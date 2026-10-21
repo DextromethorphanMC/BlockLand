@@ -1,0 +1,18 @@
+# mod
+mod/.gradle/
+mod/build/
+mod/run/
+mod/run2/
+mod/run-server/
+mod/out/
+mod/*.iml
+mod/.idea/
+
+# backend
+server/backend/target/
+server/backend/data/
+
+# web
+server/web/node_modules/
+server/web/dist/
+*.log

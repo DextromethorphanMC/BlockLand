@@ -1,0 +1,37 @@
+package com.blockland;
+
+import com.blockland.client.BlockLandClient;
+import com.blockland.network.BLNetwork;
+import com.blockland.server.BlockLandServer;
+import com.blockland.server.config.BlockLandConfig;
+import com.mojang.logging.LogUtils;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.config.ModConfig;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.fml.loading.FMLEnvironment;
+import org.slf4j.Logger;
+
+/**
+ * Mod entry point. Only wires the independent modules together:
+ * network (shared), server (game logic, runs on dedicated + integrated servers) and client (UI).
+ */
+@Mod(BlockLand.MODID)
+public final class BlockLand {
+    public static final String MODID = "blockland";
+    public static final Logger LOGGER = LogUtils.getLogger();
+
+    public BlockLand(FMLJavaModLoadingContext context) {
+        context.registerConfig(ModConfig.Type.COMMON, BlockLandConfig.SPEC);
+        BLNetwork.init();
+        BlockLandServer.bootstrap();
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            BlockLandClient.init(context.getModBusGroup());
+        }
+    }
+
+    public static ResourceLocation id(String path) {
+        return ResourceLocation.fromNamespaceAndPath(MODID, path);
+    }
+}

@@ -1,0 +1,29 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: blockland-backend
+  servlet:
+    multipart:
+      max-file-size: 256MB
+      max-request-size: 256MB
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: always
+
+blockland:
+  # 所有配置与地图文件都存放在这里（JSON + 地图文件）
+  data-dir: ./data
+  # 管理后台登录令牌（React 后台使用）
+  admin-token: change-me-admin
+  # Minecraft 服务器拉取配置使用的令牌，需与 config/blockland-common.toml 中 serverToken 一致
+  server-token: change-me-server
+  # React 构建产物目录（npm run build 之后），存在时由后端直接托管
+  web-dir: ../web/dist
+  # 首次启动时生成示例数据（1v1 / 4v4 空岛战争、示例地图与物资表）
+  seed-demo-data: true
+  # 开发时允许 Vite 开发服务器跨域访问
+  cors-origins:
+    - http://localhost:5173

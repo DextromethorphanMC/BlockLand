@@ -1,0 +1,24 @@
+modLoader="javafml"
+loaderVersion="[58,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="blockland"
+version="${mod_version}"
+displayName="BlockLand"
+authors="BlockLand"
+description='''BlockLand 小游戏服务器模组：大厅、匹配与空岛战争。'''
+
+[[dependencies.blockland]]
+    modId="forge"
+    mandatory=true
+    versionRange="[58,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.blockland]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[${minecraft_version},1.22)"
+    ordering="NONE"
+    side="BOTH"

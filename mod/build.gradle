@@ -1,0 +1,68 @@
+plugins {
+    id 'java'
+    id 'idea'
+    id 'eclipse'
+    id 'net.minecraftforge.gradle' version '[7.0.3,8)'
+}
+
+version = mod_version
+group = 'com.blockland'
+
+base {
+    archivesName = 'blockland'
+}
+
+// Mojang ships Java 21 to end users in 1.20.5+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+
+    runs {
+        configureEach {
+            workingDir = layout.projectDirectory.dir('run')
+            systemProperty 'eventbus.api.strictRuntimeChecks', 'true'
+        }
+
+        register('client') {
+            // a second local client needs its own game directory: -PclientDir=run2 -PdevName=Alex
+            workingDir = layout.projectDirectory.dir(project.findProperty('clientDir') ?: 'run')
+            // .\build.ps1 runClient -PjoinServer=localhost:25565  -> joins the dev server directly
+            if (project.hasProperty('joinServer')) {
+                args '--quickPlayMultiplayer', project.property('joinServer')
+            }
+            if (project.hasProperty('devName')) {
+                args '--username', project.property('devName')
+            }
+        }
+
+        register('server') {
+            workingDir = layout.projectDirectory.dir('run-server')
+            args '--nogui'
+        }
+    }
+}
+
+repositories {
+    minecraft.mavenizer(it)
+    maven fg.forgeMaven
+    maven fg.minecraftLibsMaven
+    mavenCentral()
+}
+
+dependencies {
+    implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")
+    annotationProcessor 'net.minecraftforge:eventbus-validator:7.0.1'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.named('processResources', ProcessResources) {
+    def props = [mod_version: mod_version, minecraft_version: minecraft_version, forge_version: forge_version]
+    inputs.properties(props)
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand(props)
+    }
+}
