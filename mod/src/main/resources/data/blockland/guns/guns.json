@@ -1,0 +1,397 @@
+{
+  "ammo": {
+    "pistol": {
+      "name": "手枪弹药",
+      "item": "pistol_ammo",
+      "damage": 6.0,
+      "headshotMultiplier": 2.0,
+      "magazines": [
+        "p9_standard",
+        "p9_extended"
+      ]
+    },
+    "smg": {
+      "name": "冲锋枪弹药",
+      "item": "smg_ammo",
+      "damage": 4.5,
+      "headshotMultiplier": 1.6,
+      "magazines": []
+    },
+    "shotgun": {
+      "name": "霰弹枪弹药",
+      "item": "shotgun_ammo",
+      "damage": 2.6,
+      "pellets": 8,
+      "headshotMultiplier": 1.4,
+      "magazines": []
+    },
+    "sniper": {
+      "name": "狙击枪弹药",
+      "item": "sniper_ammo",
+      "damage": 17.0,
+      "headshotMultiplier": 2.5,
+      "magazines": []
+    }
+  },
+  "magazines": {
+    "p9_standard": {
+      "name": "标准弹匣",
+      "description": "15 发标准容量弹匣。",
+      "ammo": "pistol",
+      "capacity": 15,
+      "guns": [
+        "p9",
+        "p9a"
+      ],
+      "node": "mag_standard"
+    },
+    "p9_extended": {
+      "name": "扩容弹匣",
+      "description": "24 发扩容弹匣，换弹与开镜略慢。",
+      "ammo": "pistol",
+      "capacity": 24,
+      "guns": [
+        "p9",
+        "p9a"
+      ],
+      "node": "mag_extended",
+      "reloadTimeScale": 1.12,
+      "adsTimeScale": 1.08
+    }
+  },
+  "sights": {
+    "iron": {
+      "name": "机械瞄具",
+      "description": "带氚光点的标准机械瞄具。",
+      "aimNode": "aim_iron",
+      "zoom": 1.12
+    },
+    "reddot": {
+      "name": "迷你红点镜",
+      "description": "套筒式反射瞄具，视野更清晰，开镜略慢。",
+      "aimNode": "aim_reddot",
+      "zoom": 1.25,
+      "adsTimeScale": 1.08,
+      "nodes": [
+        "sight_reddot"
+      ]
+    }
+  },
+  "lasers": {
+    "none": {
+      "name": "无"
+    },
+    "red": {
+      "name": "红色激光",
+      "description": "腰射散布 -20%。",
+      "color": "#FF3030",
+      "hipSpreadScale": 0.8,
+      "nodes": [
+        "laser"
+      ]
+    },
+    "green": {
+      "name": "绿色激光",
+      "description": "腰射散布 -20%，更醒目的光点。",
+      "color": "#40FF60",
+      "hipSpreadScale": 0.8,
+      "nodes": [
+        "laser"
+      ]
+    }
+  },
+  "guns": {
+    "p9": {
+      "name": "P9 手枪",
+      "description": "可靠的 9mm 半自动手枪，射速快、换弹快。",
+      "category": "pistol",
+      "model": "models/gun/p9.glb",
+      "ammo": "pistol",
+      "magazines": [
+        "p9_standard",
+        "p9_extended"
+      ],
+      "sights": [
+        "iron",
+        "reddot"
+      ],
+      "lasers": [
+        "none",
+        "red",
+        "green"
+      ],
+      "rpm": 420,
+      "damageScale": 1.0,
+      "range": 96,
+      "falloff": {
+        "start": 18,
+        "end": 45,
+        "min": 0.65
+      },
+      "spread": {
+        "hip": 3.0,
+        "ads": 0.3,
+        "move": 1.6,
+        "air": 4.0,
+        "perShot": 0.8,
+        "max": 6.5,
+        "recovery": 9.0
+      },
+      "recoil": {
+        "vertical": 1.4,
+        "horizontal": 0.45,
+        "kick": 1.0,
+        "ads": 0.7
+      },
+      "adsTime": 0.16,
+      "drawTime": 0.45,
+      "reload": {
+        "tactical": 1.75,
+        "empty": 2.15
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect"
+      },
+      "sounds": {
+        "fire": "gun.p9.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "slide",
+        "offset": [
+          0.0,
+          0.0,
+          0.034
+        ]
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "desert": {
+          "name": "沙漠",
+          "tints": {
+            "polymer": [
+              0.62,
+              0.52,
+              0.38
+            ],
+            "grip": [
+              0.62,
+              0.52,
+              0.38
+            ],
+            "mag_base": [
+              0.62,
+              0.52,
+              0.38
+            ]
+          }
+        },
+        "arctic": {
+          "name": "极地",
+          "tints": {
+            "polymer": [
+              0.86,
+              0.88,
+              0.9
+            ],
+            "grip": [
+              0.86,
+              0.88,
+              0.9
+            ],
+            "mag_base": [
+              0.86,
+              0.88,
+              0.9
+            ],
+            "slide": [
+              0.55,
+              0.57,
+              0.6
+            ]
+          }
+        },
+        "camo": {
+          "name": "数码迷彩",
+          "textures": {
+            "polymer": "textures/gun/camo_digital.png",
+            "grip": "textures/gun/camo_digital.png",
+            "slide": "textures/gun/camo_digital.png"
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+            "slide": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "barrel": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "steel_dark": [
+              1.0,
+              0.77,
+              0.34
+            ]
+          }
+        }
+      },
+      "fireModes": [
+        "semi"
+      ]
+    },
+    "p9a": {
+      "name": "P9A 冲锋手枪",
+      "description": "P9 的全自动改型，可切换半自动。射速极高、后坐力明显，适合近距离压制。",
+      "category": "pistol",
+      "model": "models/gun/p9.glb",
+      "ammo": "pistol",
+      "magazines": [
+        "p9_extended",
+        "p9_standard"
+      ],
+      "sights": [
+        "iron",
+        "reddot"
+      ],
+      "lasers": [
+        "none",
+        "red",
+        "green"
+      ],
+      "fireModes": [
+        "auto",
+        "semi"
+      ],
+      "rpm": 1050,
+      "damageScale": 0.8,
+      "range": 72,
+      "falloff": {
+        "start": 12,
+        "end": 32,
+        "min": 0.6
+      },
+      "spread": {
+        "hip": 3.6,
+        "ads": 0.6,
+        "move": 1.8,
+        "air": 4.5,
+        "perShot": 0.45,
+        "max": 7.5,
+        "recovery": 12.0
+      },
+      "recoil": {
+        "vertical": 0.85,
+        "horizontal": 0.65,
+        "kick": 0.75,
+        "ads": 0.75
+      },
+      "adsTime": 0.17,
+      "drawTime": 0.45,
+      "reload": {
+        "tactical": 1.85,
+        "empty": 2.25
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect"
+      },
+      "sounds": {
+        "fire": "gun.p9.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "slide",
+        "offset": [
+          0.0,
+          0.0,
+          0.034
+        ]
+      },
+      "skins": {
+        "default": {
+          "name": "标准（双色）",
+          "tints": {
+            "slide": [
+              0.55,
+              0.57,
+              0.6
+            ]
+          }
+        },
+        "desert": {
+          "name": "沙漠",
+          "tints": {
+            "polymer": [
+              0.62,
+              0.52,
+              0.38
+            ],
+            "grip": [
+              0.62,
+              0.52,
+              0.38
+            ],
+            "mag_base": [
+              0.62,
+              0.52,
+              0.38
+            ],
+            "slide": [
+              0.55,
+              0.57,
+              0.6
+            ]
+          }
+        },
+        "camo": {
+          "name": "数码迷彩",
+          "textures": {
+            "polymer": "textures/gun/camo_digital.png",
+            "grip": "textures/gun/camo_digital.png",
+            "slide": "textures/gun/camo_digital.png"
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+            "slide": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "barrel": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "steel_dark": [
+              1.0,
+              0.77,
+              0.34
+            ]
+          }
+        }
+      }
+    }
+  }
+}

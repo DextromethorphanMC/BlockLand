@@ -22,7 +22,9 @@ public final class PartyPackets {
         DECLINE,
         LEAVE,
         /** argument: member UUID; leader only */
-        KICK
+        KICK,
+        /** argument: member UUID; leader only — hands the party over */
+        PROMOTE
     }
 
     public record C2SAction(Action action, String argument) {

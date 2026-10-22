@@ -2,6 +2,9 @@ package com.blockland.server.content.model;
 
 import com.google.gson.JsonObject;
 
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,6 +26,36 @@ public final class GameModeDef {
     public List<KitItemDef> kit = new ArrayList<>();
     /** Version of the cover image ({@code mode/<id>}); null = no cover. */
     public String coverVersion;
+    /** Optional end of a limited-time mode ("限时开放"), ISO-8601 instant; afterwards the mode closes by itself. */
+    public String availableUntil;
+
+    private transient long untilMillis = Long.MIN_VALUE;
+
+    /** Epoch millis after which the mode is closed, or 0 for a permanent mode. */
+    public long availableUntilMillis() {
+        if (untilMillis == Long.MIN_VALUE) {
+            long parsed = 0;
+            if (availableUntil != null && !availableUntil.isBlank()) {
+                try {
+                    parsed = Instant.parse(availableUntil).toEpochMilli();
+                } catch (DateTimeParseException ignored) {
+                    // the backend validates this; a broken value must not close the mode
+                }
+            }
+            untilMillis = parsed;
+        }
+        return untilMillis;
+    }
+
+    public boolean isExpired() {
+        long until = availableUntilMillis();
+        return until > 0 && System.currentTimeMillis() >= until;
+    }
+
+    /** Enabled and, for limited-time modes, not past its end. */
+    public boolean isOpen() {
+        return enabled && !isExpired();
+    }
 
     public int timeLimitOrZero() {
         return timeLimitSeconds == null || timeLimitSeconds <= 0 ? 0 : timeLimitSeconds;

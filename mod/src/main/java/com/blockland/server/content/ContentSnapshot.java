@@ -26,8 +26,9 @@ public final class ContentSnapshot {
     private transient Map<String, GameModeDef> modeIndex;
     private transient Map<String, MapDef> mapIndex;
 
+    /** Modes players can see and queue for right now (enabled and not past their end date). */
     public List<GameModeDef> enabledModes() {
-        return modes.stream().filter(m -> m.enabled).toList();
+        return modes.stream().filter(GameModeDef::isOpen).toList();
     }
 
     public Optional<GameModeDef> mode(String id) {

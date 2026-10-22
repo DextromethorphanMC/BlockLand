@@ -119,6 +119,15 @@ public final class PartyPanel {
                         : () -> send(PartyPackets.Action.KICK, id.toString())));
                 if (inside(mouseX, mouseY, bx - 1, by - 1, 10, 10)) hoveredName = isSelf ? "离开队伍" : "移出 " + member.name();
             }
+            if (inParty && leader && !isSelf && hv > 0.05f) {
+                // ★: hand the party over to this member
+                int px = sx - 1, py = top - 1;
+                Draw.rect(g, px, py, 8, 8, ColorMath.fade(GOLD, alpha * hv));
+                Draw.text(g, font, "★", px + 1, py, 1f, ColorMath.fade(0xFF1A1206, alpha * hv), false);
+                UUID id = member.id();
+                hits.add(new Hit(px - 1, py - 1, 10, 10, () -> send(PartyPackets.Action.PROMOTE, id.toString())));
+                if (inside(mouseX, mouseY, px - 1, py - 1, 10, 10)) hoveredName = "转让队长给 " + member.name();
+            }
             i++;
         }
         for (String pending : party.pending()) {

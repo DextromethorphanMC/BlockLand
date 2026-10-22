@@ -1,6 +1,8 @@
 package com.blockland;
 
 import com.blockland.client.BlockLandClient;
+import com.blockland.gun.GunContent;
+import com.blockland.melee.MeleeContent;
 import com.blockland.network.BLNetwork;
 import com.blockland.server.BlockLandServer;
 import com.blockland.server.config.BlockLandConfig;
@@ -24,6 +26,8 @@ public final class BlockLand {
 
     public BlockLand(FMLJavaModLoadingContext context) {
         context.registerConfig(ModConfig.Type.COMMON, BlockLandConfig.SPEC);
+        GunContent.register(context.getModBusGroup());
+        MeleeContent.register(context.getModBusGroup());
         BLNetwork.init();
         BlockLandServer.bootstrap();
         if (FMLEnvironment.dist == Dist.CLIENT) {

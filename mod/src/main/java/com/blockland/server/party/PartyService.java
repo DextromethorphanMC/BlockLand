@@ -194,6 +194,20 @@ public final class PartyService {
         return null;
     }
 
+    /** The leader hands leadership to another member. Queue tickets stay valid: the party is unchanged. */
+    @Nullable
+    public String transfer(ServerPlayer leader, UUID target) {
+        Party party = byMember.get(leader.getUUID());
+        if (party == null || !party.leader().equals(leader.getUUID())) return "只有队长可以转让队长";
+        if (target.equals(leader.getUUID()) || !party.members.contains(target)) return "该玩家不在你的队伍中";
+        party.members.remove(target);
+        party.members.add(0, target);
+        ServerPlayer next = server.getPlayerList().getPlayer(target);
+        broadcast(party, "§e" + (next == null ? "队员" : next.getGameProfile().getName()) + " 成为了队长");
+        invitesChanged(party.members);
+        return null;
+    }
+
     public void onLogout(ServerPlayer player) {
         Party party = byMember.get(player.getUUID());
         leave(player, false);

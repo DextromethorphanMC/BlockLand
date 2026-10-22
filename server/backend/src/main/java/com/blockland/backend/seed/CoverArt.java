@@ -9,8 +9,12 @@ import java.awt.Graphics2D;
 import java.awt.Polygon;
 import java.awt.RadialGradientPaint;
 import java.awt.RenderingHints;
+import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
+import java.awt.geom.Line2D;
+import java.awt.geom.Path2D;
 import java.awt.geom.Point2D;
+import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -21,6 +25,8 @@ import java.util.Random;
 public final class CoverArt {
     public static final int W = 512;
     public static final int H = 288;
+    /** Muzzle of {@link #handgun} in its local coordinates. */
+    private static final int MUZZLE_X = 102, MUZZLE_Y = -23;
 
     private CoverArt() {
     }
@@ -75,6 +81,60 @@ public final class CoverArt {
         return png(image);
     }
 
+    /** A handgun firing at a red crosshair, muzzle flash glowing over a dark steel gradient. */
+    public static byte[] pistol(long seed) {
+        BufferedImage image = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = graphics(image);
+        g.setPaint(new GradientPaint(0, 0, new Color(0x090E18), W, H, new Color(0x1E3247)));
+        g.fillRect(0, 0, W, H);
+        AffineTransform gun = AffineTransform.getTranslateInstance(W * 0.36, H * 0.53);
+        gun.rotate(Math.toRadians(-8));
+        Point2D muzzle = gun.transform(new Point2D.Float(MUZZLE_X, MUZZLE_Y), null);
+        g.setPaint(new RadialGradientPaint(muzzle, 190, new float[]{0f, 1f},
+                new Color[]{new Color(255, 150, 60, 150), new Color(255, 120, 40, 0)}));
+        g.fillRect(0, 0, W, H);
+
+        Random random = new Random(seed);
+        for (int i = 0; i < 30; i++) {
+            float size = 1.5f + random.nextFloat() * 2.5f;
+            g.setColor(new Color(255, 190 + random.nextInt(50), 120, 30 + random.nextInt(90)));
+            g.fill(new Ellipse2D.Float(random.nextInt(W), random.nextInt(H), size, size));
+        }
+        crosshair(g, gun.transform(new Point2D.Float(MUZZLE_X + 150, MUZZLE_Y), null));
+        // the bullet, just before it hits
+        Point2D trailStart = gun.transform(new Point2D.Float(MUZZLE_X + 70, MUZZLE_Y), null);
+        Point2D trailEnd = gun.transform(new Point2D.Float(MUZZLE_X + 128, MUZZLE_Y), null);
+        g.setPaint(new GradientPaint(trailStart, new Color(255, 220, 150, 0), trailEnd, new Color(255, 240, 200, 230)));
+        g.setStroke(new BasicStroke(3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.draw(new Line2D.Double(trailStart, trailEnd));
+        // sparks thrown forward
+        g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        for (int i = 0; i < 16; i++) {
+            double angle = Math.toRadians(-8 + (random.nextDouble() - 0.5) * 120);
+            double from = 40 + random.nextInt(25), to = from + 10 + random.nextInt(30);
+            g.setColor(new Color(255, 200 + random.nextInt(50), 110, 80 + random.nextInt(150)));
+            g.draw(new Line2D.Double(muzzle.getX() + Math.cos(angle) * from, muzzle.getY() + Math.sin(angle) * from,
+                    muzzle.getX() + Math.cos(angle) * to, muzzle.getY() + Math.sin(angle) * to));
+        }
+
+        Graphics2D s = (Graphics2D) g.create();
+        s.transform(gun);
+        handgun(s);
+        // ejected shell casings above the ejection port
+        for (int i = 0; i < 2; i++) {
+            Graphics2D c = (Graphics2D) s.create();
+            c.translate(14 - i * 32 - random.nextInt(10), -58 - random.nextInt(24));
+            c.rotate(random.nextDouble() * Math.PI);
+            c.setPaint(new GradientPaint(0, -3, new Color(0xF0D27A), 0, 3, new Color(0x9A7426)));
+            c.fill(new RoundRectangle2D.Float(-7, -3, 14, 6, 3, 3));
+            c.dispose();
+        }
+        muzzleFlash(s, random);
+        s.dispose();
+        g.dispose();
+        return png(image);
+    }
+
     private static void island(Graphics2D g, float cx, float cy, float scale, boolean dusk) {
         int w = (int) (90 * scale), h = (int) (60 * scale);
         Polygon rock = new Polygon(new int[]{(int) cx - w / 2, (int) cx + w / 2, (int) cx + w / 6, (int) cx - w / 8},
@@ -103,6 +163,87 @@ public final class CoverArt {
         s.setColor(new Color(0xD9A441));
         s.fill(new Ellipse2D.Float(-8, 86, 16, 14));
         s.dispose();
+    }
+
+    /** Side view of a pistol pointing along +x, muzzle at ({@link #MUZZLE_X}, {@link #MUZZLE_Y}). */
+    private static void handgun(Graphics2D s) {
+        Color frame = new Color(0x2B313C);
+        // grip (angled back, ribbed) and magazine baseplate
+        Polygon grip = new Polygon(new int[]{-34, -86, -102, -55}, new int[]{2, 0, 72, 78}, 4);
+        s.setPaint(new GradientPaint(-86, 0, new Color(0x3C4554), -55, 78, new Color(0x191D24)));
+        s.fill(grip);
+        Graphics2D ribs = (Graphics2D) s.create();
+        ribs.clip(grip);
+        ribs.setColor(new Color(255, 255, 255, 22));
+        for (int y = 12; y < 78; y += 8) ribs.fillRect(-110, y, 80, 2);
+        ribs.dispose();
+        s.setColor(new Color(0x5C6676));
+        s.fill(new Polygon(new int[]{-104, -54, -55, -105}, new int[]{71, 77, 83, 77}, 4));
+        // trigger guard and trigger
+        Path2D guard = new Path2D.Float();
+        guard.moveTo(22, 1);
+        guard.lineTo(21, 16);
+        guard.quadTo(20, 30, 4, 30);
+        guard.lineTo(-38, 30);
+        s.setColor(frame);
+        s.setStroke(new BasicStroke(6f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        s.draw(guard);
+        s.setColor(new Color(0x1C2129));
+        s.fill(new Polygon(new int[]{-2, 6, 2, -4, -8, -4}, new int[]{2, 2, 12, 22, 21, 10}, 6));
+        // frame with accessory rail, beavertail
+        s.setColor(frame);
+        s.fillRect(-86, -10, 160, 12);
+        s.fill(new Polygon(new int[]{-86, -100, -97, -86}, new int[]{-12, -5, 2, 0}, 4));
+        for (int x = 42; x <= 66; x += 8) s.fillRect(x, 2, 5, 4);
+        // slide: steel gradient, top highlight, serrations, ejection port, sights, barrel
+        s.setPaint(new GradientPaint(0, -36, new Color(0xCBD4E0), 0, -10, new Color(0x5C6676)));
+        s.fill(new RoundRectangle2D.Float(-92, -36, 190, 26, 8, 8));
+        s.setColor(new Color(255, 255, 255, 110));
+        s.fillRect(-88, -35, 182, 2);
+        s.setColor(new Color(0x3A4250));
+        for (int x = -84; x <= -54; x += 6) s.fillRect(x, -32, 2, 18);
+        s.setColor(new Color(0x232831));
+        s.fillRect(8, -33, 30, 8);
+        s.fillRect(98, MUZZLE_Y - 5, MUZZLE_X - 98, 10);
+        s.setColor(new Color(0x5C6676));
+        s.fillRect(86, -40, 6, 4);
+        s.fillRect(-88, -41, 12, 5);
+    }
+
+    /** Spiky flash in front of the muzzle, longest along the firing direction. */
+    private static void muzzleFlash(Graphics2D s, Random random) {
+        float cx = MUZZLE_X + 20, cy = MUZZLE_Y;
+        int spikes = 10;
+        Path2D star = new Path2D.Float();
+        for (int k = 0; k < spikes * 2; k++) {
+            double angle = Math.PI * k / spikes;
+            double r = k % 2 == 1 ? 7 : (22 + 46 * Math.max(0, Math.cos(angle))) * (0.75 + random.nextDouble() * 0.5);
+            double x = cx + Math.cos(angle) * r, y = cy + Math.sin(angle) * r * 0.7;
+            if (k == 0) star.moveTo(x, y);
+            else star.lineTo(x, y);
+        }
+        star.closePath();
+        s.setPaint(new RadialGradientPaint(new Point2D.Float(cx, cy), 70, new float[]{0f, 0.2f, 0.55f, 1f},
+                new Color[]{new Color(255, 255, 235), new Color(255, 225, 120), new Color(255, 140, 40, 210), new Color(255, 90, 20, 0)}));
+        s.fill(star);
+        s.setColor(new Color(255, 255, 240));
+        s.fill(new Ellipse2D.Float(cx - 14, cy - 7, 28, 14));
+    }
+
+    /** Red reticle: thin outer ring, ring, split cross and centre dot. */
+    private static void crosshair(Graphics2D g, Point2D center) {
+        float x = (float) center.getX(), y = (float) center.getY();
+        g.setColor(new Color(255, 80, 64, 70));
+        g.setStroke(new BasicStroke(1.5f));
+        g.draw(new Ellipse2D.Float(x - 58, y - 58, 116, 116));
+        g.setColor(new Color(255, 80, 64, 230));
+        g.setStroke(new BasicStroke(3f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.draw(new Ellipse2D.Float(x - 38, y - 38, 76, 76));
+        for (int i = 0; i < 4; i++) {
+            double a = Math.PI / 2 * i;
+            g.draw(new Line2D.Double(x + Math.cos(a) * 16, y + Math.sin(a) * 16, x + Math.cos(a) * 52, y + Math.sin(a) * 52));
+        }
+        g.fill(new Ellipse2D.Float(x - 3, y - 3, 6, 6));
     }
 
     private static Graphics2D graphics(BufferedImage image) {

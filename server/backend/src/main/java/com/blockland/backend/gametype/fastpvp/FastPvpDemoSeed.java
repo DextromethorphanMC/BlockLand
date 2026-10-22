@@ -56,7 +56,7 @@ public class FastPvpDemoSeed implements DemoSeed {
                     new KitItem("minecraft:iron_boots", 1, "feet"),
                     new KitItem("minecraft:iron_sword", 1, "0"));
             modes.create(new GameModeService.Request("classpvp_1v1", "ClassPVP", FastPvpDefinition.ID,
-                    "经典 1v1 对决：铁套装备 + 铁剑。", true, 300, settings, kit));
+                    "经典 1v1 对决：铁套装备 + 铁剑。", true, 300, null, settings, kit));
         }
     }
 }

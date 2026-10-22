@@ -20,15 +20,24 @@ public class KitValidator {
         this.items = items;
     }
 
+    /** Items missing from the server's item registry are errors. */
     public List<KitItem> normalize(List<KitItem> raw, List<String> errors) {
+        return normalize(raw, errors, errors);
+    }
+
+    /**
+     * @param unknownItems receives items missing from the server's item registry instead of {@code errors}
+     *                     (e.g. content prepared for items a newer mod version adds)
+     */
+    public List<KitItem> normalize(List<KitItem> raw, List<String> errors, List<String> unknownItems) {
         List<KitItem> result = new ArrayList<>();
         if (raw == null) return result;
         Set<String> used = new HashSet<>();
         for (int i = 0; i < raw.size(); i++) {
             KitItem entry = raw.get(i);
-            String row = "装备第 " + (i + 1) + " 行: ";
+            String row = row(i);
             String item = entry.item() == null ? "" : entry.item().trim();
-            items.check(item, row, errors);
+            if (items.checkFormat(item, row, errors)) items.checkRegistered(item, row, unknownItems);
             if (entry.count() < 1 || entry.count() > 64) errors.add(row + "数量应在 1-64 之间");
             String slot = entry.slot() == null ? "" : entry.slot().trim().toLowerCase(Locale.ROOT);
             if (!isValidSlot(slot)) {
@@ -41,6 +50,13 @@ public class KitValidator {
         return result;
     }
 
+    /** Items of a saved kit that the server's item registry does not contain (shown as mode warnings). */
+    public List<String> unknownItems(List<KitItem> kit) {
+        List<String> unknown = new ArrayList<>();
+        for (int i = 0; i < kit.size(); i++) items.checkRegistered(kit.get(i).item(), row(i), unknown);
+        return unknown;
+    }
+
     public static boolean isValidSlot(String slot) {
         if (NAMED_SLOTS.contains(slot)) return true;
         try {
@@ -49,5 +65,9 @@ public class KitValidator {
         } catch (NumberFormatException e) {
             return false;
         }
+    }
+
+    private static String row(int index) {
+        return "装备第 " + (index + 1) + " 行: ";
     }
 }

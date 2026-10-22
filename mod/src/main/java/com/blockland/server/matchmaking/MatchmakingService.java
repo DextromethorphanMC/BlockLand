@@ -81,8 +81,10 @@ public final class MatchmakingService {
             }
         }
         ContentSnapshot snapshot = content.snapshot();
-        Optional<GameModeDef> mode = snapshot.mode(modeId).filter(m -> m.enabled);
-        if (mode.isEmpty()) return "该模式不存在或已关闭";
+        Optional<GameModeDef> mode = snapshot.mode(modeId).filter(GameModeDef::isOpen);
+        if (mode.isEmpty()) {
+            return snapshot.mode(modeId).filter(GameModeDef::isExpired).isPresent() ? "该限时模式已结束" : "该模式不存在或已关闭";
+        }
         Optional<GameType> type = types.get(mode.get().type);
         if (type.isEmpty()) return "服务器不支持该游戏类型: " + mode.get().type;
         String unavailable = type.get().checkAvailable(mode.get(), snapshot);
@@ -136,10 +138,12 @@ public final class MatchmakingService {
                     drop(entry, "队员离线，已取消匹配");
                 }
             }
-            Optional<GameModeDef> mode = snapshot.mode(modeId).filter(m -> m.enabled);
+            Optional<GameModeDef> mode = snapshot.mode(modeId).filter(GameModeDef::isOpen);
             Optional<GameType> type = mode.flatMap(m -> types.get(m.type));
             if (mode.isEmpty() || type.isEmpty() || type.get().checkAvailable(mode.get(), snapshot) != null) {
-                for (Entry entry : List.copyOf(queue)) drop(entry, "该模式当前不可用，已退出匹配");
+                String reason = snapshot.mode(modeId).filter(GameModeDef::isExpired).isPresent()
+                        ? "限时模式已结束，已退出匹配" : "该模式当前不可用，已退出匹配";
+                for (Entry entry : List.copyOf(queue)) drop(entry, reason);
                 continue;
             }
             MatchFormat format = type.get().format(mode.get());

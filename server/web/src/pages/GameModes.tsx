@@ -4,7 +4,20 @@ import { CoverPicker } from '../components/CoverPicker'
 import { emptyGroup, GroupEditor } from '../components/GroupEditor'
 import { KitEditor } from '../components/KitEditor'
 import { uiFor } from '../gametypes'
-import { confirmAction, Empty, ErrorBox, Field, formatDuration, Modal, NumberInput, PageHeader, useLoad, useToast } from '../components/ui'
+import {
+  confirmAction,
+  Empty,
+  ErrorBox,
+  Field,
+  formatDuration,
+  fromDateTimeLocal,
+  Modal,
+  NumberInput,
+  PageHeader,
+  toDateTimeLocal,
+  useLoad,
+  useToast,
+} from '../components/ui'
 import type { GameMap, GameMode, GameType, ModeGroup } from '../types'
 
 /** A mode being edited, plus the group it should belong to (groups own the membership). */
@@ -46,6 +59,7 @@ export function GameModes() {
         description: '',
         enabled: true,
         timeLimitSeconds: null,
+        availableUntil: null,
         settings: { ...type.defaultSettings },
         kit: [...type.defaultKit],
         groupId,
@@ -92,7 +106,10 @@ export function GameModes() {
         </div>
       )}
       <div className="mode-card-head">
-        <span className="tag">{typeName(mode.type)}</span>
+        <div className="row wrap">
+          <span className="tag">{typeName(mode.type)}</span>
+          {availabilityBadge(mode.availableUntil)}
+        </div>
         <label className="switch" title={mode.enabled ? '已启用' : '已停用'}>
           <input type="checkbox" checked={mode.enabled} onChange={() => toggle(mode)} />
           <span />
@@ -232,6 +249,21 @@ export function GameModes() {
   )
 }
 
+/** 限时开放 badge: the end (local time) while open, "已结束" once it has passed. */
+function availabilityBadge(availableUntil: string | null | undefined) {
+  if (!availableUntil) return null
+  if (Date.parse(availableUntil) <= Date.now()) return <span className="badge badge-ended">已结束</span>
+  return <span className="badge badge-limited">限时 · 截至 {toDateTimeLocal(availableUntil).replace('T', ' ')}</span>
+}
+
+/** Default end when a mode is first made limited: 7 days from now at 23:59 local time. */
+function defaultDeadline() {
+  const d = new Date()
+  d.setDate(d.getDate() + 7)
+  d.setHours(23, 59, 0, 0)
+  return d.toISOString()
+}
+
 /** Moves a mode into {@code groupId} (or out of every group when empty), keeping the order of the others. */
 async function assignGroup(modeId: string, groupId: string | undefined, groups: ModeGroup[]) {
   for (const g of groups) {
@@ -266,6 +298,7 @@ function GameModeEditor({
   const set = (patch: Partial<EditedMode>) => setMode((m) => ({ ...m, ...patch }))
   const { SettingsForm } = uiFor(mode.type)
   const limited = mode.timeLimitSeconds != null
+  const timed = mode.availableUntil != null
   const type = types.find((t) => t.id === mode.type)
 
   const changeType = (typeId: string) => {
@@ -355,6 +388,28 @@ function GameModeEditor({
           {limited && (
             <Field label="时长（秒）" hint={formatDuration(mode.timeLimitSeconds)}>
               <NumberInput value={mode.timeLimitSeconds ?? 0} min={10} onChange={(v) => set({ timeLimitSeconds: v })} />
+            </Field>
+          )}
+        </div>
+        <div className="grid-2">
+          <Field label="开放期限（可选）" hint="不勾选则永久开放">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={timed}
+                onChange={(e) => set({ availableUntil: e.target.checked ? defaultDeadline() : null })}
+              />
+              限时开放
+            </label>
+          </Field>
+          {timed && (
+            <Field label="截止时间" hint="超过该时间后模式自动关闭">
+              <input
+                type="datetime-local"
+                value={toDateTimeLocal(mode.availableUntil)}
+                onChange={(e) => set({ availableUntil: fromDateTimeLocal(e.target.value) })}
+                required
+              />
             </Field>
           )}
         </div>

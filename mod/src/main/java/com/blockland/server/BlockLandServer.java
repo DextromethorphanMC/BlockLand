@@ -12,6 +12,8 @@ import com.blockland.server.content.RemoteContentRepository;
 import com.blockland.server.game.GameManager;
 import com.blockland.server.game.GameServices;
 import com.blockland.server.game.GameTypeRegistry;
+import com.blockland.server.gun.GunService;
+import com.blockland.server.melee.MeleeService;
 import com.blockland.server.backend.BackendClient;
 import com.blockland.server.kit.SessionKitLayouts;
 import com.blockland.server.kit.KitService;
@@ -72,6 +74,8 @@ public final class BlockLandServer {
     public final GameManager games;
     public final MatchmakingService matchmaking;
     public final MapPreviewService previews;
+    public final GunService gunService;
+    public final MeleeService meleeService;
     private int tickCounter;
 
     private BlockLandServer(MinecraftServer server) {
@@ -105,6 +109,8 @@ public final class BlockLandServer {
             lobby.markDirty();
         });
         this.previews = new MapPreviewService(services, lobby);
+        this.gunService = new GunService(server);
+        this.meleeService = new MeleeService(server);
         this.content.addChangeListener(this::onContentChanged);
     }
 
@@ -136,6 +142,8 @@ public final class BlockLandServer {
                 instance.previews.close(player, false);
                 instance.profiles.onLogout(player);
                 instance.kitLayouts.forget(player.getUUID());
+                instance.gunService.forget(player);
+                instance.meleeService.forget(player);
             }
         });
         PlayerEvent.PlayerRespawnEvent.BUS.addListener(event -> {
@@ -176,6 +184,8 @@ public final class BlockLandServer {
         BlockLandServer created = new BlockLandServer(server);
         instance = created;
         BLNetwork.setServerListener(new ServerPacketRouter(created.lobby, created.shop, created.media));
+        BLNetwork.setGunServerListener(created.gunService);
+        BLNetwork.setMeleeServerListener(created.meleeService);
         created.lobbyWorld.prepare();
         created.content.loadCache();
         created.onContentChanged(created.content.snapshot());
@@ -195,6 +205,10 @@ public final class BlockLandServer {
         current.previews.closeAll();
         current.jobs.drain();
         BLNetwork.setServerListener(null);
+        BLNetwork.setGunServerListener(null);
+        BLNetwork.setMeleeServerListener(null);
+        current.gunService.clear();
+        current.meleeService.clear();
         instance = null;
     }
 
@@ -203,6 +217,8 @@ public final class BlockLandServer {
         games.tick();
         matchmaking.tick();
         parties.tick();
+        gunService.tick();
+        meleeService.tick();
         lobby.tick();
         profiles.tick();
         if (++tickCounter % (BlockLandConfig.SYNC_INTERVAL_SECONDS.get() * 20) == 0) content.refresh();

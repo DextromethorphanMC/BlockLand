@@ -43,6 +43,7 @@ public final class LobbyService {
     private GameManager games;
     private MatchmakingService matchmaking;
     private boolean dirty;
+    private int openModes = -1;
     private int tickCounter;
 
     public LobbyService(MinecraftServer server, ContentRepository content, GameTypeRegistry types, KitService kits,
@@ -67,6 +68,14 @@ public final class LobbyService {
     }
 
     public void tick() {
+        // limited-time modes close on their own: notice it and refresh every lobby screen
+        if (tickCounter % 20 == 0) {
+            int open = content.snapshot().enabledModes().size();
+            if (open != openModes) {
+                openModes = open;
+                dirty = true;
+            }
+        }
         if (++tickCounter % 10 != 0 || !dirty) return;
         dirty = false;
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
@@ -111,7 +120,8 @@ public final class LobbyService {
             }
             entries.add(new LobbyModeEntry(mode.id, nullToEmpty(mode.title), typeName, nullToEmpty(mode.description),
                     format.label(), format.requiredPlayers(), mode.timeLimitOrZero(),
-                    matchmaking.queued(mode.id), games.playingCount(mode.id), color, reason, hasKit, nullToEmpty(mode.coverVersion)));
+                    matchmaking.queued(mode.id), games.playingCount(mode.id), color, reason, hasKit, nullToEmpty(mode.coverVersion),
+                    mode.availableUntilMillis()));
         }
         MatchmakingService.Ticket ticket = matchmaking.ticketOf(player.getUUID());
         return new S2CLobbyState(entries, groups(snapshot, entries),
@@ -186,6 +196,7 @@ public final class LobbyService {
                 yield null;
             }
             case KICK -> parseId(argument).map(id -> parties.kick(player, id)).orElse("该玩家不在你的队伍中");
+            case PROMOTE -> parseId(argument).map(id -> parties.transfer(player, id)).orElse("该玩家不在你的队伍中");
         };
         if (error != null) player.sendSystemMessage(Component.literal("§c" + error));
         if (action == PartyPackets.Action.INVITE && error == null) {
@@ -235,7 +246,7 @@ public final class LobbyService {
     }
 
     private boolean hasKit(GameModeDef mode) {
-        return mode.enabled && types.get(mode.type).map(GameType::usesKit).orElse(false) && !mode.kitOrEmpty().isEmpty();
+        return mode.isOpen() && types.get(mode.type).map(GameType::usesKit).orElse(false) && !mode.kitOrEmpty().isEmpty();
     }
 
     private static String nullToEmpty(String value) {

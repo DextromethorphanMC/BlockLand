@@ -228,8 +228,9 @@ public final class ModeBrowser {
         float hov = f.hover.get(), sel = f.selected.get(), press = f.press.get(), enter = f.enter.get();
         float a = alpha * Math.max(0, Math.min(1, enter));
         if (a <= 0.01f) return;
-        boolean available = m.available();
-        int accent = m.accentColor() | 0xFF000000;
+        boolean limited = m.isLimited();
+        boolean available = m.available() && !LimitedTime.isOver(m.availableUntil());
+        int accent = limited ? GOLD : m.accentColor() | 0xFF000000;
 
         g.pose().pushMatrix();
         g.pose().translate(cx + cw / 2f + (1 - enter) * 22 + hov * 2, cy + ch / 2f);
@@ -271,6 +272,12 @@ public final class ModeBrowser {
             Draw.rect(g, 13, 46, 4, 4, ColorMath.fade(dot, a * dotAlpha));
             Draw.text(g, font, "排队 " + m.queued() + "/" + m.requiredPlayers() + "    游戏中 " + m.playing(), 22, 44, 1f,
                     ColorMath.fade(m.queued() > 0 ? ACCENT : DIM, a), false);
+        }
+
+        if (limited) {
+            // a thin gold frame marks limited-time modes even when the card is not selected
+            Draw.outline(g, 0, 0, cw, ch, ColorMath.fade(GOLD, a * (0.35f + 0.4f * Math.max(hov, sel))));
+            LimitedTime.modeBadge(g, font, m.availableUntil(), cw - 6, ch - 17, a);
         }
 
         // type tag, readable on top of the cover
@@ -325,6 +332,15 @@ public final class ModeBrowser {
         Draw.text(g, font, group.modeIds().size() + " 个模式  ·  排队 " + queued + "  ·  游戏中 " + playing, 12, ch - 17, 1f,
                 ColorMath.fade(ColorMath.mix(MUTED, TEXT, hov), a), true);
         Draw.text(g, font, "›", cw - 18 + hov * 5, ch / 2f - 7, 1.8f, ColorMath.fade(ColorMath.mix(MUTED, ACCENT, hov), a), true);
+        long soonest = 0;
+        for (String id : group.modeIds()) {
+            LobbyModeEntry mode = ClientLobbyState.mode(id).orElse(null);
+            if (mode != null && mode.isLimited() && (soonest == 0 || mode.availableUntil() < soonest)) soonest = mode.availableUntil();
+        }
+        if (soonest > 0) {
+            int bw = font.width("限时") + 10;
+            LimitedTime.badge(g, font, "限时", cw - bw - 26, 8, a);
+        }
         g.pose().popMatrix();
     }
 

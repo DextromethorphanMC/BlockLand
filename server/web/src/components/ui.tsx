@@ -149,6 +149,20 @@ export function formatDuration(seconds: number | null | undefined) {
   return s ? `${m} 分 ${s} 秒` : `${m} 分钟`
 }
 
+/** ISO instant -> `YYYY-MM-DDTHH:mm` in local time (the value of a datetime-local input); '' if missing/invalid. */
+export function toDateTimeLocal(iso: string | null | undefined) {
+  const d = iso ? new Date(iso) : null
+  if (!d || Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/** Value of a datetime-local input (local time) -> ISO instant; '' if empty/invalid. */
+export function fromDateTimeLocal(value: string) {
+  const d = new Date(value)
+  return value && !Number.isNaN(d.getTime()) ? d.toISOString() : ''
+}
+
 export function confirmAction(text: string) {
   return window.confirm(text)
 }

@@ -1,5 +1,12 @@
 package com.blockland.client;
 
+import com.blockland.client.decal.Decals;
+import com.blockland.client.gun.ClientGuns;
+import com.blockland.client.gun.GunPreviewRenderer;
+import com.blockland.client.input.WeaponInput;
+import com.blockland.client.melee.ClientKnives;
+import com.blockland.client.render.ModelCache;
+import com.blockland.client.render.Textures;
 import com.blockland.client.screen.KitLayoutScreen;
 import com.blockland.client.screen.LobbyScreen;
 import com.blockland.network.BLNetwork;
@@ -16,12 +23,18 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+import net.minecraftforge.client.event.RegisterPictureInPictureRendererEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.bus.BusGroup;
 
-/** Client module: key binding, lobby state cache and screens. Never loaded on a dedicated server. */
+/**
+ * Client module: key binding, lobby state cache and screens, and the wiring of the independent client features
+ * (weapon input, guns, knives, decals). Never loaded on a dedicated server.
+ */
 public final class BlockLandClient {
     public static final KeyMapping OPEN_LOBBY = new KeyMapping("key.blockland.lobby", InputConstants.KEY_M, "key.categories.blockland");
 
@@ -41,6 +54,18 @@ public final class BlockLandClient {
             pendingOpen = false;
         });
         BLNetwork.setClientListener(new Handler());
+        // retained GPU models and textures belong to the resource packs: reloaded on demand after F3+T
+        RegisterClientReloadListenersEvent.getBus(modBus).addListener(event -> event.registerReloadListener(
+                (ResourceManagerReloadListener) manager -> {
+                    ModelCache.clear();
+                    Textures.clear();
+                }));
+        WeaponInput.init(modBus);
+        Decals.init(modBus);
+        ClientGuns.init(modBus);
+        ClientKnives.init(modBus);
+        com.blockland.client.dev.DevAutomation.init();
+        RegisterPictureInPictureRendererEvent.BUS.addListener(event -> event.register(new GunPreviewRenderer(event.getBufferSource())));
     }
 
     /** Server asked to show the lobby while another screen (e.g. world loading) was open: show it once that closes. */

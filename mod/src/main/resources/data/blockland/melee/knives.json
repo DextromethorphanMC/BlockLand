@@ -1,0 +1,60 @@
+{
+  "knives": {
+    "butterfly": {
+      "name": "蝴蝶刀",
+      "description": "灵巧的折刀，出刀极快。轻击左右连斩，重击蓄力突刺，从背后刺击伤害更高。",
+      "model": "models/knife/butterfly.glb",
+      "drawTime": 0.8,
+      "comboWindow": 0.75,
+      "light": {
+        "damage": 5.0,
+        "range": 2.8,
+        "radius": 0.45,
+        "duration": 0.42,
+        "impact": 0.13,
+        "cooldown": 0.36,
+        "knockback": 0.2,
+        "backstabMultiplier": 1.5,
+        "punch": 0.9,
+        "swings": [
+          { "clip": "light_1", "slashAngle": 205 },
+          { "clip": "light_2", "slashAngle": 25 }
+        ],
+        "blockDecal": "knife_slash",
+        "bodyDecal": "knife_cut",
+        "swingSound": "blockland:knife.swing"
+      },
+      "heavy": {
+        "damage": 11.0,
+        "range": 2.5,
+        "radius": 0.3,
+        "duration": 0.95,
+        "impact": 0.40,
+        "cooldown": 0.95,
+        "knockback": 0.55,
+        "backstabMultiplier": 2.0,
+        "punch": 2.4,
+        "swings": [
+          { "clip": "heavy", "slashAngle": 90 }
+        ],
+        "blockDecal": "knife_stab",
+        "bodyDecal": "knife_cut",
+        "swingSound": "blockland:knife.swing_heavy"
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint"
+      },
+      "sounds": {
+        "equip": "blockland:knife.equip",
+        "hitFlesh": "blockland:knife.hit_flesh",
+        "hitBlock": "blockland:knife.hit_wall",
+        "hitMarker": "blockland:gun.hitmarker",
+        "critical": "blockland:gun.headshot",
+        "kill": "blockland:gun.kill"
+      }
+    }
+  }
+}

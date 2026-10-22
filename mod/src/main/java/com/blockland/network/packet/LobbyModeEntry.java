@@ -9,6 +9,7 @@ import net.minecraft.network.FriendlyByteBuf;
  * @param unavailableReason empty when the mode can be queued
  * @param hasKit            players start with a kit they can arrange in the loadout editor
  * @param coverVersion      empty when the mode has no cover
+ * @param availableUntil    epoch millis when a limited-time mode closes, 0 for permanent modes
  */
 public record LobbyModeEntry(
         String id,
@@ -23,10 +24,15 @@ public record LobbyModeEntry(
         int accentColor,
         String unavailableReason,
         boolean hasKit,
-        String coverVersion
+        String coverVersion,
+        long availableUntil
 ) {
     public boolean available() {
         return unavailableReason.isEmpty();
+    }
+
+    public boolean isLimited() {
+        return availableUntil > 0;
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -43,10 +49,11 @@ public record LobbyModeEntry(
         buf.writeUtf(unavailableReason);
         buf.writeBoolean(hasKit);
         buf.writeUtf(coverVersion, 64);
+        buf.writeLong(availableUntil);
     }
 
     public static LobbyModeEntry decode(FriendlyByteBuf buf) {
         return new LobbyModeEntry(buf.readUtf(64), buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf(),
-                buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readInt(), buf.readUtf(), buf.readBoolean(), buf.readUtf(64));
+                buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readVarInt(), buf.readInt(), buf.readUtf(), buf.readBoolean(), buf.readUtf(64), buf.readLong());
     }
 }

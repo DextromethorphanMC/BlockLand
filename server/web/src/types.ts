@@ -23,6 +23,8 @@ export interface GameMode {
   description: string
   enabled: boolean
   timeLimitSeconds: number | null
+  /** 限时开放: ISO instant after which the mode closes automatically; null = permanent */
+  availableUntil?: string | null
   settings: Record<string, unknown>
   kit: KitItem[]
   /** version of the cover image; null = no cover */

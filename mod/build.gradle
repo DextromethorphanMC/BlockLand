@@ -34,6 +34,10 @@ minecraft {
             if (project.hasProperty('devName')) {
                 args '--username', project.property('devName')
             }
+            // dev-only test driver (see client/dev/DevAutomation): -Pautomation=<dir>
+            if (project.hasProperty('automation')) {
+                systemProperty 'blockland.automation', project.property('automation')
+            }
         }
 
         register('server') {

@@ -169,12 +169,20 @@ public final class MatchPanel {
             Draw.text(g, font, "请选择一个游戏模式", tx, infoY + infoH / 2f - 4, 1f, ColorMath.fade(MUTED, alpha), false);
             return;
         }
-        int accent = mode.accentColor() | 0xFF000000;
+        int accent = mode.isLimited() ? GOLD : mode.accentColor() | 0xFF000000;
         Draw.text(g, font, "已选择", tx + shift, infoY + 7, 1f, ColorMath.fade(DIM, a), false);
         Draw.text(g, font, Draw.fit(font, mode.title(), (int) ((w - KIT_W - 30) / 1.25f)), tx + shift, infoY + 19, 1.25f,
                 ColorMath.fade(TEXT, a), true);
         String desc = mode.description().isBlank() ? mode.typeName() + " · " + mode.formatLabel() : mode.description();
-        Draw.text(g, font, Draw.fit(font, desc, w - 20), tx + shift, infoY + 38, 1f, ColorMath.fade(MUTED, a), false);
+        if (mode.isLimited()) {
+            // limited-time mode: when it ends replaces the description line
+            String ends = LimitedTime.isOver(mode.availableUntil()) ? "限时模式已结束"
+                    : LimitedTime.remaining(mode.availableUntil()) + " · " + LimitedTime.endsAt(mode.availableUntil());
+            Draw.text(g, font, Draw.fit(font, ends, w - 20), tx + shift, infoY + 38, 1f, ColorMath.fade(GOLD, a), false);
+            Draw.text(g, font, Draw.fit(font, desc, w - 20), tx + shift, infoY + 49, 1f, ColorMath.fade(DIM, a), false);
+        } else {
+            Draw.text(g, font, Draw.fit(font, desc, w - 20), tx + shift, infoY + 38, 1f, ColorMath.fade(MUTED, a), false);
+        }
         g.fill(x, infoY + 4, x + 2, infoY + infoH - 4, ColorMath.fade(accent, a));
 
         if (mode.hasKit()) {

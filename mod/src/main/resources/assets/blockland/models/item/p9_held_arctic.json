@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/p9_held",
+  "textures": {
+    "0": "blockland:item/p9_held_arctic",
+    "particle": "blockland:item/p9_held_arctic"
+  }
+}

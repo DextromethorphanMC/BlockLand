@@ -1,0 +1,64 @@
+package com.blockland.client.melee;
+
+import com.blockland.anim.AnimValue;
+import com.blockland.anim.ColorMath;
+import com.blockland.anim.Ease;
+import com.blockland.client.hud.HitMarker;
+import com.blockland.client.ui.Draw;
+import com.blockland.melee.MeleeData;
+import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+
+/**
+ * Knife HUD, matching the gun HUD's layout: name and the two attacks (bottom right) with a thin readiness bar, the
+ * shared {@link HitMarker} and a short call-out for backstabs. The vanilla crosshair stays.
+ */
+final class KnifeHud {
+    private static final int TEXT = 0xFFF2F4F7;
+    private static final int MUTED = 0xFF9AA4B5;
+    private static final int CALLOUT = 0xFFFFA235;
+
+    private static String callout = "";
+    private static final AnimValue calloutAlpha = new AnimValue(0);
+    private static final AnimValue barAlpha = new AnimValue(0);
+
+    private KnifeHud() {
+    }
+
+    static void flash(String text) {
+        callout = text;
+        calloutAlpha.snap(1);
+        calloutAlpha.to(0, 0.5, Ease.QUAD_IN).delay(0.7);
+    }
+
+    static void render(GuiGraphics g, DeltaTracker delta) {
+        Minecraft mc = Minecraft.getInstance();
+        MeleeData.Knife knife = ClientKnives.knife();
+        if (mc.player == null || knife == null || !ClientKnives.holdingKnife() || mc.options.hideGui) return;
+        Font font = mc.font;
+        int w = g.guiWidth(), h = g.guiHeight();
+        HitMarker.render(g, w, h);
+
+        int right = w - 14, bottom = h - 14;
+        Draw.glow(g, right - 60, bottom - 22, 100, 36, 0x66000000);
+        Draw.text(g, font, knife.name, right - font.width(knife.name), bottom - 26, 1f, TEXT, true);
+        String attacks = "左键 轻击 · 右键 重击";
+        Draw.text(g, font, attacks, right - font.width(attacks), bottom - 14, 1f, MUTED, true);
+        // readiness: shows only while the knife recovers
+        float ready = ClientKnives.readiness();
+        barAlpha.toIfChanged(ready < 1 ? 1 : 0, 0.15, Ease.QUAD_OUT);
+        float a = barAlpha.get();
+        if (a > 0.02f) {
+            int barW = font.width(attacks), x0 = right - barW, y = bottom - 3;
+            g.fill(x0, y, right, y + 1, ColorMath.fade(0x30FFFFFF, a));
+            g.fill(x0, y, x0 + Math.round(barW * ready), y + 1, ColorMath.fade(0xFFFFFFFF, a));
+        }
+        float c = calloutAlpha.get();
+        if (c > 0.02f && !callout.isEmpty()) {
+            float scale = 1.4f;
+            Draw.text(g, font, callout, w / 2f - font.width(callout) * scale / 2f, h / 2f + 18, scale, ColorMath.fade(CALLOUT, c), true);
+        }
+    }
+}

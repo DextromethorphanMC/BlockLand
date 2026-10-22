@@ -1,0 +1,42 @@
+{
+  "bullet_hole": {
+    "texture": "textures/decal/bullet_hole.png",
+    "variants": 4,
+    "size": [0.1, 0.1],
+    "sizeJitter": 0.2,
+    "lifetime": 30,
+    "lifetimeJitter": 6,
+    "fade": 3,
+    "max": 384
+  },
+  "knife_slash": {
+    "texture": "textures/decal/knife_slash.png",
+    "variants": 2,
+    "size": [0.44, 0.11],
+    "sizeJitter": 0.12,
+    "lifetime": 22,
+    "lifetimeJitter": 4,
+    "fade": 3,
+    "max": 96
+  },
+  "knife_stab": {
+    "texture": "textures/decal/knife_stab.png",
+    "variants": 2,
+    "size": [0.14, 0.14],
+    "sizeJitter": 0.12,
+    "lifetime": 22,
+    "lifetimeJitter": 4,
+    "fade": 3,
+    "max": 96
+  },
+  "knife_cut": {
+    "texture": "textures/decal/knife_cut.png",
+    "variants": 2,
+    "size": [0.3, 0.075],
+    "sizeJitter": 0.15,
+    "lifetime": 10,
+    "lifetimeJitter": 2,
+    "fade": 2,
+    "max": 48
+  }
+}

@@ -78,9 +78,9 @@ public class SkyWarsDemoSeed implements DemoSeed {
         }
 
         if (!modes.exists("skywars_1v1")) modes.create(new GameModeService.Request("skywars_1v1", "空岛战争 1v1", SkyWarsDefinition.ID,
-                "经典单挑，两名玩家各占一座空岛。", true, 600, settings(1, 2, 180), List.of()));
+                "经典单挑，两名玩家各占一座空岛。", true, 600, null, settings(1, 2, 180), List.of()));
         if (!modes.exists("skywars_4v4")) modes.create(new GameModeService.Request("skywars_4v4", "空岛战争 4v4", SkyWarsDefinition.ID,
-                "四人组队对抗，团队配合抢占中心资源。", true, 900, settings(4, 2, 240), List.of()));
+                "四人组队对抗，团队配合抢占中心资源。", true, 900, null, settings(4, 2, 240), List.of()));
     }
 
     private ObjectNode settings(int teamSize, int teamCount, int refill) {
