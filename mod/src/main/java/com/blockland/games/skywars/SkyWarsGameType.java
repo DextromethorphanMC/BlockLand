@@ -7,13 +7,13 @@ import com.blockland.server.content.model.MapDef;
 import com.blockland.server.game.GameInstance;
 import com.blockland.server.game.GameServices;
 import com.blockland.server.game.GameType;
-import com.blockland.server.game.MatchRoster;
 import com.blockland.server.game.MatchFormat;
+import com.blockland.server.game.MatchRoster;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
 import javax.annotation.Nullable;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 
 /** 空岛战争. */
 public final class SkyWarsGameType implements GameType {
@@ -42,7 +42,7 @@ public final class SkyWarsGameType implements GameType {
 
     @Nullable
     @Override
-    public String checkAvailable(GameModeDef mode, ContentSnapshot content) {
+    public Component checkAvailable(GameModeDef mode, ContentSnapshot content) {
         SkyWarsSettings settings = SkyWarsSettings.parse(mode.settings);
         return ArenaMaps.eligible(ID, settings.team(), content).isEmpty() ? ArenaMaps.noMapsReason(settings.team()) : null;
     }
@@ -52,8 +52,13 @@ public final class SkyWarsGameType implements GameType {
         SkyWarsSettings settings = SkyWarsSettings.parse(mode.settings);
         List<MapDef> maps = ArenaMaps.eligible(ID, settings.team(), services.content().snapshot());
         if (maps.isEmpty()) throw new IllegalStateException("没有可用地图");
-        MapDef map = maps.get(ThreadLocalRandom.current().nextInt(maps.size()));
+        MapDef map = ArenaMaps.pick(maps, roster.mapId());
         return new SkyWarsGame(services, mode, settings, map, roster);
+    }
+
+    @Override
+    public List<MapDef> maps(GameModeDef mode, ContentSnapshot content) {
+        return ArenaMaps.eligible(ID, SkyWarsSettings.parse(mode.settings).team(), content);
     }
 
     @Override

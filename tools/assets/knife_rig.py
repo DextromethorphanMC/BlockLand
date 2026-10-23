@@ -11,10 +11,12 @@ The knife follows the IK hand: if a target is out of reach the knife moves with 
 never float away from the hand."""
 import numpy as np
 
+import armrig
+import hands
 import knife_model as km
-from ik import solve_arm
 from p9_rig import POLE_L, POLE_R
-from vmath import frame_quat, norm, quat_axis_angle, quat_identity, quat_mul, quat_rotate, quat_to_mat
+from vmath import (frame_quat, norm, quat_axis_angle, quat_conj, quat_identity, quat_mul, quat_rotate,
+                   quat_slerp, quat_to_mat)
 
 SHOULDER_R = np.array([0.200, -0.330, 0.060])      # knife stance: shoulders a little more forward than the P9
 SHOULDER_L = np.array([-0.200, -0.330, 0.060])
@@ -28,9 +30,12 @@ NODES = {   # name: (parent, translation)
     "latch": ("handle_bite", km.LATCH_PIVOT - BITE_PIN),
 }
 BLADE_MID = 0.5 * (SAFE_PIN + km.TIP) - km.GRIP       # knife space: middle of the pin->tip segment
+# section 19: charm mount (lanyard hole) just past the butt of the safe handle, in handle_safe space
+CHARM_MOUNT = np.array([0.0, km.HANDLE_GAP + km.HANDLE_H / 2 - km.PIN_Y, km.HANDLE_LEN + 0.0015])
 GRIP_DEPTH = 0.030                                    # grip sits this far inside the fist box
 LATCH_OPEN = 150.0
-LEFT_REST = (np.array([-0.10, -0.42, -0.10]), norm((-1.0, 0.1, -0.2)))   # off screen while hidden
+ALIGN_R = 0.30                                        # how much the right elbow lines the forearm up with the palm
+LEFT_REST = (np.array([-0.10, -0.42, -0.10]), None, hands.blend({"relaxed": 1.0}))   # off screen, hidden
 
 
 def knife_quat(blade_dir, spine_hint):
@@ -40,7 +45,7 @@ def knife_quat(blade_dir, spine_hint):
     return frame_quat(np.cross(y, z), y, z)
 
 
-REST_T = np.array([0.120, -0.088, -0.340])
+REST_T = np.array([0.120, -0.088, -0.340])        # authored ready stance (made reachable below)
 REST_BLADE = norm((-0.30, 0.60, -0.74))
 REST_SPINE = norm((0.10, 0.70, 0.70))
 REST_Q = knife_quat(REST_BLADE, REST_SPINE)
@@ -50,6 +55,27 @@ def rx(deg):
     return quat_axis_angle((1, 0, 0), deg)
 
 
+# ---- hands (section 16): palm frames in knife space -----------------------------------------------
+# the handle is held like a pistol grip: spine side = backstrap (wrist), edge side = front strap (fingers),
+# thumb side towards the blade, palm on the right flat
+def _palm(centre, fwd, thumb, side):
+    q = hands.palm_frame(fwd, thumb, side)
+    return np.asarray(centre, float) - quat_rotate(q, (0.0, -hands.PALM_LEN / 2, 0.0)), q
+
+
+GRIP_ANGLE = 55.0   # handle diagonal across the palm (saber grip): index wraps at the blade end, heel at the butt
+_GRIP_CENTRE = np.array([km.LINER_X[1] + hands.PALM_T / 2, -0.0130 + hands.PALM_LEN / 2, 0.0])
+
+
+def _diagonal(fwd, thumb, angle):
+    q = quat_axis_angle((1, 0, 0), angle)
+    return quat_rotate(q, fwd), quat_rotate(q, thumb)
+
+
+GRIP_PALM = _palm(_GRIP_CENTRE, *_diagonal((0.0, -1.0, 0.0), (0.0, 0.0, -1.0), GRIP_ANGLE), "R")  # knife space
+REVERSE_PALM = _palm(_GRIP_CENTRE, *_diagonal((0.0, -1.0, 0.0), (0.0, 0.0, 1.0), -GRIP_ANGLE * 0.5), "R")  # ice-pick
+
+
 class KnifePose:
     def __init__(self):
         self.knife_t = REST_T.copy()
@@ -57,9 +83,12 @@ class KnifePose:
         self.a = 0.0                 # blade about the safe pin
         self.b = 0.0                 # bite handle about the bite pin
         self.c = 0.0                 # latch
-        self.free_r = None           # (pos, back) world target for the right hand while the knife flies
+        self.roll = 0.0              # knife rolled about its handle axis relative to the hand (rollover tricks)
+        self.grip = GRIP_PALM        # right palm frame in knife space
+        self.fingers_r = None        # finger curls of the right hand (default: fist)
+        self.free_r = None           # (wrist, palm quat, curls) world target for the right hand while the knife flies
         self.free_w = 0.0
-        self.hand_l = None           # (pos, back) world target for the left hand
+        self.hand_l = None           # (wrist, palm quat, curls) world target for the left hand
         self.left_scale = 0.0
         self.shoulder_r = np.zeros(3)  # lunge offset of the right shoulder
         self.pole_r = None
@@ -74,7 +103,7 @@ class KnifePose:
                 m[:3, :3] = quat_to_mat(q)
             m[:3, 3] = t
             return m
-        mk = T(self.knife_t if knife_t is None else knife_t, self.knife_q)
+        mk = T(self.knife_t if knife_t is None else knife_t, self.knife_world_q())
         ms = mk @ T(NODES["handle_safe"][1])
         mb = ms @ T(np.zeros(3), rx(self.a))
         mt = mb @ T(NODES["tip"][1])
@@ -86,41 +115,65 @@ class KnifePose:
         m = self.matrices()[node]
         return m[:3, :3] @ np.asarray(local, float) + m[:3, 3]
 
+    def knife_world_q(self):
+        return quat_mul(self.knife_q, quat_axis_angle((0, 0, 1), self.roll)) if self.roll else self.knife_q
+
     def knife_point(self, local):
-        return self.knife_t + quat_rotate(self.knife_q, local)
+        return self.knife_t + quat_rotate(self.knife_world_q(), local)
+
+    def grip_target(self):
+        w, q = self.grip
+        curls = self.fingers_r if self.fingers_r is not None else hands.blend({"fist": 1.0})
+        return self.knife_t + quat_rotate(self.knife_q, w), quat_mul(self.knife_q, q), curls   # un-rolled frame
 
     # -------------------------------------------------------------------------------------- solve
+    def _hand_target(self):
+        target = self.grip_target()
+        if self.free_r is not None and self.free_w > 0:
+            target = armrig.blend_targets([(1 - self.free_w, target), (self.free_w, self.free_r)])
+        return target
+
     def solve(self):
         shoulder_r = SHOULDER_R + self.shoulder_r
         pole_r = POLE_R if self.pole_r is None else self.pole_r
-        grip = self.knife_t.copy()
-        back = quat_rotate(self.knife_q, (1.0, 0.0, 0.0))
-        f = norm(shoulder_r - grip)                    # first guess of the forearm direction
-        for _ in range(3):
-            target = grip - GRIP_DEPTH * f
-            if self.free_r is not None and self.free_w > 0:
-                target = (1 - self.free_w) * target + self.free_w * self.free_r[0]
-                bk = norm((1 - self.free_w) * back + self.free_w * self.free_r[1])
-            else:
-                bk = back
-            ar = solve_arm(shoulder_r, target, pole_r, bk)
-            f = norm(ar["elbow"] - ar["hand"])
-        if self.free_w <= 0:                           # keep the knife in the fist even at full reach
-            self.knife_t = self.knife_t + (ar["hand"] - target)
+        # the wrist cannot fold past its range: where the authored knife angle asks for more, the knife turns
+        # with the hand about the wrist (fading out while the hand lets go of the knife)
+        wrist0, q_palm0, _ = self.grip_target()
+        target = self._hand_target()
+        tr, ar = armrig.solve_side("R", shoulder_r, pole_r, target, align=ALIGN_R, limit=True)
+        hold = 1.0 - float(np.clip(self.free_w, 0.0, 1.0))
+        if hold > 0:
+            q_lim = armrig.limit_palm(q_palm0, norm(ar["hand"] - ar["elbow"]), "R")
+            corr = quat_slerp(quat_identity(), quat_mul(q_lim, quat_conj(q_palm0)), hold)
+            self.knife_t = wrist0 + quat_rotate(corr, self.knife_t - wrist0)
+            self.knife_q = quat_mul(corr, self.knife_q)
+        if self.free_w <= 0:                           # keep the knife in the hand even at full reach
+            self.knife_t = self.knife_t + (ar["hand"] - target[0])
         hl = self.hand_l if self.hand_l is not None else LEFT_REST
-        al = solve_arm(SHOULDER_L, hl[0], POLE_L if self.pole_l is None else self.pole_l, hl[1])
+        tl, al = armrig.solve_side("L", SHOULDER_L, POLE_L if self.pole_l is None else self.pole_l, hl)
         trs = {
-            "knife": {"translation": self.knife_t, "rotation": self.knife_q},
+            "knife": {"translation": self.knife_t, "rotation": self.knife_world_q()},
             "blade": {"rotation": rx(self.a)},
             "handle_bite": {"rotation": rx(self.b)},
             "latch": {"rotation": rx(self.c)},
-            "arm_R": {"translation": shoulder_r, "rotation": ar["q_upper"]},
-            "arm_R_fore": {"rotation": ar["q_fore"]},
-            "arm_L": {"rotation": al["q_upper"], "scale": np.full(3, self.left_scale)},
-            "arm_L_fore": {"rotation": al["q_fore"]},
             "camera": {"rotation": self.cam_q},
         }
-        return trs, {"R": ar, "L": al}
+        trs.update(tr)
+        trs.update(tl)
+        trs["arm_R"]["translation"] = shoulder_r
+        trs["arm_L"]["scale"] = np.full(3, self.left_scale)
+        return trs, {"R": ar, "L": al, "target_R": target, "target_L": hl}
+
+
+def reachable(t, q):
+    """Knife root / orientation after the wrist limit for an authored pose (authoring pass for key poses)."""
+    p = KnifePose()
+    p.knife_t, p.knife_q = np.asarray(t, float).copy(), np.asarray(q, float).copy()
+    p.solve()
+    return p.knife_t.copy(), p.knife_q.copy()
+
+
+REST_T, REST_Q = reachable(REST_T, REST_Q)
 
 
 def rest_values():

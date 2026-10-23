@@ -9,16 +9,17 @@ import com.mojang.blaze3d.vertex.VertexFormatElement;
 import net.minecraft.client.renderer.RenderPipelines;
 
 /**
- * GPU pipelines for retained-mode models (blockland:core/gun shader). The vertex is 24 bytes:
- * position (3 floats), uv (2 floats), normal (3 signed bytes + 1 padding) — about half of Minecraft's entity
- * vertex — and lives in a GPU buffer uploaded once per model, so a frame only uploads one small uniform block.
+ * GPU pipelines for retained-mode models (blockland:core/gun shader, PBR). The vertex is 24 bytes: position
+ * (3 floats), uv (2 floats) and four unsigned normalized bytes holding the normal (xyz, 0..1 = −1..1) and the baked
+ * ambient occlusion (w) — about half of Minecraft's entity vertex — and lives in a GPU buffer uploaded once per model,
+ * so a frame only uploads one small uniform block. Samplers: {@code Sampler0} albedo, {@code NormalSampler} and
+ * {@code SpecularSampler} the LabPBR {@code _n} / {@code _s} maps (asset spec §20), {@code Sampler2} the lightmap.
  */
 public final class GunPipelines {
     public static final VertexFormat FORMAT = VertexFormat.builder()
             .add("Position", VertexFormatElement.POSITION)
             .add("UV0", VertexFormatElement.UV0)
-            .add("Normal", VertexFormatElement.NORMAL)
-            .padding(1)
+            .add("Normal", VertexFormatElement.COLOR)
             .build();
 
     public static final RenderPipeline OPAQUE = base("gun_opaque").withCull(true).build();
@@ -43,6 +44,8 @@ public final class GunPipelines {
                 .withVertexShader(BlockLand.id("core/gun"))
                 .withFragmentShader(BlockLand.id("core/gun"))
                 .withSampler("Sampler0")
+                .withSampler("NormalSampler")
+                .withSampler("SpecularSampler")
                 .withSampler("Sampler2")
                 .withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST)
                 .withVertexFormat(FORMAT, VertexFormat.Mode.TRIANGLES);

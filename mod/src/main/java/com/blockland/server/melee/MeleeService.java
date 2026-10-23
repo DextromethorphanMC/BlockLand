@@ -1,9 +1,12 @@
 package com.blockland.server.melee;
 
 import com.blockland.BlockLand;
+import com.blockland.combat.HitRecords;
+import com.blockland.effect.ActionLocks;
 import com.blockland.melee.MeleeContent;
 import com.blockland.melee.MeleeData;
 import com.blockland.melee.MeleeTrace;
+import com.blockland.movement.Slides;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.MeleePacketListeners;
 import com.blockland.network.packet.MeleePackets;
@@ -56,6 +59,7 @@ public final class MeleeService implements MeleePacketListeners.Server {
     @Override
     public void onAttack(ServerPlayer player, MeleePackets.C2SAttack attack) {
         if (!player.isAlive() || player.isSpectator() || attack.slot() != player.getInventory().getSelectedSlot()) return;
+        if (ActionLocks.isLocked(player)) return;
         MeleeData.Knife knife = MeleeContent.knifeOf(player.getMainHandItem()).orElse(null);
         if (knife == null) return;
         Fighter fighter = fighters.computeIfAbsent(player.getUUID(), id -> new Fighter());
@@ -94,7 +98,7 @@ public final class MeleeService implements MeleePacketListeners.Server {
                 || player.getInventory().getSelectedSlot() != strike.slot) return;
         MeleeData.Attack attack = knife.attack(strike.heavy);
         ServerLevel level = player.level();
-        MeleeTrace.Hit hit = MeleeTrace.trace(level, player, player.getEyePosition(), player.getLookAngle(), attack);
+        MeleeTrace.Hit hit = MeleeTrace.trace(level, player, Slides.eyePosition(player), player.getLookAngle(), attack);
         switch (hit.type()) {
             case ENTITY -> {
                 damage(level, player, knife, attack, hit.entity());
@@ -119,7 +123,10 @@ public final class MeleeService implements MeleePacketListeners.Server {
         DamageSource source = new DamageSource(level.registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE).getOrThrow(MeleeContent.KNIFE),
                 attacker, attacker);
         // the attack cooldown is the knife's own; vanilla's hurt cooldown would swallow fast combos
-        if (target instanceof LivingEntity living) living.invulnerableTime = 0;
+        if (target instanceof LivingEntity living) {
+            living.invulnerableTime = 0;
+            HitRecords.record(living, attacker, BlockLand.id(knife.id).toString(), backstab);
+        }
         boolean wasSpectator = target.isSpectator();
         if (!target.hurtServer(level, source, amount)) return;
         if (target instanceof LivingEntity living && attack.knockback > 0) {

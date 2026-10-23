@@ -69,6 +69,22 @@ def brushed(size=256, seed=12):
     return np.clip(rgb, 0, 1)
 
 
+def wood(size=256, seed=14):
+    """Tileable wood grain albedo (multiplies the base colour, values ~0.72..1): wavy bands along v, pores along u."""
+    rng = np.random.default_rng(seed)
+    warp = _blur_wrap(rng.standard_normal((size, size)), 20.0, 4.0)
+    warp = (warp - warp.mean()) / (warp.std() + 1e-9)
+    y = np.arange(size)[:, None] * np.ones((1, size))
+    bands = np.sin(2 * np.pi * (y / size * 7 + 0.30 * warp))
+    late = np.clip(bands, 0, 1) ** 3                      # dark late-wood lines
+    pores = _blur_wrap(rng.standard_normal((size, size)), 6.0, 0.6)
+    pores = (pores - pores.mean()) / (pores.std() + 1e-9)
+    blotch = tile_noise(size, 40, rng)
+    v = 0.92 - 0.14 * late + 0.03 * pores - 0.06 * (blotch - 0.5)
+    v = np.clip(v, 0.70, 1.0)
+    return np.clip(np.stack([v, v * 0.975, v * 0.95], 2), 0, 1)
+
+
 def dot(size=32, radius=None, soft=1.0):
     """White dot on transparent (RGBA float)."""
     r = radius if radius is not None else size * 0.30

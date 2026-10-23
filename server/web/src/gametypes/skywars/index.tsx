@@ -1,5 +1,6 @@
 import { Field, NumberInput, useLoad } from '../../components/ui'
 import type { GameMap } from '../../types'
+import { MovementFields } from '../common/Movement'
 import { TeamArenaFields, teamFormatLabel } from '../common/TeamArena'
 import type { GameTypeUi, MapOverlay, SettingsFormProps } from '../index'
 import { LOOT_COLORS, lootColor, readMapSettings, skyWarsApi } from './api'
@@ -17,6 +18,7 @@ function SkyWarsSettingsForm({ settings, onChange, maps }: SettingsFormProps) {
           <NumberInput value={refill} min={0} max={3600} onChange={(v) => onChange({ ...settings, chestRefillSeconds: v })} />
         </Field>
       </div>
+      <MovementFields settings={settings} onChange={onChange} />
     </div>
   )
 }

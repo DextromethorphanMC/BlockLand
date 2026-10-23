@@ -1,0 +1,785 @@
+{
+  "equipment": {
+    "frag_grenade": {
+      "name": "破片手雷",
+      "description": "拔销后松开握片开始计时，3.5 秒后爆炸，近距离致命。按住可以握着烹雷，左键大力投掷，右键低抛。",
+      "kind": "frag",
+      "model": "models/equipment/frag_grenade.glb",
+      "stack": 2,
+      "drawTime": 0.48,
+      "cooldown": 0.5,
+      "fuse": 3.5,
+      "cookable": true,
+      "pullTime": 0.5,
+      "throw": {
+        "overhand": {
+          "speed": 1.45,
+          "pitchUp": 4.0
+        },
+        "lob": {
+          "speed": 0.62,
+          "pitchUp": 10.0
+        },
+        "gravity": 0.05,
+        "drag": 0.99,
+        "bounce": 0.38,
+        "friction": 0.62,
+        "releaseAt": 0.2,
+        "recover": 0.42
+      },
+      "effect": {
+        "radius": 6.0,
+        "innerRadius": 1.6,
+        "damage": 24.0,
+        "minDamage": 3.0,
+        "knockback": 0.9,
+        "throughWalls": false,
+        "shake": 1.0
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint",
+        "walk": "walk",
+        "pull": "pull",
+        "hold": "hold",
+        "throw": "throw",
+        "lob": "lob"
+      },
+      "handling": {
+        "weight": 0.5,
+        "sway": 1.1,
+        "bob": 1.0,
+        "inertia": 0.85,
+        "sprintOut": 0.14,
+        "tacticalSprint": 3.0,
+        "adsTilt": 0
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "lever": {
+              "pbr": "textures/pbr/equipment/zinc",
+              "uvScale": 0.833333,
+              "tint": [
+                1.0,
+                0.92,
+                0.78
+              ]
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "label": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333,
+              "tint": [
+                0.85,
+                0.88,
+                0.92
+              ]
+            }
+          }
+        },
+        "aurora": {
+          "name": "极光",
+          "rarity": "legendary",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/aurora/body",
+              "uvScale": 0.333333,
+              "effect": "iridescent",
+              "params": [
+                0.85,
+                1.0,
+                0.04,
+                6.0
+              ]
+            },
+            "label": {
+              "pbr": "textures/pbr/skin/aurora/accent",
+              "uvScale": 0.333333,
+              "effect": "flow",
+              "effectColor": "#5CF2FF",
+              "params": [
+                0.35,
+                0.06,
+                0.25,
+                1.0
+              ]
+            },
+            "*": {
+              "pbr": "textures/pbr/skin/aurora/metal",
+              "uvScale": 0.416667,
+              "tint": [
+                0.92,
+                0.96,
+                1.0
+              ]
+            }
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      }
+    },
+    "flashbang": {
+      "name": "闪光弹",
+      "description": "1.6 秒后爆出强光与巨响，正对爆点的敌人会短暂致盲、耳鸣。背对或被墙挡住时影响大幅减弱。",
+      "kind": "flash",
+      "model": "models/equipment/flashbang.glb",
+      "stack": 2,
+      "drawTime": 0.48,
+      "cooldown": 0.5,
+      "fuse": 1.6,
+      "cookable": true,
+      "pullTime": 0.5,
+      "throw": {
+        "overhand": {
+          "speed": 1.45,
+          "pitchUp": 4.0
+        },
+        "lob": {
+          "speed": 0.62,
+          "pitchUp": 10.0
+        },
+        "gravity": 0.05,
+        "drag": 0.99,
+        "bounce": 0.38,
+        "friction": 0.62,
+        "releaseAt": 0.2,
+        "recover": 0.42
+      },
+      "effect": {
+        "radius": 24.0,
+        "maxBlind": 4.5,
+        "minBlind": 0.4,
+        "behindFactor": 0.25,
+        "deafen": 3.0,
+        "ownerFactor": 1.0
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint",
+        "walk": "walk",
+        "pull": "pull",
+        "hold": "hold",
+        "throw": "throw",
+        "lob": "lob"
+      },
+      "handling": {
+        "weight": 0.5,
+        "sway": 1.1,
+        "bob": 1.0,
+        "inertia": 0.85,
+        "sprintOut": 0.14,
+        "tacticalSprint": 3.0,
+        "adsTilt": 0
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "lever": {
+              "pbr": "textures/pbr/equipment/zinc",
+              "uvScale": 0.833333,
+              "tint": [
+                1.0,
+                0.92,
+                0.78
+              ]
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "label": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333,
+              "tint": [
+                0.85,
+                0.88,
+                0.92
+              ]
+            }
+          }
+        },
+        "aurora": {
+          "name": "极光",
+          "rarity": "legendary",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/aurora/body",
+              "uvScale": 0.333333,
+              "effect": "iridescent",
+              "params": [
+                0.85,
+                1.0,
+                0.04,
+                6.0
+              ]
+            },
+            "label": {
+              "pbr": "textures/pbr/skin/aurora/accent",
+              "uvScale": 0.333333,
+              "effect": "flow",
+              "effectColor": "#5CF2FF",
+              "params": [
+                0.35,
+                0.06,
+                0.25,
+                1.0
+              ]
+            },
+            "*": {
+              "pbr": "textures/pbr/skin/aurora/metal",
+              "uvScale": 0.416667,
+              "tint": [
+                0.92,
+                0.96,
+                1.0
+              ]
+            }
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      }
+    },
+    "smoke_grenade": {
+      "name": "烟雾弹",
+      "description": "落地静止后喷出浓烟，形成持续 18 秒、遮挡视线的烟幕。可以扑灭燃烧瓶的火焰。",
+      "kind": "smoke",
+      "model": "models/equipment/smoke_grenade.glb",
+      "stack": 2,
+      "drawTime": 0.48,
+      "cooldown": 0.5,
+      "fuse": 1.8,
+      "cookable": false,
+      "pullTime": 0.5,
+      "throw": {
+        "overhand": {
+          "speed": 1.45,
+          "pitchUp": 4.0
+        },
+        "lob": {
+          "speed": 0.62,
+          "pitchUp": 10.0
+        },
+        "gravity": 0.05,
+        "drag": 0.99,
+        "bounce": 0.3,
+        "friction": 0.62,
+        "releaseAt": 0.2,
+        "recover": 0.42
+      },
+      "effect": {
+        "radius": 4.8,
+        "height": 3.4,
+        "duration": 18.0,
+        "grow": 1.6,
+        "fade": 3.0,
+        "extinguish": true
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint",
+        "walk": "walk",
+        "pull": "pull",
+        "hold": "hold",
+        "throw": "throw",
+        "lob": "lob"
+      },
+      "handling": {
+        "weight": 0.5,
+        "sway": 1.1,
+        "bob": 1.0,
+        "inertia": 0.85,
+        "sprintOut": 0.14,
+        "tacticalSprint": 3.0,
+        "adsTilt": 0
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "lever": {
+              "pbr": "textures/pbr/equipment/zinc",
+              "uvScale": 0.833333,
+              "tint": [
+                1.0,
+                0.92,
+                0.78
+              ]
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "label": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333,
+              "tint": [
+                0.85,
+                0.88,
+                0.92
+              ]
+            }
+          }
+        },
+        "aurora": {
+          "name": "极光",
+          "rarity": "legendary",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/aurora/body",
+              "uvScale": 0.333333,
+              "effect": "iridescent",
+              "params": [
+                0.85,
+                1.0,
+                0.04,
+                6.0
+              ]
+            },
+            "label": {
+              "pbr": "textures/pbr/skin/aurora/accent",
+              "uvScale": 0.333333,
+              "effect": "flow",
+              "effectColor": "#5CF2FF",
+              "params": [
+                0.35,
+                0.06,
+                0.25,
+                1.0
+              ]
+            },
+            "*": {
+              "pbr": "textures/pbr/skin/aurora/metal",
+              "uvScale": 0.416667,
+              "tint": [
+                0.92,
+                0.96,
+                1.0
+              ]
+            }
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      }
+    },
+    "molotov": {
+      "name": "燃烧瓶",
+      "description": "点燃布条后投出，撞击即碎，在地面铺开一片持续燃烧的火海，阻断通道。",
+      "kind": "molotov",
+      "model": "models/equipment/molotov.glb",
+      "stack": 2,
+      "drawTime": 0.52,
+      "cooldown": 0.5,
+      "fuse": 0,
+      "cookable": false,
+      "pullTime": 0.7,
+      "throw": {
+        "overhand": {
+          "speed": 1.45,
+          "pitchUp": 4.0
+        },
+        "lob": {
+          "speed": 0.62,
+          "pitchUp": 10.0
+        },
+        "gravity": 0.05,
+        "drag": 0.99,
+        "bounce": 0.0,
+        "friction": 0.62,
+        "releaseAt": 0.2,
+        "recover": 0.42
+      },
+      "effect": {
+        "radius": 3.6,
+        "duration": 7.0,
+        "damagePerSecond": 4.0,
+        "igniteSeconds": 2.0,
+        "spreadTime": 0.6,
+        "maxFall": 6
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint",
+        "walk": "walk",
+        "pull": "pull",
+        "hold": "hold",
+        "throw": "throw",
+        "lob": "lob"
+      },
+      "handling": {
+        "weight": 0.5,
+        "sway": 1.1,
+        "bob": 1.0,
+        "inertia": 0.85,
+        "sprintOut": 0.14,
+        "tacticalSprint": 3.0,
+        "adsTilt": 0
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "camo_rag": {
+          "name": "林地布条",
+          "regions": {
+            "rag": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "glass": {
+              "tint": [
+                0.55,
+                1.45,
+                0.75
+              ]
+            }
+          }
+        },
+        "desert_rag": {
+          "name": "沙漠布条",
+          "regions": {
+            "rag": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "glass": {
+              "tint": [
+                1.6,
+                1.5,
+                1.3
+              ]
+            }
+          }
+        },
+        "hellfire": {
+          "name": "地狱火",
+          "rarity": "legendary",
+          "regions": {
+            "rag": {
+              "pbr": "textures/pbr/skin/magma/rock",
+              "uvScale": 0.25,
+              "effect": "flow",
+              "effectColor": "#FF6A1A",
+              "params": [
+                0.12,
+                0.12,
+                0.6,
+                0.7
+              ]
+            },
+            "glass": {
+              "tint": [
+                1.5,
+                0.35,
+                0.3
+              ]
+            },
+            "liquid": {
+              "tint": [
+                1.3,
+                0.55,
+                0.3
+              ]
+            }
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      }
+    },
+    "throwing_knife": {
+      "name": "飞刀",
+      "description": "平衡良好的投掷刀，出手快、弹道平直。命中头部可以一击致命；插在方块上的飞刀可以捡回来。",
+      "kind": "knife",
+      "model": "models/equipment/throwing_knife.glb",
+      "stack": 5,
+      "drawTime": 0.36,
+      "cooldown": 0.45,
+      "fuse": 0,
+      "cookable": false,
+      "pullTime": 0,
+      "throw": {
+        "overhand": {
+          "speed": 2.6,
+          "pitchUp": 0.5
+        },
+        "gravity": 0.03,
+        "drag": 0.995,
+        "bounce": 0.0,
+        "friction": 0.0,
+        "releaseAt": 0.16,
+        "recover": 0.32
+      },
+      "effect": {
+        "damage": 12.0,
+        "headshotMultiplier": 2.0,
+        "knockback": 0.25,
+        "stickSeconds": 30,
+        "pickup": true
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint",
+        "walk": "walk",
+        "throw": "throw"
+      },
+      "handling": {
+        "weight": 0.5,
+        "sway": 1.1,
+        "bob": 1.0,
+        "inertia": 0.85,
+        "sprintOut": 0.14,
+        "tacticalSprint": 3.0,
+        "adsTilt": 0
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/equipment/paracord",
+              "uvScale": 0.886525,
+              "tint": [
+                1.6,
+                2.2,
+                1.2
+              ]
+            }
+          }
+        },
+        "tiger": {
+          "name": "虎纹迷彩",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "galaxy": {
+          "name": "星河",
+          "rarity": "legendary",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/skin/galaxy/blade",
+              "uvScale": 0.333333,
+              "effect": "galaxy",
+              "effectColor": "#DDE6FF",
+              "params": [
+                0.012,
+                1.0,
+                0.6,
+                0.8
+              ]
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/galaxy/handle",
+              "uvScale": 0.666667
+            }
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      }
+    },
+    "adrenaline": {
+      "name": "肾上腺素注射剂",
+      "description": "扎进大腿推下活塞：8 秒内移动速度大幅提升并缓慢回复生命，结束后会短暂疲劳。",
+      "kind": "adrenaline",
+      "model": "models/equipment/adrenaline.glb",
+      "stack": 3,
+      "drawTime": 0.45,
+      "cooldown": 0.5,
+      "useTime": 1.45,
+      "injectAt": 0.82,
+      "effect": {
+        "duration": 8.0,
+        "speed": 0.35,
+        "regen": 4.0,
+        "fatigue": 2.0,
+        "fatigueSlow": 0.15
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint",
+        "walk": "walk",
+        "use": "use"
+      },
+      "handling": {
+        "weight": 0.5,
+        "sway": 1.1,
+        "bob": 1.0,
+        "inertia": 0.85,
+        "sprintOut": 0.14,
+        "tacticalSprint": 3.0,
+        "adsTilt": 0
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "barrel": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "barrel": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "cap": {
+              "pbr": "textures/pbr/equipment/pen_blue",
+              "uvScale": 0.666667,
+              "tint": [
+                0.6,
+                0.6,
+                0.6
+              ]
+            }
+          }
+        },
+        "neon": {
+          "name": "霓虹回路",
+          "rarity": "legendary",
+          "regions": {
+            "*": {
+              "pbr": "textures/pbr/skin/neon/base",
+              "uvScale": 0.333333,
+              "effect": "circuit",
+              "effectColor": "#38F0FF",
+              "params": [
+                0.25,
+                40.0,
+                0.8,
+                0.05
+              ]
+            }
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      }
+    }
+  }
+}

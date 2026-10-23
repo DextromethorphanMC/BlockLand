@@ -1,0 +1,42 @@
+{
+  "monsters": {
+    "zombie": {
+      "name": "僵尸",
+      "description": "最常见的感染者，血量充足，冲锋迅猛。",
+      "entity": "minecraft:zombie",
+      "health": 80,
+      "speed": 1.0,
+      "knockbackResistance": 0.25,
+      "skill": {
+        "type": "effect",
+        "name": "狂暴",
+        "description": "怒吼一声，短暂获得速度 III。",
+        "effect": "minecraft:speed",
+        "amplifier": 2,
+        "duration": 4,
+        "cooldown": 18,
+        "sound": "minecraft:entity.ravager.roar"
+      }
+    },
+    "slime_licker": {
+      "name": "粘液舔舐者",
+      "description": "浑身粘液的变异感染者，用粘液封住人类的双手。",
+      "entity": "blockland:slime_licker",
+      "health": 60,
+      "speed": 1.08,
+      "knockbackResistance": 0.1,
+      "skill": {
+        "type": "projectile",
+        "name": "粘液喷吐",
+        "description": "吐出一团粘液，命中的目标 3 秒内无法使用左键和右键。",
+        "projectile": "blockland:slime_shot",
+        "speed": 1.7,
+        "effect": "blockland:slimed",
+        "amplifier": 0,
+        "duration": 3,
+        "cooldown": 12,
+        "sound": "minecraft:entity.llama.spit"
+      }
+    }
+  }
+}

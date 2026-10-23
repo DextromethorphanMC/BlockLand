@@ -2,6 +2,7 @@ package com.blockland.backend.gametype.fastpvp;
 
 import com.blockland.backend.gamemode.GameMode;
 import com.blockland.backend.gametype.GameTypeDefinition;
+import com.blockland.backend.gametype.common.MovementSettings;
 import com.blockland.backend.gametype.common.TeamArenaSettings;
 import com.blockland.backend.kit.KitItem;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -13,12 +14,15 @@ import java.util.List;
 
 /**
  * FastPVP: teams spawn on a custom arena map with a configured kit; last team standing wins.
- * Settings: the shared team arena settings plus {@code allowBlockBreak} / {@code allowBlockPlace}.
+ * Settings: the shared team arena settings plus {@code allowBlockBreak} / {@code allowBlockPlace} and the movement
+ * rules ({@code allowSlide}).
  * Must stay in sync with the mod's {@code FastPvpSettings}.
  */
 @Component
 public class FastPvpDefinition implements GameTypeDefinition {
     public static final String ID = "FASTPVP";
+    /** Arena fights (guns included) slide by default. */
+    private static final boolean ALLOW_SLIDE = true;
 
     private final ObjectMapper mapper;
 
@@ -49,6 +53,7 @@ public class FastPvpDefinition implements GameTypeDefinition {
         node.put("endingSeconds", 5);
         node.put("allowBlockBreak", false);
         node.put("allowBlockPlace", false);
+        MovementSettings.putDefaults(node, ALLOW_SLIDE);
         return node;
     }
 
@@ -59,6 +64,7 @@ public class FastPvpDefinition implements GameTypeDefinition {
         TeamArenaSettings.normalizeInto(in, out, ID, context, errors);
         out.put("allowBlockBreak", TeamArenaSettings.boolField(in, "allowBlockBreak", false));
         out.put("allowBlockPlace", TeamArenaSettings.boolField(in, "allowBlockPlace", false));
+        MovementSettings.normalizeInto(in, out, ALLOW_SLIDE);
         return out;
     }
 

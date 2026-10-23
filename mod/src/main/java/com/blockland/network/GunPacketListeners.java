@@ -15,24 +15,27 @@ public final class GunPacketListeners {
         Server NOOP = new Server() {
             @Override public void onFire(ServerPlayer player, GunPackets.C2SFire fire) { }
             @Override public void onReload(ServerPlayer player, int slot) { }
-            @Override public void onGunsmith(ServerPlayer player, GunPackets.C2SGunsmith request) { }
+            @Override public void onAim(ServerPlayer player, GunPackets.C2SAim aim) { }
         };
 
         void onFire(ServerPlayer player, GunPackets.C2SFire fire);
 
         void onReload(ServerPlayer player, int slot);
 
-        void onGunsmith(ServerPlayer player, GunPackets.C2SGunsmith request);
+        void onAim(ServerPlayer player, GunPackets.C2SAim aim);
     }
 
     public interface Client {
         Client NOOP = new Client() {
             @Override public void onHit(GunPackets.S2CHit hit) { }
             @Override public void onShot(GunPackets.S2CShot shot) { }
+            @Override public void onAim(GunPackets.S2CAim aim) { }
         };
 
         void onHit(GunPackets.S2CHit hit);
 
         void onShot(GunPackets.S2CShot shot);
+
+        void onAim(GunPackets.S2CAim aim);
     }
 }

@@ -3,18 +3,27 @@ package com.blockland.client.gun;
 import com.blockland.BlockLand;
 import com.blockland.anim.Ease;
 import com.blockland.anim.Ticker;
-import com.blockland.client.gltf.GltfModel;
-import com.blockland.client.render.GpuModel;
+import com.blockland.client.craft.WeaponLook;
 import com.blockland.client.decal.Decals;
+import com.blockland.client.gltf.GltfModel;
 import com.blockland.client.input.WeaponInput;
+import com.blockland.client.render.GpuModel;
 import com.blockland.client.render.ModelCache;
+import com.blockland.client.scope.Optics;
+import com.blockland.client.scope.ScopeOptics;
+import com.blockland.client.scope.SightPose;
+import com.blockland.client.viewmodel.Holster;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
+import com.blockland.craft.CraftData;
+import com.blockland.combat.HitShapes;
+import com.blockland.effect.ActionLocks;
 import com.blockland.gun.GunContent;
 import com.blockland.gun.GunData;
 import com.blockland.gun.GunItem;
 import com.blockland.gun.GunMath;
 import com.blockland.gun.GunState;
 import com.blockland.gun.GunStats;
+import com.blockland.movement.Slides;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.GunPacketListeners;
 import com.blockland.network.packet.GunPackets;
@@ -35,14 +44,12 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.AddGuiOverlayLayersEvent;
@@ -66,21 +73,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
+import static com.blockland.client.ui.Tr.tr;
+
 /**
- * Client side of guns: input (fire / aim / reload / inspect / gunsmith), client-side prediction (ammo, spread,
+ * Client side of guns: input (fire / aim / reload / inspect / fire mode), client-side prediction (ammo, spread,
  * tracers, impacts) so shooting feels instant, camera recoil and ADS zoom, and the hooks that put the
- * {@link Viewmodel} on screen instead of the vanilla hand. The server stays authoritative for hits and ammo.
+ * {@link Viewmodel} on screen instead of the vanilla hand. Dual guns (asset spec §26) fire their pair alternately and
+ * a volley with the use key; tube magazines (§25) reload a shell at a time and firing interrupts them. Switching away
+ * hands the gun on screen to the {@link Holster} (it drops out of view while the next weapon is drawn), so two
+ * viewmodels take turns. The server stays authoritative for hits and ammo.
  */
 public final class ClientGuns {
     public static final KeyMapping RELOAD = new KeyMapping("key.blockland.reload", InputConstants.KEY_R, "key.categories.blockland");
-    public static final KeyMapping GUNSMITH = new KeyMapping("key.blockland.gunsmith", InputConstants.KEY_G, "key.categories.blockland");
     public static final KeyMapping FIRE_MODE = new KeyMapping("key.blockland.fire_mode", InputConstants.KEY_B, "key.categories.blockland");
     /** Firing or aiming out of a sprint waits until the gun has come down from the sprint carry. */
     private static final float SPRINT_READY = 0.35f;
 
     /** Server ammo wins again once we have not predicted anything for this long. */
     private static final long RECONCILE_NANOS = 450_000_000L;
-    private static final Viewmodel viewmodel = new Viewmodel();
+    /** The gun on screen, and the other instance (the one dropping out of view after a switch, or idle). */
+    private static Viewmodel viewmodel = new Viewmodel();
+    private static Viewmodel spare = new Viewmodel();
     private static final Random random = new Random();
 
     // equipped gun
@@ -95,6 +108,12 @@ public final class ClientGuns {
     // prediction
     private static int ammo;
     private static long lastShot;
+    /** Earliest time the next shot may go: one fire interval after a shot, a dual gun's volley costs more. */
+    private static long nextShotAt;
+    /** Dual guns: the next single shot comes from the left gun. */
+    private static boolean nextLeft;
+    /** The last real shot of the held gun (not a dry click), for the bolt cycle. */
+    private static long lastBoltShot;
     private static long lastPrediction;
     private static float bloom;
     private static long bloomAt;
@@ -104,20 +123,35 @@ public final class ClientGuns {
     private static long drawEnd;
     private static boolean pendingShot;
     private static boolean pendingFromSprint;
+    /** Rounds the buffered press fires (2 = a dual gun's volley). */
+    private static int pendingShots = 1;
     /** Selected fire mode per gun id (select-fire guns); the gun's default otherwise. */
     private static final Map<String, GunData.FireMode> fireModes = new HashMap<>();
     private static long pendingSince;
 
+    /** Shell-by-shell reloads (asset spec §25): where the sequence is, when that part ends, how it started. */
+    private enum ShellPhase { NONE, START, SHELL, END }
+    private static ShellPhase shellPhase = ShellPhase.NONE;
+    private static long phaseEnd;
+    private static boolean shellStartedEmpty;
+    /** Rounds the reserve can still give this reload, and the rounds in the gun when it started (HUD progress). */
+    private static int shellsLeft, shellStartAmmo, shellTarget;
+
     // camera
-    private static float recoilPitch, recoilYaw, shake;
+    private static float recoilPitch, recoilYaw;
     private static long lastFrame;
+    /** What the server was last told about the sights (C2SAim): up or down, and for which slot. */
+    private static boolean sentAiming;
+    private static int sentAimSlot = -1;
 
     // F3 numbers: CPU time of the viewmodel (pose + queue + submit), smoothed
     private static double renderMillis;
 
-    // effects that need this frame's viewmodel matrices
-    private static int pendingShells;
-    private static final List<Vec3> pendingTracers = new ArrayList<>();
+    // effects that need this frame's viewmodel matrices (per gun: 0 = right / the only one, 1 = a dual gun's left)
+    private static final int[] pendingShells = new int[2];
+    private record PendingTracer(Vec3 end, int gun) {
+    }
+    private static final List<PendingTracer> pendingTracers = new ArrayList<>();
     private static final Map<Integer, GunParticles.Laser> lasers = new HashMap<>();
 
     private ClientGuns() {
@@ -126,7 +160,6 @@ public final class ClientGuns {
     public static void init(BusGroup modBus) {
         RegisterKeyMappingsEvent.getBus(modBus).addListener(event -> {
             event.register(RELOAD);
-            event.register(GUNSMITH);
             event.register(FIRE_MODE);
         });
         RegisterClientReloadListenersEvent.getBus(modBus).addListener(event -> event.registerReloadListener(
@@ -139,6 +172,7 @@ public final class ClientGuns {
             draw.addConditionTo(ForgeLayeredDraw.PRE_SLEEP_STACK, ForgeLayeredDraw.CROSSHAIR, () -> !holdingGun());
             draw.addAbove(ForgeLayeredDraw.PRE_SLEEP_STACK, BlockLand.id("gun_hud"), ForgeLayeredDraw.CROSSHAIR, GunHud::render);
         });
+        DualHold.init();
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> clientTick());
         TickEvent.RenderTickEvent.Pre.BUS.addListener(event -> frame());
         RenderHandEvent.BUS.addListener(ClientGuns::renderHand);
@@ -164,7 +198,8 @@ public final class ClientGuns {
         ViewportEvent.ComputeFov.BUS.addListener(event -> {
             if (event.usedConfiguredFov() && stats != null && holdingGun()) {
                 float a = viewmodel.ads.get();
-                event.setFOV(event.getFOV() / (1 + (stats.sight().zoom - 1) * (float) Ease.SINE_IN_OUT.apply(Mth.clamp(a, 0, 1))));
+                event.setFOV(Optics.fov(event.getFOV(), stats.sight(), (float) Ease.SINE_IN_OUT.apply(Mth.clamp(a, 0, 1)))
+                        * viewmodel.cameraFov());
             }
         });
         ViewportEvent.ComputeCameraAngles.BUS.addListener(event -> {
@@ -173,10 +208,10 @@ public final class ClientGuns {
             event.setPitch(event.getPitch() + viewmodel.cameraPitch());
             event.setYaw(event.getYaw() + viewmodel.cameraYaw());
             event.setRoll(event.getRoll() + viewmodel.cameraRoll());
-            if (shake <= 0.001f) return;
-            double t = Ticker.global().time();
-            event.setRoll(event.getRoll() + (float) Math.sin(t * 61) * shake * 0.6f);
-            event.setPitch(event.getPitch() + (float) Math.sin(t * 47 + 1.3) * shake * 0.25f);
+            viewmodel.moveCamera(event.getCamera());
+            // a zoomed scope's breathing sway moves the view itself (the overlay is the scope)
+            event.setPitch(event.getPitch() + Optics.cameraSwayPitch());
+            event.setYaw(event.getYaw() + Optics.cameraSwayYaw());
         });
         CustomizeGuiOverlayEvent.DebugText.BUS.addListener(event -> {
             if (event.getSide() == CustomizeGuiOverlayEvent.DebugText.Side.Left && holdingGun() && modelReady) {
@@ -200,10 +235,17 @@ public final class ClientGuns {
             public void onShot(GunPackets.S2CShot shot) {
                 remoteShot(shot);
             }
+
+            @Override
+            public void onAim(GunPackets.S2CAim aim) {
+                Optics.remoteAim(aim.playerId(), aim.aiming());
+            }
         });
+        // the optics show other players' raised scopes (glints): which sight a player holds comes from their gun's build
+        Optics.setSightOf(player -> GunContent.statsOf(player.getMainHandItem()).map(GunStats::sight).orElse(null));
     }
 
-    // ---- state queried by the HUD and the gunsmith ----------------------------------------------------
+    // ---- state queried by the HUD, the craft screen and the settings ------------------------------------
 
     public static boolean holdingGun() {
         Minecraft mc = Minecraft.getInstance();
@@ -223,10 +265,34 @@ public final class ClientGuns {
         return reloading;
     }
 
-    /** 0..1 progress of the current reload. */
+    /** 0..1 progress of the current reload (a shell reload: the rounds it can load). */
     public static float reloadProgress() {
-        if (!reloading || reloadEnd <= reloadStart) return 0;
+        if (!reloading) return 0;
+        if (shellPhase != ShellPhase.NONE) {
+            if (shellPhase == ShellPhase.END || shellTarget <= shellStartAmmo) return 1;
+            return Mth.clamp((ammo - shellStartAmmo) / (float) (shellTarget - shellStartAmmo), 0, 1);
+        }
+        if (reloadEnd <= reloadStart) return 0;
         return Mth.clamp((System.nanoTime() - reloadStart) / (float) (reloadEnd - reloadStart), 0, 1);
+    }
+
+    /** A shell-by-shell reload is running (firing would interrupt it once a round is in). */
+    public static boolean isShellReloading() {
+        return reloading && shellPhase != ShellPhase.NONE;
+    }
+
+    /** The held gun is a dual pair (spec §26). */
+    public static boolean isDual() {
+        return stats != null && stats.gun().isDual();
+    }
+
+    /**
+     * Rounds in each gun of a dual pair, {left, right}: the pair fires alternately from the right, so the right gun
+     * holds the odd round.
+     */
+    public static int[] dualRounds() {
+        int right = nextLeft ? ammo / 2 : (ammo + 1) / 2;
+        return new int[]{ammo - right, right};
     }
 
     /** The fire mode currently selected for the held gun. */
@@ -241,17 +307,26 @@ public final class ClientGuns {
         if (stats == null) return;
         var modes = stats.gun().modes();
         if (modes.size() < 2) {
-            GunHud.flashHint(stats.gun().name + " 仅支持" + modes.get(0).label);
+            GunHud.flashHint(tr("blockland.gun.hud.only_mode", stats.gun().displayName().getString(), modeName(modes.get(0))));
             return;
         }
         GunData.FireMode next = modes.get((modes.indexOf(fireMode()) + 1) % modes.size());
         fireModes.put(stats.gun().id, next);
-        GunHud.flashHint("射击模式：" + next.label);
+        GunHud.flashHint(tr("blockland.gun.hud.fire_mode", modeName(next)));
         playUi("gun.hammer", 1.25f, 0.6f);
+    }
+
+    private static String modeName(GunData.FireMode mode) {
+        return tr("blockland.gun.fire_mode." + mode.name().toLowerCase(java.util.Locale.ROOT));
     }
 
     public static float aim() {
         return Mth.clamp(viewmodel.ads.get(), 0, 1);
+    }
+
+    /** The local player is aiming down the sights of a held gun (more than halfway up). */
+    public static boolean isAiming() {
+        return stats != null && holdingGun() && aim() > 0.5f;
     }
 
     /** Current cone half-angle, for the crosshair. */
@@ -282,10 +357,6 @@ public final class ClientGuns {
         while (RELOAD.consumeClick()) if (stats != null && mc.screen == null) startReload(player);
         if (WeaponInput.inspectPressed() && stats != null && mc.screen == null) inspect();
         while (FIRE_MODE.consumeClick()) if (stats != null && mc.screen == null) cycleFireMode();
-        while (GUNSMITH.consumeClick()) {
-            if (stats != null && mc.screen == null) mc.setScreen(new GunsmithScreen(player.getInventory().getSelectedSlot()));
-        }
-        GunLoadouts.applySaved(player);
         updateLasers(mc);
     }
 
@@ -302,16 +373,22 @@ public final class ClientGuns {
         if (resolved == null) return;
         long now = System.nanoTime();
         if (selected != slot || !item.gunId().equals(gunId)) {
+            holster(player);
             slot = selected;
             gunId = item.gunId();
             stats = resolved;
             state = current;
             ammo = current.ammo();
             reloading = false;
+            shellPhase = ShellPhase.NONE;
             pendingShot = false;
-            modelReady = viewmodel.equip(resolved.gun());
+            lastBoltShot = 0;
+            nextLeft = false;
+            nextShotAt = 0;
+            modelReady = viewmodel.equip(resolved.gun(), WeaponLook.modelOf(resolved.gun(), resolved.build()));
             viewmodel.setStats(resolved);
-            viewmodel.setEventSink(name -> playUi("gun." + name, 1.0f, 0.55f));
+            viewmodel.setNextLeft(false);
+            viewmodel.setEventSink(ClientGuns::clipEvent);
             drawEnd = now + (long) (resolved.gun().drawTime * 1e9);
             playUi("gun.equip", 1.0f, 0.6f);
             return;
@@ -323,13 +400,47 @@ public final class ClientGuns {
     }
 
     private static void unequip() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player != null) holster(player);
         slot = -1;
         gunId = "";
         stats = null;
         state = null;
         reloading = false;
+        shellPhase = ShellPhase.NONE;
         modelReady = false;
+        lastBoltShot = 0;
         viewmodel.ads.snap(0);
+    }
+
+    /**
+     * The gun on screen drops out of view (spec §31.4) while whatever comes next is drawn: it goes to the
+     * {@link Holster} with its last ammo count, its sights coming down and its sounds off, and the other viewmodel
+     * instance takes over.
+     */
+    private static void holster(LocalPlayer player) {
+        if (!modelReady || !viewmodel.isReady() || stats == null) return;
+        Viewmodel out = viewmodel;
+        int rounds = ammo;
+        out.setEventSink(null);
+        out.hideOpticMaterials(java.util.Set.of());
+        out.ads.toIfChanged(0, 0.12, Ease.SINE_IN_OUT);
+        Holster.start(out, new Holster.Outgoing() {
+            @Override
+            public void update(float dt) {
+                out.update(dt, player, false);
+            }
+
+            @Override
+            public void draw(Matrix4f base, int blockLight, int skyLight) {
+                out.draw(base, rounds, player, blockLight, skyLight);
+                out.submit();
+            }
+        });
+        viewmodel = spare;
+        spare = out;
+        Holster.release(viewmodel);
+        modelReady = false;
     }
 
     /** Every frame: animation clock, automatic fire, aiming, reload completion, camera recoil. */
@@ -340,28 +451,41 @@ public final class ClientGuns {
         long now = System.nanoTime();
         float dt = lastFrame == 0 ? 0 : Math.min(0.1f, (now - lastFrame) / 1e9f);
         lastFrame = now;
+        if (player == null) {
+            sentAiming = false;
+            sentAimSlot = -1;
+        }
         if (player == null || stats == null) {
             recoilPitch = recoilYaw = 0;
+            Optics.update(null, 0, dt);
+            if (player != null) syncAim(false);
             return;
         }
         boolean free = mc.screen == null && mc.getOverlay() == null;
         if (modelReady && holdingGun()) ViewmodelRenderer.suppressViewBobbing(player);
-        // aim
-        boolean wantAds = free && mc.options.keyUse.isDown() && !reloading && now >= drawEnd && !player.isSprinting()
-                && viewmodel.sprintAmount() < SPRINT_READY;
+        // aim (a bolt-action gun takes the sight down while it works the bolt)
+        boolean wantAds = free && stats.gun().canAim() && mc.options.keyUse.isDown() && !reloading && now >= drawEnd
+                && !player.isSprinting()
+                && !ActionLocks.isLocked(player)
+                && viewmodel.sprintAmount() < SPRINT_READY
+                && !cyclingBolt(now);
         viewmodel.ads.toIfChanged(wantAds ? 1 : 0, stats.adsTime(), Ease.SINE_IN_OUT);
+        syncAim(wantAds && holdingGun());
+        // dual guns have no sights: the use key fires a volley instead
+        Optics.update(holdingGun() && stats.gun().canAim() ? stats.sight() : null, aim(), dt);
         if (wantAds && viewmodel.action() == Viewmodel.Action.INSPECT) viewmodel.stopAction();
         // trigger: held for automatic weapons, a buffered click for semi-automatic ones
-        if (free && fireMode() == GunData.FireMode.AUTO && mc.options.keyAttack.isDown()) tryFire(player, false);
+        if (free && fireMode() == GunData.FireMode.AUTO && mc.options.keyAttack.isDown()) tryFire(player, false, 1);
         if (pendingShot) {
             long window = pendingFromSprint ? 600_000_000L : 180_000_000L;
             if (now - pendingSince > window) pendingShot = false;
-            else if (now - lastShot >= stats.gun().fireInterval() * 1e9 && viewmodel.sprintAmount() < SPRINT_READY) {
+            else if (now >= nextShotAt && viewmodel.sprintAmount() < SPRINT_READY) {
                 pendingShot = false;
-                tryFire(player, false);
+                tryFire(player, false, pendingShots);
             }
         }
-        if (reloading && now >= reloadEnd) finishReload(player);
+        if (reloading && shellPhase != ShellPhase.NONE) advanceShells(player);
+        else if (reloading && now >= reloadEnd) finishReload(player);
         // camera recoil: most of the kick lands within ~60 ms
         float apply = 1 - (float) Math.exp(-dt * 30);
         float dp = recoilPitch * apply, dy = recoilYaw * apply;
@@ -374,7 +498,6 @@ public final class ClientGuns {
             player.setYRot(player.getYRot() + dy);
             player.yRotO += dy;
         }
-        shake *= (float) Math.exp(-dt * 14);
         viewmodel.update(dt, player, player.isSprinting());
     }
 
@@ -392,26 +515,48 @@ public final class ClientGuns {
     private static void triggerPressed() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.screen != null || stats == null || !holdingGun()) return;
-        tryFire(mc.player, true);
+        tryFire(mc.player, true, 1);
     }
 
-    /** Aiming out of a sprint stops the sprint once (the movement input keeps it stopped while aiming). */
+    /**
+     * Aiming out of a sprint stops the sprint once (the movement input keeps it stopped while aiming); a dual gun fires
+     * a volley instead (spec §26).
+     */
     private static void aimPressed() {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player != null && mc.screen == null && holdingGun() && mc.player.isSprinting()) mc.player.setSprinting(false);
+        if (mc.player == null || mc.screen != null || !holdingGun()) return;
+        if (stats != null && stats.gun().dual != null) {
+            if (stats.gun().dual.volley) tryFire(mc.player, true, 2);
+            return;
+        }
+        if (mc.player.isSprinting()) mc.player.setSprinting(false);
     }
 
-    private static void tryFire(LocalPlayer player, boolean click) {
+    /** @param shots 2 = a dual gun's volley (both guns at once), else 1 */
+    private static void tryFire(LocalPlayer player, boolean click, int shots) {
         if (stats == null || slot < 0) return;
+        if (ActionLocks.isLocked(player)) {
+            pendingShot = false;
+            if (click) GunHud.flashHint(tr("blockland.gun.hud.slimed"));
+            return;
+        }
         long now = System.nanoTime();
-        if (now < drawEnd || reloading) return;
+        if (now < drawEnd) return;
+        if (reloading) {
+            // a tube magazine's reload stops for a shot once a round is in (the server stops its own the same way)
+            if (shellPhase == ShellPhase.NONE || ammo <= 0) return;
+            reloading = false;
+            shellPhase = ShellPhase.NONE;
+            viewmodel.stopAction();
+        }
         if (player.isSprinting()) player.setSprinting(false);
         if (viewmodel.action() == Viewmodel.Action.INSPECT) viewmodel.stopAction();
         boolean lowering = viewmodel.sprintAmount() >= SPRINT_READY;
-        if (lowering || now - lastShot < stats.gun().fireInterval() * 1e9) {
+        if (lowering || now < nextShotAt) {
             // still coming out of the sprint carry, or faster than the fire rate: buffer the press
             if (click) {
                 pendingShot = true;
+                pendingShots = shots;
                 pendingSince = now;
                 pendingFromSprint = lowering;
             }
@@ -419,41 +564,118 @@ public final class ClientGuns {
         }
         if (ammo <= 0) {
             playUi(stats.gun().sounds.dry, 1.0f, 0.8f);
+            viewmodel.dryFired();
             lastShot = now;
+            nextShotAt = now + (long) (stats.gun().fireInterval() * 1e9);
             if (reserve() > 0 || player.isCreative()) startReload(player);
             return;
         }
-        fire(player, now);
+        fire(player, now, shots);
     }
 
-    private static void fire(LocalPlayer player, long now) {
-        lastShot = now;
-        lastPrediction = now;
-        ammo--;
-        float aim = aim();
-        float spread = stats.spread(aim, player.getDeltaMovement().horizontalDistance(), !player.onGround(), bloom(now));
-        addBloom(now);
-        long seed = random.nextLong();
-        float yaw = player.getYRot(), pitch = player.getXRot();
-        BLNetwork.sendToServer(new GunPackets.C2SFire(slot, yaw, pitch, aim, seed));
+    /**
+     * Tells the server when the sights go up or come down: it times aiming (a shot only gets the aimed spread once the
+     * sights could be up) and shows the players around a raised scope's glint.
+     */
+    private static void syncAim(boolean aiming) {
+        if (aiming == sentAiming && (!aiming || slot == sentAimSlot)) return;
+        sentAiming = aiming;
+        sentAimSlot = slot;
+        BLNetwork.sendToServer(new GunPackets.C2SAim(slot, aiming));
+    }
 
+    /** A bolt-action gun is between shots with its sight down (asset spec §23). */
+    private static boolean cyclingBolt(long now) {
+        return stats != null && stats.gun().boltAction && lastBoltShot != 0
+                && BoltCycle.sightDown((now - lastBoltShot) / 1e9f, stats.gun().fireInterval(), stats.adsTime());
+    }
+
+    /**
+     * One press of the trigger: a single shot, or a dual gun's volley ({@code shots} 2: both guns, two rounds, wider).
+     * The pair fires its single shots alternately, from the right first.
+     */
+    private static void fire(LocalPlayer player, long now, int shots) {
         GunData.Gun gun = stats.gun();
-        viewmodel.play(Viewmodel.Action.FIRE, ammo == 0 ? gun.anims.fireLast : gun.anims.fire, 0);
-        viewmodel.fired(gun.recoil.kick, aim > 0.5f);
-        float r = 1 + (gun.recoil.ads - 1) * aim;
+        GunData.Dual dual = gun.dual;
+        shots = dual != null && dual.volley ? Math.max(1, Math.min(Math.min(2, shots), ammo)) : 1;
+        boolean volley = shots == 2;
+        int hand = 0;
+        if (dual != null && !volley) {
+            hand = nextLeft ? 1 : 0;
+            nextLeft = !nextLeft;
+        }
+        lastShot = now;
+        nextShotAt = now + (long) (gun.fireInterval() * (volley ? Math.max(1, dual.volleyCost) : 1) * 1e9);
+        lastBoltShot = now;
+        lastPrediction = now;
+        ammo -= shots;
+        viewmodel.setNextLeft(nextLeft);
+        float aim = aim();
+        float spread = stats.spread(aim, player.getDeltaMovement().horizontalDistance(), !player.onGround(), bloom(now))
+                * (volley ? dual.volleySpread : 1);
+        for (int i = 0; i < shots; i++) addBloom(now);
+        long seed = random.nextLong();
+        // aimed, the shot follows the sight line as the player saw it: the reticle is the point of impact, whatever the
+        // sway, the kick or the camera's motion (the server accepts it within its usual tolerance of the look direction)
+        Vector3f sightLine = Optics.shotDirection();
+        float yaw = sightLine != null ? ScopeOptics.yaw(sightLine) : player.getYRot();
+        float pitch = sightLine != null ? ScopeOptics.pitch(sightLine) : player.getXRot();
+        BLNetwork.sendToServer(new GunPackets.C2SFire(slot, yaw, pitch, aim, seed, shots, hand));
+
+        // a fire clip longer than the fire interval plays faster, so its slide / bolt cycle is home before the next shot
+        String clip = fireClip(gun, volley, hand);
+        float length = viewmodel.clipLength(clip), interval = gun.fireInterval();
+        viewmodel.play(Viewmodel.Action.FIRE, clip, length > interval && interval > 0 ? interval * 0.98f : 0);
+        viewmodel.fired(stats.kick() * (volley ? 1.35f : 1), aim, volley ? 3 : 1 << hand);
+        float r = (1 + (gun.recoil.ads - 1) * aim) * stats.recoilScale() * (volley ? 1.5f : 1);
         recoilPitch += gun.recoil.vertical * r * (0.85f + random.nextFloat() * 0.3f);
         recoilYaw += (random.nextFloat() - 0.5f) * 2 * gun.recoil.horizontal * r;
-        shake = Math.min(1.5f, shake + 0.55f * r);
-        playUi(gun.sounds.fire, 0.96f + random.nextFloat() * 0.08f, 1.0f);
-
-        // predicted tracer and impact, from this client's own trace (the server re-traces with the same seed)
-        Vec3 eye = player.getEyePosition();
-        for (int pellet = 0; pellet < Math.max(1, stats.ammo().pellets); pellet++) {
-            Vec3 dir = GunMath.spreadDirection(yaw, pitch, spread, seed, pellet);
-            Vec3 end = localTrace(player, eye, dir, gun.range);
-            pendingTracers.add(end);
+        for (int i = 0; i < shots; i++) {
+            playUi(stats.fireSound(), 0.96f + random.nextFloat() * 0.08f - i * 0.04f, stats.suppressed() ? 0.7f : 1.0f);
         }
-        pendingShells++;
+
+        // predicted tracer and impact, from this client's own trace (the server re-traces with the same seed: shot k's
+        // pellets are numbered after the earlier shots'); shots leave from the camera, which is low while sliding
+        Vec3 eye = Slides.eyePosition(player);
+        int pellets = Math.max(1, stats.ammo().pellets);
+        for (int shot = 0; shot < shots; shot++) {
+            int from = volley ? shot : hand;
+            for (int pellet = 0; pellet < pellets; pellet++) {
+                Vec3 dir = GunMath.spreadDirection(yaw, pitch, spread, seed, shot * pellets + pellet);
+                Vec3 end = localTrace(player, eye, dir, stats.range());
+                pendingTracers.add(new PendingTracer(end, from));
+            }
+            // a bolt or pump gun keeps the case until its bolt / pump comes back (clipEvent)
+            if (gun.ejectEvent.isEmpty()) pendingShells[from]++;
+        }
+    }
+
+    /**
+     * The fire clip: a dual gun's volley, or the firing gun's shot — its last-round clip when that gun ran dry (with
+     * one round left in the pair, the gun that just fired is the empty one).
+     */
+    private static String fireClip(GunData.Gun gun, boolean volley, int hand) {
+        if (gun.dual != null) {
+            boolean dry = ammo <= (volley ? 0 : 1);
+            String clip = volley ? gun.dual.fireBoth
+                    : hand == 1 ? (dry ? gun.dual.fireLastLeft : gun.dual.fireLeft)
+                    : dry ? gun.anims.fireLast : gun.anims.fire;
+            return viewmodel.hasClip(clip) ? clip : gun.anims.fire;
+        }
+        return ammo == 0 ? gun.anims.fireLast : gun.anims.fire;
+    }
+
+    /**
+     * A viewmodel clip event: its sound, and the case of a gun that ejects on an event — only while firing or
+     * reloading, the inspect's press-check opens the bolt without throwing anything out.
+     */
+    private static void clipEvent(String name) {
+        playUi("gun." + name, 1.0f, 0.55f);
+        Viewmodel.Action action = viewmodel.action();
+        if (stats != null && name.equals(stats.gun().ejectEvent)
+                && (action == Viewmodel.Action.FIRE || action == Viewmodel.Action.RELOAD)) {
+            pendingShells[0]++;
+        }
     }
 
     /** Client-side trace for effects only; spawns impact particles. */
@@ -462,10 +684,18 @@ public final class ClientGuns {
         Vec3 to = from.add(dir.scale(range));
         BlockHitResult block = level.clip(new ClipContext(from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
         Vec3 end = block.getType() == HitResult.Type.MISS ? to : block.getLocation();
-        EntityHitResult entity = ProjectileUtil.getEntityHitResult(level, player, from, end, new AABB(from, end).inflate(1),
-                e -> e.isPickable() && !e.isSpectator() && !player.isAlliedTo(e), 0.05f);
-        if (entity != null) {
-            Vec3 point = entity.getEntity().getBoundingBox().inflate(0.05).clip(from, end).orElse(entity.getLocation());
+        // the same hit boxes as the server (a sliding player is low, with the head behind the hips)
+        Vec3 point = null;
+        double nearest = from.distanceToSqr(end);
+        for (Entity candidate : level.getEntities(player, new AABB(from, end).inflate(1),
+                e -> e.isPickable() && !e.isSpectator() && !player.isAlliedTo(e))) {
+            HitShapes.Hit hit = HitShapes.clip(candidate, from, end, Math.max(0.05, candidate.getPickRadius()));
+            if (hit != null && from.distanceToSqr(hit.point()) < nearest) {
+                point = hit.point();
+                nearest = from.distanceToSqr(point);
+            }
+        }
+        if (point != null) {
             for (int i = 0; i < 4; i++) {
                 level.addParticle(ParticleTypes.CRIT, point.x, point.y, point.z, (random.nextDouble() - 0.5) * 0.4, random.nextDouble() * 0.3, (random.nextDouble() - 0.5) * 0.4);
             }
@@ -495,16 +725,29 @@ public final class ClientGuns {
         long now = System.nanoTime();
         if (now < drawEnd || ammo >= stats.capacity()) return;
         if (reserve() <= 0 && !player.isCreative()) {
-            GunHud.flashHint("没有" + stats.ammo().name);
+            GunHud.flashHint(tr("blockland.gun.hud.no_ammo", tr("item.blockland." + stats.ammo().item)));
             return;
         }
         boolean empty = ammo == 0;
-        float seconds = stats.reloadTime(empty);
         reloading = true;
         reloadStart = now;
-        reloadEnd = now + (long) (seconds * 1e9);
         pendingShot = false;
-        viewmodel.play(Viewmodel.Action.RELOAD, empty ? stats.gun().anims.reloadEmpty : stats.gun().anims.reload, seconds);
+        GunData.Reload reload = stats.gun().reload;
+        if (reload.shellMode()) {
+            // spec §25: get ready, then a shell at a time (each counts when its clip ends), then finish
+            shellPhase = ShellPhase.START;
+            shellStartedEmpty = empty;
+            shellsLeft = player.isCreative() ? Integer.MAX_VALUE : reserve();
+            shellStartAmmo = ammo;
+            shellTarget = (int) Math.min(stats.capacity(), (long) ammo + shellsLeft);
+            phaseEnd = now + (long) (reload.start * 1e9);
+            reloadEnd = phaseEnd;
+            viewmodel.play(Viewmodel.Action.RELOAD, stats.gun().anims.reloadStart, reload.start);
+        } else {
+            float seconds = stats.reloadTime(empty);
+            reloadEnd = now + (long) (seconds * 1e9);
+            viewmodel.play(Viewmodel.Action.RELOAD, empty ? stats.gun().anims.reloadEmpty : stats.gun().anims.reload, seconds);
+        }
         BLNetwork.sendToServer(new GunPackets.C2SReload(slot));
     }
 
@@ -514,6 +757,46 @@ public final class ClientGuns {
         int needed = stats.capacity() - ammo;
         ammo += player.isCreative() ? needed : Math.min(needed, reserve());
         lastPrediction = System.nanoTime();
+        nextLeft = false;
+        viewmodel.setNextLeft(false);
+    }
+
+    /** Steps a shell reload along its parts (several in one frame after a hitch, each from where the last ended). */
+    private static void advanceShells(LocalPlayer player) {
+        long now = System.nanoTime();
+        while (reloading && stats != null && now >= phaseEnd) {
+            switch (shellPhase) {
+                case START -> nextShell();
+                case SHELL -> {
+                    ammo++;
+                    shellsLeft--;
+                    lastPrediction = now;
+                    nextShell();
+                }
+                default -> {
+                    reloading = false;
+                    shellPhase = ShellPhase.NONE;
+                }
+            }
+        }
+    }
+
+    /** After the start or a round: the next round while there is room and ammo, else the end clip. */
+    private static void nextShell() {
+        GunData.Reload reload = stats.gun().reload;
+        GunData.Anims anims = stats.gun().anims;
+        if (ammo < stats.capacity() && shellsLeft > 0) {
+            shellPhase = ShellPhase.SHELL;
+            phaseEnd += (long) (reload.shell * 1e9);
+            viewmodel.play(Viewmodel.Action.RELOAD, anims.reloadShell, reload.shell);
+        } else {
+            shellPhase = ShellPhase.END;
+            boolean chamber = shellStartedEmpty && viewmodel.hasClip(anims.reloadEndEmpty);
+            float seconds = shellStartedEmpty ? reload.endEmpty : reload.end;
+            phaseEnd += (long) (seconds * 1e9);
+            viewmodel.play(Viewmodel.Action.RELOAD, chamber ? anims.reloadEndEmpty : anims.reloadEnd, seconds);
+        }
+        reloadEnd = phaseEnd;
     }
 
     /** Inspecting stops a sprint; the movement input keeps sprint off until the inspect ends. */
@@ -541,49 +824,83 @@ public final class ClientGuns {
     private static boolean renderHand(RenderHandEvent event) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
-        if (player == null || stats == null || state == null || !modelReady || !holdingGun()) return false;
+        if (player == null || stats == null || state == null || !modelReady || !viewmodel.isReady() || !holdingGun()) return false;
         if (event.getHand() != InteractionHand.MAIN_HAND) return true; // both hands are on the gun
         long start = System.nanoTime();
         // pure view space: the hand pose stack would add Minecraft's own bobbing and arm sway on top of ours
         Matrix4f base = new Matrix4f();
         int light = event.getPackedLight();
-        viewmodel.draw(base, state, ammo, player, LightTexture.block(light), LightTexture.sky(light));
-        viewmodel.submit();
+        CraftData.Attachment sight = stats.sight();
+        // the optics draw some of the optic's surfaces themselves, so the viewmodel leaves those out: a reflex sight's
+        // glass and reticle (reticle at infinity), a magnified scope's ocular glass (the eyepiece disc); dual guns have none
+        viewmodel.hideOpticMaterials(stats.gun().canAim() ? Optics.drawnMaterials(sight) : java.util.Set.of());
+        viewmodel.draw(base, ammo, player, LightTexture.block(light), LightTexture.sky(light));
+        SightPose pose = viewmodel.sightPose(base);
+        if (Optics.hidesViewmodel()) {
+            // classic scope zoom: the overlay is the scope
+            viewmodel.discard();
+        } else {
+            // behind the weapon (the world around a raised scope, out of focus), the weapon, then the optics in its glass
+            Optics.renderBehind(pose);
+            viewmodel.submit();
+        }
         renderMillis = renderMillis * 0.95 + (System.nanoTime() - start) / 1e6 * 0.05;
+        // a magnified scope's own picture in its eyepiece, a reflex sight's reticle in its glass; and the sight line shots follow
+        Optics.renderFront(pose, LightTexture.block(light), LightTexture.sky(light));
         spawnPendingEffects(mc, player, base);
         return true;
     }
 
-    /** Shells and tracers start at this frame's viewmodel ejection port / muzzle, converted to world space. */
+    /**
+     * Shells and tracers start at this frame's viewmodel ejection port / muzzle (of the gun that fired, for a dual pair),
+     * converted to world space; a special skin colours the tracers (spec §30).
+     */
     private static void spawnPendingEffects(Minecraft mc, LocalPlayer player, Matrix4f base) {
-        if (pendingShells == 0 && pendingTracers.isEmpty()) return;
+        if (pendingShells[0] == 0 && pendingShells[1] == 0 && pendingTracers.isEmpty()) return;
         ClientLevel level = mc.level;
         if (level == null) return;
         var camera = mc.gameRenderer.getMainCamera();
         Matrix4f tmp = new Matrix4f();
-        Vec3 muzzle = ViewmodelRenderer.viewToWorld(camera, viewmodel.nodeMatrix("muzzle", base, tmp), player.getEyePosition());
+        Vec3[] muzzles = new Vec3[2];
+        for (int gun = 0; gun < 2; gun++) {
+            Matrix4f at = viewmodel.nodeMatrix("muzzle", gun, base, tmp);
+            muzzles[gun] = gun == 1 && at == null ? muzzles[0] : ViewmodelRenderer.viewToWorld(camera, at, player.getEyePosition());
+        }
+        CraftData.SkinFx skinFx = stats == null ? null : stats.skinFx();
         // (no muzzle smoke here: in first person the muzzle is ~0.3 blocks from the eye and smoke would fill the screen)
-        for (Vec3 end : pendingTracers) mc.particleEngine.add(new GunParticles.Tracer(level, muzzle, end));
+        for (PendingTracer tracer : pendingTracers) mc.particleEngine.add(tracer(level, muzzles[tracer.gun], tracer.end, skinFx));
         pendingTracers.clear();
-        if (pendingShells > 0) {
-            Matrix4f eject = viewmodel.nodeMatrix("ejection", base, tmp);
-            Vec3 at = ViewmodelRenderer.viewToWorld(camera, eject, muzzle);
+        GltfModel.Primitive shell = null;
+        for (int gun = 0; gun < 2; gun++) {
+            if (pendingShells[gun] == 0) continue;
+            Matrix4f eject = viewmodel.nodeMatrix("ejection", gun, base, tmp);
+            if (eject == null && gun == 1) eject = viewmodel.nodeMatrix("ejection", 0, base, tmp);
+            Vec3 at = ViewmodelRenderer.viewToWorld(camera, eject, muzzles[gun]);
             Vector3f out = eject == null ? new Vector3f(1, 0, 0) : eject.transformDirection(new Vector3f(1, 0.6f, 0.15f)).normalize();
             Vector3f world = camera.rotation().transform(out, new Vector3f());
-            GltfModel.Primitive shell = shellMesh();
-            for (int i = 0; i < pendingShells; i++) {
+            if (shell == null) shell = shellMesh();
+            for (int i = 0; i < pendingShells[gun]; i++) {
                 Vec3 velocity = new Vec3(world.x, world.y, world.z).scale(0.14 + random.nextDouble() * 0.05)
                         .add(player.getDeltaMovement()).add(0, 0.06, 0);
                 mc.particleEngine.add(new GunParticles.Shell(level, at, velocity, shell));
             }
-            pendingShells = 0;
+            pendingShells[gun] = 0;
         }
     }
 
+    /** A tracer, in a special skin's colour and width when the gun wears one. */
+    private static GunParticles.Tracer tracer(ClientLevel level, Vec3 from, Vec3 to, @Nullable CraftData.SkinFx skinFx) {
+        if (skinFx == null) return new GunParticles.Tracer(level, from, to);
+        int rgb = skinFx.hasTracerColor() ? skinFx.tracerRgb() : GunParticles.DEFAULT_TRACER;
+        return new GunParticles.Tracer(level, from, to, rgb, Math.max(0.2f, skinFx.tracerWidth));
+    }
+
+    /** The spent case: the {@code fx_shell} of the model on screen (a special skin's own model brings its own). */
     @Nullable
     private static GltfModel.Primitive shellMesh() {
         if (stats == null) return null;
-        GpuModel model = ModelCache.get(BlockLand.id(stats.gun().model));
+        GpuModel model = viewmodel.model();
+        if (model == null) model = ModelCache.get(BlockLand.id(stats.gun().model));
         if (model == null) return null;
         int node = model.source.node("fx_shell");
         if (node < 0 || model.source.nodes.get(node).mesh < 0) return null;
@@ -600,9 +917,15 @@ public final class ClientGuns {
         Entity shooter = level.getEntity(shot.shooterId());
         Vec3 end = new Vec3(shot.endX(), shot.endY(), shot.endZ());
         if (shooter instanceof Player player) {
-            Vec3 muzzle = GunParticles.thirdPersonMuzzle(player, 1);
-            mc.particleEngine.add(new GunParticles.Flash(level, muzzle));
-            mc.particleEngine.add(new GunParticles.Tracer(level, muzzle, end));
+            // the shot came from this gun of a dual pair; a special skin colours the flash and the tracer (spec §30)
+            Vec3 muzzle = GunParticles.thirdPersonMuzzle(player, 1, shot.hand() == 1);
+            CraftData.SkinFx skinFx = GunContent.statsOf(player.getMainHandItem()).map(GunStats::skinFx).orElse(null);
+            if (!shot.suppressed()) {
+                mc.particleEngine.add(skinFx == null ? new GunParticles.Flash(level, muzzle)
+                        : new GunParticles.Flash(level, muzzle, skinFx.hasFlashColor() ? skinFx.flashRgb() : GunParticles.DEFAULT_FLASH,
+                        Math.max(0.2f, skinFx.flashScale)));
+            }
+            mc.particleEngine.add(tracer(level, muzzle, end, skinFx));
         }
         if (!shot.hitBlock()) return;
         Vec3 dir = shooter == null ? new Vec3(0, -1, 0) : end.subtract(shooter.getEyePosition()).normalize();

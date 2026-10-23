@@ -98,7 +98,13 @@ function MapEditorBody({ initial }: { initial: GameMap }) {
       <div className="map-layout">
         <section className="card">
           <h2>俯视图</h2>
-          <TopDown view={preview.data} map={map} markers={overlay.markers} selected={selected} onMarkerClick={toggleMarker} />
+          <TopDown
+            view={preview.data}
+            map={overlay.hideTeamSpawns ? { ...map, teamSpawns: [] } : map}
+            markers={overlay.markers}
+            selected={selected}
+            onMarkerClick={toggleMarker}
+          />
           <div className="legend">
             {overlay.legend.map((l) => (
               <span key={l.label}>
@@ -106,10 +112,12 @@ function MapEditorBody({ initial }: { initial: GameMap }) {
                 {l.label}
               </span>
             ))}
-            <span>
-              <i className="round" style={{ background: TEAM_COLORS[0] }} />
-              出生点
-            </span>
+            {!overlay.hideTeamSpawns && (
+              <span>
+                <i className="round" style={{ background: TEAM_COLORS[0] }} />
+                出生点
+              </span>
+            )}
           </div>
         </section>
 

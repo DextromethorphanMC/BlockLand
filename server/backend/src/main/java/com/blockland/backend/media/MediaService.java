@@ -21,7 +21,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Images owned by other modules (shop products, mode covers, group covers), stored under
+ * Images owned by other modules (shop products, mode / group / map covers), stored under
  * {@code data/media/<namespace>/<id>.png}. Uploads are converted to PNG and scaled down so game
  * clients can display them; the returned version (content hash) lets clients cache aggressively.
  */
@@ -30,7 +30,8 @@ public class MediaService {
     public static final String SHOP = "shop";
     public static final String MODE = "mode";
     public static final String GROUP = "group";
-    private static final Set<String> NAMESPACES = Set.of(SHOP, MODE, GROUP);
+    public static final String MAP = "map";
+    private static final Set<String> NAMESPACES = Set.of(SHOP, MODE, GROUP, MAP);
     private static final Pattern ID = Pattern.compile("^[a-z0-9][a-z0-9_\\-]{0,63}$");
 
     private final Path root;

@@ -3,58 +3,75 @@ package com.blockland.server.lobby;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.packet.LobbyGroupEntry;
 import com.blockland.network.packet.LobbyModeEntry;
+import com.blockland.network.packet.LobbyPackets;
 import com.blockland.network.packet.PartyPackets;
 import com.blockland.network.packet.S2CLobbyState;
-import com.blockland.server.config.BlockLandConfig;
+import com.blockland.network.packet.TextJson;
 import com.blockland.server.content.ContentRepository;
 import com.blockland.server.content.ContentSnapshot;
+import com.blockland.server.content.model.AnnouncementDef;
 import com.blockland.server.content.model.GameModeDef;
 import com.blockland.server.content.model.ModeGroupDef;
+import com.blockland.server.game.GameInstance;
 import com.blockland.server.game.GameManager;
 import com.blockland.server.game.GameType;
 import com.blockland.server.game.GameTypeRegistry;
 import com.blockland.server.game.MatchFormat;
+import com.blockland.server.game.PlayerTransit;
 import com.blockland.server.kit.KitService;
-import com.blockland.server.player.PlayerProfiles;
 import com.blockland.server.matchmaking.MatchmakingService;
 import com.blockland.server.party.PartyService;
+import com.blockland.server.player.PlayerProfiles;
+import com.blockland.server.session.PlayerDirectory;
 import com.blockland.server.util.PlayerUtil;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
- * The lobby: where players wait between matches, queue for modes and arrange kits.
- * Publishes lobby state to clients; client requests reach it through {@code ServerPacketRouter}.
+ * The lobby: where players wait between matches (in the configuration phase, with no world loaded), queue for
+ * modes, pick maps, arrange kits and read announcements. Publishes lobby state to clients; client requests reach it
+ * through {@code ServerPacketRouter}, addressed by player id because lobby players have no entity.
  */
 public final class LobbyService {
-    private final MinecraftServer server;
+    /** Operators may leave the lobby for the world (building, map previews, commands). */
+    private static final int WORLD_PERMISSION = 2;
+
     private final ContentRepository content;
     private final GameTypeRegistry types;
     private final KitService kits;
     private final PlayerProfiles profiles;
     private final PartyService parties;
-    private final LobbyWorld world;
+    private final PlayerDirectory players;
+    private final PlayerTransit transit;
+    private final LobbyWorld staging;
     private GameManager games;
     private MatchmakingService matchmaking;
+    /** The map each player last queued with, so "play again" asks for the same one. */
+    private final Map<UUID, String> lastMap = new HashMap<>();
     private boolean dirty;
     private int openModes = -1;
     private int tickCounter;
 
-    public LobbyService(MinecraftServer server, ContentRepository content, GameTypeRegistry types, KitService kits,
-                        PlayerProfiles profiles, PartyService parties, LobbyWorld world) {
-        this.server = server;
-        this.parties = parties;
-        this.world = world;
+    public LobbyService(ContentRepository content, GameTypeRegistry types, KitService kits, PlayerProfiles profiles,
+                        PartyService parties, PlayerDirectory players, PlayerTransit transit, LobbyWorld staging) {
         this.content = content;
         this.types = types;
         this.kits = kits;
         this.profiles = profiles;
+        this.parties = parties;
+        this.players = players;
+        this.transit = transit;
+        this.staging = staging;
     }
 
     /** Second construction phase; the services depend on each other through callbacks. */
@@ -78,25 +95,53 @@ public final class LobbyService {
         }
         if (++tickCounter % 10 != 0 || !dirty) return;
         dirty = false;
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            BLNetwork.sendTo(player, buildState(player, false));
+        for (UUID id : players.inLobby()) BLNetwork.sendTo(id, buildState(id, false));
+    }
+
+    // ---- arrivals and announcements ----------------------------------------------------------
+
+    /** The player is in the lobby now (just connected, or back from a match): show it with fresh data. */
+    public void enteredLobby(UUID id) {
+        BLNetwork.sendTo(id, buildState(id, true));
+        sendAnnouncements(id);
+    }
+
+    /** The disconnected player's lobby bookkeeping. */
+    public void left(UUID id) {
+        lastMap.remove(id);
+    }
+
+    /** The backend's announcements changed: every lobby gets the new list. */
+    public void announcementsChanged() {
+        for (UUID id : players.inLobby()) sendAnnouncements(id);
+    }
+
+    public void sendAnnouncements(UUID id) {
+        Set<String> read = profiles.readAnnouncements(id);
+        List<LobbyPackets.Announcement> list = new ArrayList<>();
+        Set<String> existing = new HashSet<>();
+        for (AnnouncementDef a : content.snapshot().announcements) {
+            if (a == null || a.id == null) continue;
+            existing.add(a.id);
+            list.add(new LobbyPackets.Announcement(a.id, nullToEmpty(a.title), nullToEmpty(a.content), a.pinned,
+                    a.publishedMillis(), a.updatedMillis()));
         }
+        list.sort(Comparator.comparingLong(LobbyPackets.Announcement::publishedAt));
+        BLNetwork.sendTo(id, new LobbyPackets.S2CAnnouncements(list, read.stream().filter(existing::contains).toList()));
     }
 
-    public void sendToLobby(ServerPlayer player, boolean openScreen) {
-        LobbyWorld.Spot spot = world.spot();
-        boolean keepCreative = player.isCreative() && player.hasPermissions(2);
-        PlayerUtil.reset(player, keepCreative ? net.minecraft.world.level.GameType.CREATIVE
-                : BlockLandConfig.LOBBY_ADVENTURE_MODE.get() ? net.minecraft.world.level.GameType.ADVENTURE : net.minecraft.world.level.GameType.SURVIVAL);
-        PlayerUtil.teleport(player, spot.level(), spot.pos(), spot.yaw(), 0);
-        BLNetwork.sendTo(player, buildState(player, openScreen && BlockLandConfig.LOBBY_OPEN_SCREEN_ON_JOIN.get()));
+    public void markRead(UUID id, List<String> announcementIds) {
+        Set<String> known = new HashSet<>();
+        for (AnnouncementDef a : content.snapshot().announcements) if (a != null && a.id != null) known.add(a.id);
+        List<String> valid = announcementIds.stream().filter(known::contains).distinct().toList();
+        if (valid.isEmpty()) return;
+        profiles.markRead(id, valid);
+        sendAnnouncements(id);
     }
 
-    public boolean isInLobby(ServerPlayer player) {
-        return games == null || !games.isPlaying(player);
-    }
+    // ---- state -----------------------------------------------------------------------------------
 
-    public S2CLobbyState buildState(ServerPlayer player, boolean openScreen) {
+    public S2CLobbyState buildState(UUID id, boolean openScreen) {
         ContentSnapshot snapshot = content.snapshot();
         List<LobbyModeEntry> entries = new ArrayList<>();
         for (GameModeDef mode : snapshot.enabledModes()) {
@@ -106,32 +151,40 @@ public final class LobbyService {
             String typeName;
             int color;
             boolean hasKit = type.isPresent() && type.get().usesKit() && !mode.kitOrEmpty().isEmpty();
+            List<LobbyModeEntry.MapOption> maps = List.of();
             if (type.isPresent()) {
                 format = type.get().format(mode);
-                String unavailable = type.get().checkAvailable(mode, snapshot);
-                reason = unavailable == null ? "" : unavailable;
+                Component unavailable = type.get().checkAvailable(mode, snapshot);
+                reason = unavailable == null ? "" : TextJson.write(unavailable);
                 typeName = type.get().displayName();
                 color = type.get().accentColor();
+                maps = type.get().maps(mode, snapshot).stream()
+                        .map(m -> new LobbyModeEntry.MapOption(m.id, m.name == null || m.name.isBlank() ? m.id : m.name, nullToEmpty(m.coverVersion)))
+                        .toList();
             } else {
                 format = new MatchFormat(1, 1);
-                reason = "服务器不支持该游戏类型";
+                reason = TextJson.write(Component.translatable("blockland.lobby.type_unsupported"));
                 typeName = mode.type;
                 color = 0xFF808080;
             }
             entries.add(new LobbyModeEntry(mode.id, nullToEmpty(mode.title), typeName, nullToEmpty(mode.description),
-                    format.label(), format.requiredPlayers(), mode.timeLimitOrZero(),
+                    TextJson.write(format.label()), format.requiredPlayers(), mode.timeLimitOrZero(),
                     matchmaking.queued(mode.id), games.playingCount(mode.id), color, reason, hasKit, nullToEmpty(mode.coverVersion),
-                    mode.availableUntilMillis()));
+                    mode.availableUntilMillis(), maps));
         }
-        MatchmakingService.Ticket ticket = matchmaking.ticketOf(player.getUUID());
+        MatchmakingService.Ticket ticket = matchmaking.ticketOf(id);
         return new S2CLobbyState(entries, groups(snapshot, entries),
                 ticket == null ? "" : ticket.modeId(),
+                ticket == null ? "" : ticket.mapId(),
                 ticket == null ? 0 : ticket.waitedSeconds(),
-                games.isPlaying(player),
+                games.isPlaying(id),
                 openScreen,
-                profiles.playtimeSeconds(player.getUUID()),
-                matchmaking.hasPriority(player.getUUID()),
-                partyInfo(player.getUUID()));
+                profiles.playtimeSeconds(id),
+                matchmaking.hasPriority(id),
+                partyInfo(id),
+                profiles.allowsInvites(id),
+                players.permissionLevel(id) >= WORLD_PERMISSION,
+                players.online().size());
     }
 
     private PartyPackets.PartyInfo partyInfo(UUID playerId) {
@@ -139,11 +192,10 @@ public final class LobbyService {
         List<PartyPackets.Member> members = new ArrayList<>();
         if (party != null) {
             for (UUID id : party.members()) {
-                ServerPlayer member = server.getPlayerList().getPlayer(id);
-                PartyPackets.Status status = member != null && games.isPlaying(member) ? PartyPackets.Status.IN_GAME
+                PartyPackets.Status status = games.isPlaying(id) ? PartyPackets.Status.IN_GAME
                         : matchmaking.ticketOf(id) != null ? PartyPackets.Status.QUEUED : PartyPackets.Status.LOBBY;
-                members.add(new PartyPackets.Member(id, member == null ? "?" : member.getGameProfile().getName(),
-                        id.equals(party.leader()), status));
+                String name = players.name(id);
+                members.add(new PartyPackets.Member(id, name == null ? "?" : name, id.equals(party.leader()), status));
             }
         }
         List<PartyPackets.Invite> invites = parties.invitesTo(playerId).stream()
@@ -154,64 +206,114 @@ public final class LobbyService {
 
     // ---- client requests ---------------------------------------------------------------------
 
-    /** The client opened its lobby screen and wants fresh data (it opens the screen itself). */
-    public void sendState(ServerPlayer player) {
-        BLNetwork.sendTo(player, buildState(player, false));
+    /** The client opened its lobby screen and wants fresh data. */
+    public void sendState(UUID id) {
+        BLNetwork.sendTo(id, buildState(id, false));
     }
 
-    /** Queue for a mode; the client's saved kit arrangement for that mode comes along. */
-    public void joinQueue(ServerPlayer player, String modeId, String kitSignature, List<String> kitSlots) {
-        String error = parties.isLeader(player.getUUID()) ? matchmaking.join(modeId, onlineParty(player)) : "只有队长可以开始匹配";
+    /** Queue for a mode (optionally one of its maps); the client's saved kit arrangement for that mode comes along. */
+    public void joinQueue(UUID id, String modeId, String mapId, String kitSignature, List<String> kitSlots) {
+        Component error = parties.isLeader(id) ? matchmaking.join(modeId, mapId, onlineParty(id))
+                : Component.translatable("blockland.queue.leader_only");
         if (error != null) {
-            player.sendSystemMessage(Component.literal("§c" + error));
+            players.notify(id, LobbyPackets.Level.ERROR, error);
         } else {
+            lastMap.put(id, mapId == null ? "" : mapId);
             content.snapshot().mode(modeId).filter(this::hasKit).ifPresent(mode -> {
-                String kitError = kits.submitLayout(player, mode, kitSignature, kitSlots);
-                if (kitError != null) player.sendSystemMessage(Component.literal("§e装备布局未生效: " + kitError));
+                Component kitError = kits.submitLayout(id, mode, kitSignature, kitSlots);
+                if (kitError != null) players.notify(id, LobbyPackets.Level.WARNING, Component.translatable("blockland.kit.layout_ignored", kitError));
             });
         }
-        BLNetwork.sendTo(player, buildState(player, false));
+        BLNetwork.sendTo(id, buildState(id, false));
+    }
+
+    /**
+     * A results panel button. Only accepted while the player's match is ending; the mode to play again is the one
+     * that match was, never what a client claims. A party leader brings the members who are still on the same
+     * results screen along and queues the party; a member just goes back and waits for the leader.
+     */
+    public void postMatch(UUID id, boolean playAgain, String kitSignature, List<String> kitSlots) {
+        ServerPlayer player = players.inWorld(id);
+        GameInstance game = player == null || games == null ? null : games.gameOf(player);
+        if (game == null || !game.isEnding()) return;
+        String modeId = game.mode().id;
+        if (!playAgain) {
+            games.leave(player, false);
+            return;
+        }
+        if (!parties.isLeader(id)) {
+            games.leave(player, false);
+            players.notify(id, LobbyPackets.Level.INFO, Component.translatable("blockland.lobby.wait_for_leader"));
+            return;
+        }
+        for (UUID memberId : onlineParty(id)) {
+            ServerPlayer member = players.inWorld(memberId);
+            if (member != null && games.gameOf(member) == game) games.leave(member, false);
+        }
+        joinQueue(id, modeId, lastMap.getOrDefault(id, ""), kitSignature, kitSlots);
     }
 
     /** A party member's kit arrangement, accepted while their party is queued for that mode. */
-    public void submitKit(ServerPlayer player, String modeId, String kitSignature, List<String> kitSlots) {
-        MatchmakingService.Ticket ticket = matchmaking.ticketOf(player.getUUID());
+    public void submitKit(UUID id, String modeId, String kitSignature, List<String> kitSlots) {
+        MatchmakingService.Ticket ticket = matchmaking.ticketOf(id);
         if (ticket == null || !ticket.modeId().equals(modeId)) return;
         content.snapshot().mode(modeId).filter(this::hasKit).ifPresent(mode -> {
-            String kitError = kits.submitLayout(player, mode, kitSignature, kitSlots);
-            if (kitError != null) player.sendSystemMessage(Component.literal("§e装备布局未生效: " + kitError));
+            Component kitError = kits.submitLayout(id, mode, kitSignature, kitSlots);
+            if (kitError != null) players.notify(id, LobbyPackets.Level.WARNING, Component.translatable("blockland.kit.layout_ignored", kitError));
         });
     }
 
-    public void partyAction(ServerPlayer player, PartyPackets.Action action, String argument) {
-        String error = switch (action) {
-            case INVITE -> parties.invite(player, argument);
-            case ACCEPT -> parseId(argument).map(id -> parties.accept(player, id)).orElse("邀请已失效");
+    public void partyAction(UUID id, PartyPackets.Action action, String argument) {
+        Component error = switch (action) {
+            case INVITE -> parties.invite(id, argument);
+            case ACCEPT -> parseId(argument).map(from -> parties.accept(id, from)).orElse(Component.translatable("blockland.party.invite_expired"));
             case DECLINE -> {
-                parseId(argument).ifPresent(id -> parties.decline(player, id));
+                parseId(argument).ifPresent(from -> parties.decline(id, from));
                 yield null;
             }
             case LEAVE -> {
-                parties.leave(player, true);
+                parties.leave(id, true);
                 yield null;
             }
-            case KICK -> parseId(argument).map(id -> parties.kick(player, id)).orElse("该玩家不在你的队伍中");
-            case PROMOTE -> parseId(argument).map(id -> parties.transfer(player, id)).orElse("该玩家不在你的队伍中");
+            case KICK -> parseId(argument).map(target -> parties.kick(id, target)).orElse(Component.translatable("blockland.party.not_member"));
+            case PROMOTE -> parseId(argument).map(target -> parties.transfer(id, target)).orElse(Component.translatable("blockland.party.not_member"));
         };
-        if (error != null) player.sendSystemMessage(Component.literal("§c" + error));
+        if (error != null) players.notify(id, LobbyPackets.Level.ERROR, error);
         if (action == PartyPackets.Action.INVITE && error == null) {
-            player.sendSystemMessage(Component.literal("§a已向 " + argument.trim() + " 发送组队邀请"));
+            players.notify(id, LobbyPackets.Level.SUCCESS, Component.translatable("blockland.party.invite_sent", argument.trim()));
         }
-        BLNetwork.sendTo(player, buildState(player, false));
+        BLNetwork.sendTo(id, buildState(id, false));
     }
 
-    private List<ServerPlayer> onlineParty(ServerPlayer player) {
-        List<ServerPlayer> online = new ArrayList<>();
-        for (UUID id : parties.membersOf(player.getUUID())) {
-            ServerPlayer member = server.getPlayerList().getPlayer(id);
-            if (member != null) online.add(member);
-        }
-        return online;
+    public void leaveQueue(UUID id) {
+        matchmaking.leave(id, true);
+        BLNetwork.sendTo(id, buildState(id, false));
+    }
+
+    public void sendKit(UUID id, String modeId) {
+        content.snapshot().mode(modeId).filter(this::hasKit).ifPresent(mode -> BLNetwork.sendTo(id, kits.editorData(mode)));
+    }
+
+    /** Privacy setting from the settings page. */
+    public void setAllowInvites(UUID id, boolean allow) {
+        profiles.setAllowInvites(id, allow);
+        BLNetwork.sendTo(id, buildState(id, false));
+    }
+
+    /** An operator leaves the lobby for the world: they land in the empty staging dimension, in creative mode. */
+    public void enterWorld(UUID id) {
+        if (players.permissionLevel(id) < WORLD_PERMISSION || games.isPlaying(id)) return;
+        matchmaking.leave(id, true);
+        transit.bring(id, player -> {
+            LobbyWorld.Spot spot = staging.spot();
+            PlayerUtil.reset(player, net.minecraft.world.level.GameType.CREATIVE);
+            PlayerUtil.teleport(player, spot.level(), spot.pos(), spot.yaw(), 0);
+            player.sendSystemMessage(Component.translatable("blockland.lobby.in_world_hint"));
+        });
+    }
+
+    private List<UUID> onlineParty(UUID id) {
+        return parties.membersOf(id).stream().filter(players::isOnline).toList();
     }
 
     private static Optional<UUID> parseId(String value) {
@@ -222,23 +324,13 @@ public final class LobbyService {
         }
     }
 
-    public void leaveQueue(ServerPlayer player) {
-        matchmaking.leave(player, true);
-        BLNetwork.sendTo(player, buildState(player, false));
-    }
-
-    public void sendKit(ServerPlayer player, String modeId) {
-        content.snapshot().mode(modeId).filter(this::hasKit)
-                .ifPresent(mode -> BLNetwork.sendTo(player, kits.editorData(mode)));
-    }
-
     /** Enabled groups with at least one visible mode, by sort order. */
     private static List<LobbyGroupEntry> groups(ContentSnapshot snapshot, List<LobbyModeEntry> modes) {
-        java.util.Set<String> visible = new java.util.HashSet<>();
+        Set<String> visible = new HashSet<>();
         for (LobbyModeEntry mode : modes) visible.add(mode.id());
         return snapshot.groups.stream()
                 .filter(g -> g.enabled)
-                .sorted(java.util.Comparator.comparingInt((ModeGroupDef g) -> g.sortOrder))
+                .sorted(Comparator.comparingInt((ModeGroupDef g) -> g.sortOrder))
                 .map(g -> new LobbyGroupEntry(g.id, nullToEmpty(g.title), nullToEmpty(g.description), nullToEmpty(g.coverVersion),
                         g.modeIds.stream().filter(visible::contains).toList()))
                 .filter(g -> !g.modeIds().isEmpty())

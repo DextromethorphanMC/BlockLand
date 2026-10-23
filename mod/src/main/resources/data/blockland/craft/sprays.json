@@ -1,0 +1,105 @@
+{
+  "limits": {
+    "perWeapon": 4,
+    "minSize": 0.012,
+    "maxSize": 0.09
+  },
+  "sprays": {
+    "bl_cube": {
+      "name": "BlockLand 方块",
+      "texture": "textures/spray/bl_cube.png",
+      "rarity": "common",
+      "for": [
+        "*"
+      ]
+    },
+    "skull": {
+      "name": "骷髅",
+      "texture": "textures/spray/skull.png",
+      "rarity": "common",
+      "for": [
+        "*"
+      ]
+    },
+    "flame": {
+      "name": "火焰",
+      "texture": "textures/spray/flame.png",
+      "rarity": "common",
+      "for": [
+        "*"
+      ]
+    },
+    "lightning": {
+      "name": "闪电",
+      "texture": "textures/spray/lightning.png",
+      "rarity": "common",
+      "for": [
+        "*"
+      ]
+    },
+    "star": {
+      "name": "星星",
+      "texture": "textures/spray/star.png",
+      "rarity": "common",
+      "for": [
+        "*"
+      ]
+    },
+    "heart": {
+      "name": "爱心",
+      "texture": "textures/spray/heart.png",
+      "rarity": "common",
+      "for": [
+        "*"
+      ]
+    },
+    "gg": {
+      "name": "GG",
+      "texture": "textures/spray/gg.png",
+      "rarity": "common",
+      "for": [
+        "*"
+      ]
+    },
+    "crown": {
+      "name": "王冠",
+      "texture": "textures/spray/crown.png",
+      "rarity": "common",
+      "for": [
+        "*"
+      ]
+    },
+    "paw": {
+      "name": "猫爪",
+      "texture": "textures/spray/paw.png",
+      "rarity": "common",
+      "for": [
+        "*"
+      ]
+    },
+    "target": {
+      "name": "靶心",
+      "texture": "textures/spray/target.png",
+      "rarity": "common",
+      "for": [
+        "*"
+      ]
+    },
+    "wings": {
+      "name": "羽翼",
+      "texture": "textures/spray/wings.png",
+      "rarity": "legendary",
+      "for": [
+        "*"
+      ]
+    },
+    "dragon": {
+      "name": "龙纹",
+      "texture": "textures/spray/dragon.png",
+      "rarity": "legendary",
+      "for": [
+        "*"
+      ]
+    }
+  }
+}

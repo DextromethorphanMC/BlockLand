@@ -1,6 +1,7 @@
 package com.blockland.client.screen;
 
 import com.blockland.client.ClientKitLayouts;
+import com.blockland.client.font.UiFont;
 import com.blockland.common.KitSlots;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.packet.C2SRequestKit;
@@ -16,6 +17,8 @@ import net.minecraft.world.item.ItemStack;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+
+import static com.blockland.client.ui.Tr.tr;
 
 /**
  * Loadout editor ("装备布局"): the player arranges a mode's starting kit in an inventory-shaped grid.
@@ -37,6 +40,7 @@ public final class KitLayoutScreen extends Screen {
     private static final int C_GO = 0xFF3FA34D;
 
     private final Screen parent;
+    private static final String SAVE = "blockland.kit.save", RESET = "blockland.kit.reset", BACK = "blockland.kit.back";
     private final String modeId;
     private final String modeTitle;
     @Nullable
@@ -48,12 +52,15 @@ public final class KitLayoutScreen extends Screen {
     private int left, top;
 
     private static final class Entry {
+        /** A stand-in stack for drawing; the item's real data stays on the server (the lobby has no registries). */
         final ItemStack stack;
+        final List<Component> tooltip;
         final String defaultSlot;
         String slot;
 
-        Entry(ItemStack stack, String defaultSlot, String slot) {
-            this.stack = stack;
+        Entry(S2CKitData.ItemView item, String defaultSlot, String slot) {
+            this.stack = item.toStack();
+            this.tooltip = item.tooltip();
             this.defaultSlot = defaultSlot;
             this.slot = slot;
         }
@@ -64,7 +71,7 @@ public final class KitLayoutScreen extends Screen {
     }
 
     public KitLayoutScreen(Screen parent, String modeId, String modeTitle) {
-        super(Component.literal("装备布局"));
+        super(Component.translatable("blockland.kit.title"));
         this.parent = parent;
         this.modeId = modeId;
         this.modeTitle = modeTitle;
@@ -90,7 +97,7 @@ public final class KitLayoutScreen extends Screen {
         List<Entry> list = new ArrayList<>();
         for (int i = 0; i < data.entries().size(); i++) {
             S2CKitData.Entry e = data.entries().get(i);
-            list.add(new Entry(e.stack(), e.defaultSlot(), saved != null ? saved.get(i) : e.defaultSlot()));
+            list.add(new Entry(e.item(), e.defaultSlot(), saved != null ? saved.get(i) : e.defaultSlot()));
         }
         entries = list;
         customized = saved != null;
@@ -162,6 +169,7 @@ public final class KitLayoutScreen extends Screen {
 
     // ---- buttons -----------------------------------------------------------------------------
 
+    /** @param label translation key, also the button's identity */
     private record Btn(int x, int y, int w, int h, String label, int color) {
         boolean contains(double mx, double my) {
             return mx >= x && mx < x + w && my >= y && my < y + h;
@@ -172,9 +180,9 @@ public final class KitLayoutScreen extends Screen {
         int y = top + 4 * SLOT + 30;
         int gridX = left + 30;
         return List.of(
-                new Btn(gridX, y, 58, 18, "保存", dirty ? C_GO : 0xFF3A4252),
-                new Btn(gridX + 64, y, 58, 18, "恢复默认", customized || dirty ? 0xFF4A5468 : 0xFF2A3040),
-                new Btn(gridX + 128, y, 52, 18, "返回", 0xFF2A3446));
+                new Btn(gridX, y, 58, 18, SAVE, dirty ? C_GO : 0xFF3A4252),
+                new Btn(gridX + 64, y, 58, 18, RESET, customized || dirty ? 0xFF4A5468 : 0xFF2A3040),
+                new Btn(gridX + 128, y, 52, 18, BACK, 0xFF2A3446));
     }
 
     // ---- rendering ---------------------------------------------------------------------------
@@ -191,10 +199,12 @@ public final class KitLayoutScreen extends Screen {
         int px = left - 12, py = top - 26;
         g.fill(px, py, px + panelW(), py + panelH(), C_PANEL);
         g.fill(px, py, px + 3, py + panelH(), C_ACCENT);
-        g.drawString(font, "装备布局", left, top - 18, C_TEXT, false);
-        g.drawString(font, modeTitle, left + font.width("装备布局") + 8, top - 18, C_MUTED, false);
-        String status = entries == null ? "加载中…" : dirty ? "未保存" : customized ? "自定义布局" : "默认布局";
-        g.drawString(font, status, px + panelW() - 10 - font.width(status), top - 18, dirty ? C_ACCENT : C_DIM, false);
+        String title = tr("blockland.kit.title");
+        UiFont.draw(g, title, left, top - 18, C_TEXT, false);
+        UiFont.draw(g, modeTitle, left + UiFont.width(title) + 8, top - 18, C_MUTED, false);
+        String status = tr(entries == null ? "blockland.kit.status.loading" : dirty ? "blockland.kit.status.unsaved"
+                : customized ? "blockland.kit.status.custom" : "blockland.kit.status.default");
+        UiFont.draw(g, status, px + panelW() - 10 - UiFont.width(status), top - 18, dirty ? C_ACCENT : C_DIM, false);
 
         String hovered = slotAt(mouseX, mouseY);
         for (String slot : allSlots()) {
@@ -204,7 +214,8 @@ public final class KitLayoutScreen extends Screen {
             int color = armor ? C_SLOT_LOCKED : slot.equals(hovered) ? C_SLOT_HOVER : C_SLOT;
             g.fill(p[0], p[1], p[0] + SLOT - 2, p[1] + SLOT - 2, color);
         }
-        g.drawString(font, "快捷栏", left + 30 + 9 * SLOT + 4 - font.width("快捷栏") - 2, top + 3 * SLOT + 8 - 9, C_DIM, false);
+        String hotbar = tr("blockland.kit.hotbar");
+        UiFont.draw(g, hotbar, left + 30 + 9 * SLOT + 4 - UiFont.width(hotbar) - 2, top + 3 * SLOT + 8 - 9, C_DIM, false);
 
         if (entries != null) {
             for (int i = 0; i < entries.size(); i++) {
@@ -222,9 +233,9 @@ public final class KitLayoutScreen extends Screen {
 
         for (Btn b : buttons()) {
             g.fill(b.x, b.y, b.x + b.w, b.y + b.h, b.contains(mouseX, mouseY) ? brighten(b.color) : b.color);
-            g.drawCenteredString(font, b.label, b.x + b.w / 2, b.y + 5, C_TEXT);
+            UiFont.drawCentered(g, tr(b.label), b.x + b.w / 2, b.y + 5, C_TEXT, true);
         }
-        g.drawString(font, "点击物品拿起，再点击格子放下 · 盔甲固定 · 右键取消", left, top + 4 * SLOT + 54, C_DIM, false);
+        UiFont.draw(g, tr("blockland.kit.hint"), left, top + 4 * SLOT + 54, C_DIM, false);
 
         if (entries != null && held >= 0) {
             ItemStack stack = entries.get(held).stack;
@@ -232,7 +243,9 @@ public final class KitLayoutScreen extends Screen {
             g.renderItemDecorations(font, stack, mouseX - 8, mouseY - 8);
         } else if (hovered != null) {
             int index = entryAt(hovered);
-            if (index >= 0) g.setTooltipForNextFrame(font, entries.get(index).stack, mouseX, mouseY);
+            if (index >= 0 && !entries.get(index).tooltip.isEmpty()) {
+                g.setTooltipForNextFrame(font, entries.get(index).tooltip, java.util.Optional.empty(), mouseX, mouseY);
+            }
         }
     }
 
@@ -257,7 +270,7 @@ public final class KitLayoutScreen extends Screen {
         for (Btn b : buttons()) {
             if (!b.contains(mouseX, mouseY)) continue;
             switch (b.label) {
-                case "保存" -> {
+                case SAVE -> {
                     if (dirty && entries != null) {
                         ClientKitLayouts.save(modeId, signature, entries.stream().map(e -> e.slot).toList());
                         customized = true;
@@ -265,7 +278,7 @@ public final class KitLayoutScreen extends Screen {
                         click();
                     }
                 }
-                case "恢复默认" -> {
+                case RESET -> {
                     if (entries != null && (customized || dirty)) {
                         ClientKitLayouts.remove(modeId);
                         for (Entry e : entries) e.slot = e.defaultSlot;

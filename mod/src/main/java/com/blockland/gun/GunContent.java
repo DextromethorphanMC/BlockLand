@@ -1,6 +1,8 @@
 package com.blockland.gun;
 
 import com.blockland.BlockLand;
+import com.blockland.common.Sounds;
+import com.blockland.craft.CraftCatalog;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
@@ -43,7 +45,7 @@ public final class GunContent {
     public static final List<String> SOUND_EVENTS = List.of(
             "gun.p9.fire", "gun.p9.fire_far", "gun.dry_fire", "gun.mag_release", "gun.mag_out", "gun.mag_in",
             "gun.slide_back", "gun.slide_forward", "gun.slide_release", "gun.inspect_move", "gun.equip", "gun.hammer",
-            "gun.shell", "gun.hitmarker", "gun.headshot", "gun.kill", "gun.attach");
+            "gun.shell", "gun.hitmarker", "gun.headshot", "gun.kill", "gun.attach", "gun.suppressed");
 
     private static final Map<String, RegistryObject<Item>> GUN_ITEMS = new LinkedHashMap<>();
     private static final Map<String, RegistryObject<Item>> AMMO_ITEMS = new LinkedHashMap<>();
@@ -54,6 +56,7 @@ public final class GunContent {
 
     public static void register(BusGroup modBus) {
         GunCatalog catalog = GunCatalog.get();
+        CraftCatalog.addSource(() -> GunCatalog.get().guns());
         for (GunData.Gun gun : catalog.guns()) {
             GUN_ITEMS.put(gun.id, ITEMS.register(gun.id, () -> new GunItem(gun.id, properties(gun.id)
                     .stacksTo(1)
@@ -66,7 +69,7 @@ public final class GunContent {
             SOUND_OBJECTS.put(name, SOUNDS.register(name, () -> SoundEvent.createVariableRangeEvent(BlockLand.id(name))));
         }
         TABS.register("guns", () -> CreativeModeTab.builder()
-                .title(Component.literal("BlockLand 枪械"))
+                .title(Component.translatable("itemGroup.blockland.guns"))
                 .icon(() -> GUN_ITEMS.values().stream().findFirst().map(o -> new ItemStack(o.get())).orElse(ItemStack.EMPTY))
                 .displayItems((params, output) -> {
                     GUN_ITEMS.values().forEach(o -> output.accept(o.get()));
@@ -120,8 +123,9 @@ public final class GunContent {
     }
 
     @Nullable
+    /** A {@code blockland:<name>} sound; ones only defined in sounds.json (new guns, animation events) work too. */
     public static SoundEvent sound(String name) {
         RegistryObject<SoundEvent> sound = SOUND_OBJECTS.get(name);
-        return sound == null ? null : sound.get();
+        return sound != null ? sound.get() : Sounds.byId(BlockLand.id(name));
     }
 }

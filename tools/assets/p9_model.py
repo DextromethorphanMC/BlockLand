@@ -212,14 +212,52 @@ def mag_outline(clear=0.0, count_corner=4):
                            (0.0035 + clear, 0.0035 + clear, 0.0062 + clear, 0.0062 + clear), count_corner)
 
 
+def _signed_distance(p, poly):
+    """Distance of the 2D point p to the polygon's outline, negative inside."""
+    a, b = poly, np.roll(poly, -1, 0)
+    ab = b - a
+    t = np.clip(np.einsum("ij,ij->i", p - a, ab) / np.maximum(np.einsum("ij,ij->i", ab, ab), 1e-18), 0, 1)
+    dist = np.linalg.norm(a + ab * t[:, None] - p, axis=1).min()
+    crossing = ((a[:, 1] > p[1]) != (b[:, 1] > p[1])) & \
+        (p[0] < a[:, 0] + (p[1] - a[:, 1]) * ab[:, 0] / np.where(ab[:, 1] == 0, 1e-18, ab[:, 1]))
+    return -dist if crossing.sum() % 2 else dist
+
+
+def fit_well(well, ds, sections, grip_len, mag_s, depth, margin=0.0004):
+    """The magazine well's outline (mag-local x, front) pulled in where the grip leaves less than `margin` around it, at
+    every millimetre up to `depth` from the bottom: the well's walls run straight up the grip axis and must stay inside
+    the grip's surface (poking through, they would show their back faces from outside: spec section 6).
+
+    ds, sections: the grip's rings (distance along the grip, (M, 2) polygon in ring coordinates x / front); the rings over
+    the well's depth must be perpendicular to the grip axis (the lower part of the grip), with the ring centre on the
+    grip's centre line, so the well's centre sits at front = mag_s in them."""
+    ds = np.asarray(ds, float)
+    pts = np.asarray(well, float) + np.array([0.0, mag_s])
+    for h in np.arange(0.0, depth + 1e-9, 0.001):
+        d = grip_len - h
+        k = int(np.clip(np.searchsorted(ds, d) - 1, 0, len(ds) - 2))
+        t = float(np.clip((d - ds[k]) / (ds[k + 1] - ds[k]), 0, 1))
+        poly = (1 - t) * sections[k] + t * sections[k + 1]          # the loft between two rings is linear
+        for i, p in enumerate(pts):
+            if _signed_distance(p, poly) <= -margin:
+                continue
+            lo, hi = 0.0, 1.0                                        # pull towards the ring centre
+            for _ in range(32):
+                mid = 0.5 * (lo + hi)
+                lo, hi = (mid, hi) if _signed_distance(p * mid, poly) <= -margin else (lo, mid)
+            pts[i] = p * lo
+    return pts - np.array([0.0, mag_s])
+
+
 def grip_mesh():
     ds = [d for d, _ in GRIP_WIDTH]
     widths = dict(GRIP_WIDTH)
-    rings = []
+    rings, sections = [], []
     for d in ds:
         c, s_dir, s_f, s_b = _ring_frame(d)
         x, sv = _shape(0.5 * widths[d], s_f, s_b)
         rings.append(c[None, :] + x[:, None] * np.array([1.0, 0, 0]) + sv[:, None] * s_dir[None, :])
+        sections.append(np.stack([x, sv], 1))
     outer = sh.loft(rings, "polymer", cap_start=True, cap_end=False, auto_orient=False)
     orient_radial(outer, GRIP_C0, AXIS, +1)
     top = outer.f[-1]                                    # the top cap: must face up
@@ -230,7 +268,8 @@ def grip_mesh():
     outer.set_material(lambda c, n: abs(n[0]) > 0.35 and -0.0950 < c[1] < -0.0385, "grip")
     # bottom face around the magazine well + well walls
     c_end, _, _, _ = _ring_frame(GRIP_LEN)
-    well = mag_outline(0.0008)
+    # the magazine's corners nearly touch the rounded front strap: the well follows the grip there
+    well = fit_well(mag_outline(0.0008), ds, sections, GRIP_LEN, MAG_S, 0.034)
     to3 = lambda pts, d: (grip_center(d) + MAG_S * FRONT)[None, :] + pts[:, 0:1] * np.array([1.0, 0, 0]) \
         + pts[:, 1:2] * FRONT[None, :]
     well_bottom = to3(well, GRIP_LEN)

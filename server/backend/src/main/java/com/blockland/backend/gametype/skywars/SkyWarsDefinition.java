@@ -2,6 +2,7 @@ package com.blockland.backend.gametype.skywars;
 
 import com.blockland.backend.gamemode.GameMode;
 import com.blockland.backend.gametype.GameTypeDefinition;
+import com.blockland.backend.gametype.common.MovementSettings;
 import com.blockland.backend.gametype.common.TeamArenaSettings;
 import com.blockland.backend.gametype.skywars.loot.LootTable;
 import com.blockland.backend.gametype.skywars.loot.LootTableService;
@@ -27,6 +28,8 @@ import java.util.Set;
 @Component
 public class SkyWarsDefinition implements GameTypeDefinition {
     public static final String ID = "SKYWARS";
+    /** Islands over the void: no sliding unless a mode turns it on. */
+    private static final boolean ALLOW_SLIDE = false;
 
     private final ObjectMapper mapper;
     private final LootTableService lootTables;
@@ -56,6 +59,7 @@ public class SkyWarsDefinition implements GameTypeDefinition {
         ObjectNode node = mapper.createObjectNode();
         TeamArenaSettings.putDefaults(node);
         node.put("chestRefillSeconds", 0);
+        MovementSettings.putDefaults(node, ALLOW_SLIDE);
         return node;
     }
 
@@ -65,6 +69,7 @@ public class SkyWarsDefinition implements GameTypeDefinition {
         ObjectNode out = defaultSettings();
         TeamArenaSettings.normalizeInto(in, out, ID, context, errors);
         out.put("chestRefillSeconds", TeamArenaSettings.intField(in, "chestRefillSeconds", 0, 0, 3600, "箱子刷新间隔", errors));
+        MovementSettings.normalizeInto(in, out, ALLOW_SLIDE);
         return out;
     }
 

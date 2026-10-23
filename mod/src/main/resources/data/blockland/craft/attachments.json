@@ -1,0 +1,224 @@
+{
+  "attachments": {
+    "iron": {
+      "slot": "optic",
+      "name": "机械瞄具",
+      "description": "枪械自带的准星与照门，开镜最快。",
+      "zoom": 1.12
+    },
+    "mini_reddot": {
+      "slot": "optic",
+      "name": "迷你红点镜",
+      "description": "低矮的反射式红点镜，视野开阔，轻微放大。",
+      "model": "models/attachment/mini_reddot.glb",
+      "aimNode": "aim",
+      "zoom": 1.2,
+      "adsTimeScale": 1.04,
+      "reflex": {
+        "reticle": "dot",
+        "dot": 14,
+        "color": "#FF2A1A",
+        "coating": "#A9BCFF",
+        "tint": 0.08
+      }
+    },
+    "reddot": {
+      "slot": "optic",
+      "name": "红点镜",
+      "description": "筒式红点镜，红点清晰、放大更多，开镜稍慢。",
+      "model": "models/attachment/reddot.glb",
+      "aimNode": "aim",
+      "zoom": 1.28,
+      "adsTimeScale": 1.08,
+      "reflex": {
+        "reticle": "dot",
+        "dot": 11,
+        "color": "#FF2418",
+        "coating": "#E3C98A",
+        "tint": 0.1
+      }
+    },
+    "holo": {
+      "slot": "optic",
+      "name": "全息瞄准镜",
+      "description": "方框全息瞄准镜：大视窗、圆环套点分划，近距离套敌更快；轻微放大，开镜稍慢。",
+      "model": "models/attachment/holo.glb",
+      "aimNode": "aim",
+      "zoom": 1.18,
+      "adsTimeScale": 1.06,
+      "reflex": {
+        "reticle": "holo",
+        "dot": 10,
+        "ring": 160,
+        "ringWidth": 9,
+        "color": "#FF3020",
+        "coating": "#B8C8FF",
+        "tint": 0.06
+      }
+    },
+    "reddot_rect": {
+      "slot": "optic",
+      "name": "长方形红点镜",
+      "description": "开放式长方形视窗红点瞄准镜：视窗宽、遮挡少，无放大，开镜几乎不变慢。",
+      "model": "models/attachment/reddot_rect.glb",
+      "aimNode": "aim",
+      "zoom": 1.12,
+      "adsTimeScale": 1.03,
+      "reflex": {
+        "reticle": "dot",
+        "dot": 10,
+        "color": "#FF2A1A",
+        "coating": "#C2D0FF",
+        "tint": 0.06
+      }
+    },
+    "scope_2x": {
+      "slot": "optic",
+      "name": "二倍镜",
+      "description": "棱镜式 2 倍瞄准镜：镜内放大 2 倍，发光箭头分划，中距离更好瞄；开镜稍慢。",
+      "model": "models/attachment/scope_2x.glb",
+      "aimNode": "aim",
+      "zoom": 1.1,
+      "adsTimeScale": 1.1,
+      "scope": {
+        "magnification": 2.0,
+        "lensNode": "lens_ocular",
+        "reticle": "textures/scope/reticle_2x.png",
+        "reticleSize": 1.0,
+        "reticleColor": "#FF3A2E",
+        "eyeBox": 0.012,
+        "parallax": 0.4,
+        "coating": "#B9A8FF",
+        "vignette": 0.35,
+        "apparentSize": 0.52,
+        "focalPlane": "first",
+        "sway": 0.05,
+        "blurOutside": 0.3,
+        "dirt": 0.25
+      }
+    },
+    "scope_sniper": {
+      "slot": "optic",
+      "name": "狙击镜",
+      "description": "4–9 倍可变狙击镜：开镜后滚轮调倍率，密位点分划，按住冲刺键屏息稳住准星；开镜慢，眼位一偏画面就变暗，举镜时对面的人能看到镜片反光。",
+      "model": "models/attachment/scope_sniper.glb",
+      "aimNode": "aim",
+      "zoom": 1.15,
+      "adsTimeScale": 1.25,
+      "scope": {
+        "magnification": 6.0,
+        "zoomLevels": [4.0, 6.0, 9.0],
+        "defaultZoom": 1,
+        "focalPlane": "second",
+        "lensNode": "lens_ocular",
+        "reticle": "textures/scope/reticle_sniper.png",
+        "reticleSize": 1.0,
+        "reticleColor": "#FF2A1E",
+        "illumination": 0.9,
+        "eyeBox": 0.008,
+        "parallax": 0.6,
+        "coating": "#8FE8B8",
+        "vignette": 0.45,
+        "apparentSize": 0.64,
+        "sway": 0.16,
+        "holdBreath": 5.0,
+        "blurOutside": 0.85,
+        "flare": 1.0,
+        "dirt": 0.3,
+        "glint": 1.0
+      }
+    },
+    "laser_red": {
+      "slot": "laser",
+      "name": "红色激光",
+      "description": "腰射散布 -20%。",
+      "model": "models/attachment/laser.glb",
+      "color": "#FF3030",
+      "hipSpreadScale": 0.8
+    },
+    "laser_green": {
+      "slot": "laser",
+      "name": "绿色激光",
+      "description": "腰射散布 -20%，光点更醒目。",
+      "model": "models/attachment/laser.glb",
+      "color": "#40FF60",
+      "hipSpreadScale": 0.8
+    },
+    "suppressor": {
+      "slot": "barrel",
+      "name": "消音器",
+      "description": "枪声大幅减弱、没有枪口火光；射程 -15%，后坐力 -5%，开镜略慢。",
+      "model": "models/attachment/suppressor.glb",
+      "suppressed": true,
+      "fireSound": "gun.suppressed",
+      "rangeScale": 0.85,
+      "recoilScale": 0.95,
+      "adsTimeScale": 1.03
+    },
+    "tactical_stock": {
+      "slot": "stock",
+      "name": "战术枪托",
+      "description": "镂空轻量枪托：后坐力 -15%，开镜稍慢。",
+      "model": "models/attachment/tactical_stock.glb",
+      "recoilScale": 0.85,
+      "adsTimeScale": 1.06
+    },
+    "heavy_stock": {
+      "slot": "stock",
+      "name": "重型枪托",
+      "description": "实心可调枪托，带托腮板与厚缓冲垫：后坐力 -25%，开镜明显变慢，腰射散布略增。",
+      "model": "models/attachment/heavy_stock.glb",
+      "rarity": "legendary",
+      "recoilScale": 0.75,
+      "adsTimeScale": 1.12,
+      "hipSpreadScale": 1.05
+    },
+    "wire_stock": {
+      "slot": "stock",
+      "name": "钢丝枪托",
+      "description": "极简折叠钢丝枪托：后坐力 -8%，几乎不影响开镜速度。",
+      "model": "models/attachment/wire_stock.glb",
+      "recoilScale": 0.92,
+      "adsTimeScale": 1.01
+    },
+    "stock_none": {
+      "slot": "stock",
+      "name": "无枪托",
+      "description": "拆掉枪托：开镜更快（-12%），但后坐力 +25%，腰射散布 +8%。",
+      "recoilScale": 1.25,
+      "adsTimeScale": 0.88,
+      "hipSpreadScale": 1.08
+    },
+    "vertical_grip": {
+      "slot": "underbarrel",
+      "name": "垂直握把",
+      "description": "装在护木下方的垂直前握把：后坐力 -12%，开镜稍慢（+5%）。",
+      "model": "models/attachment/vertical_grip.glb",
+      "recoilScale": 0.88,
+      "adsTimeScale": 1.05
+    },
+    "angled_grip": {
+      "slot": "underbarrel",
+      "name": "斜角握把",
+      "description": "低矮的斜角前握把：开镜更快（-7%），后坐力 -5%。",
+      "model": "models/attachment/angled_grip.glb",
+      "recoilScale": 0.95,
+      "adsTimeScale": 0.93
+    },
+    "bipod": {
+      "slot": "underbarrel",
+      "name": "两脚架",
+      "description": "折叠两脚架：后坐力 -18%，但更重，开镜更慢（+12%），腰射散布 +10%。",
+      "model": "models/attachment/bipod.glb",
+      "recoilScale": 0.82,
+      "adsTimeScale": 1.12,
+      "hipSpreadScale": 1.1
+    },
+    "charm_grass": {
+      "slot": "charm",
+      "name": "草方块挂件",
+      "description": "一块会随动作晃来晃去的小草方块，纯装饰。",
+      "model": "models/attachment/charm_grass.glb"
+    }
+  }
+}

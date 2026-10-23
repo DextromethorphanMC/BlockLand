@@ -1,6 +1,7 @@
 package com.blockland.server.matchmaking;
 
 import com.blockland.network.BLNetwork;
+import com.blockland.network.packet.LobbyPackets;
 import com.blockland.network.packet.S2CMatchFound;
 import com.blockland.server.content.ContentRepository;
 import com.blockland.server.content.ContentSnapshot;
@@ -10,9 +11,8 @@ import com.blockland.server.game.GameType;
 import com.blockland.server.game.GameTypeRegistry;
 import com.blockland.server.game.MatchFormat;
 import com.blockland.server.game.MatchRoster;
+import com.blockland.server.session.PlayerDirectory;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerPlayer;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -29,13 +29,14 @@ import java.util.function.Predicate;
 /**
  * One queue per game mode. A queue entry is a group that plays on the same team (a solo player or a party);
  * a match pops as soon as the waiting groups can fill every team. Groups with priority (any member owns the
- * {@value #PRIORITY_ENTITLEMENT} entitlement) are placed first, otherwise first come first served.
+ * {@value #PRIORITY_ENTITLEMENT} entitlement) are placed first, otherwise first come first served. A group may ask
+ * for one of the mode's maps: it only plays with groups that want the same map or do not mind.
  */
 public final class MatchmakingService {
     /** Entitlement (sold in the shop) that puts a player at the front of every queue. */
     public static final String PRIORITY_ENTITLEMENT = "PRIORITY_QUEUE";
 
-    private final MinecraftServer server;
+    private final PlayerDirectory players;
     private final ContentRepository content;
     private final GameTypeRegistry types;
     private final GameManager games;
@@ -45,9 +46,9 @@ public final class MatchmakingService {
     private final Map<UUID, Entry> byPlayer = new HashMap<>();
     private int tickCounter;
 
-    public MatchmakingService(MinecraftServer server, ContentRepository content, GameTypeRegistry types,
+    public MatchmakingService(PlayerDirectory players, ContentRepository content, GameTypeRegistry types,
                               GameManager games, Runnable onStateChanged, Predicate<UUID> hasPriority) {
-        this.server = server;
+        this.players = players;
         this.content = content;
         this.types = types;
         this.games = games;
@@ -58,11 +59,14 @@ public final class MatchmakingService {
     /** A group waiting together. */
     private static final class Entry {
         final String modeId;
+        /** empty = any map */
+        final String mapId;
         final List<UUID> members;
         final long since = System.currentTimeMillis();
 
-        Entry(String modeId, List<UUID> members) {
+        Entry(String modeId, String mapId, List<UUID> members) {
             this.modeId = modeId;
+            this.mapId = mapId;
             this.members = List.copyOf(members);
         }
     }
@@ -70,32 +74,39 @@ public final class MatchmakingService {
     /**
      * Queues a group that must end up on the same team.
      *
+     * @param mapId one of the mode's maps, or empty for any
      * @return null on success, otherwise an error message for the requester
      */
     @Nullable
-    public String join(String modeId, List<ServerPlayer> group) {
-        if (group.isEmpty()) return "没有可以匹配的玩家";
-        for (ServerPlayer player : group) {
-            if (games.isPlaying(player)) {
-                return group.size() == 1 ? "你已经在对局中" : "队员 " + player.getGameProfile().getName() + " 正在对局中";
+    public Component join(String modeId, String mapId, List<UUID> group) {
+        if (group.isEmpty()) return Component.translatable("blockland.queue.nobody");
+        for (UUID id : group) {
+            if (games.isPlaying(id)) {
+                return group.size() == 1 ? Component.translatable("blockland.queue.self_in_game")
+                        : Component.translatable("blockland.queue.member_in_game", nameOf(id));
             }
         }
         ContentSnapshot snapshot = content.snapshot();
         Optional<GameModeDef> mode = snapshot.mode(modeId).filter(GameModeDef::isOpen);
         if (mode.isEmpty()) {
-            return snapshot.mode(modeId).filter(GameModeDef::isExpired).isPresent() ? "该限时模式已结束" : "该模式不存在或已关闭";
+            return Component.translatable(snapshot.mode(modeId).filter(GameModeDef::isExpired).isPresent()
+                    ? "blockland.queue.mode_ended" : "blockland.queue.mode_closed");
         }
         Optional<GameType> type = types.get(mode.get().type);
-        if (type.isEmpty()) return "服务器不支持该游戏类型: " + mode.get().type;
-        String unavailable = type.get().checkAvailable(mode.get(), snapshot);
+        if (type.isEmpty()) return Component.translatable("blockland.queue.type_unsupported", mode.get().type);
+        Component unavailable = type.get().checkAvailable(mode.get(), snapshot);
         if (unavailable != null) return unavailable;
         MatchFormat format = type.get().format(mode.get());
         if (group.size() > format.teamSize()) {
-            return "队伍有 " + group.size() + " 人，超过该模式每队 " + format.teamSize() + " 人的上限";
+            return Component.translatable("blockland.queue.party_too_big", group.size(), format.teamSize());
+        }
+        String map = mapId == null ? "" : mapId;
+        if (!map.isEmpty() && type.get().maps(mode.get(), snapshot).stream().noneMatch(m -> m.id.equals(map))) {
+            return Component.translatable("blockland.queue.map_unavailable");
         }
 
-        for (ServerPlayer player : group) cancel(player.getUUID(), null);
-        Entry entry = new Entry(modeId, group.stream().map(ServerPlayer::getUUID).toList());
+        for (UUID id : group) cancel(id, null);
+        Entry entry = new Entry(modeId, map, group);
         queues.computeIfAbsent(modeId, k -> new ArrayList<>()).add(entry);
         for (UUID id : entry.members) byPlayer.put(id, entry);
         onStateChanged.run();
@@ -103,14 +114,14 @@ public final class MatchmakingService {
     }
 
     /** Takes the player's whole group out of its queue. */
-    public void leave(ServerPlayer player, boolean notify) {
-        if (cancel(player.getUUID(), null) && notify) onStateChanged.run();
+    public void leave(UUID player, boolean notify) {
+        if (cancel(player, null) && notify) onStateChanged.run();
     }
 
     /**
      * Cancels the queue entries of these players (their party changed), telling the other members why.
      */
-    public void cancelFor(Collection<UUID> players, String reason) {
+    public void cancelFor(Collection<UUID> players, Component reason) {
         boolean changed = false;
         for (UUID id : players) changed |= cancel(id, reason);
         if (changed) onStateChanged.run();
@@ -119,7 +130,7 @@ public final class MatchmakingService {
     @Nullable
     public Ticket ticketOf(UUID playerId) {
         Entry entry = byPlayer.get(playerId);
-        return entry == null ? null : new Ticket(entry.modeId, entry.since);
+        return entry == null ? null : new Ticket(entry.modeId, entry.mapId, entry.since);
     }
 
     public int queued(String modeId) {
@@ -134,42 +145,42 @@ public final class MatchmakingService {
             String modeId = queueEntry.getKey();
             List<Entry> queue = queueEntry.getValue();
             for (Entry entry : List.copyOf(queue)) {
-                if (entry.members.stream().anyMatch(id -> server.getPlayerList().getPlayer(id) == null)) {
-                    drop(entry, "队员离线，已取消匹配");
+                if (entry.members.stream().anyMatch(id -> !players.isOnline(id))) {
+                    drop(entry, Component.translatable("blockland.queue.member_offline"));
                 }
             }
             Optional<GameModeDef> mode = snapshot.mode(modeId).filter(GameModeDef::isOpen);
             Optional<GameType> type = mode.flatMap(m -> types.get(m.type));
             if (mode.isEmpty() || type.isEmpty() || type.get().checkAvailable(mode.get(), snapshot) != null) {
-                String reason = snapshot.mode(modeId).filter(GameModeDef::isExpired).isPresent()
-                        ? "限时模式已结束，已退出匹配" : "该模式当前不可用，已退出匹配";
+                Component reason = Component.translatable(snapshot.mode(modeId).filter(GameModeDef::isExpired).isPresent()
+                        ? "blockland.queue.mode_ended_left" : "blockland.queue.mode_unavailable_left");
                 for (Entry entry : List.copyOf(queue)) drop(entry, reason);
                 continue;
             }
             MatchFormat format = type.get().format(mode.get());
             while (true) {
-                List<List<Entry>> teams = pack(queue, format, true);
-                if (teams == null) break;
-                startMatch(type.get(), mode.get(), teams);
+                Packed packed = pack(queue, format, true);
+                if (packed == null) break;
+                startMatch(type.get(), mode.get(), packed);
             }
         }
     }
 
     /** Admin command: start a match right now with whoever is waiting. */
     @Nullable
-    public String forceStart(String modeId) {
+    public Component forceStart(String modeId) {
         ContentSnapshot snapshot = content.snapshot();
         Optional<GameModeDef> mode = snapshot.mode(modeId);
-        if (mode.isEmpty()) return "模式不存在: " + modeId;
+        if (mode.isEmpty()) return Component.literal("模式不存在: " + modeId);
         Optional<GameType> type = types.get(mode.get().type);
-        if (type.isEmpty()) return "未知游戏类型: " + mode.get().type;
-        String unavailable = type.get().checkAvailable(mode.get(), snapshot);
+        if (type.isEmpty()) return Component.literal("未知游戏类型: " + mode.get().type);
+        Component unavailable = type.get().checkAvailable(mode.get(), snapshot);
         if (unavailable != null) return unavailable;
         List<Entry> queue = queues.getOrDefault(modeId, new ArrayList<>());
-        if (queue.isEmpty()) return "队列中没有玩家";
-        List<List<Entry>> teams = pack(queue, type.get().format(mode.get()), false);
-        if (teams == null) return "队列中没有玩家";
-        startMatch(type.get(), mode.get(), teams);
+        if (queue.isEmpty()) return Component.literal("队列中没有玩家");
+        Packed packed = pack(queue, type.get().format(mode.get()), false);
+        if (packed == null) return Component.literal("队列中没有玩家");
+        startMatch(type.get(), mode.get(), packed);
         return null;
     }
 
@@ -197,14 +208,18 @@ public final class MatchmakingService {
         return ordered;
     }
 
+    private record Packed(List<List<Entry>> teams, String mapId) {
+    }
+
     /**
-     * Places waiting groups into teams (best fit, so parties stay together) and removes them from the queue.
+     * Places waiting groups into teams (best fit, so parties stay together) and removes them from the queue. The first
+     * placed group that names a map decides it; groups that want a different one wait for another match.
      *
      * @param full only succeed when every slot is filled
-     * @return the teams, or null when no match can be formed (the queue is left untouched)
+     * @return the teams and map, or null when no match can be formed (the queue is left untouched)
      */
     @Nullable
-    private List<List<Entry>> pack(List<Entry> queue, MatchFormat format, boolean full) {
+    private Packed pack(List<Entry> queue, MatchFormat format, boolean full) {
         List<List<Entry>> teams = new ArrayList<>();
         int[] free = new int[format.teamCount()];
         for (int i = 0; i < format.teamCount(); i++) {
@@ -212,12 +227,15 @@ public final class MatchmakingService {
             free[i] = format.teamSize();
         }
         int placed = 0;
+        String map = "";
         for (Entry entry : ordered(queue)) {
+            if (!entry.mapId.isEmpty() && !map.isEmpty() && !map.equals(entry.mapId)) continue;
             int best = -1;
             for (int i = 0; i < free.length; i++) {
                 if (free[i] >= entry.members.size() && (best < 0 || free[i] < free[best])) best = i;
             }
             if (best < 0) continue;
+            if (!entry.mapId.isEmpty()) map = entry.mapId;
             teams.get(best).add(entry);
             free[best] -= entry.members.size();
             placed += entry.members.size();
@@ -230,49 +248,52 @@ public final class MatchmakingService {
                 entry.members.forEach(byPlayer::remove);
             }
         }
-        return teams;
+        return new Packed(teams, map);
     }
 
-    private boolean cancel(UUID player, @Nullable String reason) {
+    private boolean cancel(UUID player, @Nullable Component reason) {
         Entry entry = byPlayer.get(player);
         if (entry == null) return false;
         drop(entry, reason);
         return true;
     }
 
-    private void drop(Entry entry, @Nullable String reason) {
+    private void drop(Entry entry, @Nullable Component reason) {
         List<Entry> queue = queues.get(entry.modeId);
         if (queue != null) queue.remove(entry);
         entry.members.forEach(byPlayer::remove);
         if (reason != null) {
-            for (UUID id : entry.members) {
-                ServerPlayer player = server.getPlayerList().getPlayer(id);
-                if (player != null) player.sendSystemMessage(Component.literal("§e" + reason));
-            }
+            for (UUID id : entry.members) players.notify(id, LobbyPackets.Level.WARNING, reason);
         }
         onStateChanged.run();
     }
 
-    private void startMatch(GameType type, GameModeDef mode, List<List<Entry>> teams) {
-        List<List<ServerPlayer>> roster = new ArrayList<>();
-        for (List<Entry> team : teams) {
-            List<ServerPlayer> players = new ArrayList<>();
+    private void startMatch(GameType type, GameModeDef mode, Packed packed) {
+        List<List<MatchRoster.Member>> roster = new ArrayList<>();
+        for (List<Entry> team : packed.teams()) {
+            List<MatchRoster.Member> members = new ArrayList<>();
             for (Entry entry : team) {
                 for (UUID id : entry.members) {
-                    ServerPlayer player = server.getPlayerList().getPlayer(id);
-                    if (player != null) players.add(player);
+                    String name = players.name(id);
+                    if (name != null) members.add(new MatchRoster.Member(id, name));
                 }
             }
-            roster.add(players);
+            roster.add(members);
         }
-        MatchRoster matchRoster = new MatchRoster(roster);
+        MatchRoster matchRoster = new MatchRoster(roster, packed.mapId());
         if (matchRoster.isEmpty()) return;
-        for (ServerPlayer player : matchRoster.players()) BLNetwork.sendTo(player, new S2CMatchFound(mode.title));
+        for (MatchRoster.Member member : matchRoster.players()) BLNetwork.sendTo(member.id(), new S2CMatchFound(mode.title));
         games.start(type, mode, matchRoster);
         onStateChanged.run();
     }
 
-    public record Ticket(String modeId, long since) {
+    private String nameOf(UUID id) {
+        String name = players.name(id);
+        return name == null ? id.toString() : name;
+    }
+
+    /** @param mapId the map asked for, empty = any */
+    public record Ticket(String modeId, String mapId, long since) {
         public int waitedSeconds() {
             return (int) ((System.currentTimeMillis() - since) / 1000L);
         }

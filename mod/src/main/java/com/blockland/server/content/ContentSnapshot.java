@@ -1,5 +1,6 @@
 package com.blockland.server.content;
 
+import com.blockland.server.content.model.AnnouncementDef;
 import com.blockland.server.content.model.GameModeDef;
 import com.blockland.server.content.model.MapDef;
 import com.blockland.server.content.model.ModeGroupDef;
@@ -22,6 +23,8 @@ public final class ContentSnapshot {
     public List<MapDef> maps = new ArrayList<>();
     /** Per game type id: data only that type understands (e.g. SkyWars loot tables). */
     public Map<String, JsonElement> typeData = new LinkedHashMap<>();
+    /** Published announcements, oldest first. */
+    public List<AnnouncementDef> announcements = new ArrayList<>();
 
     private transient Map<String, GameModeDef> modeIndex;
     private transient Map<String, MapDef> mapIndex;

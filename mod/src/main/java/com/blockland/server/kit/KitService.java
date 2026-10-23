@@ -5,15 +5,20 @@ import com.blockland.network.packet.S2CKitData;
 import com.blockland.server.content.model.GameModeDef;
 import com.blockland.server.content.model.KitItemDef;
 import com.blockland.server.item.ItemStackFactory;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * Starting kits ("开局预设物品"), usable by any game type. The items always come from the server's preset;
@@ -24,10 +29,16 @@ public final class KitService {
     private final MinecraftServer server;
     private final KitLayoutStore layouts;
     private ItemStackFactory items;
+    /** Runs after a kit was handed out (the 工匠 builds are fitted to its weapons). */
+    private Consumer<ServerPlayer> afterApply = player -> { };
 
     public KitService(MinecraftServer server, KitLayoutStore layouts) {
         this.server = server;
         this.layouts = layouts;
+    }
+
+    public void setAfterApply(Consumer<ServerPlayer> afterApply) {
+        this.afterApply = afterApply;
     }
 
     /** Clears the player's inventory and gives the mode's kit in the player's submitted arrangement. */
@@ -39,14 +50,26 @@ public final class KitService {
             ItemStack stack = createStack(kit.get(i));
             if (!stack.isEmpty()) place(player, slots.get(i), stack);
         }
+        afterApply.accept(player);
+        player.containerMenu.broadcastChanges();
+    }
+
+    /** Fits the player's saved builds (工匠) to weapons handed out outside a kit, e.g. a practice mode's guns. */
+    public void refit(ServerPlayer player) {
+        afterApply.accept(player);
         player.containerMenu.broadcastChanges();
     }
 
     /** The preset as the client's loadout editor needs it (the client merges its own saved arrangement). */
     public S2CKitData editorData(GameModeDef mode) {
         List<S2CKitData.Entry> entries = new ArrayList<>();
+        Item.TooltipContext context = Item.TooltipContext.of(server.registryAccess());
         for (KitItemDef item : mode.kitOrEmpty()) {
-            entries.add(new S2CKitData.Entry(createStack(item), KitSlots.normalize(item.slot)));
+            ItemStack stack = createStack(item);
+            if (stack.isEmpty()) continue;
+            S2CKitData.ItemView view = new S2CKitData.ItemView(BuiltInRegistries.ITEM.getKey(stack.getItem()), stack.getCount(),
+                    stack.hasFoil(), stack.getDamageValue(), stack.getTooltipLines(context, null, TooltipFlag.NORMAL));
+            entries.add(new S2CKitData.Entry(view, KitSlots.normalize(item.slot)));
         }
         return new S2CKitData(mode.id, mode.title == null ? mode.id : mode.title, signature(mode), entries);
     }
@@ -58,13 +81,13 @@ public final class KitService {
      * @return null when accepted (or empty), otherwise why it was ignored
      */
     @Nullable
-    public String submitLayout(ServerPlayer player, GameModeDef mode, String signature, List<String> slots) {
-        layouts.remove(player.getUUID(), mode.id);
+    public Component submitLayout(UUID player, GameModeDef mode, String signature, List<String> slots) {
+        layouts.remove(player, mode.id);
         if (slots.isEmpty() || mode.kitOrEmpty().isEmpty()) return null;
-        if (!signature(mode).equals(signature)) return "开局装备已更新，本次使用默认布局";
-        String error = KitSlots.validateLayout(defaults(mode), slots);
+        if (!signature(mode).equals(signature)) return Component.translatable("blockland.kit.error.outdated");
+        Component error = KitSlots.validateLayout(defaults(mode), slots);
         if (error != null) return error;
-        layouts.save(player.getUUID(), mode.id, new KitLayoutStore.Layout(signature, slots.stream().map(KitSlots::normalize).toList()));
+        layouts.save(player, mode.id, new KitLayoutStore.Layout(signature, slots.stream().map(KitSlots::normalize).toList()));
         return null;
     }
 

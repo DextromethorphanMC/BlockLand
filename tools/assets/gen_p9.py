@@ -1,6 +1,7 @@
 """Builds models/gun/p9.glb (VIEWMODEL_SPEC sections 3-6)."""
 import numpy as np
 
+import armrig
 import meshkit as mk
 import p9_model as pm
 import p9_parts as pp
@@ -20,14 +21,9 @@ MATERIALS = {
     "sight_dots": ((0.55, 1.0, 0.55, 1), 0.0, 0.40, {"emissive": (0.20, 0.75, 0.28)}),
     "mag": ((0.045, 0.045, 0.048, 1), 0.10, 0.70, {}),
     "mag_base": ((0.050, 0.050, 0.052, 1), 0.0, 0.75, {}),
-    "attachment": ((0.070, 0.070, 0.075, 1), 0.30, 0.60, {}),
-    "glass": ((0.55, 0.75, 0.90, 0.20), 0.0, 0.05, {"alpha_mode": "BLEND", "double": True}),
-    "reticle": ((1.0, 0.12, 0.08, 1), 0.0, 0.50, {"emissive": (1.0, 0.10, 0.06), "alpha_mode": "MASK",
-                                                   "cutoff": 0.5, "double": True, "texture": "dot"}),
-    "laser_lens": ((1.0, 0.25, 0.20, 1), 0.0, 0.20, {"emissive": (1.0, 0.12, 0.08)}),
     "brass": ((0.78, 0.56, 0.24, 1), 1.0, 0.30, {}),
 }
-TEXTURES = {"stipple": lambda: tx.stipple(256), "brushed": lambda: tx.brushed(256), "dot": lambda: tx.dot(32)}
+TEXTURES = {"stipple": lambda: tx.stipple(256), "brushed": lambda: tx.brushed(256)}
 
 
 def build_meshes():
@@ -38,14 +34,11 @@ def build_meshes():
         "slide": pm.slide_mesh(),
         "barrel": pm.barrel_mesh(),
         "sight_iron": d(pp.iron_sights_mesh(), (0, pm.SY1, 0)),
-        "sight_reddot": d(pp.reddot_mesh(), (0, pm.SY1, 0.0530)),
-        "reddot_reticle": pp.reticle_mesh(),
         "hammer": d(pp.hammer_mesh(), pm.HAMMER_PIVOT),
         "trigger": d(pp.trigger_mesh(), pm.TRIGGER_PIVOT),
         "slide_stop": d(pp.slide_stop_mesh(), pm.STOP_PIVOT),
         "mag_standard": pp.mag_mesh(False),
         "mag_extended": pp.mag_mesh(True),
-        "laser": d(pp.laser_mesh(), pm.LASER_ORIGIN),
         "fx_shell": pp.shell_mesh(1.25),
     }
 
@@ -100,8 +93,7 @@ def build(path, clips):
     rest, _ = rig.Pose().solve()
     g.add_node("viewmodel")
     g.add_node("gun", "viewmodel", rest["gun"]["translation"], rest["gun"]["rotation"])
-    for name in ("frame", "slide", "barrel", "hammer", "trigger", "slide_stop", "mag", "laser", "muzzle",
-                 "ejection"):
+    for name in ("frame", "slide", "barrel", "hammer", "trigger", "slide_stop", "mag", "muzzle", "ejection"):
         parent, t = rig.NODES[name]
         rot = rest.get(name, {}).get("rotation")
         if name == "mag":
@@ -110,19 +102,17 @@ def build(path, clips):
             rot = rig.ejection_quat()
         g.add_node(name, parent, t, rot, mesh=mesh_idx.get(name))
         if name == "slide":
-            for child in ("sight_iron", "sight_reddot"):
-                g.add_node(child, "slide", rig.NODES[child][1], mesh=mesh_idx[child])
-            g.add_node("reddot_reticle", "sight_reddot", rig.RETICLE_T, mesh=mesh_idx["reddot_reticle"])
+            g.add_node("sight_iron", "slide", rig.NODES["sight_iron"][1], mesh=mesh_idx["sight_iron"])
             g.add_node("aim_iron", "slide", rig.AIM_IRON_T)
-            g.add_node("aim_reddot", "slide", rig.AIM_REDDOT_T)
         if name == "mag":
             g.add_node("mag_standard", "mag", mesh=mesh_idx["mag_standard"])
             g.add_node("mag_extended", "mag", mesh=mesh_idx["mag_extended"])
-        if name == "laser":
-            g.add_node("laser_emitter", "laser", rig.LASER_EMITTER_T)
+    for name, (parent, t, rot, scale) in rig.MOUNTS.items():       # section 19: attachment mounts
+        g.add_node(name, parent, t, rot, scale=scale)
     for side, shoulder in (("R", rig.SHOULDER_R), ("L", rig.SHOULDER_L)):
         g.add_node(f"arm_{side}", "viewmodel", shoulder, rest[f"arm_{side}"]["rotation"])
         g.add_node(f"arm_{side}_fore", f"arm_{side}", rig.ARM_FORE_T, rest[f"arm_{side}_fore"]["rotation"])
+        armrig.add_hand_nodes(g, side, rest)
     g.add_node("camera", "viewmodel")
     g.add_node("fx_shell", None, mesh=mesh_idx["fx_shell"], extras={"hidden": True})
     rest_vals = {
@@ -138,6 +128,8 @@ def build(path, clips):
         "arm_L_fore": {"rotation": rest["arm_L_fore"]["rotation"]},
         "camera": {"rotation": quat_identity()},
     }
+    for side in ("R", "L"):
+        rest_vals.update(armrig.rest_values(rest, side))
     info = {}
     for clip in clips:
         info[clip.name] = bake_clip(g, clip, rest_vals)

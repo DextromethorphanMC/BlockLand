@@ -13,10 +13,11 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Where lobby players physically stand. Players spend the lobby inside a screen, so by default they wait in the
- * empty {@code blockland:lobby} dimension on a single barrier block: the client receives only empty chunks and
- * the overworld keeps no chunks loaded at all (its spawn chunks are disabled). The old "stand in the overworld"
- * behaviour stays available through the {@code lobby.voidWorld} config.
+ * The staging spot of the world. Players wait in the lobby without any world (the configuration phase), so nobody
+ * stands here for long: it is where a player is put on leaving the world (so the next world entry loads into the
+ * empty {@code blockland:lobby} dimension before the match moves them) and where operators land when they enter
+ * the world from the lobby. The overworld keeps no chunks loaded at all (its spawn chunks are disabled). The old
+ * "stand in the overworld" spot stays available through the {@code lobby.voidWorld} config.
  */
 public final class LobbyWorld {
     public static final ResourceKey<Level> LOBBY_DIMENSION = ResourceKey.create(Registries.DIMENSION, BlockLand.id("lobby"));
@@ -36,7 +37,7 @@ public final class LobbyWorld {
         if (!useVoid()) return;
         // nobody plays in the overworld, so it does not need to keep spawn chunks in memory
         server.getGameRules().getRule(GameRules.RULE_SPAWN_CHUNK_RADIUS).set(0, server);
-        BlockLand.LOGGER.info("[BlockLand] Lobby players wait in {}; overworld spawn chunks disabled", LOBBY_DIMENSION.location());
+        BlockLand.LOGGER.info("[BlockLand] Staging in {}; overworld spawn chunks disabled", LOBBY_DIMENSION.location());
     }
 
     public Spot spot() {

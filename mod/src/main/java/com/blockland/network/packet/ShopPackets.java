@@ -73,7 +73,7 @@ public final class ShopPackets {
         }
     }
 
-    /** Result of a purchase, shown in the shop. */
+    /** Result of a purchase, shown in the shop; {@code message} is component JSON ({@link TextJson}). */
     public record S2CPurchaseResult(boolean success, String message) {
         public static void encode(S2CPurchaseResult msg, FriendlyByteBuf buf) {
             buf.writeBoolean(msg.success);

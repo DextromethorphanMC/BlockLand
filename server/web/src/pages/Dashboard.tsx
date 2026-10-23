@@ -51,7 +51,7 @@ url = "${window.location.origin.replace(':5173', ':8080')}"
 serverToken = "与 application.yml 中 blockland.server-token 相同"`}</pre>
         <h3>游戏内命令</h3>
         <ul className="cmd-list">
-          <li><code>M</code> 键 / <code>/bl lobby</code> — 打开游戏大厅</li>
+          <li>进服即显示游戏大厅（大厅不加载世界）；进入世界的管理员按 <code>M</code> 键或 <code>/bl lobby</code> 返回大厅</li>
           <li><code>/bl leave</code> — 离开对局返回大厅</li>
           <li><code>/bl reload</code> — 立即从后端同步配置（OP）</li>
           <li><code>/bl start &lt;模式ID&gt;</code> — 用队列中的玩家强制开局，可单人测试（OP）</li>

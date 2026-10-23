@@ -1,3 +1,4 @@
+import { MovementFields } from '../common/Movement'
 import { TeamArenaFields, teamFormatLabel } from '../common/TeamArena'
 import type { GameTypeUi, SettingsFormProps } from '../index'
 
@@ -17,6 +18,7 @@ function FastPvpSettingsForm({ settings, onChange, maps }: SettingsFormProps) {
           允许放置方块
         </label>
       </div>
+      <MovementFields settings={settings} onChange={onChange} />
       <p className="muted small">开局装备在下方「开局装备」中配置；玩家可以在游戏大厅中调整自己的装备布局。</p>
     </div>
   )

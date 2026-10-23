@@ -100,7 +100,8 @@ public class MapFileAnalyzer {
         return spawns;
     }
 
-    private static float yawTowards(Block b, double cx, double cz) {
+    /** Yaw (degrees, Minecraft convention) of a player standing on {@code b} and facing the point (cx, cz). */
+    public static float yawTowards(Block b, double cx, double cz) {
         double dx = cx - (b.x() + 0.5), dz = cz - (b.z() + 0.5);
         if (dx * dx + dz * dz < 1) return 0;
         return (float) Math.round(Math.toDegrees(Math.atan2(-dx, dz)));

@@ -1,5 +1,6 @@
 import { Field, NumberInput } from '../../components/ui'
 import type { GameMap } from '../../types'
+import { MapPoolField } from './MapPoolField'
 
 /** Settings shared by team arena games (mirrors the backend's TeamArenaSettings). */
 export interface TeamArenaSettings {
@@ -49,9 +50,6 @@ export function TeamArenaFields({
 }) {
   const s = readTeamArena(settings)
   const set = (patch: Partial<TeamArenaSettings>) => onChange({ ...settings, ...s, ...patch })
-  const typeMaps = maps.filter((m) => m.gameType?.toUpperCase() === gameType)
-  const toggleMap = (id: string) =>
-    set({ mapIds: s.mapIds.includes(id) ? s.mapIds.filter((m) => m !== id) : [...s.mapIds, id] })
 
   return (
     <>
@@ -85,28 +83,18 @@ export function TeamArenaFields({
         </Field>
       </div>
 
-      <div className="field">
-        <span className="field-label">地图池</span>
-        <span className="field-hint">不勾选任何地图 = 使用该类型的全部地图；每局随机选择一张满足队伍数的地图。</span>
-        {typeMaps.length === 0 && <div className="muted">还没有该类型的地图，请先到「地图管理」导入。</div>}
-        <div className="map-picks">
-          {typeMaps.map((map) => {
-            const groups = map.teamSpawns.filter((t) => t.points.length > 0).length
-            const ok = groups >= s.teamCount
-            return (
-              <label key={map.id} className={`map-pick ${s.mapIds.includes(map.id) ? 'selected' : ''}`}>
-                <input type="checkbox" checked={s.mapIds.includes(map.id)} onChange={() => toggleMap(map.id)} />
-                <span>
-                  <strong>{map.name}</strong>
-                  <small className={ok ? 'muted' : 'text-warn'}>
-                    {groups} 个队伍出生点{ok ? '' : ` · 少于 ${s.teamCount} 队`}
-                  </small>
-                </span>
-              </label>
-            )
-          })}
-        </div>
-      </div>
+      <MapPoolField
+        gameType={gameType}
+        maps={maps}
+        mapIds={s.mapIds}
+        onChange={(mapIds) => set({ mapIds })}
+        hint="不勾选任何地图 = 使用该类型的全部地图；每局随机选择一张满足队伍数的地图。"
+        describe={(map) => {
+          const groups = map.teamSpawns.filter((t) => t.points.length > 0).length
+          const ok = groups >= s.teamCount
+          return { ok, text: `${groups} 个队伍出生点${ok ? '' : ` · 少于 ${s.teamCount} 队`}` }
+        }}
+      />
     </>
   )
 }

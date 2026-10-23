@@ -1,5 +1,6 @@
 package com.blockland.backend.player;
 
+import com.blockland.backend.common.ApiException;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -103,6 +104,26 @@ public final class PlayerControllers {
         @PostMapping("/logout")
         public void logout(@RequestBody PlayerService.SessionReport report) {
             players.logout(report);
+        }
+
+        public record SettingsRequest(Boolean allowPartyInvites) {
+        }
+
+        /** @param build null removes the weapon's build */
+        public record BuildRequest(String weapon, PlayerAccount.WeaponBuild build) {
+        }
+
+        /** The player changed a setting in the lobby (隐私 → 允许被邀请组队). */
+        @PostMapping("/{uuid}/settings")
+        public PlayerService.PlayerStatus settings(@PathVariable String uuid, @RequestBody SettingsRequest request) {
+            if (request.allowPartyInvites() == null) throw ApiException.badRequest("缺少 allowPartyInvites");
+            return players.setAllowPartyInvites(uuid, request.allowPartyInvites());
+        }
+
+        /** The player saved a weapon build in the 工匠 screen (already validated against the weapon by the game server). */
+        @PostMapping("/{uuid}/builds")
+        public PlayerService.PlayerStatus build(@PathVariable String uuid, @RequestBody BuildRequest request) {
+            return players.saveBuild(uuid, request.weapon(), request.build());
         }
     }
 }

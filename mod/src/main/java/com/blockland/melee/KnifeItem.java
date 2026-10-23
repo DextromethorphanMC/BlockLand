@@ -1,5 +1,10 @@
 package com.blockland.melee;
 
+import com.blockland.craft.Build;
+import com.blockland.craft.CraftCatalog;
+import com.blockland.craft.CraftData;
+import com.blockland.craft.Craftable;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
@@ -35,7 +40,7 @@ public class KnifeItem extends Item {
 
     @Override
     public Component getName(ItemStack stack) {
-        return MeleeCatalog.get().knife(knifeId).<Component>map(knife -> Component.literal(knife.name)).orElseGet(() -> super.getName(stack));
+        return MeleeCatalog.get().knife(knifeId).map(MeleeData.Knife::displayName).orElseGet(() -> super.getName(stack));
     }
 
     @Override
@@ -63,10 +68,27 @@ public class KnifeItem extends Item {
     public void appendHoverText(ItemStack stack, TooltipContext context, TooltipDisplay display, Consumer<Component> tooltip,
                                 TooltipFlag flag) {
         MeleeCatalog.get().knife(knifeId).ifPresent(knife -> {
-            tooltip.accept(Component.literal("§7轻击（左键） §f" + format(knife.light.damage) + " §7伤害"));
-            tooltip.accept(Component.literal("§7重击（右键） §f" + format(knife.heavy.damage) + " §7伤害"));
-            tooltip.accept(Component.literal("§7背刺 §f×" + format(knife.heavy.backstabMultiplier) + " §8（重击）"));
+            tooltip.accept(Component.translatable("blockland.knife.tooltip.light", Component.literal(format(knife.light.damage))
+                    .withStyle(ChatFormatting.WHITE)).withStyle(ChatFormatting.GRAY));
+            tooltip.accept(Component.translatable("blockland.knife.tooltip.heavy", Component.literal(format(knife.heavy.damage))
+                    .withStyle(ChatFormatting.WHITE)).withStyle(ChatFormatting.GRAY));
+            tooltip.accept(Component.translatable("blockland.knife.tooltip.backstab", Component.literal("×" + format(knife.heavy.backstabMultiplier))
+                    .withStyle(ChatFormatting.WHITE)).withStyle(ChatFormatting.GRAY)
+                    .append(Component.literal(" ").append(Component.translatable("blockland.knife.tooltip.heavy_only")).withStyle(ChatFormatting.DARK_GRAY)));
             if (!knife.description.isEmpty()) tooltip.accept(Component.literal("§8" + knife.description));
+            Build build = CraftCatalog.complete(knife, MeleeContent.buildOf(stack));
+            for (Craftable.Slot slot : knife.slots()) {
+                String option = build.option(slot.id(), slot.defaultOption());
+                if (option.equals(CraftData.NONE)) continue;
+                tooltip.accept(Component.translatable("blockland.craft.slot." + slot.id()).append(": ")
+                        .append(knife.describe(slot.id(), option).name()).withStyle(ChatFormatting.GRAY));
+            }
+            CraftData.Skin skin = knife.skins.getOrDefault(build.skin(), knife.skins.get("default"));
+            if (skin != null) {
+                tooltip.accept(Component.translatable("blockland.craft.skin").append(": ")
+                        .append(CraftCatalog.skinName(knife, skin)).withStyle(ChatFormatting.GRAY));
+            }
+            tooltip.accept(Component.translatable("blockland.craft.tooltip.hint").withStyle(ChatFormatting.DARK_GRAY));
         });
     }
 

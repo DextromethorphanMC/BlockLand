@@ -1,7 +1,10 @@
 """Regenerates every BlockLand gun asset.  Usage (from the repo root):  python -I tools/assets/build_all.py
 
-Optional arguments select parts: glb, knife, fx, items, knife_items, sounds, knife_sounds, decals
-(default: all, in that order; knife_items needs the knife GLB built first)."""
+Optional arguments select parts: pbr_textures, glb, ak47, knife, attachments (scopes and their reticles included),
+awp, pbr, fx, items, ak_items, awp_items, knife_items, sounds, ak_sounds, awp_sounds, suppressor_sounds, knife_sounds,
+decals, monster_textures, knife_patterns, slide_sounds (default:
+all, in that order; the *_items steps need their GLB built first). Every model step re-applies its texture sets,
+regions and baked AO (pbr_apply.py); "pbr" re-applies them to every model, "pbr_textures" regenerates the sets."""
 import os
 import sys
 import time
@@ -19,6 +22,24 @@ def path(*parts):
     return p
 
 
+def apply_pbr(*models):
+    """Section 20 / 21: binds texture sets and regions, bakes vertex AO (run after a model is (re)generated)."""
+    import pbr_apply
+    for model in models:
+        if model in pbr_apply.MODELS:
+            pbr_apply.apply(model)
+
+
+def build_pbr_textures():
+    import pbr_textures
+    pbr_textures.build()
+
+
+def build_pbr():
+    import pbr_apply
+    apply_pbr(*pbr_apply.MODELS)
+
+
 def build_glb():
     import gen_arms
     import gen_p9
@@ -28,6 +49,60 @@ def build_glb():
     print(f"p9.glb: {gun_tris} gun triangles (+{tris['fx_shell']} shell); per mesh {tris}")
     print(f"        animation channels {chans}")
     print(f"arms.glb: {gen_arms.build(path('models', 'gun', 'arms.glb'))} triangles")
+    apply_pbr("gun/p9")
+
+
+def build_ak47():
+    import ak_clips
+    import gen_ak47
+    tris, chans = gen_ak47.build(path("models", "gun", "ak47.glb"), ak_clips.all_clips())
+    print(f"ak47.glb: {sum(v for k, v in tris.items() if k != 'fx_shell')} gun triangles (+{tris['fx_shell']} shell); "
+          f"per mesh {tris}")
+    print(f"        animation channels {chans}")
+    apply_pbr("gun/ak47")
+
+
+def build_awp():
+    import awp_clips
+    import gen_awp
+    tris, chans = gen_awp.build(path("models", "gun", "awp.glb"), awp_clips.all_clips())
+    print(f"awp.glb: {sum(v for k, v in tris.items() if k != 'fx_shell')} gun triangles (+{tris['fx_shell']} shell); "
+          f"per mesh {tris}")
+    print(f"        animation channels {chans}")
+    apply_pbr("gun/awp")
+
+
+def build_awp_items():
+    import gen_awp_items
+    gen_awp_items.build(path)
+
+
+def build_awp_sounds():
+    import gen_awp_sounds
+    gen_awp_sounds.build(path)
+
+
+def build_attachments():
+    import gen_attachments
+    built = gen_attachments.build(path)
+    for name, tris in built.items():
+        print(f"attachment/{name}.glb: {tris} triangles")
+    apply_pbr(*(f"attachment/{name}" for name in built))
+
+
+def build_ak_items():
+    import gen_ak_items
+    gen_ak_items.build(path)
+
+
+def build_ak_sounds():
+    import gen_ak_sounds
+    gen_ak_sounds.build(path)
+
+
+def build_suppressor_sounds():
+    import gen_suppressor_sounds
+    gen_suppressor_sounds.build(path)
 
 
 def build_knife():
@@ -35,6 +110,7 @@ def build_knife():
     tris, chans = gen_knife.build(path("models", "knife", "butterfly.glb"))
     print(f"butterfly.glb: {sum(tris.values())} knife triangles; per mesh {tris}")
     print(f"        animation channels {chans}")
+    apply_pbr("knife/butterfly")
 
 
 def build_knife_items():
@@ -67,9 +143,52 @@ def build_sounds():
     gen_sounds.build(path)
 
 
-STEPS = {"glb": build_glb, "knife": build_knife, "fx": build_fx, "items": build_items,
-         "knife_items": build_knife_items, "sounds": build_sounds, "knife_sounds": build_knife_sounds,
-         "decals": build_decals}
+def build_monster_textures():
+    import gen_monster_textures
+    gen_monster_textures.build(path)
+
+
+def build_knife_patterns():
+    import gen_knife_patterns
+    gen_knife_patterns.build(path)
+
+
+def build_slide_sounds():
+    import gen_slide_sounds
+    gen_slide_sounds.build(path)
+
+
+STEPS = {"pbr_textures": build_pbr_textures,
+         "glb": build_glb, "ak47": build_ak47, "knife": build_knife, "attachments": build_attachments,
+         "awp": build_awp,
+         "pbr": build_pbr,
+         "fx": build_fx, "items": build_items,
+         "ak_items": build_ak_items, "awp_items": build_awp_items, "knife_items": build_knife_items,
+         "sounds": build_sounds, "ak_sounds": build_ak_sounds, "awp_sounds": build_awp_sounds,
+         "suppressor_sounds": build_suppressor_sounds, "knife_sounds": build_knife_sounds,
+         "decals": build_decals,
+         "monster_textures": build_monster_textures, "knife_patterns": build_knife_patterns,
+         "slide_sounds": build_slide_sounds}
+
+# Steps of later weapons live in modules of their own (parallel work): each module has `steps(path, apply_pbr)` ->
+# {step name: function()}, appended after the steps above in this order. Missing modules are skipped.
+STEP_MODULES = ("build_tommy", "build_ks3", "build_usp", "build_dagger", "build_stocks", "build_sprays",
+                "build_fx_special", "build_rpd", "build_karambit", "build_equipment")
+
+
+def _load_step_modules():
+    import importlib
+    for module in STEP_MODULES:
+        try:
+            mod = importlib.import_module(module)
+        except ModuleNotFoundError as e:
+            if e.name == module:
+                continue
+            raise
+        STEPS.update(mod.steps(path, apply_pbr))
+
+
+_load_step_modules()
 
 
 def main(argv):

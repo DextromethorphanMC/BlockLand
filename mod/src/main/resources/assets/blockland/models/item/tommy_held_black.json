@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/tommy_held",
+  "textures": {
+    "0": "blockland:item/tommy_held_black",
+    "particle": "blockland:item/tommy_held_black"
+  }
+}

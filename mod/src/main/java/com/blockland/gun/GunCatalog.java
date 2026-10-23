@@ -1,6 +1,10 @@
 package com.blockland.gun;
 
 import com.blockland.BlockLand;
+import com.blockland.craft.AttachmentCatalog;
+import com.blockland.craft.CraftData;
+import com.blockland.craft.Craftable;
+import com.blockland.craft.SkinLibrary;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -26,38 +30,32 @@ public final class GunCatalog {
 
     private final Map<String, GunData.Ammo> ammo;
     private final Map<String, GunData.Magazine> magazines;
-    private final Map<String, GunData.Sight> sights;
-    private final Map<String, GunData.Laser> lasers;
     private final Map<String, GunData.Gun> guns;
 
     /** JSON layout of the file. */
     private static final class File {
         Map<String, GunData.Ammo> ammo = new LinkedHashMap<>();
         Map<String, GunData.Magazine> magazines = new LinkedHashMap<>();
-        Map<String, GunData.Sight> sights = new LinkedHashMap<>();
-        Map<String, GunData.Laser> lasers = new LinkedHashMap<>();
         Map<String, GunData.Gun> guns = new LinkedHashMap<>();
     }
 
     private GunCatalog(File file) {
         file.ammo.forEach((id, value) -> value.id = id);
         file.magazines.forEach((id, value) -> value.id = id);
-        file.sights.forEach((id, value) -> value.id = id);
-        file.lasers.forEach((id, value) -> value.id = id);
         file.guns.forEach((id, gun) -> {
             gun.id = id;
             gun.skins.forEach((skinId, skin) -> skin.id = skinId);
             if (!gun.skins.containsKey("default")) {
-                GunData.Skin standard = new GunData.Skin();
+                CraftData.Skin standard = new CraftData.Skin();
                 standard.id = "default";
                 standard.name = "标准";
                 gun.skins.put("default", standard);
             }
+            SkinLibrary.get().addTo(Craftable.Kind.GUN, id, gun.skins);
+            gun.resolveSlots(file.magazines);
         });
         this.ammo = Collections.unmodifiableMap(file.ammo);
         this.magazines = Collections.unmodifiableMap(file.magazines);
-        this.sights = Collections.unmodifiableMap(file.sights);
-        this.lasers = Collections.unmodifiableMap(file.lasers);
         this.guns = Collections.unmodifiableMap(file.guns);
         validate();
     }
@@ -90,8 +88,14 @@ public final class GunCatalog {
                     BlockLand.LOGGER.warn("[BlockLand] Gun {} lists magazine {} that does not fit it", gun.id, id);
                 }
             });
-            gun.sights.forEach(id -> { if (!sights.containsKey(id)) BlockLand.LOGGER.warn("[BlockLand] Gun {}: unknown sight {}", gun.id, id); });
-            gun.lasers.forEach(id -> { if (!lasers.containsKey(id)) BlockLand.LOGGER.warn("[BlockLand] Gun {}: unknown laser {}", gun.id, id); });
+            for (Craftable.Slot slot : gun.slots()) {
+                if (slot.id().equals(GunData.Gun.MAGAZINE_SLOT)) continue;
+                for (String option : slot.options()) {
+                    if (!option.equals(CraftData.NONE) && AttachmentCatalog.get().get(option) == null) {
+                        BlockLand.LOGGER.warn("[BlockLand] Gun {}: slot {} offers unknown attachment {}", gun.id, slot.id(), option);
+                    }
+                }
+            }
         });
         BlockLand.LOGGER.info("[BlockLand] Gun catalog: {} guns, {} ammo types, {} magazines", guns.size(), ammo.size(), magazines.size());
     }
@@ -118,16 +122,6 @@ public final class GunCatalog {
     @Nullable
     public GunData.Magazine magazine(String id) {
         return magazines.get(id);
-    }
-
-    @Nullable
-    public GunData.Sight sight(String id) {
-        return sights.get(id);
-    }
-
-    @Nullable
-    public GunData.Laser laser(String id) {
-        return lasers.get(id);
     }
 
     /** Whether {@code magazineId} fits {@code gun}: listed by the gun, made for it, and taking its ammo. */

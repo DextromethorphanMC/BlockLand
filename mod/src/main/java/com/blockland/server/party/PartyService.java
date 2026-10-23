@@ -1,8 +1,8 @@
 package com.blockland.server.party;
 
+import com.blockland.network.packet.LobbyPackets;
+import com.blockland.server.session.PlayerDirectory;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerPlayer;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -15,26 +15,30 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.IntSupplier;
+import java.util.function.Predicate;
 
 /**
- * Parties (组队): players who queue and play together. Invitations go by player name and expire.
- * Knows nothing about matchmaking or the lobby; it reports every membership change to a listener
- * (the composition root uses that to cancel the party's queue ticket and refresh lobby screens).
+ * Parties (组队): players who queue and play together. Invitations go by player name, expire, and respect the
+ * invited player's privacy setting. Knows nothing about matchmaking or the lobby; it reports every membership change
+ * to a listener (the composition root uses that to cancel the party's queue ticket and refresh lobby screens).
  */
 public final class PartyService {
     public static final int INVITE_SECONDS = 60;
 
-    private final MinecraftServer server;
+    private final PlayerDirectory players;
     private final IntSupplier maxSize;
+    /** The target's privacy setting: whether they accept party invitations at all. */
+    private final Predicate<UUID> acceptsInvites;
     private final Map<UUID, Party> byMember = new HashMap<>();
     /** invited player → (inviter → invitation) */
     private final Map<UUID, Map<UUID, Invite>> invites = new HashMap<>();
-    private Listener listener = (players, membership) -> { };
+    private Listener listener = (ids, membership) -> { };
     private int tickCounter;
 
-    public PartyService(MinecraftServer server, IntSupplier maxSize) {
-        this.server = server;
+    public PartyService(PlayerDirectory players, IntSupplier maxSize, Predicate<UUID> acceptsInvites) {
+        this.players = players;
         this.maxSize = maxSize;
+        this.acceptsInvites = acceptsInvites;
     }
 
     public interface Listener {
@@ -104,8 +108,8 @@ public final class PartyService {
         for (Map.Entry<UUID, Map<UUID, Invite>> entry : invites.entrySet()) {
             boolean fromUs = entry.getValue().keySet().stream().anyMatch(party::contains);
             if (!fromUs || party.contains(entry.getKey())) continue;
-            ServerPlayer target = server.getPlayerList().getPlayer(entry.getKey());
-            if (target != null) names.add(target.getGameProfile().getName());
+            String name = players.name(entry.getKey());
+            if (name != null) names.add(name);
         }
         return names;
     }
@@ -113,34 +117,33 @@ public final class PartyService {
     // ---- actions (return an error message, or null on success) ------------------------------
 
     @Nullable
-    public String invite(ServerPlayer from, String targetName) {
+    public Component invite(UUID from, String targetName) {
         String name = targetName == null ? "" : targetName.trim();
-        if (name.isEmpty()) return "请输入玩家名称";
-        ServerPlayer target = server.getPlayerList().getPlayerByName(name);
-        if (target == null) return "玩家 " + name + " 不在线";
-        if (target == from) return "不能邀请自己";
-        List<UUID> members = membersOf(from.getUUID());
-        if (members.contains(target.getUUID())) return target.getGameProfile().getName() + " 已经在你的队伍中";
-        if (members.size() >= maxSize()) return "队伍已满（最多 " + maxSize() + " 人）";
-        Map<UUID, Invite> forTarget = invites.computeIfAbsent(target.getUUID(), k -> new LinkedHashMap<>());
-        if (forTarget.containsKey(from.getUUID())) return "已经邀请过 " + target.getGameProfile().getName() + "，等待对方回应";
-        forTarget.put(from.getUUID(), new Invite(from.getUUID(), from.getGameProfile().getName(),
-                System.currentTimeMillis() + INVITE_SECONDS * 1000L));
-        target.sendSystemMessage(Component.literal("§e" + from.getGameProfile().getName()
-                + " §f邀请你组队，在大厅（按 §eM§f）中接受或拒绝（" + INVITE_SECONDS + " 秒内有效）"));
-        invitesChanged(List.of(target.getUUID(), from.getUUID()));
+        if (name.isEmpty()) return Component.translatable("blockland.party.enter_name");
+        UUID target = players.byName(name).orElse(null);
+        if (target == null) return Component.translatable("blockland.party.not_online", name);
+        if (target.equals(from)) return Component.translatable("blockland.party.self");
+        String targetShown = nameOf(target);
+        List<UUID> members = membersOf(from);
+        if (members.contains(target)) return Component.translatable("blockland.party.already_member", targetShown);
+        if (!acceptsInvites.test(target)) return Component.translatable("blockland.party.no_invites", targetShown);
+        if (members.size() >= maxSize()) return Component.translatable("blockland.party.full", maxSize());
+        Map<UUID, Invite> forTarget = invites.computeIfAbsent(target, k -> new LinkedHashMap<>());
+        if (forTarget.containsKey(from)) return Component.translatable("blockland.party.already_invited", targetShown);
+        forTarget.put(from, new Invite(from, nameOf(from), System.currentTimeMillis() + INVITE_SECONDS * 1000L));
+        players.notify(target, LobbyPackets.Level.INFO, Component.translatable("blockland.party.invited_you", nameOf(from), INVITE_SECONDS));
+        invitesChanged(List.of(target, from));
         invitesChanged(members);
         return null;
     }
 
     @Nullable
-    public String accept(ServerPlayer player, UUID from) {
-        Invite invite = takeInvite(player.getUUID(), from);
-        if (invite == null || invite.secondsLeft() <= 0) return "邀请已失效";
-        ServerPlayer inviter = server.getPlayerList().getPlayer(from);
-        if (inviter == null) return "邀请者已离线";
-        if (membersOf(from).contains(player.getUUID())) return null;
-        if (membersOf(from).size() >= maxSize()) return "对方队伍已满";
+    public Component accept(UUID player, UUID from) {
+        Invite invite = takeInvite(player, from);
+        if (invite == null || invite.secondsLeft() <= 0) return Component.translatable("blockland.party.invite_expired");
+        if (!players.isOnline(from)) return Component.translatable("blockland.party.inviter_offline");
+        if (membersOf(from).contains(player)) return null;
+        if (membersOf(from).size() >= maxSize()) return Component.translatable("blockland.party.their_full");
 
         leave(player, false);
         Party party = byMember.get(from);
@@ -149,74 +152,74 @@ public final class PartyService {
             party.members.add(from);
             byMember.put(from, party);
         }
-        party.members.add(player.getUUID());
-        byMember.put(player.getUUID(), party);
+        party.members.add(player);
+        byMember.put(player, party);
         // being in one party at a time: other invitations to this player are dropped
-        Map<UUID, Invite> others = invites.remove(player.getUUID());
-        broadcast(party, "§a" + player.getGameProfile().getName() + " 加入了队伍");
+        Map<UUID, Invite> others = invites.remove(player);
+        broadcast(party, LobbyPackets.Level.SUCCESS, Component.translatable("blockland.party.joined", nameOf(player)));
         membersChanged(party.members);
         if (others != null) invitesChanged(others.keySet());
         return null;
     }
 
-    public void decline(ServerPlayer player, UUID from) {
-        if (takeInvite(player.getUUID(), from) == null) return;
-        ServerPlayer inviter = server.getPlayerList().getPlayer(from);
-        if (inviter != null) inviter.sendSystemMessage(Component.literal("§7" + player.getGameProfile().getName() + " 拒绝了组队邀请"));
+    public void decline(UUID player, UUID from) {
+        if (takeInvite(player, from) == null) return;
+        if (players.isOnline(from)) {
+            players.notify(from, LobbyPackets.Level.INFO, Component.translatable("blockland.party.declined", nameOf(player)));
+        }
         invitesChanged(membersOf(from));
-        invitesChanged(List.of(player.getUUID()));
+        invitesChanged(List.of(player));
     }
 
     /** Leaves the current party (no-op when solo). */
-    public void leave(ServerPlayer player, boolean announce) {
-        Party party = byMember.get(player.getUUID());
+    public void leave(UUID player, boolean announce) {
+        Party party = byMember.get(player);
         if (party == null) return;
         List<UUID> before = party.members();
-        remove(party, player.getUUID());
+        remove(party, player);
         if (announce) {
-            player.sendSystemMessage(Component.literal("§7你离开了队伍"));
-            broadcast(party, "§7" + player.getGameProfile().getName() + " 离开了队伍");
+            players.notify(player, LobbyPackets.Level.INFO, Component.translatable("blockland.party.you_left"));
+            broadcast(party, LobbyPackets.Level.INFO, Component.translatable("blockland.party.left", nameOf(player)));
         }
         membersChanged(before);
     }
 
     @Nullable
-    public String kick(ServerPlayer leader, UUID target) {
-        Party party = byMember.get(leader.getUUID());
-        if (party == null || !party.leader().equals(leader.getUUID())) return "只有队长可以移出队员";
-        if (target.equals(leader.getUUID()) || !party.members.contains(target)) return "该玩家不在你的队伍中";
+    public Component kick(UUID leader, UUID target) {
+        Party party = byMember.get(leader);
+        if (party == null || !party.leader().equals(leader)) return Component.translatable("blockland.party.leader_only_kick");
+        if (target.equals(leader) || !party.members.contains(target)) return Component.translatable("blockland.party.not_member");
         List<UUID> before = party.members();
         remove(party, target);
-        ServerPlayer kicked = server.getPlayerList().getPlayer(target);
-        if (kicked != null) kicked.sendSystemMessage(Component.literal("§7你被移出了队伍"));
-        broadcast(party, "§7" + (kicked == null ? "队员" : kicked.getGameProfile().getName()) + " 被移出了队伍");
+        players.notify(target, LobbyPackets.Level.WARNING, Component.translatable("blockland.party.you_kicked"));
+        broadcast(party, LobbyPackets.Level.INFO, Component.translatable("blockland.party.kicked", nameOf(target)));
         membersChanged(before);
         return null;
     }
 
     /** The leader hands leadership to another member. Queue tickets stay valid: the party is unchanged. */
     @Nullable
-    public String transfer(ServerPlayer leader, UUID target) {
-        Party party = byMember.get(leader.getUUID());
-        if (party == null || !party.leader().equals(leader.getUUID())) return "只有队长可以转让队长";
-        if (target.equals(leader.getUUID()) || !party.members.contains(target)) return "该玩家不在你的队伍中";
+    public Component transfer(UUID leader, UUID target) {
+        Party party = byMember.get(leader);
+        if (party == null || !party.leader().equals(leader)) return Component.translatable("blockland.party.leader_only_transfer");
+        if (target.equals(leader) || !party.members.contains(target)) return Component.translatable("blockland.party.not_member");
         party.members.remove(target);
         party.members.add(0, target);
-        ServerPlayer next = server.getPlayerList().getPlayer(target);
-        broadcast(party, "§e" + (next == null ? "队员" : next.getGameProfile().getName()) + " 成为了队长");
+        broadcast(party, LobbyPackets.Level.INFO, Component.translatable("blockland.party.new_leader", nameOf(target)));
         invitesChanged(party.members);
         return null;
     }
 
-    public void onLogout(ServerPlayer player) {
-        Party party = byMember.get(player.getUUID());
+    /** The player disconnected. */
+    public void onLeave(UUID player, String name) {
+        Party party = byMember.get(player);
         leave(player, false);
-        if (party != null) broadcast(party, "§7" + player.getGameProfile().getName() + " 已离线，离开了队伍");
+        if (party != null) broadcast(party, LobbyPackets.Level.INFO, Component.translatable("blockland.party.went_offline", name));
         Set<UUID> affected = new HashSet<>();
-        Map<UUID, Invite> received = invites.remove(player.getUUID());
+        Map<UUID, Invite> received = invites.remove(player);
         if (received != null) affected.addAll(received.keySet());
         invites.forEach((target, map) -> {
-            if (map.remove(player.getUUID()) != null) affected.add(target);
+            if (map.remove(player) != null) affected.add(target);
         });
         invites.values().removeIf(Map::isEmpty);
         invitesChanged(affected);
@@ -260,11 +263,13 @@ public final class PartyService {
         }
     }
 
-    private void broadcast(Party party, String message) {
-        for (UUID id : party.members) {
-            ServerPlayer member = server.getPlayerList().getPlayer(id);
-            if (member != null) member.sendSystemMessage(Component.literal(message));
-        }
+    private void broadcast(Party party, LobbyPackets.Level level, Component message) {
+        for (UUID id : party.members) players.notify(id, level, message);
+    }
+
+    private String nameOf(UUID id) {
+        String name = players.name(id);
+        return name == null ? "?" : name;
     }
 
     private void membersChanged(Collection<UUID> ids) {

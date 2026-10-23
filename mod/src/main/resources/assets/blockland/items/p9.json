@@ -29,6 +29,13 @@
               }
             },
             {
+              "when": "camo",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/p9_camo"
+              }
+            },
+            {
               "when": "gold",
               "model": {
                 "type": "minecraft:model",
@@ -36,10 +43,24 @@
               }
             },
             {
-              "when": "camo",
+              "when": "aurora",
               "model": {
                 "type": "minecraft:model",
-                "model": "blockland:item/p9_camo"
+                "model": "blockland:item/p9_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/p9_magma"
+              }
+            },
+            {
+              "when": "neon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/p9_neon"
               }
             }
           ],
@@ -70,6 +91,13 @@
           }
         },
         {
+          "when": "camo",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/p9_held_camo"
+          }
+        },
+        {
           "when": "gold",
           "model": {
             "type": "minecraft:model",
@@ -77,10 +105,24 @@
           }
         },
         {
-          "when": "camo",
+          "when": "aurora",
           "model": {
             "type": "minecraft:model",
-            "model": "blockland:item/p9_held_camo"
+            "model": "blockland:item/p9_held_aurora"
+          }
+        },
+        {
+          "when": "magma",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/p9_held_magma"
+          }
+        },
+        {
+          "when": "neon",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/p9_held_neon"
           }
         }
       ],

@@ -313,12 +313,15 @@ def encode(x, out, wav_dir):
 
 
 def merge_sounds_json(path, entries):
-    """Update sounds.json in place: replace our keys, keep every other entry (gun / knife / others)."""
-    data = {}
-    if os.path.exists(path):
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    data.update(entries)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
+    """Update sounds.json in place: replace our keys, keep every other entry (gun / knife / others). Locked, so
+    generators of different weapons may run at the same time."""
+    import filelock
+    with filelock.locked(path):
+        data = {}
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        data.update(entries)
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(data, f, indent=2)
+            f.write("\n")

@@ -1,5 +1,6 @@
 package com.blockland.melee;
 
+import com.blockland.combat.HitShapes;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
@@ -13,7 +14,6 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
-import java.util.Optional;
 
 /**
  * Where a knife attack lands: the nearest entity inside a swept volume around the view ray (in front of any wall),
@@ -48,10 +48,10 @@ public final class MeleeTrace {
         AABB sweep = new AABB(eye, to).inflate(attack.radius + 1);
         for (Entity candidate : level.getEntities(attacker, sweep,
                 e -> e.isPickable() && e.isAlive() && !e.isSpectator() && !attacker.isAlliedTo(e) && e != attacker.getVehicle())) {
-            AABB box = candidate.getBoundingBox().inflate(attack.radius + candidate.getPickRadius());
-            Optional<Vec3> point = box.contains(eye) ? Optional.of(eye) : box.clip(eye, to);
-            if (point.isEmpty()) continue;
-            double distance = eye.distanceToSqr(point.get());
+            // the entity's hit boxes (a sliding player is low), swept by the blade's radius
+            HitShapes.Hit hit = HitShapes.clip(candidate, eye, to, attack.radius + candidate.getPickRadius());
+            if (hit == null) continue;
+            double distance = eye.distanceToSqr(hit.point());
             // the blade does not pass through walls
             if (distance < bestDistance && distance <= wall + 1e-6) {
                 best = candidate;
@@ -59,17 +59,21 @@ public final class MeleeTrace {
             }
         }
         if (best != null) {
-            Vec3 point = surfacePoint(best.getBoundingBox(), eye, dir);
+            Vec3 point = surfacePoint(best, eye, dir);
             return new Hit(Type.ENTITY, point, best, null, Direction.getApproximateNearest(-dir.x, -dir.y, -dir.z));
         }
         if (hitBlock) return new Hit(Type.BLOCK, block.getLocation(), null, block.getBlockPos(), block.getDirection());
         return new Hit(Type.MISS, to, null, null, null);
     }
 
-    /** Where the view ray meets the box, or (when it only grazed the swept volume) the box point nearest to it. */
-    private static Vec3 surfacePoint(AABB box, Vec3 eye, Vec3 dir) {
-        Optional<Vec3> exact = box.clip(eye, eye.add(dir.scale(8)));
-        if (exact.isPresent()) return exact.get();
+    /**
+     * Where the view ray meets the entity's hit boxes, or (when it only grazed the swept volume) the point of the box
+     * around them nearest to it.
+     */
+    private static Vec3 surfacePoint(Entity entity, Vec3 eye, Vec3 dir) {
+        HitShapes.Hit exact = HitShapes.clip(entity, eye, eye.add(dir.scale(8)), 0);
+        if (exact != null) return exact.point();
+        AABB box = HitShapes.bounds(entity);
         Vec3 centre = box.getCenter();
         double t = Math.max(0, centre.subtract(eye).dot(dir));
         Vec3 onRay = eye.add(dir.scale(t));

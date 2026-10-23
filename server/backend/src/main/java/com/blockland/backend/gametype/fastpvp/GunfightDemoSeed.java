@@ -61,6 +61,7 @@ public class GunfightDemoSeed implements DemoSeed {
             settings.put("endingSeconds", 5);
             settings.put("allowBlockBreak", false);
             settings.put("allowBlockPlace", false);
+            settings.put("allowSlide", true);
             List<KitItem> kit = List.of(
                     new KitItem("blockland:p9", 1, "0"),
                     new KitItem("blockland:pistol_ammo", 60, "1"),

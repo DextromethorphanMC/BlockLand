@@ -87,6 +87,11 @@ export function Users() {
                     {u.banned && <span className="badge badge-danger" title={`${u.ban?.reason} · 至 ${formatTime(u.ban?.until)}`}>封禁中</span>}
                     {u.muted && <span className="badge badge-warn" title={`${u.mute?.reason} · 至 ${formatTime(u.mute?.until)}`}>禁言中</span>}
                     {!u.banned && !u.muted && <span className="muted small">正常</span>}
+                    {u.preferences?.allowPartyInvites === false && (
+                      <span className="badge" title="玩家在游戏设置「隐私」中关闭了「允许被邀请组队」">
+                        拒绝组队邀请
+                      </span>
+                    )}
                   </div>
                   {(u.banned || u.muted) && (
                     <div className="small muted">

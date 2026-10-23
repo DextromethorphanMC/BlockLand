@@ -9,11 +9,12 @@ import com.blockland.anim.Stagger;
 import com.blockland.anim.Ticker;
 import com.blockland.client.ClientLobbyState;
 import com.blockland.client.ClientMedia;
+import com.blockland.client.font.UiFont;
 import com.blockland.client.ui.Draw;
+import com.blockland.client.ui.Tr;
 import com.blockland.network.packet.LobbyGroupEntry;
 import com.blockland.network.packet.LobbyModeEntry;
 import com.blockland.network.packet.MediaPackets;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 
 import javax.annotation.Nullable;
@@ -25,6 +26,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static com.blockland.client.screen.lobby.LobbyTheme.*;
+import static com.blockland.client.ui.Tr.tr;
 
 /**
  * The "选择游戏模式" column: group cards and ungrouped mode cards; opening a group shows only its modes.
@@ -39,7 +41,6 @@ public final class ModeBrowser {
     /** Remembered across lobby openings, like a real menu. */
     private static String openGroupId;
 
-    private final Font font;
     private final Map<String, CardFx> fx = new HashMap<>();
     private final Spring scroll = new Spring(0).config(240, 30);
     private final Spring backHover = new Spring(0).config(300, 26);
@@ -77,8 +78,7 @@ public final class ModeBrowser {
 
     public enum Result { NONE, SELECTED }
 
-    public ModeBrowser(Font font) {
-        this.font = font;
+    public ModeBrowser() {
     }
 
     // ---- content --------------------------------------------------------------------------------
@@ -214,13 +214,14 @@ public final class ModeBrowser {
         backHover.setTarget(hovered ? 1 : 0);
         float hv = backHover.get();
         int color = ColorMath.fade(ColorMath.mix(MUTED, ACCENT, hv), a);
-        Draw.text(g, font, "‹", x - hv * 3, y + 2, 1.2f, color, false);
-        Draw.text(g, font, "全部模式", x + 10, y + 3, 1f, color, false);
-        g.fill(x + 10, y + 13, x + 10 + Math.round(font.width("全部模式") * hv), y + 14, ColorMath.fade(ACCENT, a));
+        Draw.text(g, "‹", x - hv * 3, y + 2, 1.2f, color, false);
+        String all = tr("blockland.modes.all");
+        Draw.text(g, all, x + 10, y + 3, 1f, color, false);
+        g.fill(x + 10, y + 13, x + 10 + Math.round(UiFont.width(all) * hv), y + 14, ColorMath.fade(ACCENT, a));
 
-        Draw.text(g, font, Draw.fit(font, group.title(), (int) ((w - 4) / 1.35f)), x, y + 20, 1.35f, ColorMath.fade(TEXT, a), true);
+        Draw.text(g, Draw.fit(group.title(), (int) ((w - 4) / 1.35f)), x, y + 20, 1.35f, ColorMath.fade(TEXT, a), true);
         if (!group.description().isEmpty()) {
-            Draw.text(g, font, Draw.fit(font, group.description(), w), x, y + 35, 1f, ColorMath.fade(DIM, a), false);
+            Draw.text(g, Draw.fit(group.description(), w), x, y + 35, 1f, ColorMath.fade(DIM, a), false);
         }
     }
 
@@ -230,7 +231,6 @@ public final class ModeBrowser {
         if (a <= 0.01f) return;
         boolean limited = m.isLimited();
         boolean available = m.available() && !LimitedTime.isOver(m.availableUntil());
-        int accent = limited ? GOLD : m.accentColor() | 0xFF000000;
 
         g.pose().pushMatrix();
         g.pose().translate(cx + cw / 2f + (1 - enter) * 22 + hov * 2, cy + ch / 2f);
@@ -238,56 +238,56 @@ public final class ModeBrowser {
         g.pose().scale(scale, scale);
         g.pose().translate(-cw / 2f, -ch / 2f);
 
+        // every card looks the same; only the selected one carries the accent colour
         int base = ColorMath.mix(ColorMath.mix(CARD, CARD_HOVER, hov), CARD_SELECTED, sel);
-        Draw.glow(g, 0, ch / 2f, 40, ch * 0.9f, ColorMath.fade(accent, 0.22f * sel * a));
+        Draw.glow(g, 0, ch / 2f, 40, ch * 0.9f, ColorMath.fade(ACCENT, 0.22f * sel * a));
         Draw.rect(g, 0, 0, cw, ch, ColorMath.fade(base, a));
 
-        // cover on the right, blended into the card
+        // the cover fills the card (like a group card), shaded dark on the left so the text stays legible
         ClientMedia.Image cover = ClientMedia.get(MediaPackets.MODE, m.id(), m.coverVersion());
-        int coverX = Math.round(cw * 0.34f);
         if (cover != null) {
-            float coverAlpha = (available ? 0.95f : 0.35f) * (0.85f + 0.15f * Math.max(hov, sel));
-            Draw.cover(g, cover, coverX, 1, cw - coverX - 1, ch - 2, 1 + 0.07f * hov, ColorMath.fade(0xFFFFFFFF, a * coverAlpha));
-            Draw.fadeX(g, coverX, 1, Math.round((cw - coverX) * 0.75f), ch - 2, ColorMath.fade(base, a), true);
-            Draw.fadeY(g, coverX, ch / 2, cw - coverX - 1, ch / 2 - 1, ColorMath.fade(0x99000000, a), false);
+            float coverAlpha = (available ? 0.8f : 0.3f) + (available ? 0.2f : 0.05f) * Math.max(hov, sel);
+            Draw.cover(g, cover, 1, 1, cw - 2, ch - 2, 1 + 0.06f * hov, ColorMath.fade(0xFFFFFFFF, a * coverAlpha));
         }
+        Draw.fadeX(g, 1, 1, Math.round(cw * 0.9f), ch - 2, ColorMath.fade(0xF0070B12, a), true);
+        Draw.fadeX(g, 1, 1, Math.round(cw * 0.55f), ch - 2, ColorMath.fade(0xA0070B12, a), true);
+        Draw.fadeY(g, 1, ch / 2, cw - 2, ch / 2 - 1, ColorMath.fade(0x80000000, a), false);
 
-        // accent bar + selection outline
+        // left bar and frame: neutral, brighter on hover; the accent only when selected
+        int frame = ColorMath.mix(NEUTRAL_EDGE, ACCENT, sel);
         int bar = Math.round(2 + 2 * Math.max(hov, sel));
-        Draw.rect(g, 0, 0, bar, ch, ColorMath.fade(available ? accent : DIM, a * (0.55f + 0.45f * Math.max(hov, sel))));
-        if (sel > 0.01f) Draw.outline(g, 0, 0, cw, ch, ColorMath.fade(accent, a * 0.75f * sel));
+        Draw.rect(g, 0, 0, bar, ch, ColorMath.fade(frame, a * (available ? 0.45f + 0.55f * Math.max(hov, sel) : 0.3f)));
+        Draw.outline(g, 0, 0, cw, ch, ColorMath.fade(frame, a * Math.max(0.35f * hov, 0.8f * sel)));
 
         // text
         int textMax = cw - 24;
-        Draw.text(g, font, Draw.fit(font, m.title(), (int) (textMax / 1.2f)), 12, 9, 1.2f, ColorMath.fade(available ? TEXT : MUTED, a), true);
-        String time = m.timeLimitSeconds() > 0 ? "限时 " + clock(m.timeLimitSeconds()) : "不限时";
-        Draw.text(g, font, m.formatLabel() + "  ·  " + m.requiredPlayers() + " 人  ·  " + time, 12, 26, 1f, ColorMath.fade(MUTED, a), false);
+        Draw.text(g, Draw.fit(m.title(), (int) (textMax / 1.2f)), 12, 9, 1.2f, ColorMath.fade(available ? TEXT : MUTED, a), true);
+        String time = m.timeLimitSeconds() > 0 ? tr("blockland.modes.time_limit", clock(m.timeLimitSeconds())) : tr("blockland.modes.no_time_limit");
+        Draw.text(g, Tr.text(m.formatLabel()) + "  ·  " + tr("blockland.modes.players", m.requiredPlayers()) + "  ·  " + time, 12, 26, 1f,
+                ColorMath.fade(MUTED, a), false);
         if (!available) {
-            Draw.text(g, font, Draw.fit(font, m.unavailableReason(), textMax), 12, 44, 1f, ColorMath.fade(ERROR, a), false);
+            Draw.text(g, Draw.fit(Tr.text(m.unavailableReason()), textMax), 12, 44, 1f, ColorMath.fade(ERROR, a), false);
         } else {
             float pulse = (float) (0.5 + 0.5 * Math.sin(Ticker.global().time() * 4));
-            int dot = m.playing() > 0 ? OK : m.queued() > 0 ? ACCENT : DIM;
+            int dot = m.playing() > 0 ? OK : m.queued() > 0 ? TEXT : DIM;
             float dotAlpha = m.playing() > 0 || m.queued() > 0 ? 0.55f + 0.45f * pulse : 0.6f;
             Draw.glow(g, 15, 48, 5, 5, ColorMath.fade(dot, a * 0.5f * dotAlpha));
             Draw.rect(g, 13, 46, 4, 4, ColorMath.fade(dot, a * dotAlpha));
-            Draw.text(g, font, "排队 " + m.queued() + "/" + m.requiredPlayers() + "    游戏中 " + m.playing(), 22, 44, 1f,
-                    ColorMath.fade(m.queued() > 0 ? ACCENT : DIM, a), false);
+            Draw.text(g, tr("blockland.modes.queue_line", m.queued(), m.requiredPlayers(), m.playing()), 22, 44, 1f,
+                    ColorMath.fade(m.queued() > 0 ? TEXT : DIM, a), false);
         }
 
-        if (limited) {
-            // a thin gold frame marks limited-time modes even when the card is not selected
-            Draw.outline(g, 0, 0, cw, ch, ColorMath.fade(GOLD, a * (0.35f + 0.4f * Math.max(hov, sel))));
-            LimitedTime.modeBadge(g, font, m.availableUntil(), cw - 6, ch - 17, a);
-        }
+        if (limited) LimitedTime.modeBadge(g, m.availableUntil(), cw - 6, ch - 17, a);
 
         // type tag, readable on top of the cover
-        int tagW = font.width(m.typeName()) + 8;
+        int tagW = UiFont.width(m.typeName()) + 8;
         Draw.rect(g, cw - tagW - 6, 6, tagW, 12, ColorMath.fade(0xAA05080D, a));
-        Draw.text(g, font, m.typeName(), cw - tagW - 2, 8, 1f, ColorMath.fade(accent, a), false);
+        Draw.text(g, m.typeName(), cw - tagW - 2, 8, 1f, ColorMath.fade(MUTED, a), false);
         if (m.hasKit()) {
-            int kitW = font.width("装备") + 8;
+            String kit = tr("blockland.modes.kit");
+            int kitW = UiFont.width(kit) + 8;
             Draw.rect(g, cw - tagW - kitW - 10, 6, kitW, 12, ColorMath.fade(0xAA05080D, a));
-            Draw.text(g, font, "装备", cw - tagW - kitW - 6, 8, 1f, ColorMath.fade(MUTED, a), false);
+            Draw.text(g, kit, cw - tagW - kitW - 6, 8, 1f, ColorMath.fade(MUTED, a), false);
         }
         g.pose().popMatrix();
     }
@@ -303,8 +303,7 @@ public final class ModeBrowser {
         g.pose().scale(scale, scale);
         g.pose().translate(-cw / 2f, -ch / 2f);
 
-        Draw.glow(g, cw * 0.3f, ch / 2f, cw * 0.5f, ch, ColorMath.fade(ACCENT, 0.12f * hov * a));
-        Draw.rect(g, 0, 0, cw, ch, ColorMath.fade(CARD, a));
+        Draw.rect(g, 0, 0, cw, ch, ColorMath.fade(ColorMath.mix(CARD, CARD_HOVER, hov), a));
         ClientMedia.Image cover = ClientMedia.get(MediaPackets.GROUP, group.id(), group.coverVersion());
         if (cover != null) {
             Draw.cover(g, cover, 1, 1, cw - 2, ch - 2, 1 + 0.06f * hov, ColorMath.fade(0xFFFFFFFF, a * (0.8f + 0.2f * hov)));
@@ -314,12 +313,12 @@ public final class ModeBrowser {
         Draw.fadeX(g, 1, 1, Math.round(cw * 0.55f), ch - 2, ColorMath.fade(0xA0070B12, a), true);
         Draw.fadeY(g, 1, ch / 2, cw - 2, ch / 2 - 1, ColorMath.fade(0x80000000, a), false);
 
-        Draw.rect(g, 0, 0, Math.round(2 + 2 * hov), ch, ColorMath.fade(ACCENT, a * (0.6f + 0.4f * hov)));
-        if (hov > 0.01f) Draw.outline(g, 0, 0, cw, ch, ColorMath.fade(ACCENT, a * 0.45f * hov));
+        Draw.rect(g, 0, 0, Math.round(2 + 2 * hov), ch, ColorMath.fade(NEUTRAL_EDGE, a * (0.45f + 0.55f * hov)));
+        Draw.outline(g, 0, 0, cw, ch, ColorMath.fade(NEUTRAL_EDGE, a * 0.35f * hov));
 
-        Draw.text(g, font, Draw.fit(font, group.title(), (int) ((cw - 40) / 1.4f)), 12, 10, 1.4f, ColorMath.fade(TEXT, a), true);
+        Draw.text(g, Draw.fit(group.title(), (int) ((cw - 40) / 1.4f)), 12, 10, 1.4f, ColorMath.fade(TEXT, a), true);
         if (!group.description().isEmpty()) {
-            Draw.text(g, font, Draw.fit(font, group.description(), cw - 44), 12, 30, 1f, ColorMath.fade(MUTED, a), false);
+            Draw.text(g, Draw.fit(group.description(), cw - 44), 12, 30, 1f, ColorMath.fade(MUTED, a), false);
         }
         int queued = 0, playing = 0;
         for (String id : group.modeIds()) {
@@ -329,17 +328,18 @@ public final class ModeBrowser {
                 playing += mode.playing();
             }
         }
-        Draw.text(g, font, group.modeIds().size() + " 个模式  ·  排队 " + queued + "  ·  游戏中 " + playing, 12, ch - 17, 1f,
+        Draw.text(g, tr("blockland.modes.group_line", group.modeIds().size(), queued, playing), 12, ch - 17, 1f,
                 ColorMath.fade(ColorMath.mix(MUTED, TEXT, hov), a), true);
-        Draw.text(g, font, "›", cw - 18 + hov * 5, ch / 2f - 7, 1.8f, ColorMath.fade(ColorMath.mix(MUTED, ACCENT, hov), a), true);
+        Draw.text(g, "›", cw - 18 + hov * 5, ch / 2f - 7, 1.8f, ColorMath.fade(ColorMath.mix(MUTED, TEXT, hov), a), true);
         long soonest = 0;
         for (String id : group.modeIds()) {
             LobbyModeEntry mode = ClientLobbyState.mode(id).orElse(null);
             if (mode != null && mode.isLimited() && (soonest == 0 || mode.availableUntil() < soonest)) soonest = mode.availableUntil();
         }
         if (soonest > 0) {
-            int bw = font.width("限时") + 10;
-            LimitedTime.badge(g, font, "限时", cw - bw - 26, 8, a);
+            String limited = tr("blockland.modes.limited");
+            int bw = UiFont.width(limited) + 10;
+            LimitedTime.badge(g, limited, cw - bw - 26, 8, a);
         }
         g.pose().popMatrix();
     }

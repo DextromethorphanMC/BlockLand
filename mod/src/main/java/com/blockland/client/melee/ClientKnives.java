@@ -5,12 +5,15 @@ import com.blockland.anim.Ticker;
 import com.blockland.client.decal.Decals;
 import com.blockland.client.hud.HitMarker;
 import com.blockland.client.input.WeaponInput;
+import com.blockland.client.viewmodel.Holster;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
+import com.blockland.effect.ActionLocks;
 import com.blockland.melee.KnifeItem;
 import com.blockland.melee.MeleeCatalog;
 import com.blockland.melee.MeleeContent;
 import com.blockland.melee.MeleeData;
 import com.blockland.melee.MeleeTrace;
+import com.blockland.movement.Slides;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.MeleePacketListeners;
 import com.blockland.network.packet.MeleePackets;
@@ -48,17 +51,22 @@ import org.joml.Matrix4f;
 import javax.annotation.Nullable;
 import java.util.Random;
 
+import static com.blockland.client.ui.Tr.tr;
+
 /**
  * Client side of knives: input (light attack on left click — held to keep swinging — heavy attack on right click,
  * inspect), the attack timing (cooldown, combo alternation, buffered presses), instant local effects when the blade
  * connects (cut decals, particles, sounds, camera punch) and the hooks that put the {@link KnifeViewmodel} on
- * screen. The server stays authoritative for hits and damage.
+ * screen; switching away hands the knife on screen to the {@link Holster} (two viewmodels take turns). The server
+ * stays authoritative for hits and damage.
  */
 public final class ClientKnives {
     /** A press this long before the knife is ready still counts (it plays as soon as the cooldown ends). */
     private static final long BUFFER_NANOS = 250_000_000L;
 
-    private static final KnifeViewmodel viewmodel = new KnifeViewmodel();
+    /** The knife on screen, and the other instance (dropping out of view after a switch, or idle). */
+    private static KnifeViewmodel viewmodel = new KnifeViewmodel();
+    private static KnifeViewmodel spare = new KnifeViewmodel();
     private static final Random random = new Random();
 
     // equipped knife
@@ -116,6 +124,10 @@ public final class ClientKnives {
             event.setPitch(event.getPitch() + viewmodel.cameraPitch());
             event.setYaw(event.getYaw() + viewmodel.cameraYaw());
             event.setRoll(event.getRoll() + viewmodel.cameraRoll());
+            viewmodel.camera().moveCamera(event.getCamera());
+        });
+        ViewportEvent.ComputeFov.BUS.addListener(event -> {
+            if (event.usedConfiguredFov() && holdingKnife() && modelReady) event.setFOV(event.getFOV() * viewmodel.camera().fovScale());
         });
         CustomizeGuiOverlayEvent.DebugText.BUS.addListener(event -> {
             if (event.getSide() == CustomizeGuiOverlayEvent.DebugText.Side.Left && holdingKnife() && modelReady) {
@@ -129,7 +141,7 @@ public final class ClientKnives {
                 boolean backstab = hit.kind() == MeleePackets.HitKind.BACKSTAB || hit.kind() == MeleePackets.HitKind.BACKSTAB_KILL;
                 boolean kill = hit.kind() == MeleePackets.HitKind.KILL || hit.kind() == MeleePackets.HitKind.BACKSTAB_KILL;
                 HitMarker.show(backstab, kill);
-                if (backstab) KnifeHud.flash("背刺");
+                if (backstab) KnifeHud.flash(tr("blockland.knife.hud.backstab"));
                 MeleeData.Sounds sounds = knife != null ? knife.sounds : new MeleeData.Sounds();
                 playUi(kill ? sounds.kill : backstab ? sounds.critical : sounds.hitMarker, 1.0f, 0.9f);
             }
@@ -172,6 +184,7 @@ public final class ClientKnives {
         LocalPlayer player = mc.player;
         if (player == null) return;
         syncEquipped(player);
+        if (knife != null) viewmodel.setBuild(MeleeContent.buildOf(player.getMainHandItem()));
         if (WeaponInput.inspectPressed() && knife != null && mc.screen == null) inspect(player);
     }
 
@@ -183,6 +196,7 @@ public final class ClientKnives {
             return;
         }
         if (selected == slot && held.id.equals(knifeId)) return;
+        holster(player);
         slot = selected;
         knifeId = held.id;
         knife = held;
@@ -198,12 +212,38 @@ public final class ClientKnives {
     }
 
     private static void unequip() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player != null) holster(player);
         slot = -1;
         knifeId = "";
         knife = null;
         modelReady = false;
         strikePending = false;
         buffered = -1;
+    }
+
+    /** The knife on screen drops out of view (spec §31.4) while the next weapon is drawn; the spare takes over. */
+    private static void holster(LocalPlayer player) {
+        if (!modelReady || !viewmodel.isReady()) return;
+        KnifeViewmodel out = viewmodel;
+        out.setEventSink(name -> {
+        });
+        Holster.start(out, new Holster.Outgoing() {
+            @Override
+            public void update(float dt) {
+                out.update(dt, player, false);
+            }
+
+            @Override
+            public void draw(Matrix4f base, int blockLight, int skyLight) {
+                out.draw(base, player, blockLight, skyLight);
+                out.submit();
+            }
+        });
+        viewmodel = spare;
+        spare = out;
+        Holster.release(viewmodel);
+        modelReady = false;
     }
 
     /** Every frame: animation clock, the pending strike, buffered and held attacks. */
@@ -252,6 +292,11 @@ public final class ClientKnives {
 
     private static void attack(LocalPlayer player, boolean heavy, boolean click) {
         if (knife == null || slot < 0) return;
+        if (ActionLocks.isLocked(player)) {
+            buffered = -1;
+            if (click) KnifeHud.flash(tr("blockland.effect.slimed"));
+            return;
+        }
         long now = System.nanoTime();
         if (!ready(now)) {
             if (click) {
@@ -294,7 +339,7 @@ public final class ClientKnives {
         MeleeData.Attack attack = knife.attack(strikeHeavy);
         MeleeData.Swing swing = attack.swing(strikeCombo);
         ClientLevel level = (ClientLevel) player.level();
-        Vec3 eye = player.getEyePosition();
+        Vec3 eye = Slides.eyePosition(player);
         MeleeTrace.Hit hit = MeleeTrace.trace(level, player, eye, player.getViewVector(1), attack);
         Vec3 cut = cutDirection(player.getViewYRot(1), player.getViewXRot(1), swing.slashAngle);
         switch (hit.type()) {

@@ -3,13 +3,15 @@ package com.blockland.client.melee;
 import com.blockland.anim.AnimValue;
 import com.blockland.anim.ColorMath;
 import com.blockland.anim.Ease;
+import com.blockland.client.font.UiFont;
 import com.blockland.client.hud.HitMarker;
 import com.blockland.client.ui.Draw;
 import com.blockland.melee.MeleeData;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+
+import static com.blockland.client.ui.Tr.tr;
 
 /**
  * Knife HUD, matching the gun HUD's layout: name and the two attacks (bottom right) with a thin readiness bar, the
@@ -37,28 +39,28 @@ final class KnifeHud {
         Minecraft mc = Minecraft.getInstance();
         MeleeData.Knife knife = ClientKnives.knife();
         if (mc.player == null || knife == null || !ClientKnives.holdingKnife() || mc.options.hideGui) return;
-        Font font = mc.font;
         int w = g.guiWidth(), h = g.guiHeight();
         HitMarker.render(g, w, h);
 
         int right = w - 14, bottom = h - 14;
         Draw.glow(g, right - 60, bottom - 22, 100, 36, 0x66000000);
-        Draw.text(g, font, knife.name, right - font.width(knife.name), bottom - 26, 1f, TEXT, true);
-        String attacks = "左键 轻击 · 右键 重击";
-        Draw.text(g, font, attacks, right - font.width(attacks), bottom - 14, 1f, MUTED, true);
+        String name = knife.displayName().getString();
+        Draw.text(g, name, right - UiFont.width(name), bottom - 26, 1f, TEXT, true);
+        String attacks = tr("blockland.knife.hud.controls");
+        Draw.text(g, attacks, right - UiFont.width(attacks), bottom - 14, 1f, MUTED, true);
         // readiness: shows only while the knife recovers
         float ready = ClientKnives.readiness();
         barAlpha.toIfChanged(ready < 1 ? 1 : 0, 0.15, Ease.QUAD_OUT);
         float a = barAlpha.get();
         if (a > 0.02f) {
-            int barW = font.width(attacks), x0 = right - barW, y = bottom - 3;
+            int barW = UiFont.width(attacks), x0 = right - barW, y = bottom - 3;
             g.fill(x0, y, right, y + 1, ColorMath.fade(0x30FFFFFF, a));
             g.fill(x0, y, x0 + Math.round(barW * ready), y + 1, ColorMath.fade(0xFFFFFFFF, a));
         }
         float c = calloutAlpha.get();
         if (c > 0.02f && !callout.isEmpty()) {
             float scale = 1.4f;
-            Draw.text(g, font, callout, w / 2f - font.width(callout) * scale / 2f, h / 2f + 18, scale, ColorMath.fade(CALLOUT, c), true);
+            Draw.text(g, callout, w / 2f - UiFont.width(callout) * scale / 2f, h / 2f + 18, scale, ColorMath.fade(CALLOUT, c), true);
         }
     }
 }

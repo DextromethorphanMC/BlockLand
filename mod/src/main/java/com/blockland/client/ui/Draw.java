@@ -3,20 +3,22 @@ package com.blockland.client.ui;
 import com.blockland.BlockLand;
 import com.blockland.anim.ColorMath;
 import com.blockland.client.ClientMedia;
+import com.blockland.client.font.UiFont;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
+
+import java.util.List;
 
 /**
  * Drawing helpers for animated GUIs: soft glows and gradient fades (generated textures instead of hard-edged
  * rectangles), "cover"-fitted images, and float-positioned/scaled/faded text so animations can move things by
- * fractions of a pixel.
+ * fractions of a pixel. Text goes through the mod's own font ({@link UiFont}).
  */
 public final class Draw {
     private static final int RAMP = 256;
@@ -101,32 +103,49 @@ public final class Draw {
     // ---- text -----------------------------------------------------------------------------------
 
     /** Text at a float position with scale and colour (alpha honoured). */
-    public static void text(GuiGraphics g, Font font, String text, float x, float y, float scale, int color, boolean shadow) {
+    public static void text(GuiGraphics g, String text, float x, float y, float scale, int color, boolean shadow) {
         if (ColorMath.alpha(color) < 4 || text.isEmpty()) return;
-        g.pose().pushMatrix();
-        g.pose().translate(x, y);
-        g.pose().scale(scale, scale);
-        g.drawString(font, text, 0, 0, color, shadow);
-        g.pose().popMatrix();
+        UiFont.draw(g, text, x, y, scale, color, shadow);
     }
 
-    public static void text(GuiGraphics g, Font font, FormattedCharSequence text, float x, float y, int color) {
+    /** A line from {@link #wrap}. */
+    public static void text(GuiGraphics g, FormattedCharSequence text, float x, float y, int color) {
         if (ColorMath.alpha(color) < 4) return;
-        g.pose().pushMatrix();
-        g.pose().translate(x, y);
-        g.drawString(font, text, 0, 0, color, false);
-        g.pose().popMatrix();
+        UiFont.draw(g, text, x, y, color, false);
     }
 
     /** Truncates with an ellipsis so the text fits {@code maxWidth}. */
-    public static String fit(Font font, String text, int maxWidth) {
-        if (font.width(text) <= maxWidth) return text;
-        String cut = font.plainSubstrByWidth(text, Math.max(0, maxWidth - font.width("…")));
-        return cut + "…";
+    public static String fit(String text, float maxWidth) {
+        return UiFont.fit(text, maxWidth);
     }
 
-    public static java.util.List<FormattedCharSequence> wrap(Font font, String text, int maxWidth) {
-        return font.split(Component.literal(text), Math.max(1, maxWidth));
+    /** Wraps text into lines no wider than {@code maxWidth} (CJK-aware). */
+    public static List<FormattedCharSequence> wrap(String text, float maxWidth) {
+        return UiFont.split(text, maxWidth);
+    }
+
+    /** @deprecated the font is the mod's own now; use {@link #text(GuiGraphics, String, float, float, float, int, boolean)} */
+    @Deprecated
+    public static void text(GuiGraphics g, Font font, String text, float x, float y, float scale, int color, boolean shadow) {
+        text(g, text, x, y, scale, color, shadow);
+    }
+
+    /** @deprecated use {@link #text(GuiGraphics, FormattedCharSequence, float, float, int)} */
+    @Deprecated
+    public static void text(GuiGraphics g, Font font, FormattedCharSequence text, float x, float y, int color) {
+        text(g, text, x, y, color);
+    }
+
+    /** @deprecated use {@link #fit(String, float)} */
+    @Deprecated
+    public static String fit(Font font, String text, int maxWidth) {
+        return fit(text, maxWidth);
+    }
+
+    /** @deprecated use {@link #wrap(String, float)} */
+    @Deprecated
+    public static List<FormattedCharSequence> wrap(Font font, String text, int maxWidth) {
+        return wrap(text, maxWidth);
     }
 
     // ---- generated textures -------------------------------------------------------------------

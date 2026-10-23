@@ -7,7 +7,11 @@
       "headshotMultiplier": 2.0,
       "magazines": [
         "p9_standard",
-        "p9_extended"
+        "p9_extended",
+        "usp_standard",
+        "usp_extended",
+        "usp_dual_standard",
+        "usp_dual_extended"
       ]
     },
     "smg": {
@@ -15,7 +19,10 @@
       "item": "smg_ammo",
       "damage": 4.5,
       "headshotMultiplier": 1.6,
-      "magazines": []
+      "magazines": [
+        "tommy_stick",
+        "tommy_drum"
+      ]
     },
     "shotgun": {
       "name": "霰弹枪弹药",
@@ -23,14 +30,31 @@
       "damage": 2.6,
       "pellets": 8,
       "headshotMultiplier": 1.4,
-      "magazines": []
+      "magazines": [
+        "ks3_tube",
+        "ks3_tube_ext"
+      ]
     },
     "sniper": {
       "name": "狙击枪弹药",
       "item": "sniper_ammo",
       "damage": 17.0,
       "headshotMultiplier": 2.5,
-      "magazines": []
+      "magazines": [
+        "awp_standard"
+      ]
+    },
+    "rifle": {
+      "name": "步枪弹药",
+      "item": "rifle_ammo",
+      "damage": 7.0,
+      "headshotMultiplier": 2.2,
+      "magazines": [
+        "ak_standard",
+        "ak_extended",
+        "rpd_box",
+        "rpd_box_ext"
+      ]
     }
   },
   "magazines": {
@@ -57,47 +81,146 @@
       "node": "mag_extended",
       "reloadTimeScale": 1.12,
       "adsTimeScale": 1.08
-    }
-  },
-  "sights": {
-    "iron": {
-      "name": "机械瞄具",
-      "description": "带氚光点的标准机械瞄具。",
-      "aimNode": "aim_iron",
-      "zoom": 1.12
     },
-    "reddot": {
-      "name": "迷你红点镜",
-      "description": "套筒式反射瞄具，视野更清晰，开镜略慢。",
-      "aimNode": "aim_reddot",
-      "zoom": 1.25,
-      "adsTimeScale": 1.08,
-      "nodes": [
-        "sight_reddot"
-      ]
-    }
-  },
-  "lasers": {
-    "none": {
-      "name": "无"
+    "ak_standard": {
+      "name": "标准弹匣",
+      "description": "30 发 7.62 毛米弯弹匣。",
+      "ammo": "rifle",
+      "capacity": 30,
+      "guns": [
+        "ak47"
+      ],
+      "node": "mag_standard"
     },
-    "red": {
-      "name": "红色激光",
-      "description": "腰射散布 -20%。",
-      "color": "#FF3030",
-      "hipSpreadScale": 0.8,
-      "nodes": [
-        "laser"
-      ]
+    "ak_extended": {
+      "name": "扩容弹匣",
+      "description": "45 发加长弹匣，换弹与开镜稍慢。",
+      "ammo": "rifle",
+      "capacity": 45,
+      "guns": [
+        "ak47"
+      ],
+      "node": "mag_extended",
+      "reloadTimeScale": 1.15,
+      "adsTimeScale": 1.08
     },
-    "green": {
-      "name": "绿色激光",
-      "description": "腰射散布 -20%，更醒目的光点。",
-      "color": "#40FF60",
-      "hipSpreadScale": 0.8,
-      "nodes": [
-        "laser"
-      ]
+    "awp_standard": {
+      "name": "标准弹匣",
+      "description": "10 发 .338 马格南弹匣。",
+      "ammo": "sniper",
+      "capacity": 10,
+      "guns": [
+        "awp"
+      ],
+      "node": "mag_standard"
+    },
+    "tommy_stick": {
+      "name": "30 发弹匣",
+      "description": "30 发 .45 直弹匣，换弹快。",
+      "ammo": "smg",
+      "capacity": 30,
+      "guns": [
+        "tommy"
+      ],
+      "node": "mag_stick"
+    },
+    "tommy_drum": {
+      "name": "50 发弹鼓",
+      "description": "经典 50 发弹鼓：火力持续更久，但换弹与开镜明显更慢。",
+      "ammo": "smg",
+      "capacity": 50,
+      "guns": [
+        "tommy"
+      ],
+      "node": "mag_drum",
+      "reloadTimeScale": 1.3,
+      "adsTimeScale": 1.12
+    },
+    "ks3_tube": {
+      "name": "6 发管式弹仓",
+      "description": "标准长度的管式弹仓，逐发装填。",
+      "ammo": "shotgun",
+      "capacity": 6,
+      "guns": [
+        "ks3"
+      ],
+      "node": "tube_standard"
+    },
+    "ks3_tube_ext": {
+      "name": "8 发加长弹仓",
+      "description": "延长到枪口的管式弹仓：多装两发，枪头更重、开镜略慢。",
+      "ammo": "shotgun",
+      "capacity": 8,
+      "guns": [
+        "ks3"
+      ],
+      "node": "tube_extended",
+      "adsTimeScale": 1.06
+    },
+    "usp_standard": {
+      "name": "标准弹匣",
+      "description": "12 发 .45 弹匣。",
+      "ammo": "pistol",
+      "capacity": 12,
+      "guns": [
+        "usp"
+      ],
+      "node": "mag_standard"
+    },
+    "usp_extended": {
+      "name": "扩容弹匣",
+      "description": "18 发扩容弹匣，换弹与开镜略慢。",
+      "ammo": "pistol",
+      "capacity": 18,
+      "guns": [
+        "usp"
+      ],
+      "node": "mag_extended",
+      "reloadTimeScale": 1.1,
+      "adsTimeScale": 1.06
+    },
+    "usp_dual_standard": {
+      "name": "标准弹匣 ×2",
+      "description": "两把枪各一个 12 发弹匣，共 24 发。",
+      "ammo": "pistol",
+      "capacity": 24,
+      "guns": [
+        "usp_dual"
+      ],
+      "node": "mag_standard"
+    },
+    "usp_dual_extended": {
+      "name": "扩容弹匣 ×2",
+      "description": "两把枪各一个 18 发扩容弹匣，共 36 发；换弹略慢。",
+      "ammo": "pistol",
+      "capacity": 36,
+      "guns": [
+        "usp_dual"
+      ],
+      "node": "mag_extended",
+      "reloadTimeScale": 1.1
+    },
+    "rpd_box": {
+      "name": "100 发弹鼓",
+      "description": "100 发 7.62 毫米弹链弹鼓。",
+      "ammo": "rifle",
+      "capacity": 100,
+      "guns": [
+        "rpd"
+      ],
+      "node": "mag_standard"
+    },
+    "rpd_box_ext": {
+      "name": "150 发弹鼓",
+      "description": "150 发大弹鼓：火力更持久，但换弹与开镜更慢。",
+      "ammo": "rifle",
+      "capacity": 150,
+      "guns": [
+        "rpd"
+      ],
+      "node": "mag_extended",
+      "reloadTimeScale": 1.1,
+      "adsTimeScale": 1.08
     }
   },
   "guns": {
@@ -111,15 +234,31 @@
         "p9_standard",
         "p9_extended"
       ],
-      "sights": [
-        "iron",
-        "reddot"
-      ],
-      "lasers": [
-        "none",
-        "red",
-        "green"
-      ],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron"
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管"
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "options": ["tactical_stock", "heavy_stock", "wire_stock"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
       "rpm": 420,
       "damageScale": 1.0,
       "range": 96,
@@ -129,7 +268,7 @@
         "min": 0.65
       },
       "spread": {
-        "hip": 3.0,
+        "hip": 3.75,
         "ads": 0.3,
         "move": 1.6,
         "air": 4.0,
@@ -156,7 +295,9 @@
         "fireLast": "fire_last",
         "reload": "reload",
         "reloadEmpty": "reload_empty",
-        "inspect": "inspect"
+        "inspect": "inspect",
+        "walk": "walk",
+        "tacSprint": "tac_sprint"
       },
       "sounds": {
         "fire": "gun.p9.fire",
@@ -221,10 +362,15 @@
         },
         "camo": {
           "name": "数码迷彩",
-          "textures": {
-            "polymer": "textures/gun/camo_digital.png",
-            "grip": "textures/gun/camo_digital.png",
-            "slide": "textures/gun/camo_digital.png"
+          "regions": {
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/polymer",
+              "uvScale": 0.333333
+            },
+            "body": {
+              "pbr": "textures/pbr/skin/camo/polymer",
+              "uvScale": 0.333333
+            }
           }
         },
         "gold": {
@@ -251,7 +397,26 @@
       },
       "fireModes": [
         "semi"
-      ]
+      ],
+      "handling": {
+        "weight": 1.0,
+        "sway": 1.0,
+        "bob": 1.0,
+        "inertia": 1.0,
+        "sprintOut": 0.22,
+        "tacticalSprint": 2.5,
+        "adsTilt": 6,
+        "recoilBack": 1.0,
+        "recoilRise": 1.0,
+        "recoilTwist": 1.0,
+        "recoilSnap": 1.15,
+        "recoilShake": 0.8,
+        "recoilPivot": 0.0,
+        "cameraKick": 1.0,
+        "cameraRoll": 1.0,
+        "cameraFov": 0.8,
+        "cameraRumble": 0.25
+      }
     },
     "p9a": {
       "name": "P9A 冲锋手枪",
@@ -263,15 +428,31 @@
         "p9_extended",
         "p9_standard"
       ],
-      "sights": [
-        "iron",
-        "reddot"
-      ],
-      "lasers": [
-        "none",
-        "red",
-        "green"
-      ],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron"
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管"
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "options": ["tactical_stock", "heavy_stock", "wire_stock"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
       "fireModes": [
         "auto",
         "semi"
@@ -285,7 +466,7 @@
         "min": 0.6
       },
       "spread": {
-        "hip": 3.6,
+        "hip": 4.5,
         "ads": 0.6,
         "move": 1.8,
         "air": 4.5,
@@ -312,7 +493,9 @@
         "fireLast": "fire_last",
         "reload": "reload",
         "reloadEmpty": "reload_empty",
-        "inspect": "inspect"
+        "inspect": "inspect",
+        "walk": "walk",
+        "tacSprint": "tac_sprint"
       },
       "sounds": {
         "fire": "gun.p9.fire",
@@ -364,10 +547,15 @@
         },
         "camo": {
           "name": "数码迷彩",
-          "textures": {
-            "polymer": "textures/gun/camo_digital.png",
-            "grip": "textures/gun/camo_digital.png",
-            "slide": "textures/gun/camo_digital.png"
+          "regions": {
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/polymer",
+              "uvScale": 0.333333
+            },
+            "body": {
+              "pbr": "textures/pbr/skin/camo/polymer",
+              "uvScale": 0.333333
+            }
           }
         },
         "gold": {
@@ -388,6 +576,1294 @@
               1.0,
               0.77,
               0.34
+            ]
+          }
+        }
+      },
+      "handling": {
+        "weight": 1.0,
+        "sway": 1.0,
+        "bob": 1.0,
+        "inertia": 1.0,
+        "sprintOut": 0.22,
+        "tacticalSprint": 2.5,
+        "adsTilt": 6,
+        "recoilBack": 0.8,
+        "recoilRise": 0.75,
+        "recoilTwist": 1.25,
+        "recoilSnap": 1.45,
+        "recoilShake": 0.75,
+        "recoilPivot": 0.0,
+        "cameraKick": 0.8,
+        "cameraRoll": 1.2,
+        "cameraFov": 0.6,
+        "cameraRumble": 0.15
+      }
+    },
+    "ak47": {
+      "name": "AK-47 突击步枪",
+      "description": "经典 7.62 毛米突击步枪，威力大、后坐力重，可切换全自动/半自动。",
+      "category": "rifle",
+      "model": "models/gun/ak47.glb",
+      "ammo": "rifle",
+      "magazines": [
+        "ak_standard",
+        "ak_extended"
+      ],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": [
+            "sight_rear",
+            "sight_iron",
+            "front_sight_ears"
+          ]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管",
+          "hides": [
+            "muzzle_brake"
+          ]
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "noneName": "木质枪托",
+          "hides": [
+            "stock"
+          ]
+        },
+        "underbarrel": {
+          "node": "mount_underbarrel",
+          "default": "none",
+          "options": ["vertical_grip", "angled_grip"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": [
+        "auto",
+        "semi"
+      ],
+      "rpm": 600,
+      "damageScale": 1.0,
+      "range": 120,
+      "falloff": {
+        "start": 35,
+        "end": 80,
+        "min": 0.7
+      },
+      "spread": {
+        "hip": 4.75,
+        "ads": 0.22,
+        "move": 2.4,
+        "air": 5.5,
+        "perShot": 0.5,
+        "max": 7.5,
+        "recovery": 7.5
+      },
+      "recoil": {
+        "vertical": 1.6,
+        "horizontal": 0.75,
+        "kick": 1.25,
+        "ads": 0.6
+      },
+      "adsTime": 0.26,
+      "drawTime": 0.7,
+      "reload": {
+        "tactical": 2.4,
+        "empty": 2.9
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.ak47.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "handling": {
+        "weight": 1.8,
+        "sway": 1.15,
+        "bob": 1.1,
+        "inertia": 1.25,
+        "sprintOut": 0.3,
+        "tacticalSprint": 2.8,
+        "adsTilt": 8,
+        "recoilBack": 1.1,
+        "recoilRise": 0.75,
+        "recoilTwist": 1.3,
+        "recoilSnap": 0.95,
+        "recoilShake": 1.1,
+        "recoilPivot": 0.14,
+        "cameraKick": 1.1,
+        "cameraRoll": 1.2,
+        "cameraFov": 1.0,
+        "cameraRumble": 0.5
+      },
+      "skins": {
+        "default": {
+          "name": "标准（胡桃木）"
+        },
+        "black": {
+          "name": "黑色战术",
+          "tints": {
+            "wood": [
+              0.16,
+              0.16,
+              0.17
+            ],
+            "wood_handguard": [
+              0.16,
+              0.16,
+              0.17
+            ],
+            "wood_grip": [
+              0.16,
+              0.16,
+              0.17
+            ]
+          }
+        },
+        "desert": {
+          "name": "沙漠",
+          "tints": {
+            "wood": [
+              0.66,
+              0.55,
+              0.38
+            ],
+            "wood_handguard": [
+              0.66,
+              0.55,
+              0.38
+            ],
+            "wood_grip": [
+              0.66,
+              0.55,
+              0.38
+            ],
+            "steel": [
+              0.6,
+              0.55,
+              0.45
+            ],
+            "steel_barrel": [
+              0.6,
+              0.55,
+              0.45
+            ],
+            "steel_stock": [
+              0.6,
+              0.55,
+              0.45
+            ]
+          }
+        },
+        "camo": {
+          "name": "数码迷彩",
+          "regions": {
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/polymer",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/polymer",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/polymer",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+            "steel": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "steel_barrel": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "steel_stock": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "steel_dark": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "steel_dark_barrel": [
+              1.0,
+              0.77,
+              0.34
+            ]
+          }
+        }
+      }
+    },
+    "awp": {
+      "name": "AWP 狙击步枪",
+      "description": "栓动式 .338 马格南狙击步枪：40 格内打身体一枪倒地、爆头必杀；射速极慢，每发都要拉栓，不开镜几乎打不准。",
+      "category": "sniper",
+      "model": "models/gun/awp.glb",
+      "ammo": "sniper",
+      "magazines": [
+        "awp_standard"
+      ],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "scope_sniper",
+          "options": [
+            "scope_sniper",
+            "scope_2x",
+            "holo",
+            "reddot",
+            "mini_reddot"
+          , "reddot_rect"]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管",
+          "hides": [
+            "muzzle_brake"
+          ]
+        },
+        "magazine": {},
+        "underbarrel": {
+          "node": "mount_underbarrel",
+          "default": "none",
+          "options": ["bipod"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": [
+        "semi"
+      ],
+      "boltAction": true,
+      "ejectEvent": "awp.bolt_back",
+      "rpm": 41,
+      "damageScale": 1.3,
+      "range": 200,
+      "falloff": {
+        "start": 40,
+        "end": 120,
+        "min": 0.75
+      },
+      "spread": {
+        "hip": 11.25,
+        "ads": 0.02,
+        "move": 6.0,
+        "air": 10.0,
+        "perShot": 1.5,
+        "max": 12.0,
+        "recovery": 6.0
+      },
+      "recoil": {
+        "vertical": 4.5,
+        "horizontal": 1.2,
+        "kick": 2.2,
+        "ads": 0.8
+      },
+      "adsTime": 0.32,
+      "drawTime": 0.95,
+      "reload": {
+        "tactical": 3.0,
+        "empty": 3.7
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.awp.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "handling": {
+        "weight": 2.4,
+        "sway": 1.3,
+        "bob": 1.15,
+        "inertia": 1.6,
+        "sprintOut": 0.4,
+        "tacticalSprint": 2.0,
+        "adsTilt": 5,
+        "recoilBack": 1.0,
+        "recoilRise": 0.7,
+        "recoilTwist": 0.6,
+        "recoilSnap": 0.7,
+        "recoilShake": 1.3,
+        "recoilPivot": 0.18,
+        "cameraKick": 1.4,
+        "cameraRoll": 1.0,
+        "cameraFov": 1.6,
+        "cameraRumble": 1.0
+      },
+      "skins": {
+        "default": {
+          "name": "标准（橄榄绿）"
+        },
+        "black": {
+          "name": "黑色战术",
+          "tints": {
+            "stock": [
+              0.13,
+              0.13,
+              0.14
+            ],
+            "grip": [
+              0.13,
+              0.13,
+              0.14
+            ]
+          }
+        },
+        "desert": {
+          "name": "沙漠",
+          "tints": {
+            "stock": [
+              0.66,
+              0.55,
+              0.38
+            ],
+            "grip": [
+              0.66,
+              0.55,
+              0.38
+            ],
+            "receiver": [
+              0.42,
+              0.38,
+              0.3
+            ]
+          }
+        },
+        "thunder": {
+          "name": "雷霆",
+          "rarity": "special",
+          "tints": {
+            "stock": [
+              0.1,
+              0.12,
+              0.16
+            ],
+            "grip": [
+              0.1,
+              0.12,
+              0.16
+            ]
+          },
+          "fx": {
+            "flashColor": "#9FD8FF",
+            "flashScale": 1.2,
+            "tracerColor": "#7FE0FF",
+            "tracerWidth": 1.3
+          }
+        }
+      }
+    },
+    "tommy": {
+      "name": "汤姆逊冲锋枪",
+      "description": "老式 .45 冲锋枪：射速高、可换 50 发弹鼓，近距离火力凶猛；枪身沉重，连射时枪口上跳明显。",
+      "category": "smg",
+      "model": "models/gun/tommy.glb",
+      "ammo": "smg",
+      "magazines": [
+        "tommy_stick",
+        "tommy_drum"
+      ],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": [
+            "sight_rear",
+            "sight_iron"
+          ]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "枪口补偿器",
+          "hides": [
+            "muzzle_brake"
+          ]
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "noneName": "木质枪托",
+          "hides": [
+            "stock"
+          ]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": [
+        "auto",
+        "semi"
+      ],
+      "rpm": 720,
+      "damageScale": 1.0,
+      "range": 80,
+      "falloff": {
+        "start": 14,
+        "end": 38,
+        "min": 0.55
+      },
+      "spread": {
+        "hip": 4.25,
+        "ads": 0.45,
+        "move": 1.8,
+        "air": 4.8,
+        "perShot": 0.35,
+        "max": 6.5,
+        "recovery": 10.0
+      },
+      "recoil": {
+        "vertical": 1.05,
+        "horizontal": 0.55,
+        "kick": 0.95,
+        "ads": 0.7
+      },
+      "adsTime": 0.24,
+      "drawTime": 0.6,
+      "reload": {
+        "tactical": 2.3,
+        "empty": 2.8
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.tommy.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "handling": {
+        "weight": 1.6,
+        "sway": 1.1,
+        "bob": 1.05,
+        "inertia": 1.2,
+        "sprintOut": 0.28,
+        "tacticalSprint": 2.6,
+        "adsTilt": 7,
+        "recoilBack": 0.9,
+        "recoilRise": 0.6,
+        "recoilTwist": 1.1,
+        "recoilSnap": 1.3,
+        "recoilShake": 1.0,
+        "recoilPivot": 0.12,
+        "cameraKick": 0.85,
+        "cameraRoll": 1.1,
+        "cameraFov": 0.8,
+        "cameraRumble": 0.35
+      },
+      "skins": {
+        "default": {
+          "name": "标准（胡桃木）"
+        },
+        "black": {
+          "name": "黑色战术",
+          "tints": {
+            "wood": [
+              0.16,
+              0.16,
+              0.17
+            ],
+            "wood_foregrip": [
+              0.16,
+              0.16,
+              0.17
+            ],
+            "wood_grip": [
+              0.16,
+              0.16,
+              0.17
+            ]
+          }
+        },
+        "chicago": {
+          "name": "芝加哥",
+          "rarity": "special",
+          "tints": {
+            "steel": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "steel_barrel": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "steel_dark": [
+              1.0,
+              0.77,
+              0.34
+            ]
+          },
+          "fx": {
+            "flashColor": "#FFD27A",
+            "flashScale": 1.15,
+            "tracerColor": "#FFC44A",
+            "tracerWidth": 1.15
+          }
+        }
+      }
+    },
+    "ks3": {
+      "name": "KS-3 霰弹枪",
+      "description": "泵动式 12 号霰弹枪：一发 8 颗弹丸，近距离威力巨大；每发都要拉动护木上膛，逐发装填，装填途中可随时开火打断。",
+      "category": "shotgun",
+      "model": "models/gun/ks3.glb",
+      "ammo": "shotgun",
+      "magazines": [
+        "ks3_tube",
+        "ks3_tube_ext"
+      ],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": [
+            "sight_rear",
+            "sight_iron"
+          ]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管"
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "noneName": "标准枪托",
+          "hides": [
+            "stock"
+          ]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": [
+        "semi"
+      ],
+      "rpm": 70,
+      "damageScale": 0.9,
+      "range": 40,
+      "falloff": {
+        "start": 5,
+        "end": 22,
+        "min": 0.2
+      },
+      "spread": {
+        "hip": 6.88,
+        "ads": 3.6,
+        "move": 1.2,
+        "air": 3.0,
+        "perShot": 0.6,
+        "max": 8.0,
+        "recovery": 6.0
+      },
+      "recoil": {
+        "vertical": 3.6,
+        "horizontal": 1.0,
+        "kick": 1.9,
+        "ads": 0.85
+      },
+      "adsTime": 0.26,
+      "drawTime": 0.75,
+      "reload": {
+        "mode": "shell",
+        "start": 0.45,
+        "shell": 0.52,
+        "end": 0.42,
+        "endEmpty": 0.8,
+        "tactical": 3.0,
+        "empty": 3.6
+      },
+      "ejectEvent": "pump_back",
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint",
+        "reloadStart": "reload_start",
+        "reloadShell": "reload_shell",
+        "reloadEnd": "reload_end",
+        "reloadEndEmpty": "reload_end_empty"
+      },
+      "sounds": {
+        "fire": "gun.ks3.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "pump",
+        "offset": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "handling": {
+        "weight": 1.9,
+        "sway": 1.15,
+        "bob": 1.1,
+        "inertia": 1.35,
+        "sprintOut": 0.32,
+        "tacticalSprint": 2.5,
+        "adsTilt": 7,
+        "recoilBack": 1.05,
+        "recoilRise": 0.65,
+        "recoilTwist": 0.9,
+        "recoilSnap": 0.75,
+        "recoilShake": 1.4,
+        "recoilPivot": 0.16,
+        "cameraKick": 1.3,
+        "cameraRoll": 1.2,
+        "cameraFov": 1.5,
+        "cameraRumble": 1.0
+      },
+      "skins": {
+        "default": {
+          "name": "标准（黑色）"
+        },
+        "olive": {
+          "name": "橄榄绿",
+          "tints": {
+            "stock": [
+              0.3,
+              0.34,
+              0.2
+            ],
+            "pump": [
+              0.3,
+              0.34,
+              0.2
+            ]
+          }
+        },
+        "dragon": {
+          "name": "龙息",
+          "rarity": "special",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/magma/rock",
+              "uvScale": 0.25,
+              "effect": "flow",
+              "effectColor": "#FF6A1A",
+              "params": [
+                0.12,
+                0.12,
+                0.6,
+                0.7
+              ]
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/magma/rock",
+              "uvScale": 0.25,
+              "effect": "flow",
+              "effectColor": "#FF6A1A",
+              "params": [
+                0.12,
+                0.12,
+                0.6,
+                0.7
+              ]
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/magma/rock",
+              "uvScale": 0.25,
+              "effect": "flow",
+              "effectColor": "#FF6A1A",
+              "params": [
+                0.12,
+                0.12,
+                0.6,
+                0.7
+              ]
+            },
+            "*": {
+              "pbr": "textures/pbr/skin/magma/metal",
+              "uvScale": 0.333333
+            }
+          },
+          "fx": {
+            "flashColor": "#FF7A2A",
+            "flashScale": 1.45,
+            "tracerColor": "#FF6A1A",
+            "tracerWidth": 1.5
+          }
+        }
+      }
+    },
+    "usp": {
+      "name": "USP 手枪",
+      "description": ".45 口径半自动手枪：单发威力比 P9 更大、射速稍慢、精度高，适合装消音器。",
+      "category": "pistol",
+      "model": "models/gun/usp.glb",
+      "ammo": "pistol",
+      "magazines": [
+        "usp_standard",
+        "usp_extended"
+      ],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron"
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管"
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "options": ["tactical_stock", "heavy_stock", "wire_stock"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": [
+        "semi"
+      ],
+      "rpm": 380,
+      "damageScale": 1.18,
+      "range": 100,
+      "falloff": {
+        "start": 20,
+        "end": 50,
+        "min": 0.65
+      },
+      "spread": {
+        "hip": 3.5,
+        "ads": 0.25,
+        "move": 1.5,
+        "air": 4.0,
+        "perShot": 0.95,
+        "max": 6.5,
+        "recovery": 8.5
+      },
+      "recoil": {
+        "vertical": 1.7,
+        "horizontal": 0.5,
+        "kick": 1.15,
+        "ads": 0.7
+      },
+      "adsTime": 0.17,
+      "drawTime": 0.5,
+      "reload": {
+        "tactical": 1.85,
+        "empty": 2.25
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.usp.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "slide",
+        "offset": [
+          0.0,
+          0.0,
+          0.034
+        ]
+      },
+      "handling": {
+        "weight": 1.1,
+        "sway": 1.0,
+        "bob": 1.0,
+        "inertia": 1.05,
+        "sprintOut": 0.23,
+        "tacticalSprint": 2.5,
+        "adsTilt": 6,
+        "recoilBack": 1.05,
+        "recoilRise": 1.15,
+        "recoilTwist": 0.9,
+        "recoilSnap": 1.05,
+        "recoilShake": 0.9,
+        "recoilPivot": 0.0,
+        "cameraKick": 1.1,
+        "cameraRoll": 1.0,
+        "cameraFov": 0.9,
+        "cameraRumble": 0.3
+      },
+      "skins": {
+        "default": {
+          "name": "标准（黑色）"
+        },
+        "tan": {
+          "name": "沙色",
+          "tints": {
+            "polymer": [
+              0.62,
+              0.52,
+              0.38
+            ],
+            "grip": [
+              0.62,
+              0.52,
+              0.38
+            ]
+          }
+        },
+        "two_tone": {
+          "name": "银色套筒",
+          "tints": {
+            "slide": [
+              0.62,
+              0.64,
+              0.67
+            ]
+          }
+        }
+      }
+    },
+    "usp_dual": {
+      "name": "双持 USP",
+      "description": "左右手各一把 USP：左键左右交替射击，右键双枪齐射（一次两发，散布更大）；不能开镜，两把枪一起换弹。",
+      "category": "pistol",
+      "model": "models/gun/usp_dual.glb",
+      "ammo": "pistol",
+      "magazines": [
+        "usp_dual_standard",
+        "usp_dual_extended"
+      ],
+      "slots": {
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管"
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "dual": {
+        "suffix": "_L",
+        "volley": true,
+        "volleySpread": 1.4,
+        "volleyCost": 2
+      },
+      "fireModes": [
+        "semi"
+      ],
+      "rpm": 560,
+      "damageScale": 1.18,
+      "range": 90,
+      "falloff": {
+        "start": 18,
+        "end": 45,
+        "min": 0.6
+      },
+      "spread": {
+        "hip": 4.25,
+        "ads": 3.4,
+        "move": 1.8,
+        "air": 4.5,
+        "perShot": 0.8,
+        "max": 7.5,
+        "recovery": 9.0
+      },
+      "recoil": {
+        "vertical": 1.2,
+        "horizontal": 0.7,
+        "kick": 1.0,
+        "ads": 1.0
+      },
+      "adsTime": 0.2,
+      "drawTime": 0.65,
+      "reload": {
+        "tactical": 2.4,
+        "empty": 2.8
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.usp.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "slide",
+        "offset": [
+          0.0,
+          0.0,
+          0.032
+        ]
+      },
+      "handling": {
+        "weight": 1.3,
+        "sway": 1.1,
+        "bob": 1.05,
+        "inertia": 1.1,
+        "sprintOut": 0.25,
+        "tacticalSprint": 2.5,
+        "adsTilt": 0,
+        "recoilBack": 0.9,
+        "recoilRise": 1.0,
+        "recoilTwist": 1.3,
+        "recoilSnap": 1.2,
+        "recoilShake": 0.8,
+        "recoilPivot": 0.0,
+        "cameraKick": 0.9,
+        "cameraRoll": 1.4,
+        "cameraFov": 0.8,
+        "cameraRumble": 0.3
+      },
+      "skins": {
+        "default": {
+          "name": "标准（黑色）"
+        },
+        "two_tone": {
+          "name": "银色套筒",
+          "tints": {
+            "slide": [
+              0.62,
+              0.64,
+              0.67
+            ]
+          }
+        },
+        "cerberus": {
+          "name": "地狱犬",
+          "rarity": "special",
+          "model": "models/gun/usp_dual_cerberus.glb",
+          "fx": {
+            "flashColor": "#FF3A2A",
+            "flashTexture": "textures/effect/muzzle_flash_cerberus.png",
+            "flashSideTexture": "textures/effect/muzzle_flash_side_cerberus.png",
+            "flashScale": 1.25,
+            "tracerColor": "#FF3B30",
+            "tracerWidth": 1.25,
+            "fireSound": "gun.usp.fire_cerberus"
+          }
+        }
+      }
+    },
+    "rpd": {
+      "name": "RPD 轻机枪",
+      "description": "7.62 毫米弹链供弹轻机枪：100 发弹鼓，火力持久、后坐沉稳；换弹要开盖重装弹链，又慢又重，腰射散布大。",
+      "category": "lmg",
+      "model": "models/gun/rpd.glb",
+      "ammo": "rifle",
+      "magazines": [
+        "rpd_box",
+        "rpd_box_ext"
+      ],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": [
+            "sight_rear",
+            "sight_iron"
+          ]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "消焰器",
+          "hides": [
+            "muzzle_brake"
+          ]
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "underbarrel": {
+          "node": "mount_underbarrel",
+          "default": "none",
+          "options": [
+            "vertical_grip",
+            "angled_grip",
+            "bipod"
+          ]
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "noneName": "木质枪托",
+          "hides": [
+            "stock"
+          ],
+          "options": [
+            "tactical_stock",
+            "heavy_stock",
+            "wire_stock",
+            "stock_none"
+          ]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": [
+        "auto"
+      ],
+      "rpm": 700,
+      "damageScale": 0.95,
+      "range": 90,
+      "falloff": {
+        "start": 30,
+        "end": 75,
+        "min": 0.65
+      },
+      "spread": {
+        "hip": 6.5,
+        "ads": 0.35,
+        "move": 3.0,
+        "air": 6.5,
+        "perShot": 0.4,
+        "max": 9.5,
+        "recovery": 6.0
+      },
+      "recoil": {
+        "vertical": 1.2,
+        "horizontal": 0.9,
+        "kick": 1.3,
+        "ads": 0.65
+      },
+      "adsTime": 0.38,
+      "drawTime": 1.0,
+      "reload": {
+        "tactical": 5.5,
+        "empty": 6.0
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.rpd.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "handling": {
+        "weight": 2.6,
+        "sway": 1.25,
+        "bob": 1.15,
+        "inertia": 1.5,
+        "sprintOut": 0.38,
+        "tacticalSprint": 2.2,
+        "adsTilt": 7,
+        "recoilBack": 1.15,
+        "recoilRise": 0.7,
+        "recoilTwist": 1.2,
+        "recoilSnap": 0.85,
+        "recoilShake": 1.2,
+        "recoilPivot": 0.16,
+        "cameraKick": 1.1,
+        "cameraRoll": 1.2,
+        "cameraFov": 1.0,
+        "cameraRumble": 0.6
+      },
+      "skins": {
+        "default": {
+          "name": "标准（胡桃木）"
+        },
+        "black": {
+          "name": "黑色战术",
+          "tints": {
+            "wood": [
+              0.16,
+              0.16,
+              0.17
+            ],
+            "wood_handguard": [
+              0.16,
+              0.16,
+              0.17
+            ],
+            "wood_grip": [
+              0.16,
+              0.16,
+              0.17
+            ]
+          }
+        },
+        "desert": {
+          "name": "沙漠",
+          "tints": {
+            "wood": [
+              0.66,
+              0.55,
+              0.38
+            ],
+            "wood_handguard": [
+              0.66,
+              0.55,
+              0.38
+            ],
+            "wood_grip": [
+              0.66,
+              0.55,
+              0.38
+            ],
+            "steel": [
+              0.6,
+              0.55,
+              0.45
+            ],
+            "steel_barrel": [
+              0.6,
+              0.55,
+              0.45
+            ],
+            "steel_stock": [
+              0.6,
+              0.55,
+              0.45
+            ],
+            "mag": [
+              0.6,
+              0.55,
+              0.45
             ]
           }
         }

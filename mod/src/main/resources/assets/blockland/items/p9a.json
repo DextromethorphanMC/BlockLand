@@ -34,6 +34,20 @@
                 "type": "minecraft:model",
                 "model": "blockland:item/p9_camo"
               }
+            },
+            {
+              "when": "aurora",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/p9_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/p9_magma"
+              }
             }
           ],
           "fallback": {
@@ -67,6 +81,20 @@
           "model": {
             "type": "minecraft:model",
             "model": "blockland:item/p9_held_camo"
+          }
+        },
+        {
+          "when": "aurora",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/p9_held_aurora"
+          }
+        },
+        {
+          "when": "magma",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/p9_held_magma"
           }
         }
       ],

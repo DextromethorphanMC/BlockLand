@@ -1,5 +1,8 @@
 package com.blockland.common;
 
+import net.minecraft.network.chat.Component;
+
+import javax.annotation.Nullable;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -44,17 +47,18 @@ public final class KitSlots {
     /**
      * Checks a player's arrangement against the kit's default slots.
      *
-     * @return null when valid, otherwise the reason
+     * @return null when valid, otherwise the reason (for the player)
      */
-    public static String validateLayout(List<String> defaults, List<String> layout) {
-        if (layout.size() != defaults.size()) return "装备数量不匹配";
+    @Nullable
+    public static Component validateLayout(List<String> defaults, List<String> layout) {
+        if (layout.size() != defaults.size()) return Component.translatable("blockland.kit.error.count");
         Set<String> used = new HashSet<>();
         for (int i = 0; i < layout.size(); i++) {
             String slot = normalize(layout.get(i));
             String original = normalize(defaults.get(i));
-            if (!isValid(slot)) return "无效的位置: " + slot;
-            if (isArmor(original) ? !slot.equals(original) : isArmor(slot)) return "盔甲位置不能调整";
-            if (!used.add(slot)) return "位置重复: " + slot;
+            if (!isValid(slot)) return Component.translatable("blockland.kit.error.slot", slot);
+            if (isArmor(original) ? !slot.equals(original) : isArmor(slot)) return Component.translatable("blockland.kit.error.armor");
+            if (!used.add(slot)) return Component.translatable("blockland.kit.error.duplicate", slot);
         }
         return null;
     }

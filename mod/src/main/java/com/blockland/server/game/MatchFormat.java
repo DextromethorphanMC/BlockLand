@@ -1,5 +1,7 @@
 package com.blockland.server.game;
 
+import net.minecraft.network.chat.Component;
+
 /** How many players a match needs: {@code teamCount} teams of {@code teamSize} players. */
 public record MatchFormat(int teamSize, int teamCount) {
 
@@ -12,10 +14,11 @@ public record MatchFormat(int teamSize, int teamCount) {
         return teamSize * teamCount;
     }
 
-    /** e.g. "1v1", "4v4", "8人混战", "2人×4队". */
-    public String label() {
-        if (teamCount == 2) return teamSize + "v" + teamSize;
-        if (teamSize == 1) return teamCount + "人混战";
-        return teamSize + "人×" + teamCount + "队";
+    /** e.g. "1v1", "4v4", "8人混战", "2人×4队", "8人" (one side, e.g. infection). */
+    public Component label() {
+        if (teamCount == 1) return Component.translatable("blockland.format.players", teamSize);
+        if (teamCount == 2) return Component.literal(teamSize + "v" + teamSize);
+        if (teamSize == 1) return Component.translatable("blockland.format.free_for_all", teamCount);
+        return Component.translatable("blockland.format.teams", teamSize, teamCount);
     }
 }

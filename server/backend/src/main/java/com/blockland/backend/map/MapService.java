@@ -6,6 +6,7 @@ import com.blockland.backend.config.BlockLandProperties;
 import com.blockland.backend.gamemode.GameModeService;
 import com.blockland.backend.gametype.GameTypeDefinition;
 import com.blockland.backend.gametype.GameTypeRegistry;
+import com.blockland.backend.media.MediaService;
 import com.blockland.backend.storage.Repository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,15 +35,17 @@ public class MapService {
     private final GameTypeRegistry types;
     private final MapFileAnalyzer analyzer;
     private final ObjectMapper mapper;
+    private final MediaService media;
     private final Path mapDir;
 
     public MapService(Repository<GameMap> maps, GameModeService gameModes, GameTypeRegistry types,
-                      MapFileAnalyzer analyzer, ObjectMapper mapper, BlockLandProperties properties) {
+                      MapFileAnalyzer analyzer, ObjectMapper mapper, MediaService media, BlockLandProperties properties) {
         this.maps = maps;
         this.gameModes = gameModes;
         this.types = types;
         this.analyzer = analyzer;
         this.mapper = mapper;
+        this.media = media;
         this.mapDir = properties.dataPath().resolve("maps");
     }
 
@@ -79,7 +82,7 @@ public class MapService {
 
         GameMap map = new GameMap(id, name.trim(), type.id(), format, fileName, sha256(data), data.length,
                 result.size(), blankToNull(spawnMarkerBlock), MapFileAnalyzer.clusterMarkers(result.markers(), result.size()),
-                DEFAULT_VOID_Y, type.mapSettingsFromFile(result, null), Instant.now());
+                DEFAULT_VOID_Y, type.mapSettingsFromFile(result, null), null, Instant.now());
         return maps.save(map);
     }
 
@@ -98,7 +101,7 @@ public class MapService {
                 .map(type -> type.mapSettingsFromFile(result, current.settings()))
                 .orElse(current.settings());
         GameMap map = new GameMap(id, current.name(), current.gameType(), format, fileName, sha256(data), data.length,
-                result.size(), marker, spawns, current.voidY(), settings, Instant.now());
+                result.size(), marker, spawns, current.voidY(), settings, current.coverVersion(), Instant.now());
         return maps.save(map);
     }
 
@@ -124,7 +127,7 @@ public class MapService {
 
         GameMap map = new GameMap(id, request.name().trim(), type.id(), current.format(), current.fileName(),
                 current.fileHash(), current.fileSize(), current.size(), current.spawnMarkerBlock(), spawns,
-                request.voidY() == null ? DEFAULT_VOID_Y : request.voidY(), settings, Instant.now());
+                request.voidY() == null ? DEFAULT_VOID_Y : request.voidY(), settings, current.coverVersion(), Instant.now());
         GameMap saved = maps.save(map);
         gameModes.revalidateAll();
         return saved;
@@ -134,7 +137,20 @@ public class MapService {
         get(id);
         maps.deleteById(id);
         deleteFiles(id);
+        media.delete(MediaService.MAP, id);
         gameModes.revalidateAll();
+    }
+
+    /** Cover shown in the lobby's map picker (wide image, e.g. 16:9). */
+    public GameMap setCover(String id, byte[] data) {
+        GameMap map = get(id);
+        return maps.save(map.withCover(media.store(MediaService.MAP, id, data, 512, 288), Instant.now()));
+    }
+
+    public GameMap removeCover(String id) {
+        GameMap map = get(id);
+        media.delete(MediaService.MAP, id);
+        return map.coverVersion() == null ? map : maps.save(map.withCover(null, Instant.now()));
     }
 
     public Path file(String id) {

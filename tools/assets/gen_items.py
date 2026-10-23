@@ -6,20 +6,15 @@ import os
 import numpy as np
 
 import raster as rs
+import skin_looks
 import textures as tx
 from glbread import GLTF
 from preview import GUN_DIR, hidden_set, load_materials
 
 GUN = "p9"
-SKINS = ["desert", "arctic", "gold", "camo"]
-SKIN_TINTS = {   # material -> replacement base colour (the runtime's skin JSON uses the same values)
-    "desert": {"polymer": (0.62, 0.52, 0.38), "grip": (0.62, 0.52, 0.38), "mag_base": (0.62, 0.52, 0.38)},
-    "arctic": {"polymer": (0.86, 0.88, 0.90), "grip": (0.86, 0.88, 0.90), "mag_base": (0.86, 0.88, 0.90),
-               "slide": (0.55, 0.57, 0.60)},
-    "gold": {"slide": (1.00, 0.77, 0.34), "barrel": (1.00, 0.77, 0.34), "steel_dark": (1.00, 0.77, 0.34)},
-    "camo": {},
-}
-SKIN_TEXTURES = {"camo": {"polymer": "camo", "grip": "camo", "slide": "camo"}}
+# the gun's skins as the runtime has them (guns.json + the shared craft/skins.json), default first
+SKIN_DATA = {k: v for k, v in skin_looks.weapon_skins(GUN, "gun").items() if k != "default"}
+SKINS = list(SKIN_DATA)
 METALLIC_SKINS = {"gold": ("slide", "barrel", "steel_dark")}
 AMMO = ["pistol_ammo", "smg_ammo", "shotgun_ammo", "sniper_ammo"]
 
@@ -31,20 +26,10 @@ def write_json(path, obj):
 
 
 def skin_materials(mats, skin):
-    out = []
-    camo = tx.camo_digital(128)
-    camo_lin = np.dstack([rs.srgb_to_linear(camo), np.ones(camo.shape[:2])])
-    for m in mats:
-        m = dict(m)
-        name = m["name"]
-        if skin in SKIN_TINTS and name in SKIN_TINTS[skin]:      # tints are display (sRGB) colours
-            m["base"] = np.array(list(rs.srgb_to_linear(np.array(SKIN_TINTS[skin][name]))) + [m["base"][3]])
-        if name in SKIN_TEXTURES.get(skin, {}):
-            m["tex"] = camo_lin
-            m["base"] = np.array([1.0, 1.0, 1.0, m["base"][3]])
-        if name in METALLIC_SKINS.get(skin, ()):
+    out = skin_looks.skin_materials(mats, SKIN_DATA.get(skin, {}))
+    for m in out:
+        if m["name"] in METALLIC_SKINS.get(skin, ()):        # icon only: polished look
             m["metallic"], m["roughness"] = 1.0, 0.3
-        out.append(m)
     return out
 
 
@@ -81,7 +66,7 @@ def icon_shade(frag, mats):
         m = mats[mi]
         alb = np.tile(np.asarray(m["base"][:3], float), (s.sum(), 1))
         if m.get("tex") is not None:
-            alb = alb * rs.sample(m["tex"], uv[s])[:, :3]
+            alb = alb * rs.sample(m["tex"], uv[s] * m.get("uv_scale", 1.0))[:, :3]
         a = rs.linear_to_srgb(alb)
         ndl = np.clip(n[s] @ L, 0, 1)
         lum = 0.60 + 0.42 * ndl - 0.10 * np.clip(-n[s][:, 1], 0, 1)
@@ -140,30 +125,33 @@ def palette(mats_by_name):
     rng = np.random.default_rng(31)
     for k, name in enumerate(order):
         src = {"slide_top": "slide", "bore": "steel_dark"}.get(name, name)
-        m = mats_by_name[src]
-        base = np.asarray(m["base"][:3], float)
-        if m.get("tex") is not None:
-            base = base * m["tex"][:, :, :3].reshape(-1, 3).mean(0)
-        c = rs.linear_to_srgb(base) * 0.95 + 0.07
+        c = patch_colours(mats_by_name[src], k) * 0.95 + 0.07
         if name == "slide_top":
             c = c * 1.12 + 0.03
         if name == "bore":
-            c = np.array([0.02, 0.02, 0.02])
+            c = np.full((4, 4, 3), 0.02)
         x0, y0 = (k % 4) * 4, (k // 4) * 4
-        patch = np.tile(c, (4, 4, 1)) * (0.94 + 0.10 * rng.random((4, 4, 1)))
+        patch = c * (0.94 + 0.10 * rng.random((4, 4, 1)))
         patch[0] *= 1.10
         patch[3] *= 0.85
-        if name == "camo":
-            pass
         pal[y0:y0 + 4, x0:x0 + 4, :3] = np.clip(patch, 0, 1)
         pal[y0:y0 + 4, x0:x0 + 4, 3] = 1.0
-    if mats_by_name["polymer"].get("tex") is not None:          # camo: draw the pattern into the patches
-        camo = tx.camo_digital(128)[::8, ::8][:4, :4]
-        for k in (2, 3):
-            x0, y0 = (k % 4) * 4, (k // 4) * 4
-            pal[y0:y0 + 4, x0:x0 + 4, :3] = camo * 0.95 + 0.04
-        pal[0:4, 0:4, :3] = tx.camo_digital(128)[4::8, 4::8][:4, :4] * 0.90 + 0.04
     return pal
+
+
+def patch_colours(m, k=0):
+    """4x4 sRGB colours of a material for a held-model palette patch: point samples of its texture (a quarter of a
+    repeat, so patterns such as camo stay visible) times its colour, or the plain colour."""
+    base = np.asarray(m["base"][:3], float)
+    tex = m.get("tex")
+    if tex is None:
+        return np.tile(rs.linear_to_srgb(base), (4, 4, 1))
+    h, w = tex.shape[:2]
+    off = (k * 0.137) % 1.0
+    ys = ((np.arange(4) + 0.5) / 16 + off) % 1.0 * h
+    xs = ((np.arange(4) + 0.5) / 16 + off * 0.61) % 1.0 * w
+    s = tex[ys.astype(int)[:, None], xs.astype(int)[None, :], :3]
+    return rs.linear_to_srgb(s * base)
 
 
 PATCH = {"slide": 0, "slide_top": 1, "polymer": 2, "grip": 3, "barrel": 4, "steel_dark": 5, "sight_dots": 6,

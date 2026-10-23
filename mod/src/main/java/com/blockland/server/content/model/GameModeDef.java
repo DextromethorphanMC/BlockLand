@@ -1,5 +1,6 @@
 package com.blockland.server.content.model;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.time.Instant;
@@ -63,5 +64,16 @@ public final class GameModeDef {
 
     public List<KitItemDef> kitOrEmpty() {
         return kit == null ? List.of() : kit;
+    }
+
+    /** A yes/no setting every type may carry (e.g. {@code allowSlide}); {@code fallback} when it is missing or broken. */
+    public boolean flag(String key, boolean fallback) {
+        JsonElement value = settings == null ? null : settings.get(key);
+        if (value == null || !value.isJsonPrimitive()) return fallback;
+        try {
+            return value.getAsBoolean();
+        } catch (RuntimeException e) {
+            return fallback;
+        }
     }
 }

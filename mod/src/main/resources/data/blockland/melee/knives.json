@@ -17,8 +17,14 @@
         "backstabMultiplier": 1.5,
         "punch": 0.9,
         "swings": [
-          { "clip": "light_1", "slashAngle": 205 },
-          { "clip": "light_2", "slashAngle": 25 }
+          {
+            "clip": "light_1",
+            "slashAngle": 205
+          },
+          {
+            "clip": "light_2",
+            "slashAngle": 25
+          }
         ],
         "blockDecal": "knife_slash",
         "bodyDecal": "knife_cut",
@@ -29,13 +35,16 @@
         "range": 2.5,
         "radius": 0.3,
         "duration": 0.95,
-        "impact": 0.40,
+        "impact": 0.4,
         "cooldown": 0.95,
         "knockback": 0.55,
         "backstabMultiplier": 2.0,
         "punch": 2.4,
         "swings": [
-          { "clip": "heavy", "slashAngle": 90 }
+          {
+            "clip": "heavy",
+            "slashAngle": 90
+          }
         ],
         "blockDecal": "knife_stab",
         "bodyDecal": "knife_cut",
@@ -45,7 +54,9 @@
         "idle": "idle",
         "draw": "draw",
         "inspect": "inspect",
-        "sprint": "sprint"
+        "sprint": "sprint",
+        "walk": "walk",
+        "tacSprint": "tac_sprint"
       },
       "sounds": {
         "equip": "blockland:knife.equip",
@@ -54,6 +65,410 @@
         "hitMarker": "blockland:gun.hitmarker",
         "critical": "blockland:gun.headshot",
         "kill": "blockland:gun.kill"
+      },
+      "handling": {
+        "weight": 0.6,
+        "sway": 1.2,
+        "bob": 1.0,
+        "inertia": 0.9,
+        "sprintOut": 0.16,
+        "tacticalSprint": 3.0,
+        "adsTilt": 0
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "black": {
+          "name": "暗影",
+          "tints": {
+            "blade": [
+              0.22,
+              0.23,
+              0.25
+            ],
+            "blade_edge": [
+              0.55,
+              0.57,
+              0.6
+            ],
+            "handle": [
+              0.1,
+              0.1,
+              0.11
+            ],
+            "handle_inlay": [
+              0.16,
+              0.16,
+              0.17
+            ]
+          }
+        },
+        "crimson": {
+          "name": "猩红",
+          "tints": {
+            "handle": [
+              0.55,
+              0.06,
+              0.07
+            ],
+            "handle_inlay": [
+              0.3,
+              0.03,
+              0.04
+            ],
+            "latch": [
+              0.7,
+              0.1,
+              0.1
+            ]
+          }
+        },
+        "ocean": {
+          "name": "深海",
+          "tints": {
+            "blade": [
+              0.35,
+              0.55,
+              0.75
+            ],
+            "handle": [
+              0.06,
+              0.18,
+              0.3
+            ],
+            "handle_inlay": [
+              0.1,
+              0.35,
+              0.5
+            ]
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+            "blade": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "blade_edge": [
+              1.0,
+              0.88,
+              0.55
+            ],
+            "pins": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "latch": [
+              1.0,
+              0.77,
+              0.34
+            ]
+          }
+        },
+        "damascus": {
+          "name": "大马士革",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/skin/damascus/blade",
+              "uvScale": 0.5
+            }
+          }
+        },
+        "tiger": {
+          "name": "虎牙",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/skin/tiger/blade",
+              "uvScale": 0.5
+            }
+          }
+        },
+        "fade": {
+          "name": "渐变",
+          "rarity": "legendary",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/skin/fade/blade",
+              "uvScale": 0.333333
+            }
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      }
+    },
+    "dagger": {
+      "name": "匕首",
+      "description": "双刃战术匕首：出刀更快，轻击伤害略低；重击是一记快速直刺，从背后刺中可一击致命。",
+      "model": "models/knife/dagger.glb",
+      "drawTime": 0.6,
+      "comboWindow": 0.65,
+      "light": {
+        "damage": 4.5,
+        "range": 2.6,
+        "radius": 0.42,
+        "duration": 0.36,
+        "impact": 0.11,
+        "cooldown": 0.3,
+        "knockback": 0.15,
+        "backstabMultiplier": 1.5,
+        "punch": 0.8,
+        "swings": [
+          {
+            "clip": "light_1",
+            "slashAngle": 200
+          },
+          {
+            "clip": "light_2",
+            "slashAngle": 20
+          }
+        ],
+        "blockDecal": "knife_slash",
+        "bodyDecal": "knife_cut",
+        "swingSound": "blockland:knife.swing"
+      },
+      "heavy": {
+        "damage": 10.0,
+        "range": 2.4,
+        "radius": 0.28,
+        "duration": 0.8,
+        "impact": 0.33,
+        "cooldown": 0.8,
+        "knockback": 0.45,
+        "backstabMultiplier": 2.0,
+        "punch": 2.0,
+        "swings": [
+          {
+            "clip": "heavy",
+            "slashAngle": 90
+          }
+        ],
+        "blockDecal": "knife_stab",
+        "bodyDecal": "knife_cut",
+        "swingSound": "blockland:knife.swing_heavy"
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint",
+        "walk": "walk",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "equip": "blockland:knife.equip",
+        "hitFlesh": "blockland:knife.hit_flesh",
+        "hitBlock": "blockland:knife.hit_wall",
+        "hitMarker": "blockland:gun.hitmarker",
+        "critical": "blockland:gun.headshot",
+        "kill": "blockland:gun.kill"
+      },
+      "handling": {
+        "weight": 0.5,
+        "sway": 1.15,
+        "bob": 1.0,
+        "inertia": 0.85,
+        "sprintOut": 0.15,
+        "tacticalSprint": 3.0,
+        "adsTilt": 0
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "black": {
+          "name": "暗影",
+          "tints": {
+            "blade": [
+              0.22,
+              0.23,
+              0.25
+            ],
+            "blade_edge": [
+              0.55,
+              0.57,
+              0.6
+            ],
+            "guard": [
+              0.1,
+              0.1,
+              0.11
+            ],
+            "handle": [
+              0.1,
+              0.1,
+              0.11
+            ]
+          }
+        },
+        "damascus": {
+          "name": "大马士革",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/skin/damascus/blade",
+              "uvScale": 0.5
+            }
+          }
+        },
+        "tiger": {
+          "name": "虎牙",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/skin/tiger/blade",
+              "uvScale": 0.5
+            }
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+            "blade": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "blade_edge": [
+              1.0,
+              0.88,
+              0.55
+            ],
+            "guard": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "pommel": [
+              1.0,
+              0.77,
+              0.34
+            ]
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      }
+    },
+    "karambit": {
+      "name": "爪子刀",
+      "description": "反握的弯钩爪刀，食指穿过刀环。轻击快速勾划、连击最快；重击一记锤拳下勾并回拉撕扯，背刺伤害高。",
+      "model": "models/knife/karambit.glb",
+      "drawTime": 0.7,
+      "comboWindow": 0.6,
+      "light": {
+        "damage": 4.5,
+        "range": 2.5,
+        "radius": 0.42,
+        "duration": 0.38,
+        "impact": 0.12,
+        "cooldown": 0.28,
+        "knockback": 0.15,
+        "backstabMultiplier": 1.5,
+        "punch": 0.85,
+        "swings": [
+          {
+            "clip": "light_1",
+            "slashAngle": 190
+          },
+          {
+            "clip": "light_2",
+            "slashAngle": 10
+          }
+        ],
+        "blockDecal": "knife_slash",
+        "bodyDecal": "knife_cut",
+        "swingSound": "blockland:knife.swing"
+      },
+      "heavy": {
+        "damage": 10.0,
+        "range": 2.3,
+        "radius": 0.3,
+        "duration": 0.85,
+        "impact": 0.36,
+        "cooldown": 0.85,
+        "knockback": 0.5,
+        "backstabMultiplier": 2.0,
+        "punch": 2.2,
+        "swings": [
+          {
+            "clip": "heavy",
+            "slashAngle": 100
+          }
+        ],
+        "blockDecal": "knife_stab",
+        "bodyDecal": "knife_cut",
+        "swingSound": "blockland:knife.swing_heavy"
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint",
+        "walk": "walk",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "equip": "blockland:knife.equip",
+        "hitFlesh": "blockland:knife.hit_flesh",
+        "hitBlock": "blockland:knife.hit_wall",
+        "hitMarker": "blockland:gun.hitmarker",
+        "critical": "blockland:gun.headshot",
+        "kill": "blockland:gun.kill"
+      },
+      "handling": {
+        "weight": 0.5,
+        "sway": 1.2,
+        "bob": 1.0,
+        "inertia": 0.85,
+        "sprintOut": 0.15,
+        "tacticalSprint": 3.0,
+        "adsTilt": 0,
+        "cameraKick": 1.0,
+        "cameraRoll": 1.1,
+        "cameraFov": 1.0,
+        "cameraRumble": 0.6
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "black": {
+          "name": "暗影",
+          "tints": {
+            "blade": [0.22, 0.23, 0.25],
+            "blade_edge": [0.55, 0.57, 0.6],
+            "handle": [0.1, 0.1, 0.11],
+            "ring": [0.1, 0.1, 0.11]
+          }
+        },
+        "tiger": {
+          "name": "虎纹",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/skin/tiger/blade",
+              "uvScale": 0.5
+            }
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
       }
     }
   }

@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/ks3_held",
+  "textures": {
+    "0": "blockland:item/ks3_held_dragon",
+    "particle": "blockland:item/ks3_held_dragon"
+  }
+}

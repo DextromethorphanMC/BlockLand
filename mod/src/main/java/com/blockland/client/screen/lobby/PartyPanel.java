@@ -7,18 +7,15 @@ import com.blockland.anim.Ease;
 import com.blockland.anim.Spring;
 import com.blockland.anim.Ticker;
 import com.blockland.client.ClientLobbyState;
+import com.blockland.client.font.UiFont;
 import com.blockland.client.ui.Draw;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.packet.PartyPackets;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
-import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.network.chat.Component;
-import net.minecraft.client.resources.PlayerSkin;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -27,6 +24,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static com.blockland.client.screen.lobby.LobbyTheme.*;
+import static com.blockland.client.ui.Tr.tr;
 
 /**
  * Party strip (top right of the play tab): member heads, pending invitations and a "+" slot that opens a
@@ -41,7 +39,6 @@ public final class PartyPanel {
     private static final int CARD_W = 176;
     private static final int CARD_H = 38;
 
-    private final Font font;
     private final EditBox input;
     private final AnimValue popover = new AnimValue(0);
     private final Map<String, Spring> hover = new HashMap<>();
@@ -49,21 +46,26 @@ public final class PartyPanel {
     private boolean popoverOpen;
     private final List<Hit> hits = new ArrayList<>();
     private int stripLeft;
+    private int stripBottom;
 
     /** A clickable region recorded while rendering. */
     private record Hit(int x, int y, int w, int h, Runnable action) {
     }
 
     public PartyPanel(Font font) {
-        this.font = font;
-        this.input = new EditBox(font, 0, 0, 120, 16, Component.literal("玩家名称"));
+        this.input = new EditBox(font, 0, 0, 120, 16, Component.translatable("blockland.party.name_field"));
         input.setMaxLength(16);
-        input.setHint(Component.literal("输入玩家名称").withColor(DIM));
+        input.setHint(Component.translatable("blockland.party.name_hint").withColor(DIM));
     }
 
     /** Left edge of the strip after the last render, so the screen can keep other content clear of it. */
     public int left() {
         return stripLeft;
+    }
+
+    /** Bottom of everything drawn last frame (strip, invite field, invitation cards). */
+    public int bottom() {
+        return stripBottom;
     }
 
     public boolean isTyping() {
@@ -78,21 +80,20 @@ public final class PartyPanel {
      */
     public void render(GuiGraphics g, int mouseX, int mouseY, int right, int top, float alpha) {
         hits.clear();
-        Minecraft mc = Minecraft.getInstance();
-        UUID self = mc.player == null ? new UUID(0, 0) : mc.player.getUUID();
+        UUID self = ClientLobbyState.selfId();
         PartyPackets.PartyInfo party = ClientLobbyState.party();
         boolean leader = ClientLobbyState.isPartyLeader(self);
         boolean inParty = !party.members().isEmpty();
 
         List<PartyPackets.Member> members = inParty ? party.members()
-                : List.of(new PartyPackets.Member(self, mc.player == null ? "" : mc.player.getGameProfile().getName(), true,
+                : List.of(new PartyPackets.Member(self, ClientLobbyState.selfName(), true,
                 ClientLobbyState.isQueued() ? PartyPackets.Status.QUEUED : PartyPackets.Status.LOBBY));
         int slots = Math.max(2, Math.min(party.maxSize(), members.size() + party.pending().size() + 1));
         int width = slots * SLOT + (slots - 1) * GAP;
         int x = right - width;
-        String label = inParty ? "队伍 " + members.size() + "/" + party.maxSize() : "组队";
-        stripLeft = x - font.width(label) - 8;
-        Draw.text(g, font, label, stripLeft, top + 6, 1f, ColorMath.fade(inParty ? TEXT : MUTED, alpha), false);
+        String label = inParty ? tr("blockland.party.label", members.size(), party.maxSize()) : tr("blockland.party.solo");
+        stripLeft = x - UiFont.width(label) - 8;
+        Draw.text(g, label, stripLeft, top + 6, 1f, ColorMath.fade(inParty ? TEXT : MUTED, alpha), false);
 
         int i = 0;
         String hoveredName = null;
@@ -102,9 +103,9 @@ public final class PartyPanel {
             boolean hovered = inside(mouseX, mouseY, sx, top, SLOT, SLOT);
             float hv = spring("m" + member.id(), hovered);
             drawHead(g, member.id(), sx, top, hv, statusColor(member.status()), alpha);
-            if (member.leader() && inParty) Draw.text(g, font, "★", sx + SLOT - 6, top - 4, 1f, ColorMath.fade(GOLD, alpha), true);
+            if (member.leader() && inParty) Draw.text(g, "★", sx + SLOT - 6, top - 4, 1f, ColorMath.fade(GOLD, alpha), true);
             if (hovered) {
-                hoveredName = member.name() + statusLabel(member.status()) + (member.leader() && inParty ? " · 队长" : "");
+                hoveredName = member.name() + statusLabel(member.status()) + (member.leader() && inParty ? tr("blockland.party.leader_suffix") : "");
                 hoveredX = sx + SLOT / 2;
             }
             boolean isSelf = member.id().equals(self);
@@ -112,21 +113,21 @@ public final class PartyPanel {
                 // ×: leave (own slot) or kick (leader on another member)
                 int bx = sx + SLOT - 7, by = top + SLOT - 7;
                 Draw.rect(g, bx, by, 8, 8, ColorMath.fade(CANCEL, alpha * hv));
-                Draw.text(g, font, "×", bx + 1.5f, by - 0.5f, 1f, ColorMath.fade(TEXT, alpha * hv), false);
+                Draw.text(g, "×", bx + 1.5f, by - 0.5f, 1f, ColorMath.fade(TEXT, alpha * hv), false);
                 UUID id = member.id();
                 hits.add(new Hit(bx - 1, by - 1, 10, 10, isSelf
                         ? () -> send(PartyPackets.Action.LEAVE, "")
                         : () -> send(PartyPackets.Action.KICK, id.toString())));
-                if (inside(mouseX, mouseY, bx - 1, by - 1, 10, 10)) hoveredName = isSelf ? "离开队伍" : "移出 " + member.name();
+                if (inside(mouseX, mouseY, bx - 1, by - 1, 10, 10)) hoveredName = isSelf ? tr("blockland.party.leave") : tr("blockland.party.kick", member.name());
             }
             if (inParty && leader && !isSelf && hv > 0.05f) {
                 // ★: hand the party over to this member
                 int px = sx - 1, py = top - 1;
                 Draw.rect(g, px, py, 8, 8, ColorMath.fade(GOLD, alpha * hv));
-                Draw.text(g, font, "★", px + 1, py, 1f, ColorMath.fade(0xFF1A1206, alpha * hv), false);
+                Draw.text(g, "★", px + 1, py, 1f, ColorMath.fade(0xFF1A1206, alpha * hv), false);
                 UUID id = member.id();
                 hits.add(new Hit(px - 1, py - 1, 10, 10, () -> send(PartyPackets.Action.PROMOTE, id.toString())));
-                if (inside(mouseX, mouseY, px - 1, py - 1, 10, 10)) hoveredName = "转让队长给 " + member.name();
+                if (inside(mouseX, mouseY, px - 1, py - 1, 10, 10)) hoveredName = tr("blockland.party.promote", member.name());
             }
             i++;
         }
@@ -135,9 +136,9 @@ public final class PartyPanel {
             int sx = x + i * (SLOT + GAP);
             Draw.rect(g, sx, top, SLOT, SLOT, ColorMath.fade(0x30FFFFFF, alpha));
             String dots = ".".repeat(1 + (int) (Ticker.global().time() * 2 % 3));
-            Draw.text(g, font, dots, sx + (SLOT - font.width(dots)) / 2f, top + 5, 1f, ColorMath.fade(MUTED, alpha), false);
+            Draw.text(g, dots, sx + (SLOT - UiFont.width(dots)) / 2f, top + 5, 1f, ColorMath.fade(MUTED, alpha), false);
             if (inside(mouseX, mouseY, sx, top, SLOT, SLOT)) {
-                hoveredName = "已邀请 " + pending + "，等待回应";
+                hoveredName = tr("blockland.party.pending", pending);
                 hoveredX = sx + SLOT / 2;
             }
             i++;
@@ -149,10 +150,10 @@ public final class PartyPanel {
             float hv = spring("add", hovered || popoverOpen);
             Draw.rect(g, sx, top, SLOT, SLOT, ColorMath.fade(ColorMath.mix(0xFF1A2333, 0xFF2A3650, hv), alpha));
             Draw.outline(g, sx, top, SLOT, SLOT, ColorMath.fade(ColorMath.mix(LINE, ACCENT, hv), alpha));
-            Draw.text(g, font, "+", sx + 7, top + 5.5f, 1.2f, ColorMath.fade(ColorMath.mix(MUTED, ACCENT, hv), alpha), false);
+            Draw.text(g, "+", sx + 7, top + 5.5f, 1.2f, ColorMath.fade(ColorMath.mix(MUTED, ACCENT, hv), alpha), false);
             hits.add(new Hit(sx, top, SLOT, SLOT, () -> setPopover(!popoverOpen)));
             if (hovered && !popoverOpen) {
-                hoveredName = "邀请玩家组队";
+                hoveredName = tr("blockland.party.invite_title");
                 hoveredX = sx + SLOT / 2;
             }
         }
@@ -163,13 +164,13 @@ public final class PartyPanel {
             renderPopover(g, mouseX, mouseY, right - POP_W, below, alpha * pop, (1 - pop) * -6);
             below += POP_H + 6;
         }
-        renderInvites(g, mouseX, mouseY, right, below, alpha);
+        stripBottom = renderInvites(g, mouseX, mouseY, right, below, alpha);
 
         if (hoveredName != null) {
-            int tw = font.width(hoveredName) + 8;
+            int tw = UiFont.width(hoveredName) + 8;
             int tx = Math.min(right - tw, hoveredX - tw / 2);
             Draw.rect(g, tx, top + SLOT + 3, tw, 12, ColorMath.fade(0xF005080D, alpha));
-            Draw.text(g, font, hoveredName, tx + 4, top + SLOT + 5, 1f, ColorMath.fade(TEXT, alpha), false);
+            Draw.text(g, hoveredName, tx + 4, top + SLOT + 5, 1f, ColorMath.fade(TEXT, alpha), false);
         }
     }
 
@@ -178,7 +179,7 @@ public final class PartyPanel {
         g.pose().translate(0, shift);
         Draw.rect(g, px, py, POP_W, POP_H, ColorMath.fade(0xF20C121C, a));
         Draw.outline(g, px, py, POP_W, POP_H, ColorMath.fade(ColorMath.withAlpha(ACCENT, 0x66), a));
-        Draw.text(g, font, "邀请玩家组队", px + 8, py + 6, 1f, ColorMath.fade(TEXT, a), false);
+        Draw.text(g, tr("blockland.party.invite_title"), px + 8, py + 6, 1f, ColorMath.fade(TEXT, a), false);
         // the EditBox only edits; the field is drawn here so it matches the lobby and fades with the popover
         int fx = px + 8, fy = py + 20, fw = POP_W - 66, fh = 16;
         input.setX(fx);
@@ -188,12 +189,12 @@ public final class PartyPanel {
         Draw.outline(g, fx, fy, fw, fh, ColorMath.fade(popoverOpen ? ACCENT : LINE, a * 0.8f));
         String value = input.getValue();
         if (value.isEmpty()) {
-            Draw.text(g, font, "输入玩家名称", fx + 5, fy + 4, 1f, ColorMath.fade(DIM, a), false);
+            Draw.text(g, tr("blockland.party.name_hint"), fx + 5, fy + 4, 1f, ColorMath.fade(DIM, a), false);
         } else {
-            Draw.text(g, font, Draw.fit(font, value, fw - 12), fx + 5, fy + 4, 1f, ColorMath.fade(TEXT, a), false);
+            Draw.text(g, Draw.fit(value, fw - 12), fx + 5, fy + 4, 1f, ColorMath.fade(TEXT, a), false);
         }
         if (popoverOpen && (long) (Ticker.global().time() * 2) % 2 == 0) {
-            int caret = fx + 5 + Math.min(font.width(value), fw - 12);
+            int caret = fx + 5 + Math.min(UiFont.width(value), fw - 12);
             g.fill(caret, fy + 3, caret + 1, fy + fh - 3, ColorMath.fade(ACCENT, a));
         }
         int bx = px + POP_W - 52, by = py + 20, bw = 44, bh = 16;
@@ -201,12 +202,14 @@ public final class PartyPanel {
         float hv = spring("send", hovered);
         boolean enabled = !input.getValue().isBlank();
         Draw.rect(g, bx, by, bw, bh, ColorMath.fade(enabled ? ColorMath.lighten(GO, 0.1f * hv) : DISABLED, a));
-        Draw.text(g, font, "邀请", bx + (bw - font.width("邀请")) / 2f, by + 4, 1f, ColorMath.fade(enabled ? TEXT : MUTED, a), false);
+        String inviteLabel = tr("blockland.party.invite");
+        Draw.text(g, inviteLabel, bx + (bw - UiFont.width(inviteLabel)) / 2f, by + 4, 1f, ColorMath.fade(enabled ? TEXT : MUTED, a), false);
         g.pose().popMatrix();
         if (popoverOpen) hits.add(new Hit(bx, by, bw, bh, this::submit));
     }
 
-    private void renderInvites(GuiGraphics g, int mouseX, int mouseY, int right, int top, float alpha) {
+    /** @return the y below the last card */
+    private int renderInvites(GuiGraphics g, int mouseX, int mouseY, int right, int top, float alpha) {
         List<PartyPackets.Invite> invites = ClientLobbyState.party().invites();
         cardIn.keySet().removeIf(id -> invites.stream().noneMatch(inv -> inv.fromId().equals(id)));
         int y = top;
@@ -224,9 +227,9 @@ public final class PartyPanel {
             Draw.rect(g, x, y, CARD_W, CARD_H, ColorMath.fade(0xF2141C29, a));
             Draw.rect(g, x, y, 3, CARD_H, ColorMath.fade(ACCENT, a));
             drawFace(g, invite.fromId(), x + 8, y + 7, 12, a);
-            String title = Draw.fit(font, invite.fromName(), CARD_W - 110) + " 邀请你组队";
-            Draw.text(g, font, title, x + 24, y + 6, 1f, ColorMath.fade(TEXT, a), false);
-            Draw.text(g, font, invite.partySize() + " 人队伍 · " + left + " 秒", x + 24, y + 17, 1f, ColorMath.fade(MUTED, a), false);
+            String title = tr("blockland.party.invited_card", Draw.fit(invite.fromName(), CARD_W - 110));
+            Draw.text(g, title, x + 24, y + 6, 1f, ColorMath.fade(TEXT, a), false);
+            Draw.text(g, tr("blockland.party.invite_detail", invite.partySize(), left), x + 24, y + 17, 1f, ColorMath.fade(MUTED, a), false);
             // expiry bar
             float frac = Math.min(1, left / 60f);
             g.fill(x + 3, y + CARD_H - 2, x + 3 + Math.round((CARD_W - 3) * frac), y + CARD_H, ColorMath.fade(ACCENT, a * 0.7f));
@@ -237,13 +240,15 @@ public final class PartyPanel {
             float ha = spring("acc" + from, inside(mouseX, mouseY, acceptX, by, bw, bh));
             float hd = spring("dec" + from, inside(mouseX, mouseY, declineX, by, bw, bh));
             Draw.rect(g, acceptX, by, bw, bh, ColorMath.fade(ColorMath.lighten(GO, 0.12f * ha), a));
-            Draw.text(g, font, "接受", acceptX + (bw - font.width("接受")) / 2f, by + 2, 1f, ColorMath.fade(TEXT, a), false);
+            String accept = tr("blockland.party.accept"), decline = tr("blockland.party.decline");
+            Draw.text(g, accept, acceptX + (bw - UiFont.width(accept)) / 2f, by + 2, 1f, ColorMath.fade(TEXT, a), false);
             Draw.rect(g, declineX, by, bw, bh, ColorMath.fade(ColorMath.mix(0xFF2A3344, CANCEL, hd), a));
-            Draw.text(g, font, "拒绝", declineX + (bw - font.width("拒绝")) / 2f, by + 2, 1f, ColorMath.fade(TEXT, a), false);
+            Draw.text(g, decline, declineX + (bw - UiFont.width(decline)) / 2f, by + 2, 1f, ColorMath.fade(TEXT, a), false);
             hits.add(new Hit(acceptX, by, bw, bh, () -> send(PartyPackets.Action.ACCEPT, from.toString())));
             hits.add(new Hit(declineX, by, bw, bh, () -> send(PartyPackets.Action.DECLINE, from.toString())));
             y += CARD_H + 4;
         }
+        return y;
     }
 
     private void drawHead(GuiGraphics g, UUID id, int x, int y, float hv, int ring, float alpha) {
@@ -255,10 +260,7 @@ public final class PartyPanel {
 
     private static void drawFace(GuiGraphics g, UUID id, int x, int y, int size, float alpha) {
         if (alpha < 0.5f) return; // faces cannot fade; hide them during transitions instead
-        Minecraft mc = Minecraft.getInstance();
-        PlayerInfo info = mc.getConnection() == null ? null : mc.getConnection().getPlayerInfo(id);
-        PlayerSkin skin = info != null ? info.getSkin() : DefaultPlayerSkin.get(id);
-        PlayerFaceRenderer.draw(g, skin, x, y, size);
+        PlayerFaceRenderer.draw(g, Skins.of(id), x, y, size);
     }
 
     // ---- input ----------------------------------------------------------------------------------
@@ -339,8 +341,8 @@ public final class PartyPanel {
     private static String statusLabel(PartyPackets.Status status) {
         return switch (status) {
             case LOBBY -> "";
-            case QUEUED -> " · 匹配中";
-            case IN_GAME -> " · 对局中";
+            case QUEUED -> tr("blockland.party.status.queued");
+            case IN_GAME -> tr("blockland.party.status.in_game");
         };
     }
 

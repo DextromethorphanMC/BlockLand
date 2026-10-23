@@ -1,0 +1,241 @@
+{
+  "skins": {
+    "aurora": {
+      "name": "极光",
+      "rarity": "legendary",
+      "for": [
+        "gun"
+      ],
+      "regions": {
+        "body": {
+          "pbr": "textures/pbr/skin/aurora/body",
+          "uvScale": 0.333333,
+          "effect": "iridescent",
+          "params": [
+            0.85,
+            1.0,
+            0.04,
+            6.0
+          ]
+        },
+        "stock": {
+          "pbr": "textures/pbr/skin/aurora/accent",
+          "uvScale": 0.333333,
+          "effect": "flow",
+          "effectColor": "#5CF2FF",
+          "params": [
+            0.35,
+            0.06,
+            0.25,
+            1.0
+          ]
+        },
+        "handguard": {
+          "pbr": "textures/pbr/skin/aurora/accent",
+          "uvScale": 0.333333,
+          "effect": "flow",
+          "effectColor": "#5CF2FF",
+          "params": [
+            0.35,
+            0.06,
+            0.25,
+            1.0
+          ]
+        },
+        "grip": {
+          "pbr": "textures/pbr/skin/aurora/accent",
+          "uvScale": 0.333333,
+          "effect": "flow",
+          "effectColor": "#5CF2FF",
+          "params": [
+            0.35,
+            0.06,
+            0.25,
+            1.0
+          ]
+        },
+        "magazine": {
+          "pbr": "textures/pbr/skin/aurora/accent",
+          "uvScale": 0.333333,
+          "effect": "flow",
+          "effectColor": "#5CF2FF",
+          "params": [
+            0.35,
+            0.06,
+            0.25,
+            1.0
+          ]
+        },
+        "*": {
+          "pbr": "textures/pbr/skin/aurora/metal",
+          "uvScale": 0.416667,
+          "tint": [
+            0.92,
+            0.96,
+            1.0
+          ]
+        }
+      }
+    },
+    "magma": {
+      "name": "熔岩",
+      "rarity": "legendary",
+      "for": [
+        "gun"
+      ],
+      "regions": {
+        "body": {
+          "pbr": "textures/pbr/skin/magma/rock",
+          "uvScale": 0.25,
+          "effect": "flow",
+          "effectColor": "#FF6A1A",
+          "params": [
+            0.12,
+            0.12,
+            0.6,
+            0.7
+          ]
+        },
+        "stock": {
+          "pbr": "textures/pbr/skin/magma/rock",
+          "uvScale": 0.25,
+          "effect": "flow",
+          "effectColor": "#FF6A1A",
+          "params": [
+            0.12,
+            0.12,
+            0.6,
+            0.7
+          ]
+        },
+        "handguard": {
+          "pbr": "textures/pbr/skin/magma/rock",
+          "uvScale": 0.25,
+          "effect": "flow",
+          "effectColor": "#FF6A1A",
+          "params": [
+            0.12,
+            0.12,
+            0.6,
+            0.7
+          ]
+        },
+        "grip": {
+          "pbr": "textures/pbr/skin/magma/rock",
+          "uvScale": 0.25,
+          "effect": "flow",
+          "effectColor": "#FF6A1A",
+          "params": [
+            0.12,
+            0.12,
+            0.6,
+            0.7
+          ]
+        },
+        "magazine": {
+          "pbr": "textures/pbr/skin/magma/rock",
+          "uvScale": 0.25,
+          "effect": "flow",
+          "effectColor": "#FF6A1A",
+          "params": [
+            0.12,
+            0.12,
+            0.6,
+            0.7
+          ]
+        },
+        "*": {
+          "pbr": "textures/pbr/skin/magma/metal",
+          "uvScale": 0.333333
+        }
+      }
+    },
+    "galaxy": {
+      "name": "星河",
+      "rarity": "legendary",
+      "for": [
+        "knife"
+      ],
+      "regions": {
+        "blade": {
+          "pbr": "textures/pbr/skin/galaxy/blade",
+          "uvScale": 0.333333,
+          "effect": "galaxy",
+          "effectColor": "#DDE6FF",
+          "params": [
+            0.012,
+            1.0,
+            0.6,
+            0.8
+          ]
+        },
+        "handle": {
+          "pbr": "textures/pbr/skin/galaxy/handle",
+          "uvScale": 0.666667
+        },
+        "hardware": {
+          "pbr": "textures/pbr/skin/common/dark_chrome",
+          "uvScale": 1.25
+        },
+        "*": {
+          "pbr": "textures/pbr/skin/galaxy/handle",
+          "uvScale": 0.666667
+        }
+      }
+    },
+    "doppler": {
+      "name": "多普勒",
+      "rarity": "legendary",
+      "for": [
+        "knife"
+      ],
+      "regions": {
+        "blade": {
+          "pbr": "textures/pbr/skin/doppler/blade",
+          "uvScale": 0.333333,
+          "effect": "iridescent",
+          "params": [
+            0.35,
+            1.3,
+            0.02,
+            9.0
+          ]
+        },
+        "handle": {
+          "pbr": "textures/pbr/skin/doppler/handle",
+          "uvScale": 0.666667
+        },
+        "hardware": {
+          "pbr": "textures/pbr/skin/common/dark_chrome",
+          "uvScale": 1.25
+        },
+        "*": {
+          "pbr": "textures/pbr/skin/doppler/handle",
+          "uvScale": 0.666667
+        }
+      }
+    },
+    "neon": {
+      "name": "霓虹回路",
+      "rarity": "legendary",
+      "for": [
+        "gun",
+        "knife"
+      ],
+      "regions": {
+        "*": {
+          "pbr": "textures/pbr/skin/neon/base",
+          "uvScale": 0.333333,
+          "effect": "circuit",
+          "effectColor": "#38F0FF",
+          "params": [
+            0.25,
+            40.0,
+            0.8,
+            0.05
+          ]
+        }
+      }
+    }
+  }
+}

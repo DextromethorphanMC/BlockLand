@@ -3,9 +3,9 @@ package com.blockland.server.map;
 import com.blockland.server.arena.Arena;
 import com.blockland.server.content.model.MapDef;
 import com.blockland.server.game.GameServices;
-import com.blockland.server.lobby.LobbyService;
 import com.blockland.server.util.PlayerUtil;
 import com.blockland.server.world.PasteJob;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -26,20 +26,19 @@ import java.util.UUID;
  */
 public final class MapPreviewService {
     private final GameServices services;
-    private final LobbyService lobby;
     private final Map<UUID, Arena> previews = new HashMap<>();
 
-    public MapPreviewService(GameServices services, LobbyService lobby) {
+    public MapPreviewService(GameServices services) {
         this.services = services;
-        this.lobby = lobby;
     }
 
     public void open(ServerPlayer player, MapDef map) {
         close(player, false);
-        player.sendSystemMessage(Component.literal("§e正在加载地图 " + map.name + " …"));
+        player.sendSystemMessage(Component.translatable("blockland.preview.loading", map.name).withStyle(ChatFormatting.YELLOW));
         services.maps().load(map).whenComplete((blueprint, error) -> services.server().execute(() -> {
             if (error != null) {
-                player.sendSystemMessage(Component.literal("§c地图加载失败: " + error.getMessage()));
+                player.sendSystemMessage(Component.translatable("blockland.preview.load_failed", String.valueOf(error.getMessage()))
+                        .withStyle(ChatFormatting.RED));
                 return;
             }
             Arena arena = services.arenas().allocate(blueprint.size());
@@ -49,7 +48,7 @@ public final class MapPreviewService {
                 player.setGameMode(GameType.CREATIVE);
                 Vec3 center = arena.center();
                 PlayerUtil.teleport(player, arena.level(), new Vec3(center.x, arena.origin().getY() + arena.size().getY() + 2, center.z), 0, 45);
-                player.sendSystemMessage(Component.literal("§a地图预览已就绪。§7使用 §f/bl map here §7查看相对坐标，§f/bl map close §7退出。"));
+                player.sendSystemMessage(Component.translatable("blockland.preview.ready"));
             });
         }));
     }
@@ -58,18 +57,19 @@ public final class MapPreviewService {
     public void describePosition(ServerPlayer player) {
         Arena arena = previews.get(player.getUUID());
         if (arena == null) {
-            player.sendSystemMessage(Component.literal("§c你当前没有在预览地图"));
+            player.sendSystemMessage(Component.translatable("blockland.preview.not_previewing").withStyle(ChatFormatting.RED));
             return;
         }
         BlockPos feet = player.blockPosition().subtract(arena.origin());
-        player.sendSystemMessage(Component.literal(String.format("§7脚下(出生点): §fx=%d y=%d z=%d §7朝向 yaw=%.0f",
-                feet.getX(), feet.getY(), feet.getZ(), player.getYRot())));
+        player.sendSystemMessage(Component.translatable("blockland.preview.position",
+                Component.literal(String.format("x=%d y=%d z=%d", feet.getX(), feet.getY(), feet.getZ())).withStyle(ChatFormatting.WHITE),
+                String.format("%.0f", player.getYRot())).withStyle(ChatFormatting.GRAY));
         HitResult hit = player.pick(20.0, 0.0F, false);
         if (hit instanceof BlockHitResult blockHit && hit.getType() == HitResult.Type.BLOCK) {
             BlockPos target = blockHit.getBlockPos().subtract(arena.origin());
-            String block = arena.level().getBlockState(blockHit.getBlockPos()).getBlock().getName().getString();
-            player.sendSystemMessage(Component.literal(String.format("§7准星方块: §f%s §7x=%d y=%d z=%d",
-                    block, target.getX(), target.getY(), target.getZ())));
+            Component block = arena.level().getBlockState(blockHit.getBlockPos()).getBlock().getName();
+            player.sendSystemMessage(Component.translatable("blockland.preview.target", block.copy().withStyle(ChatFormatting.WHITE),
+                    target.getX(), target.getY(), target.getZ()).withStyle(ChatFormatting.GRAY));
         }
     }
 
@@ -77,7 +77,7 @@ public final class MapPreviewService {
         Arena arena = previews.remove(player.getUUID());
         if (arena == null) return;
         services.arenas().release(arena);
-        if (toLobby) lobby.sendToLobby(player, false);
+        if (toLobby) services.players().toLobby(player);
     }
 
     public void closeAll() {

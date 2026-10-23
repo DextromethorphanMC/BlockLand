@@ -14,6 +14,8 @@ public record GameServices(
         MapLoader maps,
         ArenaService arenas,
         WorldJobScheduler jobs,
-        KitService kits
+        KitService kits,
+        MatchResultPublisher results,
+        PlayerTransit players
 ) {
 }

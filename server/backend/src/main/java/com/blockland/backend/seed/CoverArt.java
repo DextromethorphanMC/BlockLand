@@ -10,10 +10,12 @@ import java.awt.Polygon;
 import java.awt.RadialGradientPaint;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
+import java.awt.geom.Area;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
 import java.awt.geom.Path2D;
 import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
@@ -135,6 +137,217 @@ public final class CoverArt {
         return png(image);
     }
 
+    /** A glowing biohazard sign in toxic fog: dark green gradient, slime drips, spores and quarantine tape. */
+    public static byte[] infection(long seed) {
+        BufferedImage image = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = graphics(image);
+        g.setPaint(new GradientPaint(0, 0, new Color(0x030A06), W, H, new Color(0x123A1E)));
+        g.fillRect(0, 0, W, H);
+        Point2D.Float center = new Point2D.Float(W * 0.66f, H * 0.44f);
+        g.setPaint(new RadialGradientPaint(center, 210, new float[]{0f, 1f},
+                new Color[]{new Color(150, 255, 60, 120), new Color(90, 200, 40, 0)}));
+        g.fillRect(0, 0, W, H);
+
+        Random random = new Random(seed);
+        // fog banks low over the ground
+        for (int i = 0; i < 9; i++) {
+            float w = 160 + random.nextInt(160), h = 30 + random.nextInt(30);
+            g.setColor(new Color(120, 220, 90, 14 + random.nextInt(18)));
+            g.fill(new Ellipse2D.Float(random.nextInt(W) - w / 2, H * 0.62f + random.nextInt(H / 3), w, h));
+        }
+        // slime dripping from the top edge
+        for (int i = 0; i < 11; i++) {
+            float x = 8 + random.nextInt(W - 16), len = 14 + random.nextInt(70), w = 4 + random.nextInt(6);
+            g.setColor(new Color(110, 200, 40, 120 + random.nextInt(90)));
+            g.fill(new RoundRectangle2D.Float(x - w / 2, -6, w, len, w, w));
+            g.fill(new Ellipse2D.Float(x - w * 0.8f, len - w * 1.1f - 6, w * 1.6f, w * 1.8f));
+        }
+        // spores
+        for (int i = 0; i < 46; i++) {
+            float size = 1.5f + random.nextFloat() * 3.5f;
+            g.setColor(new Color(170 + random.nextInt(60), 255, 90, 40 + random.nextInt(140)));
+            g.fill(new Ellipse2D.Float(random.nextInt(W), random.nextInt(H), size, size));
+        }
+
+        Area sign = biohazard(center.x, center.y, 4.1f);
+        for (int k = 6; k >= 1; k--) {
+            g.setColor(new Color(150, 255, 60, 16));
+            g.setStroke(new BasicStroke(k * 5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g.draw(sign);
+        }
+        g.setPaint(new GradientPaint(center.x, center.y - 110, new Color(0xE6FF6A), center.x, center.y + 110, new Color(0x6CD62A)));
+        g.fill(sign);
+        g.setColor(new Color(20, 60, 10, 160));
+        g.setStroke(new BasicStroke(1.5f));
+        g.draw(sign);
+
+        tape(g, W * 0.5f, H * 0.89f, -6);
+        tape(g, W * 0.3f, H * 0.99f, 5);
+        g.dispose();
+        return png(image);
+    }
+
+    /** A shooting range at night: lane lights, human silhouette targets with hit marks, a red reticle on the nearest. */
+    public static byte[] range(long seed) {
+        BufferedImage image = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = graphics(image);
+        g.setPaint(new GradientPaint(0, 0, new Color(0x0B1220), 0, H, new Color(0x1C2A36)));
+        g.fillRect(0, 0, W, H);
+        Random random = new Random(seed);
+        float horizon = H * 0.42f;
+        // floor converging to the back wall, with lane lines
+        g.setPaint(new GradientPaint(0, horizon, new Color(0x2A3440), 0, H, new Color(0x11171E)));
+        g.fill(new Polygon(new int[]{0, W, W, 0}, new int[]{(int) horizon, (int) horizon, H, H}, 4));
+        g.setStroke(new BasicStroke(2f));
+        for (int i = -4; i <= 4; i++) {
+            g.setColor(new Color(255, 214, 90, 60));
+            g.draw(new Line2D.Double(W / 2.0 + i * 24, horizon, W / 2.0 + i * 150, H));
+        }
+        // ceiling lights
+        for (int i = 0; i < 6; i++) {
+            float x = W * (0.12f + i * 0.152f);
+            g.setPaint(new RadialGradientPaint(new Point2D.Float(x, 18), 70, new float[]{0f, 1f},
+                    new Color[]{new Color(255, 236, 190, 90), new Color(255, 236, 190, 0)}));
+            g.fillRect((int) x - 70, 0, 140, 90);
+            g.setColor(new Color(0xFFF1CF));
+            g.fill(new RoundRectangle2D.Float(x - 20, 8, 40, 5, 4, 4));
+        }
+        // silhouette targets, the far ones smaller; the reticle sits on the last (nearest right) one
+        float[][] targets = {{0.18f, 0.6f, 0.55f}, {0.38f, 0.5f, 0.38f}, {0.58f, 0.47f, 0.3f}, {0.8f, 0.56f, 0.48f}};
+        Point2D aim = new Point2D.Float(W / 2f, H / 2f);
+        for (float[] t : targets) {
+            float cx = W * t[0], base = H * t[1] + 60 * t[2], s = t[2];
+            Graphics2D d = (Graphics2D) g.create();
+            d.translate(cx, base);
+            d.scale(s, s);
+            d.setColor(new Color(0, 0, 0, 90));
+            d.fill(new Ellipse2D.Float(-60, -6, 120, 16));
+            d.setPaint(new GradientPaint(0, -230, new Color(0xF2E6C9), 0, 0, new Color(0xC9B48A)));
+            Path2D body = new Path2D.Float();
+            body.moveTo(-58, 0);
+            body.lineTo(-58, -120);
+            body.quadTo(-58, -150, -28, -156);
+            body.lineTo(28, -156);
+            body.quadTo(58, -150, 58, -120);
+            body.lineTo(58, 0);
+            body.closePath();
+            d.fill(body);
+            d.fill(new Ellipse2D.Float(-26, -214, 52, 58));
+            d.setColor(new Color(0xB33A2E));
+            d.setStroke(new BasicStroke(4f));
+            d.draw(new Ellipse2D.Float(-30, -120, 60, 60));
+            d.draw(new Ellipse2D.Float(-12, -200, 24, 26));
+            for (int k = 0; k < 5; k++) {
+                d.setColor(new Color(20, 20, 24, 220));
+                d.fill(new Ellipse2D.Float(-30 + random.nextInt(60), -150 + random.nextInt(110), 7, 7));
+            }
+            d.dispose();
+            aim = new Point2D.Float(cx, base - 185 * s);
+        }
+        crosshair(g, aim);
+        // spent casings on the floor
+        for (int i = 0; i < 9; i++) {
+            Graphics2D c = (Graphics2D) g.create();
+            c.translate(40 + random.nextInt(W - 80), H - 30 + random.nextInt(24));
+            c.rotate(random.nextDouble() * Math.PI);
+            c.setPaint(new GradientPaint(0, -3, new Color(0xF0D27A), 0, 3, new Color(0x9A7426)));
+            c.fill(new RoundRectangle2D.Float(-7, -3, 14, 6, 3, 3));
+            c.dispose();
+        }
+        g.dispose();
+        return png(image);
+    }
+
+    /** A half-built bridge of blocks reaching across a deep void towards a golden goal island, in a dusk sky. */
+    public static byte[] bridge(long seed) {
+        BufferedImage image = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = graphics(image);
+        g.setPaint(new GradientPaint(0, 0, new Color(0x2B1B4A), 0, H, new Color(0x04040A)));
+        g.fillRect(0, 0, W, H);
+        Random random = new Random(seed);
+        for (int i = 0; i < 70; i++) {
+            float size = 1 + random.nextFloat() * 2;
+            g.setColor(new Color(255, 255, 255, 40 + random.nextInt(150)));
+            g.fill(new Ellipse2D.Float(random.nextInt(W), random.nextInt((int) (H * 0.6f)), size, size));
+        }
+        // the goal island glowing on the right
+        float gx = W * 0.8f, gy = H * 0.5f;
+        g.setPaint(new RadialGradientPaint(new Point2D.Float(gx, gy), 150, new float[]{0f, 1f},
+                new Color[]{new Color(255, 205, 80, 110), new Color(255, 205, 80, 0)}));
+        g.fillRect(0, 0, W, H);
+        block(g, gx - 44, gy, 88, 18, new Color(0xF4C542), new Color(0xB8860B));
+        g.setColor(new Color(0x5B4636));
+        g.fill(new Polygon(new int[]{(int) gx - 40, (int) gx + 40, (int) gx + 12, (int) gx - 14},
+                new int[]{(int) gy + 18, (int) gy + 18, (int) gy + 70, (int) gy + 62}, 4));
+        // the spawn island on the left and the bridge growing out of it
+        float sx = W * 0.14f, sy = H * 0.62f;
+        block(g, sx - 50, sy, 100, 20, new Color(0xE8E4DA), new Color(0x8C8A86));
+        g.setColor(new Color(0x4A4A52));
+        g.fill(new Polygon(new int[]{(int) sx - 46, (int) sx + 46, (int) sx + 16, (int) sx - 18},
+                new int[]{(int) sy + 20, (int) sy + 20, (int) sy + 80, (int) sy + 72}, 4));
+        float size = 17;
+        int blocks = 13;
+        for (int i = 0; i < blocks; i++) {
+            block(g, sx + 50 + i * size, sy - i * 0.9f, size, size, new Color(0xF5F5F5), new Color(0xB9B9C0));
+        }
+        // the outline where the next block goes
+        float px = sx + 50 + blocks * size, py = sy - blocks * 0.9f;
+        g.setColor(new Color(255, 255, 255, 170));
+        g.setStroke(new BasicStroke(1.6f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 1, new float[]{4, 3}, 0));
+        g.draw(new Rectangle2D.Float(px, py, size, size));
+        // depth fog over the void
+        g.setPaint(new GradientPaint(0, H * 0.7f, new Color(10, 6, 24, 0), 0, H, new Color(10, 6, 24, 230)));
+        g.fillRect(0, (int) (H * 0.7f), W, H);
+        g.dispose();
+        return png(image);
+    }
+
+    /** The practice group: a shot-up bullseye and a staircase of blocks on a calm blue gradient. */
+    public static byte[] practice(long seed) {
+        BufferedImage image = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = graphics(image);
+        g.setPaint(new GradientPaint(0, 0, new Color(0x0E2238), W, H, new Color(0x1F4A5C)));
+        g.fillRect(0, 0, W, H);
+        Random random = new Random(seed);
+        for (int i = 0; i < 18; i++) {
+            float s = 8 + random.nextInt(18);
+            g.setColor(new Color(255, 255, 255, 10 + random.nextInt(20)));
+            g.fill(new Rectangle2D.Float(random.nextInt(W), random.nextInt(H), s, s));
+        }
+        Point2D.Float center = new Point2D.Float(W * 0.32f, H * 0.5f);
+        Color[] rings = {new Color(0xF5F1E6), new Color(0xD8402E), new Color(0xF5F1E6), new Color(0xD8402E), new Color(0xF5F1E6)};
+        for (int i = 0; i < rings.length; i++) {
+            float r = 92 - i * 18;
+            g.setColor(rings[i]);
+            g.fill(new Ellipse2D.Float(center.x - r, center.y - r, r * 2, r * 2));
+        }
+        g.setColor(new Color(0xD8402E));
+        g.fill(new Ellipse2D.Float(center.x - 8, center.y - 8, 16, 16));
+        for (int k = 0; k < 6; k++) {
+            g.setColor(new Color(20, 20, 24, 230));
+            double a = random.nextDouble() * Math.PI * 2, d = random.nextDouble() * 40;
+            g.fill(new Ellipse2D.Float((float) (center.x + Math.cos(a) * d) - 4, (float) (center.y + Math.sin(a) * d) - 4, 8, 8));
+        }
+        float size = 34, bx = W * 0.58f, by = H * 0.72f;
+        for (int col = 0; col < 4; col++) {
+            for (int row = 0; row <= col; row++) {
+                block(g, bx + col * size, by - (row + 1) * size, size, size, new Color(0x8BC34A), new Color(0x4E7A24));
+            }
+        }
+        g.dispose();
+        return png(image);
+    }
+
+    /** A block seen from the front: dark rim, shaded face, a light top edge. */
+    private static void block(Graphics2D g, float x, float y, float w, float h, Color face, Color edge) {
+        g.setColor(edge);
+        g.fill(new Rectangle2D.Float(x, y, w, h));
+        g.setPaint(new GradientPaint(x, y, face, x, y + h, face.darker()));
+        g.fill(new Rectangle2D.Float(x + 1.5f, y + 1.5f, w - 3, h - 3));
+        g.setColor(new Color(255, 255, 255, 90));
+        g.fill(new Rectangle2D.Float(x + 1.5f, y + 1.5f, w - 3, Math.max(2, h * 0.16f)));
+    }
+
     private static void island(Graphics2D g, float cx, float cy, float scale, boolean dusk) {
         int w = (int) (90 * scale), h = (int) (60 * scale);
         Polygon rock = new Polygon(new int[]{(int) cx - w / 2, (int) cx + w / 2, (int) cx + w / 6, (int) cx - w / 8},
@@ -228,6 +441,50 @@ public final class CoverArt {
         s.fill(star);
         s.setColor(new Color(255, 255, 240));
         s.fill(new Ellipse2D.Float(cx - 14, cy - 7, 28, 14));
+    }
+
+    /**
+     * The biohazard sign around (cx, cy) in units of {@code u} pixels (26 units to the tips): three crescents
+     * (outer circle minus an offset inner circle), a centre hole and ring arcs inside each crescent's mouth.
+     */
+    private static Area biohazard(float cx, float cy, float u) {
+        Area sign = new Area();
+        Area ring = new Area(circle(cx, cy, 14.5f * u));
+        ring.subtract(new Area(circle(cx, cy, 11.5f * u)));
+        for (int i = 0; i < 3; i++) {
+            double a = Math.toRadians(-90 + 120 * i);
+            float dx = (float) Math.cos(a), dy = (float) Math.sin(a);
+            Area crescent = new Area(circle(cx + dx * 11 * u, cy + dy * 11 * u, 15 * u));
+            crescent.subtract(new Area(circle(cx + dx * 15 * u, cy + dy * 15 * u, 10.5f * u)));
+            sign.add(crescent);
+            Area arc = new Area(ring);
+            arc.intersect(new Area(circle(cx + dx * 15 * u, cy + dy * 15 * u, 9.3f * u)));
+            sign.add(arc);
+        }
+        sign.subtract(new Area(circle(cx, cy, 3 * u)));
+        return sign;
+    }
+
+    private static Ellipse2D circle(float cx, float cy, float r) {
+        return new Ellipse2D.Float(cx - r, cy - r, r * 2, r * 2);
+    }
+
+    /** Yellow quarantine tape with black diagonal stripes, rotated around (cx, cy) and long enough to leave the frame. */
+    private static void tape(Graphics2D g, float cx, float cy, double angleDeg) {
+        Graphics2D t = (Graphics2D) g.create();
+        t.translate(cx, cy);
+        t.rotate(Math.toRadians(angleDeg));
+        RoundRectangle2D band = new RoundRectangle2D.Float(-W, -12, W * 2, 24, 4, 4);
+        t.setColor(new Color(0, 0, 0, 90));
+        t.fill(new RoundRectangle2D.Float(-W, -9, W * 2, 24, 4, 4));
+        t.setColor(new Color(0xF2C230));
+        t.fill(band);
+        t.clip(band);
+        t.setColor(new Color(0x1A1A14));
+        for (int x = -W - 24; x < W + 24; x += 22) {
+            t.fill(new Polygon(new int[]{x, x + 10, x + 34, x + 24}, new int[]{12, 12, -12, -12}, 4));
+        }
+        t.dispose();
     }
 
     /** Red reticle: thin outer ring, ring, split cross and centre dot. */

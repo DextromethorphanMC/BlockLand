@@ -1,5 +1,6 @@
 package com.blockland.gun;
 
+import com.blockland.combat.HitShapes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 
@@ -34,13 +35,11 @@ public final class GunMath {
     }
 
     /**
-     * Whether a hit at height {@code hitY} is on the head: the band from a little below the eyes to the top of the
-     * bounding box (scales with the entity, works for players, zombies, skeletons, villagers…).
+     * Whether a hit at height {@code hitY} on an upright entity is on the head (see {@link HitShapes#inHeadBand});
+     * hit registration itself asks {@link HitShapes}, which also knows sliding players.
      */
     public static boolean isHeadshot(Entity target, double hitY) {
-        double eye = target.getEyeY();
-        double headBottom = eye - Math.max(0.12, target.getBbHeight() * 0.12);
-        return target.getBbHeight() > 0.9 && hitY >= headBottom;
+        return HitShapes.inHeadBand(target, hitY);
     }
 
     private static long mix(long z) {

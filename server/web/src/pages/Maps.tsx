@@ -1,6 +1,6 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api } from '../api'
+import { api, mediaUrl } from '../api'
 import { confirmAction, Empty, ErrorBox, Field, Modal, PageHeader, useLoad, useToast } from '../components/ui'
 import type { GameMap } from '../types'
 
@@ -25,7 +25,7 @@ export function Maps() {
     <>
       <PageHeader
         title="地图管理"
-        subtitle="导入原版结构文件 (.nbt) 或 WorldEdit 导出的 .schem。导入时会自动识别出生点标记方块；各游戏类型会读取自己需要的内容（如空岛战争识别箱子坐标）。"
+        subtitle="导入原版结构文件 (.nbt) 或 WorldEdit 导出的 .schem。导入时会自动识别出生点标记方块；各游戏类型会读取自己需要的内容（如空岛战争识别箱子坐标）。封面会显示在游戏大厅的地图选择中。"
         actions={
           <button className="btn btn-primary" onClick={() => setUploading(true)}>
             ⬆ 导入地图
@@ -37,6 +37,7 @@ export function Maps() {
       <table className="table">
         <thead>
           <tr>
+            <th>封面</th>
             <th>名称</th>
             <th>类型</th>
             <th>尺寸 (X×Y×Z)</th>
@@ -48,6 +49,9 @@ export function Maps() {
         <tbody>
           {maps.data?.map((m) => (
             <tr key={m.id}>
+              <td className="map-cover-cell">
+                <MapCover map={m} onChanged={maps.reload} />
+              </td>
               <td>
                 <Link to={`/maps/${m.id}`}>
                   <strong>{m.name}</strong>
@@ -78,6 +82,60 @@ export function Maps() {
       </table>
       {uploading && <UploadDialog types={types.data ?? []} onClose={() => setUploading(false)} />}
     </>
+  )
+}
+
+/** Cover thumbnail: click to upload (scaled to 512×288 by the backend), × to remove. */
+function MapCover({ map, onChanged }: { map: GameMap; onChanged: () => void }) {
+  const toast = useToast()
+  const input = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const url = mediaUrl('map', map.id, map.coverVersion)
+
+  const upload = async (file: File | null) => {
+    if (!file) return
+    setBusy(true)
+    try {
+      await api.uploadMapCover(map.id, file)
+      toast.ok(`已更新「${map.name}」的封面`)
+      onChanged()
+    } catch (e) {
+      toast.error(e)
+    } finally {
+      setBusy(false)
+      if (input.current) input.current.value = ''
+    }
+  }
+
+  const remove = async (e: MouseEvent) => {
+    e.stopPropagation()
+    if (!confirmAction(`移除地图「${map.name}」的封面？`)) return
+    try {
+      await api.removeMapCover(map.id)
+      toast.ok('已移除封面')
+      onChanged()
+    } catch (err) {
+      toast.error(err)
+    }
+  }
+
+  return (
+    <div
+      className="map-cover"
+      role="button"
+      tabIndex={0}
+      title="点击上传封面（建议 16:9，如 1024×576）"
+      onClick={() => !busy && input.current?.click()}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && !busy && input.current?.click()}
+    >
+      {busy ? <span>上传中…</span> : url ? <img src={url} alt="" /> : <span>+ 封面</span>}
+      {url && !busy && (
+        <button type="button" className="map-cover-remove" aria-label="移除封面" title="移除封面" onClick={remove}>
+          ×
+        </button>
+      )}
+      <input ref={input} type="file" accept="image/*" hidden onChange={(e) => upload(e.target.files?.[0] ?? null)} />
+    </div>
   )
 }
 

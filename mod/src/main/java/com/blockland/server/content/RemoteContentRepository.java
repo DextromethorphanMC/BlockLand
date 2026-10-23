@@ -4,6 +4,7 @@ import com.blockland.BlockLand;
 import com.blockland.server.content.model.MapDef;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 
 import java.io.IOException;
 import java.net.URI;
@@ -152,6 +153,16 @@ public final class RemoteContentRepository implements ContentRepository {
         HttpRequest request = request("/api/server/registry/items")
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(itemIds), StandardCharsets.UTF_8))
+                .build();
+        http.sendAsync(request, HttpResponse.BodyHandlers.discarding())
+                .exceptionally(error -> null);
+    }
+
+    @Override
+    public void publishTypeRegistry(String typeId, JsonElement data) {
+        HttpRequest request = request("/api/server/registry/game-types/" + java.net.URLEncoder.encode(typeId, StandardCharsets.UTF_8))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(data), StandardCharsets.UTF_8))
                 .build();
         http.sendAsync(request, HttpResponse.BodyHandlers.discarding())
                 .exceptionally(error -> null);

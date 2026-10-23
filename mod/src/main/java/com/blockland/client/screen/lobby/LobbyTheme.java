@@ -9,6 +9,8 @@ public final class LobbyTheme {
     public static final int CARD_HOVER = 0xFF1B2537;
     public static final int CARD_SELECTED = 0xFF1F2B40;
     public static final int LINE = 0x22FFFFFF;
+    /** The one edge colour every card shares (bar, hover frame); only the selected card switches to the accent. */
+    public static final int NEUTRAL_EDGE = 0xFFB8C2D3;
 
     public static final int TEXT = 0xFFF3F6FB;
     public static final int MUTED = 0xFF98A4B8;

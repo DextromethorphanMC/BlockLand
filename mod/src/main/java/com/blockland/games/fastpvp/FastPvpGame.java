@@ -6,7 +6,9 @@ import com.blockland.server.content.model.MapDef;
 import com.blockland.server.game.GameServices;
 import com.blockland.server.game.MatchRoster;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.GameType;
 
 import java.util.List;
 
@@ -20,8 +22,8 @@ final class FastPvpGame extends TeamArenaGame {
     }
 
     @Override
-    protected String gameName() {
-        return "快速PVP";
+    protected Component gameName() {
+        return Component.translatable("blockland.game.fastpvp");
     }
 
     @Override
@@ -33,6 +35,11 @@ final class FastPvpGame extends TeamArenaGame {
     @Override
     protected boolean dropsItemsOnElimination() {
         return false;
+    }
+
+    @Override
+    protected GameType playingGameMode() {
+        return settings.allowBlockBreak() || settings.allowBlockPlace() ? GameType.SURVIVAL : GameType.ADVENTURE;
     }
 
     @Override

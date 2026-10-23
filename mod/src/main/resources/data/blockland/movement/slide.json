@@ -1,0 +1,35 @@
+{
+  "entrySpeed": 0.2,
+  "boost": 1.45,
+  "minStartSpeed": 0.4,
+  "maxStartSpeed": 0.56,
+  "holdTicks": 3,
+  "friction": 0.92,
+  "endSpeed": 0.17,
+  "maxTicks": 22,
+  "airTicks": 3,
+  "cooldownTicks": 12,
+  "steering": 1.5,
+  "maxSteer": 15,
+  "eyeHeight": 0.97,
+  "camera": {
+    "roll": 4.0,
+    "fovKick": 0.05
+  },
+  "pose": {
+    "hipHeight": 0.13,
+    "lean": 25,
+    "forward": 0.25
+  },
+  "hitBody": {
+    "back": 0.2,
+    "forward": 1.0,
+    "height": 0.85,
+    "halfWidth": 0.3
+  },
+  "hitHead": {
+    "back": 0.15,
+    "height": 0.98,
+    "half": 0.25
+  }
+}

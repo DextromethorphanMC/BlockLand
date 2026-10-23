@@ -1,10 +1,19 @@
 package com.blockland.melee;
 
+import com.blockland.common.Handling;
+import com.blockland.craft.CraftCatalog;
+import com.blockland.craft.CraftData;
+import com.blockland.craft.Craftable;
+import net.minecraft.network.chat.Component;
+
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Knife definitions as written in {@code data/blockland/melee/knives.json} (read by Gson; field names = JSON keys).
- * Everything that makes one knife differ from another lives here: the two attacks, timing, model and sounds.
+ * Everything that makes one knife differ from another lives here: the two attacks, timing, model, sounds and its 工匠
+ * (craft) options — skins and slots for universal attachments (a charm).
  */
 public final class MeleeData {
     private MeleeData() {
@@ -54,8 +63,10 @@ public final class MeleeData {
         public String idle = "idle";
         public String draw = "draw";
         public String inspect = "inspect";
-        /** Optional looping sprint carry. */
+        /** Optional loops: walk, the running carry and the tactical sprint. */
+        public String walk = "walk";
         public String sprint = "sprint";
+        public String tacSprint = "tac_sprint";
     }
 
     /** Sound event ids (any namespace). */
@@ -69,7 +80,7 @@ public final class MeleeData {
         public String kill = "blockland:gun.kill";
     }
 
-    public static final class Knife {
+    public static final class Knife implements Craftable {
         public String id;
         public String name = "";
         public String description = "";
@@ -82,9 +93,63 @@ public final class MeleeData {
         public Attack heavy = new Attack();
         public Anims anims = new Anims();
         public Sounds sounds = new Sounds();
+        /** First-person feel (weight, sway, sprint-out time…). */
+        public Handling handling = new Handling();
+        /** Cosmetic skins (per-material display colours / textures); {@code default} is added when missing. */
+        public Map<String, CraftData.Skin> skins = new LinkedHashMap<>();
+        /** Craft slots in display order (e.g. {@code charm} at {@code mount_charm}). */
+        public Map<String, CraftData.SlotDef> slots = new LinkedHashMap<>();
+
+        private transient List<Slot> resolvedSlots;
 
         public Attack attack(boolean heavy) {
             return heavy ? this.heavy : this.light;
+        }
+
+        /** Resolves the declared slots (called by the catalogue at load). */
+        void resolveSlots() {
+            resolvedSlots = CraftCatalog.resolveAll(slots);
+        }
+
+        @Override
+        public String id() {
+            return id;
+        }
+
+        @Override
+        public Kind kind() {
+            return Kind.KNIFE;
+        }
+
+        @Override
+        public Component displayName() {
+            return CraftCatalog.text("item.blockland." + id, name);
+        }
+
+        @Override
+        public String model() {
+            return model;
+        }
+
+        @Override
+        public String modelRoot() {
+            return "knife";
+        }
+
+        @Override
+        public List<Slot> slots() {
+            return resolvedSlots == null ? List.of() : resolvedSlots;
+        }
+
+        @Override
+        public Map<String, CraftData.Skin> skins() {
+            return skins;
+        }
+
+        @Override
+        public OptionInfo describe(String slot, String option) {
+            return slot(slot).map(s -> CraftCatalog.describeAttachment(this, s, option))
+                    .orElseGet(() -> new OptionInfo(Component.literal(option), Component.empty(), "common"));
         }
     }
 }

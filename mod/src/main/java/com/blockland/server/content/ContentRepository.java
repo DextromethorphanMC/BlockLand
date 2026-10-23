@@ -1,6 +1,7 @@
 package com.blockland.server.content;
 
 import com.blockland.server.content.model.MapDef;
+import com.google.gson.JsonElement;
 
 import java.nio.file.Path;
 import java.util.Collection;
@@ -27,4 +28,7 @@ public interface ContentRepository {
 
     /** Best-effort upload of registry data (e.g. item ids) so the admin UI can offer autocomplete. */
     void publishItemRegistry(Collection<String> itemIds);
+
+    /** Tells the backend what a game type offers on this server (e.g. the infection monsters), for its admin UI. */
+    void publishTypeRegistry(String typeId, JsonElement data);
 }

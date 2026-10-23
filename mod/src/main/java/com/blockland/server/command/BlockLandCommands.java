@@ -1,6 +1,5 @@
 package com.blockland.server.command;
 
-import com.blockland.network.BLNetwork;
 import com.blockland.server.BlockLandServer;
 import com.blockland.server.config.BlockLandConfig;
 import com.blockland.server.content.ContentSnapshot;
@@ -37,21 +36,23 @@ public final class BlockLandCommands {
         };
 
         LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("bl")
+                // the lobby has no world: a player standing in the world (an operator) goes back to it
                 .then(Commands.literal("lobby").executes(ctx -> run(ctx, server, (s, p) -> {
-                    BLNetwork.sendTo(p, s.lobby.buildState(p, true));
+                    if (s.games.isPlaying(p)) s.games.leave(p, false);
+                    else s.sessions.toLobby(p);
                     return 1;
                 })))
                 .then(Commands.literal("join").then(Commands.argument("mode", StringArgumentType.word()).suggests(modeIds)
                         .executes(ctx -> run(ctx, server, (s, p) -> {
-                            s.lobby.joinQueue(p, StringArgumentType.getString(ctx, "mode"), "", List.of());
+                            s.lobby.joinQueue(p.getUUID(), StringArgumentType.getString(ctx, "mode"), "", "", List.of());
                             return s.matchmaking.ticketOf(p.getUUID()) != null ? 1 : 0;
                         }))))
                 .then(Commands.literal("leave").executes(ctx -> run(ctx, server, (s, p) -> {
                     if (s.games.isPlaying(p)) {
                         s.games.leave(p, false);
                     } else {
-                        s.matchmaking.leave(p, true);
-                        s.lobby.sendToLobby(p, true);
+                        s.matchmaking.leave(p.getUUID(), true);
+                        s.sessions.toLobby(p);
                     }
                     return 1;
                 })))
@@ -74,8 +75,8 @@ public final class BlockLandCommands {
                 .then(Commands.literal("start").requires(src -> src.hasPermission(2))
                         .then(Commands.argument("mode", StringArgumentType.word()).suggests(modeIds).executes(ctx -> {
                             BlockLandServer s = require(ctx, server);
-                            String error = s.matchmaking.forceStart(StringArgumentType.getString(ctx, "mode"));
-                            if (error != null) ctx.getSource().sendFailure(Component.literal(error));
+                            Component error = s.matchmaking.forceStart(StringArgumentType.getString(ctx, "mode"));
+                            if (error != null) ctx.getSource().sendFailure(error);
                             else ctx.getSource().sendSuccess(() -> Component.literal("§a已强制开始对局"), true);
                             return error == null ? 1 : 0;
                         })))
@@ -98,10 +99,10 @@ public final class BlockLandCommands {
                             List<java.util.UUID> order = s.matchmaking.order(modeId);
                             StringBuilder text = new StringBuilder("§b" + modeId + " §7队列（" + order.size() + "，按开局顺序）:");
                             for (int i = 0; i < order.size(); i++) {
-                                ServerPlayer p = s.server.getPlayerList().getPlayer(order.get(i));
+                                String name = s.sessions.name(order.get(i));
                                 text.append("\n §7").append(i + 1).append(". ")
                                         .append(s.matchmaking.hasPriority(order.get(i)) ? "§6★ " : "§f")
-                                        .append(p == null ? order.get(i).toString() : p.getGameProfile().getName());
+                                        .append(name == null ? order.get(i).toString() : name);
                             }
                             ctx.getSource().sendSuccess(() -> Component.literal(text.toString()), false);
                             return order.size();
@@ -126,7 +127,7 @@ public final class BlockLandCommands {
                                         p.sendSystemMessage(Component.literal("§c对局中无法预览地图"));
                                         return 0;
                                     }
-                                    s.matchmaking.leave(p, true);
+                                    s.matchmaking.leave(p.getUUID(), true);
                                     s.previews.open(p, map);
                                     return 1;
                                 }))))

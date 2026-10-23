@@ -49,6 +49,8 @@ public class FastPvpDemoSeed implements DemoSeed {
             settings.put("endingSeconds", 5);
             settings.put("allowBlockBreak", false);
             settings.put("allowBlockPlace", false);
+            // the classic sword duel stays on its feet; the gun modes slide
+            settings.put("allowSlide", false);
             List<KitItem> kit = List.of(
                     new KitItem("minecraft:iron_helmet", 1, "head"),
                     new KitItem("minecraft:iron_chestplate", 1, "chest"),

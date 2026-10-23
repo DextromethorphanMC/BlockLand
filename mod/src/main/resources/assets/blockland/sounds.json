@@ -161,5 +161,316 @@
       "blockland:knife/hit_wall_3"
     ],
     "subtitle": "subtitles.blockland.knife.hit_wall"
+  },
+  "gun.ak47.fire": {
+    "sounds": [
+      "blockland:gun/ak47_fire_1",
+      "blockland:gun/ak47_fire_2",
+      "blockland:gun/ak47_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.ak47.fire"
+  },
+  "gun.ak47.fire_far": {
+    "sounds": [
+      "blockland:gun/ak47_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.ak47.fire_far"
+  },
+  "gun.bolt_back": {
+    "sounds": [
+      "blockland:gun/bolt_back"
+    ],
+    "subtitle": "subtitles.blockland.gun.bolt_back"
+  },
+  "gun.bolt_forward": {
+    "sounds": [
+      "blockland:gun/bolt_forward"
+    ],
+    "subtitle": "subtitles.blockland.gun.bolt_forward"
+  },
+  "gun.suppressed": {
+    "sounds": [
+      "blockland:gun/suppressed_1",
+      "blockland:gun/suppressed_2",
+      "blockland:gun/suppressed_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.suppressed"
+  },
+  "gun.awp.fire": {
+    "sounds": [
+      "blockland:gun/awp_fire_1",
+      "blockland:gun/awp_fire_2",
+      "blockland:gun/awp_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.awp.fire"
+  },
+  "gun.awp.fire_far": {
+    "sounds": [
+      "blockland:gun/awp_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.awp.fire_far"
+  },
+  "gun.awp.bolt_up": {
+    "sounds": [
+      "blockland:gun/awp_bolt_up"
+    ],
+    "subtitle": "subtitles.blockland.gun.awp.bolt_up"
+  },
+  "gun.awp.bolt_back": {
+    "sounds": [
+      "blockland:gun/awp_bolt_back"
+    ],
+    "subtitle": "subtitles.blockland.gun.awp.bolt_back"
+  },
+  "gun.awp.bolt_forward": {
+    "sounds": [
+      "blockland:gun/awp_bolt_forward"
+    ],
+    "subtitle": "subtitles.blockland.gun.awp.bolt_forward"
+  },
+  "gun.awp.bolt_down": {
+    "sounds": [
+      "blockland:gun/awp_bolt_down"
+    ],
+    "subtitle": "subtitles.blockland.gun.awp.bolt_down"
+  },
+  "movement.slide": {
+    "sounds": [
+      "blockland:movement/slide_1",
+      "blockland:movement/slide_2",
+      "blockland:movement/slide_3"
+    ],
+    "subtitle": "subtitles.blockland.movement.slide"
+  },
+  "gun.tommy.fire": {
+    "sounds": [
+      "blockland:gun/tommy_fire_1",
+      "blockland:gun/tommy_fire_2",
+      "blockland:gun/tommy_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.tommy.fire"
+  },
+  "gun.tommy.fire_far": {
+    "sounds": [
+      "blockland:gun/tommy_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.tommy.fire_far"
+  },
+  "gun.ks3.fire": {
+    "sounds": [
+      "blockland:gun/ks3_fire_1",
+      "blockland:gun/ks3_fire_2",
+      "blockland:gun/ks3_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.ks3.fire"
+  },
+  "gun.ks3.fire_far": {
+    "sounds": [
+      "blockland:gun/ks3_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.ks3.fire_far"
+  },
+  "gun.pump_back": {
+    "sounds": [
+      "blockland:gun/pump_back"
+    ],
+    "subtitle": "subtitles.blockland.gun.pump_back"
+  },
+  "gun.pump_forward": {
+    "sounds": [
+      "blockland:gun/pump_forward"
+    ],
+    "subtitle": "subtitles.blockland.gun.pump_forward"
+  },
+  "gun.shell_in": {
+    "sounds": [
+      "blockland:gun/shell_in_1",
+      "blockland:gun/shell_in_2",
+      "blockland:gun/shell_in_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.shell_in"
+  },
+  "gun.usp.fire": {
+    "sounds": [
+      "blockland:gun/usp_fire_1",
+      "blockland:gun/usp_fire_2",
+      "blockland:gun/usp_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.usp.fire"
+  },
+  "gun.usp.fire_cerberus": {
+    "sounds": [
+      "blockland:gun/usp_cerberus_1",
+      "blockland:gun/usp_cerberus_2",
+      "blockland:gun/usp_cerberus_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.usp.fire_cerberus"
+  },
+  "gun.rpd.fire": {
+    "sounds": [
+      "blockland:gun/rpd_fire_1",
+      "blockland:gun/rpd_fire_2",
+      "blockland:gun/rpd_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.rpd.fire"
+  },
+  "gun.rpd.fire_far": {
+    "sounds": [
+      "blockland:gun/rpd_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.rpd.fire_far"
+  },
+  "gun.cover_open": {
+    "sounds": [
+      "blockland:gun/cover_open"
+    ],
+    "subtitle": "subtitles.blockland.gun.cover_open"
+  },
+  "gun.cover_close": {
+    "sounds": [
+      "blockland:gun/cover_close"
+    ],
+    "subtitle": "subtitles.blockland.gun.cover_close"
+  },
+  "gun.belt": {
+    "sounds": [
+      "blockland:gun/belt"
+    ],
+    "subtitle": "subtitles.blockland.gun.belt"
+  },
+  "equipment.equip": {
+    "sounds": [
+      "blockland:equipment/equip_1",
+      "blockland:equipment/equip_2"
+    ],
+    "subtitle": "subtitles.blockland.equipment.equip"
+  },
+  "equipment.pin": {
+    "sounds": [
+      "blockland:equipment/pin_1",
+      "blockland:equipment/pin_2"
+    ],
+    "subtitle": "subtitles.blockland.equipment.pin"
+  },
+  "equipment.spoon": {
+    "sounds": [
+      "blockland:equipment/spoon"
+    ],
+    "subtitle": "subtitles.blockland.equipment.spoon"
+  },
+  "equipment.throw": {
+    "sounds": [
+      "blockland:equipment/throw_1",
+      "blockland:equipment/throw_2"
+    ],
+    "subtitle": "subtitles.blockland.equipment.throw"
+  },
+  "equipment.lob": {
+    "sounds": [
+      "blockland:equipment/lob"
+    ],
+    "subtitle": "subtitles.blockland.equipment.lob"
+  },
+  "equipment.bounce": {
+    "sounds": [
+      "blockland:equipment/bounce_1",
+      "blockland:equipment/bounce_2",
+      "blockland:equipment/bounce_3"
+    ],
+    "subtitle": "subtitles.blockland.equipment.bounce"
+  },
+  "equipment.frag_explode": {
+    "sounds": [
+      "blockland:equipment/frag_explode_1",
+      "blockland:equipment/frag_explode_2"
+    ],
+    "subtitle": "subtitles.blockland.equipment.frag_explode"
+  },
+  "equipment.frag_explode_far": {
+    "sounds": [
+      "blockland:equipment/frag_explode_far"
+    ],
+    "subtitle": "subtitles.blockland.equipment.frag_explode_far"
+  },
+  "equipment.flash_bang": {
+    "sounds": [
+      "blockland:equipment/flash_bang"
+    ],
+    "subtitle": "subtitles.blockland.equipment.flash_bang"
+  },
+  "equipment.flash_ring": {
+    "sounds": [
+      "blockland:equipment/flash_ring"
+    ],
+    "subtitle": "subtitles.blockland.equipment.flash_ring"
+  },
+  "equipment.smoke_pop": {
+    "sounds": [
+      "blockland:equipment/smoke_pop"
+    ],
+    "subtitle": "subtitles.blockland.equipment.smoke_pop"
+  },
+  "equipment.smoke_hiss": {
+    "sounds": [
+      "blockland:equipment/smoke_hiss"
+    ],
+    "subtitle": "subtitles.blockland.equipment.smoke_hiss"
+  },
+  "equipment.molotov_light": {
+    "sounds": [
+      "blockland:equipment/molotov_light"
+    ],
+    "subtitle": "subtitles.blockland.equipment.molotov_light"
+  },
+  "equipment.molotov_shatter": {
+    "sounds": [
+      "blockland:equipment/molotov_shatter"
+    ],
+    "subtitle": "subtitles.blockland.equipment.molotov_shatter"
+  },
+  "equipment.fire_loop": {
+    "sounds": [
+      "blockland:equipment/fire_loop"
+    ],
+    "subtitle": "subtitles.blockland.equipment.fire_loop"
+  },
+  "equipment.knife_throw": {
+    "sounds": [
+      "blockland:equipment/knife_throw_1",
+      "blockland:equipment/knife_throw_2"
+    ],
+    "subtitle": "subtitles.blockland.equipment.knife_throw"
+  },
+  "equipment.knife_hit_flesh": {
+    "sounds": [
+      "blockland:equipment/knife_hit_flesh_1",
+      "blockland:equipment/knife_hit_flesh_2"
+    ],
+    "subtitle": "subtitles.blockland.equipment.knife_hit_flesh"
+  },
+  "equipment.knife_hit_block": {
+    "sounds": [
+      "blockland:equipment/knife_hit_block_1",
+      "blockland:equipment/knife_hit_block_2"
+    ],
+    "subtitle": "subtitles.blockland.equipment.knife_hit_block"
+  },
+  "equipment.adrenaline_cap": {
+    "sounds": [
+      "blockland:equipment/adrenaline_cap"
+    ],
+    "subtitle": "subtitles.blockland.equipment.adrenaline_cap"
+  },
+  "equipment.adrenaline_inject": {
+    "sounds": [
+      "blockland:equipment/adrenaline_inject"
+    ],
+    "subtitle": "subtitles.blockland.equipment.adrenaline_inject"
+  },
+  "equipment.heartbeat": {
+    "sounds": [
+      "blockland:equipment/heartbeat"
+    ],
+    "subtitle": "subtitles.blockland.equipment.heartbeat"
   }
 }

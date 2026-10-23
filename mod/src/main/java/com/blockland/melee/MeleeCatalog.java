@@ -1,6 +1,9 @@
 package com.blockland.melee;
 
 import com.blockland.BlockLand;
+import com.blockland.craft.CraftData;
+import com.blockland.craft.Craftable;
+import com.blockland.craft.SkinLibrary;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -31,7 +34,18 @@ public final class MeleeCatalog {
     }
 
     private MeleeCatalog(File file) {
-        file.knives.forEach((id, knife) -> knife.id = id);
+        file.knives.forEach((id, knife) -> {
+            knife.id = id;
+            knife.skins.forEach((skinId, skin) -> skin.id = skinId);
+            if (!knife.skins.containsKey("default")) {
+                CraftData.Skin standard = new CraftData.Skin();
+                standard.id = "default";
+                standard.name = "标准";
+                knife.skins.put("default", standard);
+            }
+            SkinLibrary.get().addTo(Craftable.Kind.KNIFE, id, knife.skins);
+            knife.resolveSlots();
+        });
         this.knives = Collections.unmodifiableMap(file.knives);
         knives.values().forEach(knife -> {
             for (MeleeData.Attack attack : new MeleeData.Attack[]{knife.light, knife.heavy}) {

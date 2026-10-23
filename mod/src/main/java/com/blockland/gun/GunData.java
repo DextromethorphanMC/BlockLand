@@ -1,12 +1,21 @@
 package com.blockland.gun;
 
+import com.blockland.common.Handling;
+import com.blockland.craft.CraftCatalog;
+import com.blockland.craft.CraftData;
+import com.blockland.craft.Craftable;
+import net.minecraft.network.chat.Component;
+
+import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Gun definitions as written in {@code data/blockland/guns/guns.json} (read by Gson; field names = JSON keys).
- * Everything that makes one gun differ from another lives here: ammo, magazines, attachments, skins, handling.
+ * Everything that makes one gun differ from another lives here: ammo, magazines, slots, skins, handling. The
+ * attachments that go into the slots are universal (craft/attachments.json, {@link CraftData.Attachment}).
  */
 public final class GunData {
     private GunData() {
@@ -39,48 +48,6 @@ public final class GunData {
         public String node = "";
         public float reloadTimeScale = 1;
         public float adsTimeScale = 1;
-    }
-
-    public static final class Sight {
-        public String id;
-        public String name = "";
-        public String description = "";
-        /** Eye-point node used when aiming down this sight. */
-        public String aimNode = "aim_iron";
-        /** FOV divisor while aiming (1.25 = 25% zoom). */
-        public float zoom = 1.1f;
-        public float adsTimeScale = 1;
-        /** Viewmodel nodes shown with this sight. */
-        public List<String> nodes = List.of();
-    }
-
-    public static final class Laser {
-        public String id;
-        public String name = "";
-        public String description = "";
-        /** Beam colour, {@code #RRGGBB}; empty = no beam. */
-        public String color = "";
-        public float hipSpreadScale = 1;
-        public List<String> nodes = List.of();
-
-        public boolean hasBeam() {
-            return !color.isEmpty();
-        }
-
-        public int argb() {
-            return color.isEmpty() ? 0 : 0xFF000000 | Integer.parseInt(color.substring(1), 16);
-        }
-    }
-
-    /** A cosmetic variant: per-material colour multipliers and/or texture replacements. */
-    public static final class Skin {
-        public String id;
-        public String name = "";
-        public String rarity = "common";
-        /** material name → linear RGB multiplier */
-        public Map<String, float[]> tints = new LinkedHashMap<>();
-        /** material name → texture path under {@code assets/blockland/} */
-        public Map<String, String> textures = new LinkedHashMap<>();
     }
 
     public static final class Falloff {
@@ -117,6 +84,42 @@ public final class GunData {
         /** Seconds for a reload with rounds left / with an empty magazine. */
         public float tactical = 1.8f;
         public float empty = 2.2f;
+        /**
+         * {@code magazine} (default: a magazine swap, every round at once) or {@code shell} (tube magazines, asset spec
+         * §25: rounds go in one at a time, the reload can be interrupted by firing once a round is in).
+         */
+        public String mode = "magazine";
+        /** Shell mode: seconds to get ready (clip {@code reload_start}) … */
+        public float start = 0.45f;
+        /** … per round loaded ({@code reload_shell}, the round counts at its end) … */
+        public float shell = 0.5f;
+        /** … and to finish ({@code reload_end}, or {@code reload_end_empty} — which also chambers a round — after an empty start). */
+        public float end = 0.4f;
+        public float endEmpty = 0.75f;
+
+        public boolean shellMode() {
+            return "shell".equalsIgnoreCase(mode);
+        }
+    }
+
+    /**
+     * A pair of guns, one in each hand (asset spec §26). The model repeats every node of the right gun ({@code gun},
+     * {@code slide}, {@code muzzle}, {@code mount_barrel} …) for the left one with {@link #suffix}; magazines, the slide
+     * lock and attachments at mounts apply to both. No sights: the use key fires both guns at once ({@link #volley}).
+     * Rounds are counted for the pair (the magazine's capacity is both magazines).
+     */
+    public static final class Dual {
+        public String suffix = "_L";
+        /** The use key fires both guns at once (two rounds) instead of aiming. */
+        public boolean volley = true;
+        /** Spread multiplier of a volley's two shots. */
+        public float volleySpread = 1.35f;
+        /** Fire-rate credits a volley costs (the server's limit; one shot costs 1). */
+        public float volleyCost = 2;
+        /** Clips of the left gun's shot (and its last round) and of a volley. */
+        public String fireLeft = "fire_L";
+        public String fireLastLeft = "fire_last_L";
+        public String fireBoth = "fire_both";
     }
 
     /** Animation names in the gun's GLB (see tools/assets/VIEWMODEL_SPEC.md). */
@@ -128,8 +131,15 @@ public final class GunData {
         public String reload = "reload";
         public String reloadEmpty = "reload_empty";
         public String inspect = "inspect";
-        /** Optional looping sprint carry; the runtime poses one procedurally when the model has none. */
+        /** Optional loops (spec §17): walk, the lowered running carry and the raised tactical sprint. */
+        public String walk = "walk";
         public String sprint = "sprint";
+        public String tacSprint = "tac_sprint";
+        /** Shell-mode reloads (spec §25): start, one round, finish, finish after an empty start (chambers a round). */
+        public String reloadStart = "reload_start";
+        public String reloadShell = "reload_shell";
+        public String reloadEnd = "reload_end";
+        public String reloadEndEmpty = "reload_end_empty";
     }
 
     public static final class Sounds {
@@ -158,7 +168,7 @@ public final class GunData {
         }
     }
 
-    public static final class Gun {
+    public static final class Gun implements Craftable {
         public String id;
         public String name = "";
         public String description = "";
@@ -167,10 +177,27 @@ public final class GunData {
         public String model = "";
         public String ammo = "";
         public List<String> magazines = List.of();
-        public List<String> sights = List.of("iron");
-        public List<String> lasers = List.of("none");
+        /**
+         * Craft slots in display order (optic, barrel, laser, magazine, stock, charm …): mount node, default option,
+         * optional option list (default: every attachment of the slot's kind) and nodes hidden while filled. A
+         * {@code magazine} entry only places the magazine slot; its options are {@link #magazines}.
+         */
+        public Map<String, CraftData.SlotDef> slots = new LinkedHashMap<>();
         /** Supported fire modes, the first is the default ("semi", "auto"); several = select fire. */
         public List<String> fireModes = List.of("semi");
+        /**
+         * Bolt action (asset spec §23): after every shot the sight comes down while the fire clip cycles the bolt and
+         * goes up again if aim is still held. Presentation only; {@link #rpm} stays the server's fire-rate limit.
+         */
+        public boolean boltAction = false;
+        /**
+         * Clip event that throws out the empty case (a bolt gun ejects when its bolt comes back, in the fire clip and the
+         * empty reload); empty = at the shot.
+         */
+        public String ejectEvent = "";
+        /** Two guns, one per hand (asset spec §26); null = a single gun. */
+        @Nullable
+        public Dual dual;
         public float rpm = 400;
         public float damageScale = 1;
         public float range = 80;
@@ -183,7 +210,9 @@ public final class GunData {
         public Anims anims = new Anims();
         public Sounds sounds = new Sounds();
         public SlideLock slideLock = new SlideLock();
-        public Map<String, Skin> skins = new LinkedHashMap<>();
+        public Map<String, CraftData.Skin> skins = new LinkedHashMap<>();
+        /** First-person feel (weight, sway, sprint-out time…). */
+        public Handling handling = new Handling();
 
         public FireMode mode() {
             return fireModes.isEmpty() ? FireMode.SEMI : FireMode.parse(fireModes.get(0));
@@ -198,16 +227,97 @@ public final class GunData {
             return 60f / Math.max(1, rpm);
         }
 
+        public boolean isDual() {
+            return dual != null;
+        }
+
+        /** Whether the use key raises the sights (dual guns fire a volley with it instead). */
+        public boolean canAim() {
+            return dual == null;
+        }
+
         public String defaultMagazine() {
             return magazines.isEmpty() ? "" : magazines.get(0);
         }
 
-        public String defaultSight() {
-            return sights.isEmpty() ? "iron" : sights.get(0);
+        // ---- craft ------------------------------------------------------------------------------------
+
+        /** The magazine slot's id in builds. */
+        public static final String MAGAZINE_SLOT = "magazine";
+
+        private transient List<Slot> resolvedSlots;
+
+        /** Resolves the declared slots (called by the catalogue once the magazines are known). */
+        void resolveSlots(Map<String, Magazine> catalogMagazines) {
+            List<Slot> list = new ArrayList<>();
+            boolean magazinePlaced = false;
+            for (Map.Entry<String, CraftData.SlotDef> entry : slots.entrySet()) {
+                if (entry.getKey().equals(MAGAZINE_SLOT)) {
+                    list.add(magazineSlot(catalogMagazines));
+                    magazinePlaced = true;
+                } else {
+                    list.add(CraftCatalog.resolve(entry.getKey(), entry.getValue()));
+                }
+            }
+            if (!magazinePlaced && !magazines.isEmpty()) list.add(magazineSlot(catalogMagazines));
+            resolvedSlots = List.copyOf(list);
         }
 
-        public String defaultLaser() {
-            return lasers.isEmpty() ? "none" : lasers.get(0);
+        private Slot magazineSlot(Map<String, Magazine> catalogMagazines) {
+            Map<String, String> nodes = new LinkedHashMap<>();
+            for (String id : magazines) {
+                Magazine magazine = catalogMagazines.get(id);
+                if (magazine != null && !magazine.node.isEmpty()) nodes.put(id, magazine.node);
+            }
+            return new Slot(MAGAZINE_SLOT, "", defaultMagazine(), magazines, List.of(), nodes, "");
+        }
+
+        @Override
+        public String id() {
+            return id;
+        }
+
+        @Override
+        public Kind kind() {
+            return Kind.GUN;
+        }
+
+        @Override
+        public Component displayName() {
+            return CraftCatalog.text("item.blockland." + id, name);
+        }
+
+        @Override
+        public String model() {
+            return model;
+        }
+
+        @Override
+        public String modelRoot() {
+            return "gun";
+        }
+
+        @Override
+        public List<Slot> slots() {
+            return resolvedSlots == null ? List.of() : resolvedSlots;
+        }
+
+        @Override
+        public Map<String, CraftData.Skin> skins() {
+            return skins;
+        }
+
+        @Override
+        public OptionInfo describe(String slot, String option) {
+            if (slot.equals(MAGAZINE_SLOT)) {
+                Magazine magazine = GunCatalog.get().magazine(option);
+                if (magazine == null) return new OptionInfo(Component.literal(option), Component.empty(), "common");
+                return new OptionInfo(Component.translatable("blockland.craft.magazine_name",
+                        CraftCatalog.text("blockland.magazine." + option, magazine.name), magazine.capacity),
+                        CraftCatalog.text("blockland.magazine." + option + ".desc", magazine.description), "common");
+            }
+            return slot(slot).map(s -> CraftCatalog.describeAttachment(this, s, option))
+                    .orElseGet(() -> new OptionInfo(Component.literal(option), Component.empty(), "common"));
         }
     }
 }

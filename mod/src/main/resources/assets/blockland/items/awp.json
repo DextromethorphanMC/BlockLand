@@ -1,0 +1,121 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "gui",
+          "ground",
+          "fixed"
+        ],
+        "model": {
+          "type": "minecraft:select",
+          "property": "minecraft:custom_model_data",
+          "index": 0,
+          "cases": [
+            {
+              "when": "black",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/awp_black"
+              }
+            },
+            {
+              "when": "desert",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/awp_desert"
+              }
+            },
+            {
+              "when": "thunder",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/awp_thunder"
+              }
+            },
+            {
+              "when": "aurora",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/awp_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/awp_magma"
+              }
+            },
+            {
+              "when": "neon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/awp_neon"
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "blockland:item/awp"
+          }
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:select",
+      "property": "minecraft:custom_model_data",
+      "index": 0,
+      "cases": [
+        {
+          "when": "black",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/awp_held_black"
+          }
+        },
+        {
+          "when": "desert",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/awp_held_desert"
+          }
+        },
+        {
+          "when": "thunder",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/awp_held_thunder"
+          }
+        },
+        {
+          "when": "aurora",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/awp_held_aurora"
+          }
+        },
+        {
+          "when": "magma",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/awp_held_magma"
+          }
+        },
+        {
+          "when": "neon",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/awp_held_neon"
+          }
+        }
+      ],
+      "fallback": {
+        "type": "minecraft:model",
+        "model": "blockland:item/awp_held"
+      }
+    }
+  }
+}

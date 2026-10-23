@@ -2,16 +2,19 @@ package com.blockland.server.shop;
 
 import com.blockland.BlockLand;
 import com.blockland.network.BLNetwork;
+import com.blockland.network.packet.LobbyPackets;
 import com.blockland.network.packet.ShopPackets;
+import com.blockland.network.packet.TextJson;
 import com.blockland.server.backend.BackendClient;
 import com.blockland.server.player.PlayerProfiles;
+import com.blockland.server.session.PlayerDirectory;
 import com.google.gson.reflect.TypeToken;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerPlayer;
 
 import java.lang.reflect.Type;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -26,6 +29,7 @@ public final class ShopRelay {
     private final MinecraftServer server;
     private final BackendClient backend;
     private final PlayerProfiles profiles;
+    private final PlayerDirectory players;
     private volatile CompletableFuture<List<ProductJson>> catalogue;
     private volatile long catalogueFetchedAt;
 
@@ -50,34 +54,38 @@ public final class ShopRelay {
     private record PurchaseRequest(String uuid, String name, String productId) {
     }
 
-    public ShopRelay(MinecraftServer server, BackendClient backend, PlayerProfiles profiles) {
+    public ShopRelay(MinecraftServer server, BackendClient backend, PlayerProfiles profiles, PlayerDirectory players) {
         this.server = server;
         this.backend = backend;
         this.profiles = profiles;
+        this.players = players;
     }
 
-    public void sendCatalogue(ServerPlayer player) {
+    public void sendCatalogue(UUID player) {
         catalogue().whenComplete((products, error) -> server.execute(() -> {
             if (error != null) {
                 BlockLand.LOGGER.warn("[BlockLand] Shop catalogue unavailable: {}", error.getMessage());
-                BLNetwork.sendTo(player, new ShopPackets.S2CData(List.of(), "商店暂时无法连接，请稍后再试"));
+                BLNetwork.sendTo(player, new ShopPackets.S2CData(List.of(), "blockland.shop.unreachable"));
                 return;
             }
             List<ShopPackets.Product> list = products.stream().map(p -> new ShopPackets.Product(p.id, p.name,
                     nullToEmpty(p.description), nullToEmpty(p.category), p.priceCents, p.currency == null ? "CNY" : p.currency,
-                    p.durationDays, nullToEmpty(p.imageVersion), profiles.entitlementUntil(player.getUUID(), p.entitlement))).toList();
+                    p.durationDays, nullToEmpty(p.imageVersion), profiles.entitlementUntil(player, p.entitlement))).toList();
             BLNetwork.sendTo(player, new ShopPackets.S2CData(list, ""));
         }));
     }
 
-    public void purchase(ServerPlayer player, String productId) {
-        PurchaseRequest request = new PurchaseRequest(player.getUUID().toString(), player.getGameProfile().getName(), productId);
+    public void purchase(UUID player, String productId) {
+        String name = players.name(player);
+        if (name == null) return;
+        PurchaseRequest request = new PurchaseRequest(player.toString(), name, productId);
         backend.<PurchaseResult>post("/api/server/shop/purchase", request, PurchaseResult.class)
                 .whenComplete((result, error) -> server.execute(() -> {
                     boolean success = error == null && result != null && result.success;
-                    String message = error != null ? "购买失败：无法连接商店服务" : result == null ? "购买失败" : result.message;
-                    player.sendSystemMessage(Component.literal((success ? "§a" : "§c") + message));
-                    BLNetwork.sendTo(player, new ShopPackets.S2CPurchaseResult(success, message));
+                    Component message = error != null ? Component.translatable("blockland.shop.purchase_unreachable")
+                            : result == null ? Component.translatable("blockland.shop.purchase_failed") : Component.literal(result.message);
+                    players.notify(player, success ? LobbyPackets.Level.SUCCESS : LobbyPackets.Level.ERROR, message);
+                    BLNetwork.sendTo(player, new ShopPackets.S2CPurchaseResult(success, TextJson.write(message)));
                     if (success) profiles.refresh(player).thenRun(() -> sendCatalogue(player));
                 }));
     }

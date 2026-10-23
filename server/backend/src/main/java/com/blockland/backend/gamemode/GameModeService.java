@@ -91,14 +91,23 @@ public class GameModeService {
                 .orElse(List.of("未知的游戏类型: " + mode.type()));
     }
 
-    /** Re-validates every mode's settings, e.g. after a referenced map was deleted. */
-    public void revalidateAll() {
+    /**
+     * Re-validates every mode's settings, e.g. after a referenced map was deleted or a game type's settings changed.
+     *
+     * @return number of modes whose settings were rewritten
+     */
+    public int revalidateAll() {
+        int changed = 0;
         for (GameMode mode : modes.findAll()) {
-            types.find(mode.type()).ifPresent(type -> {
-                ObjectNode settings = type.normalizeSettings(mode.settings(), context(), new ArrayList<>());
-                if (!settings.equals(mode.settings())) modes.save(mode.withSettings(settings, Instant.now()));
-            });
+            GameTypeDefinition type = types.find(mode.type()).orElse(null);
+            if (type == null) continue;
+            ObjectNode settings = type.normalizeSettings(mode.settings(), context(), new ArrayList<>());
+            if (!settings.equals(mode.settings())) {
+                modes.save(mode.withSettings(settings, Instant.now()));
+                changed++;
+            }
         }
+        return changed;
     }
 
     private GameMode create(Request request, boolean allowUnknownItems) {

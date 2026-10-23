@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/usp_dual_held",
+  "textures": {
+    "0": "blockland:item/usp_dual_held_two_tone",
+    "particle": "blockland:item/usp_dual_held_two_tone"
+  }
+}

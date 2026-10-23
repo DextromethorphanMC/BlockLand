@@ -71,6 +71,8 @@ export interface GameMap {
   voidY: number | null
   /** owned by the map's game type */
   settings: Record<string, unknown>
+  /** version of the cover shown in the lobby's map picker; null = no cover */
+  coverVersion?: string | null
   updatedAt?: string
 }
 
@@ -106,6 +108,19 @@ export interface Entitlement {
   grantedAt: string
 }
 
+/** 工匠 build of one weapon: skin and, per slot, the fitted option. */
+export interface WeaponBuild {
+  skin: string
+  slots: Record<string, string>
+}
+
+/** What the player chose in game (lobby settings, read announcements, weapon builds). */
+export interface PlayerPreferences {
+  allowPartyInvites: boolean
+  readAnnouncements: string[]
+  builds: Record<string, WeaponBuild>
+}
+
 export interface PlayerAccount {
   uuid: string
   name: string
@@ -116,9 +131,20 @@ export interface PlayerAccount {
   ban: Restriction | null
   mute: Restriction | null
   entitlements: Entitlement[]
+  preferences?: PlayerPreferences
   online: boolean
   banned: boolean
   muted: boolean
+}
+
+/** 公告: shown in the game lobby; players mark them as read there. */
+export interface Announcement {
+  id: string
+  title: string
+  content: string
+  pinned: boolean
+  publishedAt: string
+  updatedAt: string
 }
 
 export interface Product {

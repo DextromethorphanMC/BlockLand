@@ -70,6 +70,17 @@ public class MapController {
         service.delete(id);
     }
 
+    /** Cover for the lobby's map picker; scaled to 512×288 at most. */
+    @PostMapping(value = "/{id}/cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public GameMap cover(@PathVariable String id, @RequestParam("file") MultipartFile file) throws IOException {
+        return service.setCover(id, file.getBytes());
+    }
+
+    @DeleteMapping("/{id}/cover")
+    public GameMap removeCover(@PathVariable String id) {
+        return service.removeCover(id);
+    }
+
     @GetMapping("/{id}/preview")
     public MapFileAnalyzer.TopView preview(@PathVariable String id) {
         return service.preview(id);

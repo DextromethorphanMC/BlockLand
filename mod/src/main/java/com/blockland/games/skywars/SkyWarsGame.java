@@ -11,6 +11,7 @@ import com.blockland.server.game.MatchRoster;
 import com.blockland.server.item.ItemStackFactory;
 import com.blockland.server.map.MapBlueprint;
 import com.blockland.server.util.PlayerUtil;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -42,8 +43,8 @@ final class SkyWarsGame extends TeamArenaGame {
     }
 
     @Override
-    protected String gameName() {
-        return "空岛战争";
+    protected Component gameName() {
+        return Component.translatable("blockland.game.skywars");
     }
 
     @Override
@@ -68,7 +69,7 @@ final class SkyWarsGame extends TeamArenaGame {
         int refill = settings.chestRefillSeconds();
         if (refill > 0 && elapsedSeconds() % refill == 0) {
             fillChests();
-            broadcast(Component.literal("§6§l箱子已刷新！"));
+            broadcast(Component.translatable("blockland.skywars.chests_refilled").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
             forEachOnline(p -> PlayerUtil.sound(p, SoundEvents.EXPERIENCE_ORB_PICKUP, 1f, 0.8f));
         }
     }

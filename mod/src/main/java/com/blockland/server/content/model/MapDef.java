@@ -24,6 +24,8 @@ public final class MapDef {
     public Integer voidY;
     /** Owned by the map's game type (e.g. SkyWars chests). */
     public JsonObject settings = new JsonObject();
+    /** Version of the cover image ({@code map/<id>}); null = no cover. */
+    public String coverVersion;
 
     public static final class Size {
         public int x;

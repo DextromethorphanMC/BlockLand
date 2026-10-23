@@ -11,7 +11,7 @@ import java.util.List;
 public record C2SSubmitKit(String modeId, String kitSignature, List<String> kitSlots) {
 
     public static void encode(C2SSubmitKit msg, FriendlyByteBuf buf) {
-        C2SJoinQueue.encode(new C2SJoinQueue(msg.modeId, msg.kitSignature, msg.kitSlots), buf);
+        C2SJoinQueue.encode(new C2SJoinQueue(msg.modeId, "", msg.kitSignature, msg.kitSlots), buf);
     }
 
     public static C2SSubmitKit decode(FriendlyByteBuf buf) {

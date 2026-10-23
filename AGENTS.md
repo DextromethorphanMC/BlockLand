@@ -6,8 +6,17 @@
   - 模组服务端：服务之间通过接口、监听器或「已分好的数据」（如 `MatchRoster`）交互，由 `BlockLandServer` 统一组装；
   - 网络层只分发给 listener 接口，不引用服务端/客户端逻辑（枪械、刀具各有独立的 `GunPacketListeners` / `MeleePacketListeners`）；
   - 客户端界面拆成独立组件（`client/screen/lobby/*`、`client/gun/*`、`client/melee/*`），由屏幕类只负责布局与连线；
+  - 武器的命中判定统一问 `combat/HitShapes`（不要直接拿实体碰撞箱），射击/挥刀的起点用 `movement/Slides.eyePosition`，这样滑铲等姿态变化对所有武器自动生效；
   - 武器共用的部分放在共享模块（`client/viewmodel/*`、`client/input/WeaponInput`、`client/hud/HitMarker`、`client/decal/Decals`），各武器模块之间互不引用；
-  - 游戏类型、配置、美术资源都是「数据 + 约定」：枪械走 `guns.json`，刀具走 `knives.json`，损伤贴图走 `decals.json`，模型走 `tools/assets/VIEWMODEL_SPEC.md`，不要把具体内容写死进逻辑代码。
+  - 游戏类型、配置、美术资源都是「数据 + 约定」：枪械走 `guns.json`，刀具走 `knives.json`，通用配件（瞄准镜、激光、枪管、枪托、挂件）走 `craft/attachments.json`、武器只声明槽位，感染怪物走 `monsters.json`，损伤贴图走 `decals.json`，滑铲走 `movement/slide.json`（是否允许是模式设置 `allowSlide`），材质走 GLB 材质 `extras`（`pbr` 纹理组 + `region` 区域），皮肤按区域写（武器自己的 `skins` 与共享的 `craft/skins.json`），瞄准镜走配件的 `scope` 对象，模型（含配件挂点）走 `tools/assets/VIEWMODEL_SPEC.md`，不要把具体内容写死进逻辑代码。
+- **瞄具统一走光学模块**：武器只向 `client/scope/Optics` 提供本帧的 `SightPose`（瞄具节点位置），开镜视场、灵敏度、晃动、射击方向（瞄准线）都问 `Optics`；倍镜的第二次世界渲染必须与主画面隔离——不要把视锥交给原版当「捕获的调试视锥」画出来、不要重写主画面本帧在用的 uniform 槽（GPU 缓冲是无同步持久映射），新增需要对镜内隐藏的东西时在 `ScopePicture` 里处理（`VIEWMODEL_SPEC.md` §22）。
+- **第一人称渲染要兼顾光影包**：自定义管线画的东西都要有 `client/render/ShaderPacks.active()` 时的回退（原版渲染类型或更简单的效果），并且不在光影阴影阶段绘制。
+- **界面文字用模组字体**：界面与 HUD 文字通过 `client/font/UiFont`（或 `client/ui/Draw.text/fit/wrap`）绘制和测量，不要直接用原版 `Font`；语言文件新增汉字后运行 `python tools/fonts/subset_fonts.py --check`，缺字时重新生成字体子集。
+- **大厅是连接的配置阶段**：大厅里没有世界，服务端没有 `ServerPlayer`，客户端没有 `mc.player` / `mc.level`。
+  - 大厅相关的服务端代码按玩家 UUID 工作，通过 `server/session/PlayerDirectory` 找人、发提示（大厅里是 toast，世界里是聊天）；对局通过 `server/game/PlayerTransit.bring` 把玩家带进世界、`toLobby` 送回。Forge 的登录/登出事件只表示「进入/离开世界」。
+  - 大厅里会收发的包用 `BLNetwork.anyToServer` / `anyToClient` 注册，只能用不依赖注册表的编码（物品用 `S2CKitData.ItemView` 这样的展示数据，文字用 `TextJson`）。
+  - 客户端大厅界面不能依赖玩家实体或世界（自己的账号用 `ClientLobbyState.selfId()` / `selfName()`）。
+- **界面文字走语言文件**：玩家能看到的文字都放进 `assets/blockland/lang/zh_cn.json` 和 `en_us.json`（客户端用 `client/ui/Tr.tr`，服务端发送 `Component.translatable`），不要在代码里写死中文；后台录入的内容（模式名、地图名、公告）原样显示。
 - 后端（`server/backend`）、管理后台（`server/web`）与模组之间只通过 HTTP 接口/JSON 约定通信。
 - 新代码风格与周围代码保持一致（注释密度、命名、写法）。
 

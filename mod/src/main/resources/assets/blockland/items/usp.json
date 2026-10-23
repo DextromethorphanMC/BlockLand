@@ -1,0 +1,107 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "gui",
+          "ground",
+          "fixed"
+        ],
+        "model": {
+          "type": "minecraft:select",
+          "property": "minecraft:custom_model_data",
+          "index": 0,
+          "cases": [
+            {
+              "when": "tan",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/usp_tan"
+              }
+            },
+            {
+              "when": "two_tone",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/usp_two_tone"
+              }
+            },
+            {
+              "when": "aurora",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/usp_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/usp_magma"
+              }
+            },
+            {
+              "when": "neon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/usp_neon"
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "blockland:item/usp"
+          }
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:select",
+      "property": "minecraft:custom_model_data",
+      "index": 0,
+      "cases": [
+        {
+          "when": "tan",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/usp_held_tan"
+          }
+        },
+        {
+          "when": "two_tone",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/usp_held_two_tone"
+          }
+        },
+        {
+          "when": "aurora",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/usp_held_aurora"
+          }
+        },
+        {
+          "when": "magma",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/usp_held_magma"
+          }
+        },
+        {
+          "when": "neon",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/usp_held_neon"
+          }
+        }
+      ],
+      "fallback": {
+        "type": "minecraft:model",
+        "model": "blockland:item/usp_held"
+      }
+    }
+  }
+}

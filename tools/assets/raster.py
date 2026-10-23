@@ -172,7 +172,7 @@ def rasterize(items, cam, W, H, flat=False):
                         uv = (c0[s_, None] * UV[tv[s_, 0]] + c1[s_, None] * UV[tv[s_, 1]]
                               + c2[s_, None] * UV[tv[s_, 2]])
                         m = mats[mi]
-                        alpha = sample(m["tex"], uv, m.get("nearest", False))[:, 3] * m["base"][3]
+                        alpha = sample(m["tex"], uv * m.get("uv_scale", 1.0), m.get("nearest", False))[:, 3] * m["base"][3]
                         drop[np.nonzero(s_)[0]] = alpha < m.get("cutoff", 0.5)
                     keepf = ~drop
                     tg, tv, pix, k, c0, c1, c2 = tg[keepf], tv[keepf], pix[keepf], k[keepf], c0[keepf], c1[keepf], c2[keepf]
@@ -201,7 +201,8 @@ def rasterize(items, cam, W, H, flat=False):
         nrm /= np.linalg.norm(nrm, axis=1)[:, None] + 1e-30
         uv = c[0] * UV[tv[:, 0]] + c[1] * UV[tv[:, 1]] + c[2] * UV[tv[:, 2]]
         pos = c[0] * P[tv[:, 0]] + c[1] * P[tv[:, 1]] + c[2] * P[tv[:, 2]]
-        frag = {"pix": pix, "mid": MID[tg], "nrm": nrm, "uv": uv, "pos": pos}
+        frag = {"pix": pix, "mid": MID[tg], "nrm": nrm, "uv": uv, "pos": pos, "tri": tg, "tv": tv,
+                "bary": np.hstack(c)}
         if phase == "opaque":
             out["depth"][pix] = best_key[pix]
             out["mid"][pix] = MID[tg]
@@ -227,7 +228,7 @@ def shade(frag, mats, view_dir_fn=None, exposure=1.6, key=KEY, fill=FILL, rim=0.
         m = mats[mi]
         col = np.tile(np.asarray(m["base"], float), (s.sum(), 1))
         if m.get("tex") is not None:
-            col = col * sample(m["tex"], uv[s], m.get("nearest", False))
+            col = col * sample(m["tex"], uv[s] * m.get("uv_scale", 1.0), m.get("nearest", False))
         albedo[s] = col[:, :3]
         alpha[s] = col[:, 3]
         metal[s] = m.get("metallic", 0.0)

@@ -1,6 +1,8 @@
 import { useState, type ComponentType, type ReactElement } from 'react'
 import type { GameMap } from '../types'
 import { fastPvpUi } from './fastpvp'
+import { infectionUi } from './infection'
+import { aimPracticeUi, bridgePracticeUi } from './practice'
 import { skyWarsUi } from './skywars'
 
 export interface SettingsFormProps {
@@ -20,6 +22,8 @@ export interface MapMarker {
 export interface MapOverlay {
   markers: MapMarker[]
   legend: { label: string; color: string }[]
+  /** true when the type's own points replace the map's team spawns (they are then not drawn) */
+  hideTeamSpawns?: boolean
 }
 
 export interface MapPanelProps {
@@ -43,6 +47,8 @@ export interface GameTypeUi {
   MapPanel?: ComponentType<MapPanelProps>
   /** React hook providing top-down markers for a map of this type. */
   useMapOverlay?: (map: GameMap) => MapOverlay
+  /** Hint under the mode's "存活时间" when the type gives it its own meaning (default: team with most survivors wins). */
+  timeLimitHint?: string
   /** Extra admin pages owned by the type (e.g. SkyWars loot tables). */
   pages?: { path: string; label: string; element: ReactElement }[]
 }
@@ -50,6 +56,9 @@ export interface GameTypeUi {
 const registry: Record<string, GameTypeUi> = {
   SKYWARS: skyWarsUi,
   FASTPVP: fastPvpUi,
+  INFECTION: infectionUi,
+  AIM_PRACTICE: aimPracticeUi,
+  BRIDGE_PRACTICE: bridgePracticeUi,
 }
 
 export function uiFor(type: string): GameTypeUi {

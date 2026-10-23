@@ -94,6 +94,14 @@ public final class GlbReader {
             material.alphaMode = string(m, "alphaMode", "OPAQUE");
             material.alphaCutoff = number(m, "alphaCutoff", 0.5f);
             material.doubleSided = m.has("doubleSided") && m.get("doubleSided").getAsBoolean();
+            if (m.has("extras") && m.get("extras").isJsonObject()) {
+                // asset spec §20/§21: LabPBR texture set, skin region and tiling
+                JsonObject extras = m.getAsJsonObject("extras");
+                material.pbr = string(extras, "pbr", "").trim();
+                material.region = string(extras, "region", "").trim();
+                material.uvScale = number(extras, "uvScale", 1);
+                if (!(material.uvScale > 0) || Float.isInfinite(material.uvScale)) material.uvScale = 1;
+            }
             model.materials.add(material);
         }
     }
@@ -120,6 +128,7 @@ public final class GlbReader {
                     for (int i = 0; i < vertices; i++) primitive.indices[i] = i;
                 }
                 if (primitive.normals == null) primitive.normals = flatNormals(primitive);
+                if (attributes.has("COLOR_0")) primitive.ao = occlusion(attributes.get("COLOR_0").getAsInt(), vertices);
                 primitive.material = p.has("material") ? p.get("material").getAsInt() : -1;
                 mesh.primitives.add(primitive);
             }
@@ -137,6 +146,11 @@ public final class GlbReader {
             floats(n, "translation", node.translation);
             floats(n, "rotation", node.rotation);
             floats(n, "scale", node.scale);
+            if (n.has("extras") && n.get("extras").isJsonObject()) {
+                for (var entry : n.getAsJsonObject("extras").entrySet()) {
+                    if (entry.getValue().isJsonPrimitive()) node.extras.put(entry.getKey(), entry.getValue().getAsString());
+                }
+            }
             JsonArray children = array(n, "children");
             node.children = new int[children.size()];
             for (int i = 0; i < children.size(); i++) node.children[i] = children.get(i).getAsInt();
@@ -166,13 +180,17 @@ public final class GlbReader {
                 if (path == null) continue;
                 JsonObject sampler = samplers.get(c.get("sampler").getAsInt()).getAsJsonObject();
                 String interpolation = string(sampler, "interpolation", "LINEAR");
-                if ("CUBICSPLINE".equals(interpolation)) throw new IOException("CUBICSPLINE animation is not supported");
                 GltfModel.Channel channel = new GltfModel.Channel();
                 channel.node = target.get("node").getAsInt();
                 channel.path = path;
                 channel.times = floatAccessor(sampler.get("input").getAsInt());
                 channel.values = floatAccessor(sampler.get("output").getAsInt());
                 channel.step = "STEP".equals(interpolation);
+                channel.cubic = "CUBICSPLINE".equals(interpolation);
+                int width = path == GltfModel.Path.ROTATION ? 4 : 3;
+                if (channel.values.length != channel.times.length * width * (channel.cubic ? 3 : 1)) {
+                    throw new IOException("animation " + animation.name + ": output size does not match its keys");
+                }
                 if (channel.times.length > 0) animation.duration = Math.max(animation.duration, channel.times[channel.times.length - 1]);
                 animation.channels.add(channel);
             }
@@ -252,6 +270,15 @@ public final class GlbReader {
             case 5125 -> (float) (a.data.getInt(base + c * 4) & 0xFFFFFFFFL);
             default -> 0;
         };
+    }
+
+    /** Baked AO from a COLOR_0 accessor (VEC3 / VEC4, float or normalized integers): its red channel, clamped. */
+    private float[] occlusion(int index, int vertices) throws IOException {
+        Accessor a = accessor(index);
+        if (a.count != vertices || a.components < 3) return null;
+        float[] ao = new float[vertices];
+        for (int i = 0; i < vertices; i++) ao[i] = Math.max(0, Math.min(1, component(a, i * a.stride, 0)));
+        return ao;
     }
 
     private int[] intAccessor(int index) throws IOException {

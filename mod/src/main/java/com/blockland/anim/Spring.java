@@ -45,6 +45,19 @@ public final class Spring implements FloatProperty, Ticker.Updatable {
         wake();
     }
 
+    /**
+     * Kicks the spring so that, from rest, its first swing peaks about {@code peak} away from the target (units of the
+     * value): the impulse is sized from the stiffness, damping and mass, so retuning a spring keeps the kick's size.
+     */
+    public void punch(float peak) {
+        double omega = Math.sqrt(stiffness / mass);
+        double zeta = damping / (2 * Math.sqrt(stiffness * mass));
+        double first = zeta < 0.999
+                ? Math.exp(-zeta / Math.sqrt(1 - zeta * zeta) * Math.atan2(Math.sqrt(1 - zeta * zeta), zeta))
+                : Math.exp(-1);
+        impulse((float) (peak * omega / first));
+    }
+
     public float target() {
         return (float) target;
     }

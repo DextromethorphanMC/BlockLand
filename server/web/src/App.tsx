@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { getToken, setToken } from './api'
 import { ToastProvider } from './components/ui'
+import { Announcements } from './pages/Announcements'
 import { Dashboard } from './pages/Dashboard'
 import { GameModes } from './pages/GameModes'
 import { Login } from './pages/Login'
@@ -35,6 +36,7 @@ export function App() {
                 </NavLink>
                 <NavLink to="/modes">小游戏管理</NavLink>
                 <NavLink to="/maps">地图管理</NavLink>
+                <NavLink to="/announcements">公告</NavLink>
                 <NavLink to="/users">用户</NavLink>
                 <NavLink to="/shop">商店</NavLink>
                 {allTypePages().map((p) => (
@@ -53,6 +55,7 @@ export function App() {
                 <Route path="/modes" element={<GameModes />} />
                 <Route path="/maps" element={<Maps />} />
                 <Route path="/maps/:id" element={<MapEditor />} />
+                <Route path="/announcements" element={<Announcements />} />
                 <Route path="/users" element={<Users />} />
                 <Route path="/shop" element={<Shop />} />
                 {allTypePages().map((p) => (

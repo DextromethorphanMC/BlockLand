@@ -68,6 +68,14 @@ class GLTF:
         self._tex_cache[tex_index] = arr
         return arr
 
+    def _colors(self, idx):
+        """COLOR_0 as floats 0..1 (normalised byte / short accessors are scaled)."""
+        a = self.json["accessors"][idx]
+        arr = self.accessor(idx).astype(np.float64)
+        if a["componentType"] != 5126:
+            arr = arr / float(np.iinfo(COMP[a["componentType"]]).max)
+        return arr
+
     def mesh_primitives(self, mesh_index):
         out = []
         for p in self.json["meshes"][mesh_index]["primitives"]:
@@ -76,7 +84,8 @@ class GLTF:
                         "normals": self.accessor(at["NORMAL"]).astype(np.float64) if "NORMAL" in at else None,
                         "uvs": self.accessor(at["TEXCOORD_0"]).astype(np.float64) if "TEXCOORD_0" in at else None,
                         "indices": self.accessor(p["indices"]).reshape(-1, 3).astype(np.int64),
-                        "material": p.get("material")})
+                        "material": p.get("material"),
+                        "colors": self._colors(at["COLOR_0"]) if "COLOR_0" in at else None})
         return out
 
     # ------------------------------------------------------------------ transforms & animation

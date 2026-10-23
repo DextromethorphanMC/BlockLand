@@ -1,6 +1,7 @@
 """Builds models/knife/butterfly.glb (VIEWMODEL_SPEC sections 11-12)."""
 import numpy as np
 
+import armrig
 import knife_clips
 import knife_model as km
 import knife_rig as kr
@@ -9,6 +10,7 @@ import textures as tx
 from gen_p9 import bake_clip
 from glb import GLB
 from ik import UPPER_LEN
+from vmath import quat_conj, quat_identity, quat_mul
 
 MATERIALS = {   # name: (base rgba, metallic, roughness, texture)
     "blade": ((0.66, 0.66, 0.68, 1), 1.0, 0.20, "brushed"),
@@ -45,6 +47,9 @@ def build(path, clips=None):
     for name in ("handle_safe", "blade", "tip", "handle_bite", "latch"):
         parent, t = kr.NODES[name]
         g.add_node(name, parent, t, rest.get(name, {}).get("rotation"), mesh=mesh_idx.get(name))
+    # section 19: charm mount at the butt of the safe handle; its -Y hangs straight down in the rest pose
+    q_world = quat_mul(rest["knife"]["rotation"], rest.get("handle_safe", {}).get("rotation", quat_identity()))
+    g.add_node("mount_charm", "handle_safe", kr.CHARM_MOUNT, quat_conj(q_world))
     g.add_node("camera", "viewmodel")
     for side in ("R", "L"):
         r = rest[f"arm_{side}"]
@@ -52,6 +57,7 @@ def build(path, clips=None):
                    r["rotation"], scale=r.get("scale"))
         g.add_node(f"arm_{side}_fore", f"arm_{side}", np.array([0.0, -UPPER_LEN, 0.0]),
                    rest[f"arm_{side}_fore"]["rotation"])
+        armrig.add_hand_nodes(g, side, rest)
     if "scale" in rest["arm_L"] and not np.any(rest["arm_L"]["scale"]):
         g.json["nodes"][g.node_index["arm_L"]]["scale"] = [0.0, 0.0, 0.0]
     rest_vals = {n: dict(v) for n, v in rest.items()}

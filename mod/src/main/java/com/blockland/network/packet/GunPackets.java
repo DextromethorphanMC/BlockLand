@@ -2,7 +2,7 @@ package com.blockland.network.packet;
 
 import net.minecraft.network.FriendlyByteBuf;
 
-/** Gun messages. Ammo and attachments travel in the item component; these are the actions and their effects. */
+/** Gun messages. Ammo and the build travel in the item component; these are the actions and their effects. */
 public final class GunPackets {
     private GunPackets() {
     }
@@ -14,18 +14,27 @@ public final class GunPackets {
      * @param yaw   view rotation when the trigger was pulled
      * @param aim   0 = hip, 1 = fully aimed down the sight
      * @param seed  spread seed; the server uses it so client tracers match server hits
+     * @param shots rounds fired at once: 1, or 2 for a dual gun's volley (asset spec §26)
+     * @param hand  which gun of a dual pair fired a single shot (0 = right, 1 = left; 0 for every other gun)
      */
-    public record C2SFire(int slot, float yaw, float pitch, float aim, long seed) {
+    public record C2SFire(int slot, float yaw, float pitch, float aim, long seed, int shots, int hand) {
+        public C2SFire(int slot, float yaw, float pitch, float aim, long seed) {
+            this(slot, yaw, pitch, aim, seed, 1, 0);
+        }
+
         public static void encode(C2SFire msg, FriendlyByteBuf buf) {
             buf.writeVarInt(msg.slot);
             buf.writeFloat(msg.yaw);
             buf.writeFloat(msg.pitch);
             buf.writeFloat(msg.aim);
             buf.writeLong(msg.seed);
+            buf.writeByte(msg.shots);
+            buf.writeByte(msg.hand);
         }
 
         public static C2SFire decode(FriendlyByteBuf buf) {
-            return new C2SFire(buf.readVarInt(), buf.readFloat(), buf.readFloat(), buf.readFloat(), buf.readLong());
+            return new C2SFire(buf.readVarInt(), buf.readFloat(), buf.readFloat(), buf.readFloat(), buf.readLong(), buf.readByte(),
+                    buf.readByte());
         }
     }
 
@@ -40,18 +49,31 @@ public final class GunPackets {
         }
     }
 
-    /** Gunsmith: fit these attachments and skin to the gun in {@code slot} (any inventory slot). */
-    public record C2SGunsmith(int slot, String skin, String magazine, String sight, String laser) {
-        public static void encode(C2SGunsmith msg, FriendlyByteBuf buf) {
+    /**
+     * The player raised ({@code aiming}) or lowered the sights of the gun in {@code slot}. The server times it, so a
+     * shot only gets the aimed spread once the sights could really be up (the gun's ADS time), and tells the players
+     * around (a raised magnified scope glints).
+     */
+    public record C2SAim(int slot, boolean aiming) {
+        public static void encode(C2SAim msg, FriendlyByteBuf buf) {
             buf.writeVarInt(msg.slot);
-            buf.writeUtf(msg.skin, 64);
-            buf.writeUtf(msg.magazine, 64);
-            buf.writeUtf(msg.sight, 64);
-            buf.writeUtf(msg.laser, 64);
+            buf.writeBoolean(msg.aiming);
         }
 
-        public static C2SGunsmith decode(FriendlyByteBuf buf) {
-            return new C2SGunsmith(buf.readVarInt(), buf.readUtf(64), buf.readUtf(64), buf.readUtf(64), buf.readUtf(64));
+        public static C2SAim decode(FriendlyByteBuf buf) {
+            return new C2SAim(buf.readVarInt(), buf.readBoolean());
+        }
+    }
+
+    /** A player another client can see raised or lowered their sights (the receiver decides what a scope shows). */
+    public record S2CAim(int playerId, boolean aiming) {
+        public static void encode(S2CAim msg, FriendlyByteBuf buf) {
+            buf.writeVarInt(msg.playerId);
+            buf.writeBoolean(msg.aiming);
+        }
+
+        public static S2CAim decode(FriendlyByteBuf buf) {
+            return new S2CAim(buf.readVarInt(), buf.readBoolean());
         }
     }
 
@@ -72,10 +94,17 @@ public final class GunPackets {
     /**
      * Someone else fired: muzzle flash, tracer and impact for players tracking the shooter.
      *
-     * @param hitBlock the projectile ended on a block (impact particles and a bullet hole at the end point)
-     * @param face     the struck block face ({@code Direction} ordinal) when {@code hitBlock}
+     * @param hitBlock   the projectile ended on a block (impact particles and a bullet hole at the end point)
+     * @param face       the struck block face ({@code Direction} ordinal) when {@code hitBlock}
+     * @param suppressed the gun wears a suppressor: no muzzle flash
+     * @param hand       which gun of a dual pair fired (0 = right / the only one, 1 = left)
      */
-    public record S2CShot(int shooterId, double endX, double endY, double endZ, boolean hitBlock, int face) {
+    public record S2CShot(int shooterId, double endX, double endY, double endZ, boolean hitBlock, int face, boolean suppressed,
+                          int hand) {
+        public S2CShot(int shooterId, double endX, double endY, double endZ, boolean hitBlock, int face, boolean suppressed) {
+            this(shooterId, endX, endY, endZ, hitBlock, face, suppressed, 0);
+        }
+
         public static void encode(S2CShot msg, FriendlyByteBuf buf) {
             buf.writeVarInt(msg.shooterId);
             buf.writeDouble(msg.endX);
@@ -83,10 +112,13 @@ public final class GunPackets {
             buf.writeDouble(msg.endZ);
             buf.writeBoolean(msg.hitBlock);
             buf.writeByte(msg.face);
+            buf.writeBoolean(msg.suppressed);
+            buf.writeByte(msg.hand);
         }
 
         public static S2CShot decode(FriendlyByteBuf buf) {
-            return new S2CShot(buf.readVarInt(), buf.readDouble(), buf.readDouble(), buf.readDouble(), buf.readBoolean(), buf.readByte());
+            return new S2CShot(buf.readVarInt(), buf.readDouble(), buf.readDouble(), buf.readDouble(), buf.readBoolean(), buf.readByte(),
+                    buf.readBoolean(), buf.readByte());
         }
     }
 }

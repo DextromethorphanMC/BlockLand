@@ -1,9 +1,13 @@
 package com.blockland.client.gun;
 
 import com.blockland.client.gltf.GltfModel;
+import com.blockland.combat.HitShapes;
+import com.blockland.craft.CraftData;
 import com.blockland.gun.GunContent;
 import com.blockland.gun.GunData;
 import com.blockland.gun.GunStats;
+import com.blockland.movement.SlideRules;
+import com.blockland.movement.Slides;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Camera;
@@ -21,8 +25,10 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
@@ -38,6 +44,9 @@ import java.util.Optional;
  */
 final class GunParticles {
     private static final ResourceLocation WHITE = ResourceLocation.withDefaultNamespace("textures/misc/white.png");
+    /** Colours of an ordinary shot: the tracer's head, the flash's core (special skins bring their own). */
+    static final int DEFAULT_TRACER = 0xFFF4D0;
+    static final int DEFAULT_FLASH = 0xFFE2A0;
 
     private GunParticles() {
     }
@@ -66,6 +75,24 @@ final class GunParticles {
         out.addVertex(m, (float) rel.x + lx - ux, (float) rel.y + ly - uy, (float) rel.z + lz - uz).setColor(argb);
     }
 
+    /** A round glow facing the camera: {@code centre} colour in the middle fading to clear at radius {@code r}. */
+    private static void glow(VertexConsumer out, Matrix4f m, Vec3 p, Camera camera, float r, int centre) {
+        Vec3 rel = p.subtract(camera.getPosition());
+        Vector3f left = camera.getLeftVector(), up = camera.getUpVector();
+        int rim = centre & 0xFFFFFF;
+        float x = (float) rel.x, y = (float) rel.y, z = (float) rel.z;
+        int segments = 14;
+        for (int i = 0; i < segments; i++) {
+            double a0 = Math.PI * 2 * i / segments, a1 = Math.PI * 2 * (i + 1) / segments;
+            float c0 = (float) Math.cos(a0) * r, s0 = (float) Math.sin(a0) * r, c1 = (float) Math.cos(a1) * r, s1 = (float) Math.sin(a1) * r;
+            // a quad with its two centre corners collapsed: one triangle of the fan
+            out.addVertex(m, x, y, z).setColor(centre);
+            out.addVertex(m, x, y, z).setColor(centre);
+            out.addVertex(m, x + left.x() * c1 + up.x() * s1, y + left.y() * c1 + up.y() * s1, z + left.z() * c1 + up.z() * s1).setColor(rim);
+            out.addVertex(m, x + left.x() * c0 + up.x() * s0, y + left.y() * c0 + up.y() * s0, z + left.z() * c0 + up.z() * s0).setColor(rim);
+        }
+    }
+
     private static void vertex(VertexConsumer out, Matrix4f m, Vec3 p, int argb) {
         out.addVertex(m, (float) p.x, (float) p.y, (float) p.z).setColor(argb);
     }
@@ -74,13 +101,25 @@ final class GunParticles {
         return (Mth.clamp((int) (a * 255), 0, 255) << 24) | (rgb & 0xFFFFFF);
     }
 
-    /** Approximate muzzle of a third-person player: right hand raised forward (crossbow hold). */
+    /** Approximate muzzle of a third-person player: right hand raised forward (crossbow hold), low while sliding. */
     static Vec3 thirdPersonMuzzle(Player player, float partialTick) {
-        Vec3 eye = player.getEyePosition(partialTick);
+        return thirdPersonMuzzle(player, partialTick, false);
+    }
+
+    /**
+     * Approximate muzzle of a third-person player's gun; a dual gun's pair is held out at both shoulders
+     * ({@code left}: the left hand's gun, asset spec §26).
+     */
+    static Vec3 thirdPersonMuzzle(Player player, float partialTick, boolean left) {
+        Vec3 eye = Slides.isSliding(player)
+                ? player.getPosition(partialTick).add(0, SlideRules.get().eyeHeight * player.getScale(), 0)
+                : player.getEyePosition(partialTick);
         Vec3 look = player.getViewVector(partialTick);
         float yaw = (float) Math.toRadians(player.getViewYRot(partialTick));
         Vec3 right = new Vec3(-Math.cos(yaw), 0, -Math.sin(yaw));
-        return eye.add(look.scale(0.75)).add(right.scale(0.22)).add(0, -0.28, 0);
+        boolean dual = GunContent.gunOf(player.getMainHandItem()).map(GunData.Gun::isDual).orElse(false);
+        double side = dual ? (left ? -0.3 : 0.3) : 0.22;
+        return eye.add(look.scale(0.75)).add(right.scale(side)).add(0, -0.28, 0);
     }
 
     // ---- tracer -------------------------------------------------------------------------------------
@@ -91,11 +130,20 @@ final class GunParticles {
         private final Vec3 from;
         private final Vec3 to;
         private final double length;
+        private final int rgb;
+        private final float width;
 
         Tracer(ClientLevel level, Vec3 from, Vec3 to) {
+            this(level, from, to, DEFAULT_TRACER, 1);
+        }
+
+        /** A tracer in a special skin's colour and width (asset spec §30). */
+        Tracer(ClientLevel level, Vec3 from, Vec3 to, int rgb, float width) {
             super(level, from.x, from.y, from.z);
             this.from = from;
             this.to = to;
+            this.rgb = rgb;
+            this.width = width;
             this.length = from.distanceTo(to);
             this.lifetime = Math.max(2, (int) Math.ceil(length / SPEED) + 1);
             this.hasPhysics = false;
@@ -118,8 +166,9 @@ final class GunParticles {
             if (head <= tail) return;
             Vec3 dir = to.subtract(from).normalize();
             float fade = 1 - (float) Math.max(0, (age + partialTick - (lifetime - 1)));
+            int tailRgb = rgb == DEFAULT_TRACER ? 0xFFE6A0 : rgb;
             beam(buffers.getBuffer(RenderType.lightning()), pose.last().pose(), from.add(dir.scale(tail)), from.add(dir.scale(head)),
-                    camera.getPosition(), 0.028f, argb(0, 0xFFE6A0), argb(0.85f * fade, 0xFFF4D0));
+                    camera.getPosition(), 0.028f * width, argb(0, tailRgb), argb(0.85f * fade, rgb));
         }
 
         @Override
@@ -137,12 +186,19 @@ final class GunParticles {
 
     static final class Flash extends Particle {
         private final float size;
+        private final int rgb;
 
         Flash(ClientLevel level, Vec3 at) {
+            this(level, at, DEFAULT_FLASH, 1);
+        }
+
+        /** A flash in a special skin's colour and size (asset spec §30). */
+        Flash(ClientLevel level, Vec3 at, int rgb, float scale) {
             super(level, at.x, at.y, at.z);
             this.lifetime = 2;
             this.hasPhysics = false;
-            this.size = 0.16f + random.nextFloat() * 0.08f;
+            this.rgb = rgb;
+            this.size = (0.16f + random.nextFloat() * 0.08f) * scale;
         }
 
         @Override
@@ -159,8 +215,8 @@ final class GunParticles {
             float life = 1 - (age + partialTick) / (lifetime + 1);
             VertexConsumer out = buffers.getBuffer(RenderType.lightning());
             Vec3 p = new Vec3(x, y, z);
-            billboard(out, pose.last().pose(), p, camera, size * 1.6f, argb(0.35f * life, 0xFF9A30));
-            billboard(out, pose.last().pose(), p, camera, size, argb(0.9f * life, 0xFFE2A0));
+            billboard(out, pose.last().pose(), p, camera, size * 1.6f, argb(0.35f * life, rgb == DEFAULT_FLASH ? 0xFF9A30 : rgb));
+            billboard(out, pose.last().pose(), p, camera, size, argb(0.9f * life, rgb));
         }
 
         @Override
@@ -262,8 +318,8 @@ final class GunParticles {
             this.hasPhysics = false;
         }
 
-        static Optional<GunData.Laser> laserOf(Player player) {
-            return GunContent.statsOf(player.getMainHandItem()).map(GunStats::laser).filter(GunData.Laser::hasBeam);
+        static Optional<CraftData.Attachment> laserOf(Player player) {
+            return GunContent.statsOf(player.getMainHandItem()).map(GunStats::laser).filter(CraftData.Attachment::hasBeam);
         }
 
         @Override
@@ -283,7 +339,7 @@ final class GunParticles {
 
         @Override
         public void renderCustom(PoseStack pose, MultiBufferSource buffers, Camera camera, float partialTick) {
-            Optional<GunData.Laser> laser = laserOf(owner);
+            Optional<CraftData.Attachment> laser = laserOf(owner);
             if (laser.isEmpty()) return;
             int rgb = laser.get().argb() & 0xFFFFFF;
             Minecraft mc = Minecraft.getInstance();
@@ -294,19 +350,47 @@ final class GunParticles {
             HitResult hit = level.clip(new ClipContext(eye, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, owner));
             boolean hitSomething = hit.getType() != HitResult.Type.MISS;
             Vec3 dot = hitSomething ? hit.getLocation() : end;
+            // a player or creature in the way catches the dot (the same hit shapes as bullets)
+            Vec3 body = entityHit(eye, dot);
+            if (body != null) {
+                dot = body;
+                hitSomething = true;
+            }
             VertexConsumer out = buffers.getBuffer(RenderType.lightning());
             Matrix4f m = pose.last().pose();
             if (!firstPerson) {
                 beam(out, m, thirdPersonMuzzle(owner, partialTick), dot, camera.getPosition(), 0.012f, argb(0.55f, rgb), argb(0.1f, rgb));
+                // a dual gun has a laser on each gun (spec §26)
+                if (GunContent.gunOf(owner.getMainHandItem()).map(GunData.Gun::isDual).orElse(false)) {
+                    beam(out, m, thirdPersonMuzzle(owner, partialTick, true), dot, camera.getPosition(), 0.012f, argb(0.55f, rgb),
+                            argb(0.1f, rgb));
+                }
             }
             if (hitSomething) {
                 // pull the dot slightly towards the viewer so it does not sink into the surface
                 Vec3 towards = camera.getPosition().subtract(dot).normalize().scale(0.02);
                 double distance = camera.getPosition().distanceTo(dot);
-                float size = (float) Math.min(0.09, 0.02 + distance * 0.0025);
-                billboard(out, m, dot.add(towards), camera, size * 2.6f, argb(0.25f, rgb));
-                billboard(out, m, dot.add(towards), camera, size, argb(0.95f, rgb));
+                // a small round spot with a soft halo (squares read as a red box around a red-dot reticle)
+                float size = (float) Math.min(0.05, 0.012 + distance * 0.0016);
+                glow(out, m, dot.add(towards), camera, size * 2.4f, argb(0.35f, rgb));
+                glow(out, m, dot.add(towards), camera, size, argb(0.95f, rgb));
             }
+        }
+
+        /** The nearest point where the laser line enters an entity's hit shapes (not the owner's), or null. */
+        @Nullable
+        private Vec3 entityHit(Vec3 from, Vec3 to) {
+            Vec3 point = null;
+            double nearest = from.distanceToSqr(to);
+            for (Entity candidate : level.getEntities(owner, new AABB(from, to).inflate(1),
+                    e -> e.isPickable() && !e.isSpectator() && e != owner)) {
+                HitShapes.Hit hit = HitShapes.clip(candidate, from, to, Math.max(0.05, candidate.getPickRadius()));
+                if (hit != null && from.distanceToSqr(hit.point()) < nearest) {
+                    point = hit.point();
+                    nearest = from.distanceToSqr(point);
+                }
+            }
+            return point;
         }
 
         @Override

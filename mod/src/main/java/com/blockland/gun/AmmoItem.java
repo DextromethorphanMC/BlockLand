@@ -1,6 +1,9 @@
 package com.blockland.gun;
 
+import com.blockland.craft.CraftCatalog;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
@@ -32,17 +35,22 @@ public class AmmoItem extends Item {
                                 TooltipFlag flag) {
         GunData.Ammo ammo = GunCatalog.get().ammo(ammoId);
         if (ammo == null) return;
-        tooltip.accept(Component.literal("§7伤害 §f" + ammo.damage + (ammo.pellets > 1 ? " ×" + ammo.pellets : "")
-                + " §8· §7爆头 ×" + ammo.headshotMultiplier));
+        String damage = ammo.damage + (ammo.pellets > 1 ? " ×" + ammo.pellets : "");
+        tooltip.accept(Component.translatable("blockland.ammo.tooltip.damage", Component.literal(damage).withStyle(ChatFormatting.WHITE))
+                .withStyle(ChatFormatting.GRAY)
+                .append(Component.literal(" · ").withStyle(ChatFormatting.DARK_GRAY))
+                .append(Component.translatable("blockland.ammo.tooltip.headshot", ammo.headshotMultiplier).withStyle(ChatFormatting.GRAY)));
         if (!ammo.magazines.isEmpty()) {
-            StringBuilder names = new StringBuilder();
+            MutableComponent names = Component.empty().withStyle(ChatFormatting.WHITE);
+            boolean first = true;
             for (String id : ammo.magazines) {
                 GunData.Magazine magazine = GunCatalog.get().magazine(id);
                 if (magazine == null) continue;
-                if (!names.isEmpty()) names.append("、");
-                names.append(magazine.name);
+                if (!first) names.append(Component.translatable("blockland.list.separator"));
+                names.append(CraftCatalog.text("blockland.magazine." + id, magazine.name));
+                first = false;
             }
-            tooltip.accept(Component.literal("§7适配弹匣：§f" + names));
+            tooltip.accept(Component.translatable("blockland.ammo.tooltip.magazines", names).withStyle(ChatFormatting.GRAY));
         }
     }
 }

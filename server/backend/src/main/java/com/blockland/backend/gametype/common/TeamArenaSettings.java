@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -32,7 +33,11 @@ public final class TeamArenaSettings {
         out.put("teamCount", intField(in, "teamCount", 2, 1, 64, "队伍数量", errors));
         out.put("countdownSeconds", intField(in, "countdownSeconds", 10, 0, 120, "开局倒计时", errors));
         out.put("endingSeconds", intField(in, "endingSeconds", 8, 1, 60, "结算时间", errors));
+        normalizeMapIds(in, out, typeId, context, errors);
+    }
 
+    /** {@code mapIds}: keeps the ids of existing maps of the given type, reports the others. */
+    public static void normalizeMapIds(JsonNode in, ObjectNode out, String typeId, GameTypeDefinition.Context context, List<String> errors) {
         ArrayNode mapIds = out.putArray("mapIds");
         if (in.has("mapIds") && in.get("mapIds").isArray()) {
             for (JsonNode idNode : in.get("mapIds")) {
@@ -99,8 +104,25 @@ public final class TeamArenaSettings {
         return Math.max(min, Math.min(max, v));
     }
 
+    public static double doubleField(JsonNode node, String key, double fallback, double min, double max, String label, List<String> errors) {
+        JsonNode value = node.get(key);
+        if (value == null || value.isNull()) return fallback;
+        if (!value.isNumber() || !Double.isFinite(value.asDouble())) {
+            errors.add(label + " 必须是数字");
+            return fallback;
+        }
+        double v = value.asDouble();
+        if (v < min || v > max) errors.add(label + " 必须在 " + plain(min) + " 到 " + plain(max) + " 之间");
+        return Math.max(min, Math.min(max, v));
+    }
+
     public static boolean boolField(JsonNode node, String key, boolean fallback) {
         JsonNode value = node.get(key);
         return value == null || value.isNull() ? fallback : value.asBoolean(fallback);
+    }
+
+    /** 1.0 -> "1", 2.5 -> "2.5" */
+    private static String plain(double value) {
+        return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
     }
 }

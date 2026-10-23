@@ -10,6 +10,7 @@ public final class MediaPackets {
     public static final String SHOP = "shop";
     public static final String MODE = "mode";
     public static final String GROUP = "group";
+    public static final String MAP = "map";
 
     private MediaPackets() {
     }

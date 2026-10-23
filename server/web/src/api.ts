@@ -1,4 +1,4 @@
-import type { GameMap, GameMode, GameType, ModeGroup, Order, Overview, PlayerAccount, Product, TopView } from './types'
+import type { Announcement, GameMap, GameMode, GameType, ModeGroup, Order, Overview, PlayerAccount, Product, TopView } from './types'
 
 const TOKEN_KEY = 'blockland.adminToken'
 
@@ -72,8 +72,19 @@ export const api = {
     request<GameMap>(`/api/admin/maps/${id}/file`, { method: 'POST', body: form }),
   updateMap: (map: GameMap) => request<GameMap>(`/api/admin/maps/${map.id}`, { method: 'PUT', body: json(map) }),
   deleteMap: (id: string) => request<void>(`/api/admin/maps/${id}`, { method: 'DELETE' }),
+  uploadMapCover: (id: string, file: File) => upload<GameMap>(`/api/admin/maps/${id}/cover`, file),
+  removeMapCover: (id: string) => request<GameMap>(`/api/admin/maps/${id}/cover`, { method: 'DELETE' }),
+
+  /** Newest first. */
+  announcements: () => request<Announcement[]>('/api/admin/announcements'),
+  createAnnouncement: (a: AnnouncementInput) => request<Announcement>('/api/admin/announcements', { method: 'POST', body: json(a) }),
+  updateAnnouncement: (id: string, a: AnnouncementInput) =>
+    request<Announcement>(`/api/admin/announcements/${id}`, { method: 'PUT', body: json(a) }),
+  deleteAnnouncement: (id: string) => request<void>(`/api/admin/announcements/${id}`, { method: 'DELETE' }),
 
   itemRegistry: () => request<string[]>('/api/admin/registry/items'),
+  /** What the game server published for a game type (e.g. 枪战感染 monsters); {} until then. */
+  gameTypeRegistry: (type: string) => request<Record<string, unknown>>(`/api/admin/registry/game-types/${type}`),
 
   users: (query = '') => request<PlayerAccount[]>(`/api/admin/users${query ? `?q=${encodeURIComponent(query)}` : ''}`),
   ban: (uuid: string, reason: string, minutes: number | null) =>
@@ -95,6 +106,12 @@ export const api = {
   orders: () => request<Order[]>('/api/admin/shop/orders'),
 }
 
+export interface AnnouncementInput {
+  title: string
+  content: string
+  pinned: boolean
+}
+
 function upload<T>(path: string, file: File) {
   const form = new FormData()
   form.append('file', file)
@@ -102,7 +119,7 @@ function upload<T>(path: string, file: File) {
 }
 
 /** Public URL of a stored image (no auth needed), versioned to bypass caches after a change. */
-export function mediaUrl(namespace: 'shop' | 'mode' | 'group', id: string, version: string | null | undefined) {
+export function mediaUrl(namespace: 'shop' | 'mode' | 'group' | 'map', id: string, version: string | null | undefined) {
   return version ? `/api/public/media/${namespace}/${id}?v=${version}` : null
 }
 

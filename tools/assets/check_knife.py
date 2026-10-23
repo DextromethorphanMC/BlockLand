@@ -1,13 +1,16 @@
 """Knife GLB checks (VIEWMODEL_SPEC sections 11-12), used by check_glb.py."""
 import numpy as np
 
-from check_glb import check_container, check_eye_distance, check_meshes, euler_deg
+from check_glb import CAM_ROLL, CAM_TURN
+from check_glb import (check_container, check_curve_rate, check_eye_distance, check_hand_joints, check_meshes,
+                       euler_deg)
 from glbread import GLTF
 
 KNIFE_CLIPS = {"idle": (2.0, 2.0), "draw": (0.80, 0.80), "light_1": (0.42, 0.42), "light_2": (0.42, 0.42),
                "heavy": (0.95, 0.95), "inspect": (3.0, 4.2)}
-OPTIONAL_CLIPS = {"sprint": (0.66, 0.66)}
-LOOPING = {"idle", "sprint"}
+OPTIONAL_CLIPS = {"sprint": (0.66, 0.66), "walk": (0.6, 1.6), "tac_sprint": (0.4, 0.9)}   # section 17
+LOOPING = {"idle", "walk", "sprint", "tac_sprint"}
+NO_CAMERA = {"idle", "walk", "sprint", "tac_sprint"}
 EVENTS = {"swing", "swing_heavy", "flip", "open", "catch", "equip"}
 REQUIRED_EVENTS = {"draw": {"equip", "open"}, "light_1": {"swing"}, "light_2": {"swing"}, "heavy": {"swing_heavy"},
                    "inspect": {"flip", "catch"}}
@@ -89,9 +92,10 @@ def check_clips(g, r, label):
                 r.check(np.allclose(vs[0], vs[-1], atol=1e-6) or (path == "rotation" and np.allclose(vs[0], -vs[-1])),
                         f"{label}: {nm} first/last keys differ on {g.nodes[node]['name']}.{path}")
             if node == cam:
+                r.check(nm not in NO_CAMERA, f"{label}: {nm} must not animate the camera (section 17)")
                 r.check(path == "rotation", f"{label}: {nm} animates camera {path}")
                 eul = np.array([euler_deg(q) for q in vs])
-                r.check(np.all(np.abs(eul[:, :2]) <= 1.5 + 1e-3) and np.all(np.abs(eul[:, 2]) <= 3.0 + 1e-3),
+                r.check(np.all(np.abs(eul[:, :2]) <= CAM_TURN + 1e-3) and np.all(np.abs(eul[:, 2]) <= CAM_ROLL + 1e-3),
                         f"{label}: {nm} camera beyond +-1.5/+-3 deg")
                 r.check(np.allclose(np.abs(vs[-1]), [0, 0, 0, 1], atol=1e-5), f"{label}: {nm} camera not at rest at end")
             if node == arm_l and path == "scale":
@@ -172,6 +176,10 @@ def check(path, arms, r):
     anims = check_clips(g, r, label)
     check_contacts(g, r, label, anims)
     check_eye_distance(g, arms, r, anims, root="knife", label=label)
+    check_hand_joints(g, r, label)
+    check_curve_rate(g, r, label)
+    import check_attach
+    check_attach.check_weapon(path, arms, r, label)
     tris = sum(len(g.accessor(p["indices"])) // 3 for n in g.nodes if "mesh" in n
                for p in g.json["meshes"][n["mesh"]]["primitives"])
     r.note(f"knife triangles: {tris}")

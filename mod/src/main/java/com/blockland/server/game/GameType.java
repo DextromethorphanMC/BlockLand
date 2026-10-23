@@ -2,6 +2,9 @@ package com.blockland.server.game;
 
 import com.blockland.server.content.ContentSnapshot;
 import com.blockland.server.content.model.GameModeDef;
+import com.blockland.server.content.model.MapDef;
+import com.google.gson.JsonElement;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
 import javax.annotation.Nullable;
@@ -25,17 +28,31 @@ public interface GameType {
 
     /**
      * @return null when the mode can be played with the given configuration,
-     *         otherwise a human readable reason shown in the lobby.
+     *         otherwise the reason shown in the lobby (each player reads it in their own language).
      */
     @Nullable
-    String checkAvailable(GameModeDef mode, ContentSnapshot content);
+    Component checkAvailable(GameModeDef mode, ContentSnapshot content);
 
-    /** Creates (but does not start) a match for exactly the given players. */
+    /** Creates (but does not start) a match for exactly the given players, on the roster's map when it is one of {@link #maps}. */
     GameInstance create(GameServices services, GameModeDef mode, MatchRoster roster);
+
+    /** The maps a mode of this type can be played on right now: the lobby's map choice offers exactly these. */
+    default List<MapDef> maps(GameModeDef mode, ContentSnapshot content) {
+        return List.of();
+    }
 
     /** Whether modes of this type give players a starting kit (enables the client's loadout editor). */
     default boolean usesKit() {
         return false;
+    }
+
+    /**
+     * What this type offers on this server, published to the backend at start-up for its admin UI (e.g. the
+     * infection monsters), so the backend never hard-codes the mod's content. Null = nothing to publish.
+     */
+    @Nullable
+    default JsonElement registryData() {
+        return null;
     }
 
     /** Hook for warming caches (e.g. map files) after the configuration changed. */

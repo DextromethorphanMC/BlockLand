@@ -1,0 +1,135 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "gui",
+          "ground",
+          "fixed"
+        ],
+        "model": {
+          "type": "minecraft:select",
+          "property": "minecraft:custom_model_data",
+          "index": 0,
+          "cases": [
+            {
+              "when": "black",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/ak47_black"
+              }
+            },
+            {
+              "when": "desert",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/ak47_desert"
+              }
+            },
+            {
+              "when": "camo",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/ak47_camo"
+              }
+            },
+            {
+              "when": "gold",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/ak47_gold"
+              }
+            },
+            {
+              "when": "aurora",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/ak47_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/ak47_magma"
+              }
+            },
+            {
+              "when": "neon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/ak47_neon"
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "blockland:item/ak47"
+          }
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:select",
+      "property": "minecraft:custom_model_data",
+      "index": 0,
+      "cases": [
+        {
+          "when": "black",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/ak47_held_black"
+          }
+        },
+        {
+          "when": "desert",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/ak47_held_desert"
+          }
+        },
+        {
+          "when": "camo",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/ak47_held_camo"
+          }
+        },
+        {
+          "when": "gold",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/ak47_held_gold"
+          }
+        },
+        {
+          "when": "aurora",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/ak47_held_aurora"
+          }
+        },
+        {
+          "when": "magma",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/ak47_held_magma"
+          }
+        },
+        {
+          "when": "neon",
+          "model": {
+            "type": "minecraft:model",
+            "model": "blockland:item/ak47_held_neon"
+          }
+        }
+      ],
+      "fallback": {
+        "type": "minecraft:model",
+        "model": "blockland:item/ak47_held"
+      }
+    }
+  }
+}

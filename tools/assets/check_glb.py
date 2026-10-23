@@ -1,6 +1,7 @@
-"""Validates p9.glb / arms.glb against VIEWMODEL_SPEC.md, independently of the writer.
+"""Validates the weapon GLBs (p9 / ak47 / knives) and arms.glb against VIEWMODEL_SPEC.md, independently of the
+writer.
 
-python -I tools/assets/check_glb.py [path/to/p9.glb] [path/to/arms.glb]     (exit code 1 on failure)"""
+python -I tools/assets/check_glb.py [path/to/weapon.glb ...] [path/to/arms.glb]     (exit code 1 on failure)"""
 import os
 import struct
 import sys
@@ -14,33 +15,47 @@ from glbread import GLTF, quat_mat       # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 GUN_DIR = os.path.join(HERE, "..", "..", "mod", "src", "main", "resources", "assets", "blockland", "models", "gun")
 KNIFE_DIR = os.path.join(os.path.dirname(GUN_DIR), "knife")
+EQUIPMENT_DIR = os.path.join(os.path.dirname(GUN_DIR), "equipment")      # section 36
 FOV_Y = 54.0                       # section 2: viewmodel projection (vertical), used for the on-screen estimate
+CAM_TURN, CAM_ROLL = 2.5, 4.5      # section 31: largest camera pitch / yaw and roll of a clip (degrees)
 PARENTS = {
     "viewmodel": None, "gun": "viewmodel", "frame": "gun", "slide": "gun", "sight_iron": "slide",
-    "sight_reddot": "slide", "reddot_reticle": "sight_reddot", "aim_iron": "slide", "aim_reddot": "slide",
-    "barrel": "gun", "hammer": "gun", "trigger": "gun", "slide_stop": "gun", "mag": "gun",
-    "mag_standard": "mag", "mag_extended": "mag", "laser": "gun", "laser_emitter": "laser", "muzzle": "gun",
-    "ejection": "gun", "arm_R": "viewmodel", "arm_R_fore": "arm_R", "arm_L": "viewmodel",
-    "arm_L_fore": "arm_L", "camera": "viewmodel", "fx_shell": None,
+    "aim_iron": "slide", "barrel": "gun", "hammer": "gun", "trigger": "gun", "slide_stop": "gun", "mag": "gun",
+    "mag_standard": "mag", "mag_extended": "mag", "muzzle": "gun", "ejection": "gun", "arm_R": "viewmodel",
+    "arm_R_fore": "arm_R", "arm_L": "viewmodel", "arm_L_fore": "arm_L", "camera": "viewmodel", "fx_shell": None,
+    # section 19: attachment mounts (the optic rides on the slide)
+    "mount_optic": "slide", "mount_laser": "gun", "mount_barrel": "gun", "mount_stock": "gun", "mount_charm": "gun",
 }
-MESH_NODES = {"frame", "slide", "sight_iron", "sight_reddot", "reddot_reticle", "barrel", "hammer", "trigger",
-              "slide_stop", "mag_standard", "mag_extended", "laser", "fx_shell"}
-EMPTY_NODES = {"viewmodel", "aim_iron", "aim_reddot", "mag", "laser_emitter", "muzzle", "ejection", "arm_R",
-               "arm_R_fore", "arm_L", "arm_L_fore", "camera"}
+MESH_NODES = {"frame", "slide", "sight_iron", "barrel", "hammer", "trigger", "slide_stop", "mag_standard",
+              "mag_extended", "fx_shell"}
+EMPTY_NODES = {"viewmodel", "aim_iron", "mag", "muzzle", "ejection", "arm_R", "arm_R_fore", "arm_L", "arm_L_fore",
+               "camera", "mount_optic", "mount_laser", "mount_barrel", "mount_stock", "mount_charm"}
+# section 19: attachments live in models/attachment/*.glb, never inside a weapon file
+REMOVED_NODES = ("sight_reddot", "reddot_reticle", "aim_reddot", "laser", "laser_emitter")
+MOUNTS = ("mount_optic", "mount_laser", "mount_barrel", "mount_stock", "mount_charm")
 DURATIONS = {"idle": (2.0, 2.0), "sprint": (0.66, 0.66), "draw": (0.45, 0.8), "fire": (0.15, 0.3),
              "fire_last": (0.15, 0.3),
              "reload": (1.6, 2.2), "reload_empty": (2.0, 2.6), "inspect": (3.0, 4.2)}
-LOOPING = {"idle", "sprint"}
-NO_CAMERA = {"idle", "sprint"}
+LOOPING = {"idle", "walk", "sprint", "tac_sprint"}
+NO_CAMERA = {"idle", "walk", "sprint", "tac_sprint"}
+LOCOMOTION = {"walk": (0.6, 1.6), "tac_sprint": (0.4, 0.9)}          # section 17 (optional / new clips)
+MIN_RATE = 60.0                                                     # section 15: LINEAR curves baked at >= 60 Hz
+HAND_JOINTS = [f"arm_{s}_{j}" for s in "RL" for j in
+               ["hand"] + [f"{f}{k}" for f in ("thumb", "index", "middle", "ring", "pinky") for k in ("", "2")]]
+VALID_JOINTS = {f"arm_{s}{j}" for s in "RL" for j in ("", "_fore")} | set(HAND_JOINTS)
 EVENT_NAMES = {"mag_release", "mag_out", "mag_in", "slide_back", "slide_forward", "slide_release",
                "inspect_move", "equip", "hammer"}
 REQUIRED_EVENTS = {"draw": {"equip"}, "reload": {"mag_release", "mag_out", "mag_in"},
                    "reload_empty": {"mag_release", "mag_out", "mag_in", "slide_forward"},
                    "inspect": {"slide_back", "slide_forward", "inspect_move"}}
-MATERIALS = {"polymer", "grip", "slide", "barrel", "steel_dark", "sight_dots", "mag", "mag_base", "attachment",
-             "glass", "reticle", "laser_lens", "brass"}
+MATERIALS = {"polymer", "grip", "slide", "barrel", "steel_dark", "sight_dots", "mag", "mag_base", "brass"}
 ARM_MESHES = [f"{s}_{g}_{v}{x}" for s in "RL" for g in ("upper", "fore") for v in ("wide", "slim")
               for x in ("", "_sleeve")]
+# section 7 (v2): largest (width, depth) of a wide-skin segment (at its joint end; segments taper), slim skins are
+# ARM_SLIM as wide, the sleeve layer is inflated by ARM_INFLATE per side
+ARM_SECTIONS = {"upper": (0.056, 0.058), "fore": (0.050, 0.048)}
+ARM_SLIM = 0.75
+ARM_INFLATE = 0.003
 
 
 class Report:
@@ -124,6 +139,8 @@ def check_nodes(g, r):
     for side in "RL":
         t = g.nodes[g.names[f"arm_{side}_fore"]].get("translation", [0, 0, 0])
         r.check(np.allclose(t, [0, -0.30, 0], atol=1e-6), f"p9: arm_{side}_fore translation {t}")
+    for nm in REMOVED_NODES:
+        r.check(nm not in g.names, f"p9: {nm} must not be in the weapon file (section 19: separate attachment)")
     vm = g.nodes[g.names["viewmodel"]]
     r.check(not any(k in vm for k in ("translation", "rotation", "scale")), "p9: viewmodel rest pose not identity")
     cam = g.nodes[g.names["camera"]]
@@ -146,12 +163,10 @@ def check_materials(g, r):
     for nm in MATERIALS:
         r.check(nm in names, f"p9: material {nm} missing")
     mats = {m["name"]: m for m in g.json["materials"]}
-    for nm in ("grip", "slide"):
-        r.check("baseColorTexture" in mats[nm]["pbrMetallicRoughness"], f"p9: material {nm} lacks its texture")
-    r.check(mats["glass"].get("alphaMode") == "BLEND", "p9: glass must be BLEND")
-    r.check(mats["reticle"].get("alphaMode") == "MASK", "p9: reticle must be MASK")
-    for nm in ("reticle", "sight_dots", "laser_lens"):
-        r.check(any(v > 0 for v in mats[nm].get("emissiveFactor", [0, 0, 0])), f"p9: {nm} should be emissive")
+    for nm in ("grip", "slide"):        # an embedded texture, or (section 20) a texture set
+        r.check("baseColorTexture" in mats[nm]["pbrMetallicRoughness"] or "pbr" in mats[nm].get("extras", {}),
+                f"p9: material {nm} lacks its texture")
+    r.check(any(v > 0 for v in mats["sight_dots"].get("emissiveFactor", [0, 0, 0])), "p9: sight_dots should be emissive")
     for s in g.json.get("samplers", []):
         r.check(s.get("wrapS", 10497) == 10497 and s.get("wrapT", 10497) == 10497, "p9: sampler not REPEAT")
     for im in g.json.get("images", []):
@@ -162,7 +177,7 @@ def check_animations(g, r):
     anims = {a["name"]: a for a in g.json.get("animations", [])}
     vm = g.names["viewmodel"]
     cam = g.names["camera"]
-    for nm, (lo, hi) in DURATIONS.items():
+    for nm, (lo, hi) in {**DURATIONS, **LOCOMOTION}.items():
         if not r.check(nm in anims, f"p9: animation {nm} missing"):
             continue
         a = anims[nm]
@@ -192,7 +207,7 @@ def check_animations(g, r):
             if node == cam:
                 r.check(path == "rotation", f"p9: {nm} animates camera {path}")
                 eul = np.array([euler_deg(q) for q in vs])
-                r.check(np.all(np.abs(eul[:, :2]) <= 1.5 + 1e-3) and np.all(np.abs(eul[:, 2]) <= 3.0 + 1e-3),
+                r.check(np.all(np.abs(eul[:, :2]) <= CAM_TURN + 1e-3) and np.all(np.abs(eul[:, 2]) <= CAM_ROLL + 1e-3),
                         f"p9: {nm} camera rotation exceeds limits (max {np.abs(eul).max(0).round(2)})")
                 r.check(np.allclose(np.abs(vs[-1]), [0, 0, 0, 1], atol=1e-5), f"p9: {nm} camera not identity at end")
             if g.nodes[node]["name"] == "mag" and path == "scale":
@@ -220,12 +235,11 @@ def check_eye_distance(g, arms, r, anims, root="gun", label="p9"):
         if "mesh" in n and n["name"] != "fx_shell":
             gun_meshes.append((i, np.concatenate(mesh_points(g, n["mesh"]))))
     arm_meshes = []
-    if arms is not None:
-        for side in "RL":
-            for seg, joint in (("upper", f"arm_{side}"), ("fore", f"arm_{side}_fore")):
-                pts = [np.concatenate(mesh_points(arms, arms.nodes[arms.names[f"{side}_{seg}_{v}{x}"]]["mesh"]))
-                       for v in ("wide", "slim") for x in ("", "_sleeve")]
-                arm_meshes.append((g.names[joint], np.concatenate(pts)))
+    if arms is not None:                       # section 16: each arms.glb mesh is drawn at its extras.joint
+        for n in arms.nodes:
+            joint = n.get("extras", {}).get("joint")
+            if "mesh" in n and joint in g.names:
+                arm_meshes.append((g.names[joint], np.concatenate(mesh_points(arms, n["mesh"]))))
     worst = {}
     onscreen = {}
     t70 = np.tan(np.radians(FOV_Y / 2))
@@ -262,19 +276,14 @@ def check_eye_distance(g, arms, r, anims, root="gun", label="p9"):
     return worst
 
 
-def check_sights(g, r):
+def check_sights(g, r, label="p9"):
+    """Eye point and the mounts that point down the bore (optic, laser, barrel) are parallel to it."""
     W = g.world_matrices({})
-    ret = W[g.names["reddot_reticle"]]
-    aim = W[g.names["aim_reddot"]]
-    v = ret[:3, 3] - aim[:3, 3]
-    fwd = -aim[:3, 2] / np.linalg.norm(aim[:3, 2])
-    off = v - fwd * np.dot(v, fwd)
-    r.check(np.linalg.norm(off) < 1e-5 and np.dot(v, fwd) > 0, "p9: reticle not on the aim_reddot sight line")
-    r.note(f"aim_reddot -> reticle distance {np.dot(v, fwd):.4f}")
     bore = -W[g.names["muzzle"]][:3, 2]
-    for nm in ("aim_iron", "aim_reddot", "laser_emitter"):
-        d = -W[g.names[nm]][:3, 2]
-        r.check(np.dot(d, bore) > 0.9999, f"p9: {nm} -Z not parallel to the bore")
+    for nm in ("aim_iron", "mount_optic", "mount_laser", "mount_barrel"):
+        if nm in g.names:
+            d = -W[g.names[nm]][:3, 2]
+            r.check(np.dot(d, bore) / np.linalg.norm(d) > 0.9999, f"{label}: {nm} -Z not parallel to the bore")
     ej = W[g.names["ejection"]][:3, 0]
     gx = W[g.names["gun"]][:3, 0]
     r.check(np.dot(ej, gx) > 0.5, "p9: ejection +X does not point to the right of the gun")
@@ -295,15 +304,72 @@ def check_arms(a, r):
             uv = p["uvs"]
             r.check(uv.min() >= 0 and uv.max() <= 1, f"arms: {nm} UVs outside [0,1]")
             pos = p["positions"]
-            g = 0.004 if nm.endswith("_sleeve") else 0.0
-            w = (0.0525 if "_slim" in nm else 0.07) + 2 * g
-            r.check(np.isclose(np.ptp(pos[:, 0]), w, atol=1e-5) and np.isclose(np.ptp(pos[:, 2]), 0.07 + 2 * g, atol=1e-5),
-                    f"arms: {nm} cross-section {np.ptp(pos[:, 0]):.4f} x {np.ptp(pos[:, 2]):.4f}")
+            g = ARM_INFLATE if nm.endswith("_sleeve") else 0.0
+            seg = "upper" if "_upper_" in nm else "fore"
+            w = ARM_SECTIONS[seg][0] * (ARM_SLIM if "_slim" in nm else 1.0) + 2 * g
+            d = ARM_SECTIONS[seg][1] + 2 * g
+            r.check(np.isclose(np.ptp(pos[:, 0]), w, atol=1e-5) and np.isclose(np.ptp(pos[:, 2]), d, atol=1e-5),
+                    f"arms: {nm} cross-section {np.ptp(pos[:, 0]):.4f} x {np.ptp(pos[:, 2]):.4f}, expected {w:.4f} x {d:.4f}")
             r.check(np.isclose(pos[:, 1].max(), g, atol=1e-6) and np.isclose(pos[:, 1].min(), -0.30 - g, atol=1e-6),
                     f"arms: {nm} length range {pos[:, 1].min():.3f}..{pos[:, 1].max():.3f}")
+    seen = set()
+    for n in a.nodes:
+        if "mesh" not in n:
+            continue
+        ex = n.get("extras", {})
+        nm = n.get("name")
+        ok = (ex.get("joint") in VALID_JOINTS and ex.get("variant") in ("wide", "slim")
+              and ex.get("layer") in ("base", "sleeve"))
+        if r.check(ok, f"arms: {nm} has bad extras {ex}"):
+            seen.add((ex["joint"], ex["variant"], ex["layer"]))
+            if ex["layer"] == "sleeve":
+                r.check(ex["joint"] in {f"arm_{s}{j}" for s in "RL" for j in ("", "_fore")},
+                        f"arms: sleeve {nm} on a hand joint")
+        for p in a.mesh_primitives(n["mesh"]):
+            r.check(p["uvs"].min() >= 0 and p["uvs"].max() <= 1, f"arms: {nm} UVs outside [0,1]")
+    for joint in HAND_JOINTS:
+        for v in ("wide", "slim"):
+            r.check((joint, v, "base") in seen, f"arms: no {v} mesh for {joint}")
+    r.note(f"arms.glb: {sum(1 for n in a.nodes if 'mesh' in n)} meshes, every node with extras "
+           f"{{joint, variant, layer}}")
     mats = {m["name"]: m for m in a.json["materials"]}
     r.check(mats.get("skin_overlay", {}).get("alphaMode") == "MASK" and
             abs(mats["skin_overlay"].get("alphaCutoff", 0) - 0.1) < 1e-6, "arms: skin_overlay must be MASK 0.1")
+
+
+def check_hand_joints(g, r, label):
+    """Section 16 finger rig under both forearms."""
+    for side in "RL":
+        p = f"arm_{side}"
+        layout = {f"{p}_hand": f"{p}_fore"}
+        for f in ("thumb", "index", "middle", "ring", "pinky"):
+            layout[f"{p}_{f}"] = f"{p}_hand"
+            layout[f"{p}_{f}2"] = f"{p}_{f}"
+        for joint, parent in layout.items():
+            if not r.check(joint in g.names, f"{label}: missing joint {joint}"):
+                continue
+            par = g.parent.get(g.names[joint])
+            r.check(par is not None and g.nodes[par]["name"] == parent, f"{label}: {joint} must hang under {parent}")
+        if f"{p}_hand" in g.names:
+            t = g.nodes[g.names[f"{p}_hand"]].get("translation", [0, 0, 0])
+            r.check(np.allclose(t, [0, -0.30, 0], atol=1e-6), f"{label}: {p}_hand must sit at the forearm end")
+
+
+def check_curve_rate(g, r, label):
+    """Section 15: LINEAR curves must be baked at >= 60 samples/s (CUBICSPLINE may use sparse keys)."""
+    worst = (0.0, "")
+    for a in g.json.get("animations", []):
+        for ch in a["channels"]:
+            s = a["samplers"][ch["sampler"]]
+            if s.get("interpolation", "LINEAR") != "LINEAR":
+                continue
+            ts = g.accessor(s["input"])[:, 0]
+            if len(ts) > 2:
+                dt = float(np.max(np.diff(ts)))
+                if dt > worst[0]:
+                    worst = (dt, f"{a['name']}/{g.nodes[ch['target']['node']]['name']}")
+    r.check(worst[0] <= 1.0 / MIN_RATE + 1e-4, f"{label}: LINEAR keys {worst[0]:.4f}s apart in {worst[1]} (< 60 Hz)")
+    r.note(f"curves: LINEAR keys at least every {worst[0] * 1000:.1f} ms (>= {1 / max(worst[0], 1e-9):.0f} Hz)")
 
 
 def check_gun(path, arms, r):
@@ -315,17 +381,51 @@ def check_gun(path, arms, r):
     anims = check_animations(g, r)
     check_sights(g, r)
     check_eye_distance(g, arms, r, anims)
+    import check_attach
+    check_attach.check_weapon(path, arms, r, "p9")
+    check_hand_joints(g, r, "p9")
+    check_curve_rate(g, r, "p9")
+    check_framing(path, r)
     tris = sum(len(g.accessor(p["indices"])) // 3 for n in g.nodes if "mesh" in n and n["name"] != "fx_shell"
                for p in g.json["meshes"][n["mesh"]]["primitives"])
     r.note(f"gun triangles (all attachments, excluding fx_shell): {tris}")
+
+
+FRAMED = ("rest", "idle", "fire", "fire_last", "walk")        # must stay on screen with the margin
+FREE = ("mag_standard", "mag_extended", "tactical_stock", "charm_grass")  # may run off the bottom / right edge
+
+
+def check_framing(path, r, margin=0.03):
+    """Gun and its attachments (largest build) inside the frame at the runtime FOV, 16:9 and 4:3: hip / idle / fire /
+    walk with a `margin` (fraction of screen height) at the bottom and right; magazines and a stock may run off the
+    bottom-right edge (COD-style hip framing); sprint carries are only reported."""
+    import framing
+    clips = FRAMED + ("sprint", "tac_sprint")
+    for (name, asp), ((left, top, right, bottom), _) in framing.report(path, clips, exclude=FREE).items():
+        aspect = framing.ASPECTS[asp]
+        m_right, m_bottom = (1 - right) * aspect, 1 - bottom
+        if name in FRAMED:
+            r.check(left >= 0 and top >= 0 and m_right >= margin - 1e-4 and m_bottom >= margin - 1e-4,
+                    f"p9: {name} at {asp} leaves the frame (box {left:.3f},{top:.3f}..{right:.3f},{bottom:.3f})")
+        tag = "" if name in FRAMED else " [report only]"
+        r.note(f"framing {name:9s} {asp:4s}: x {left:.3f}..{right:.3f} y {top:.3f}..{bottom:.3f} "
+               f"(right margin {m_right:.3f}H, bottom margin {m_bottom:.3f}H){tag}")
 
 
 def main(argv):
     arms_path = next((a for a in argv if a.endswith("arms.glb")), os.path.join(GUN_DIR, "arms.glb"))
     paths = [a for a in argv if a.endswith(".glb") and not a.endswith("arms.glb")]
     if not paths:
-        paths = [os.path.join(GUN_DIR, "p9.glb")] + sorted(
+        paths = [os.path.join(GUN_DIR, f) for f in ("p9.glb", "ak47.glb", "awp.glb")
+                 if os.path.exists(os.path.join(GUN_DIR, f))]
+        # every later weapon file in models/gun (new guns, special-skin models)
+        paths += sorted(os.path.join(GUN_DIR, f) for f in os.listdir(GUN_DIR)
+                        if f.endswith(".glb") and f not in ("p9.glb", "ak47.glb", "awp.glb", "arms.glb"))
+        paths += sorted(
             os.path.join(KNIFE_DIR, f) for f in (os.listdir(KNIFE_DIR) if os.path.isdir(KNIFE_DIR) else [])
+            if f.endswith(".glb"))
+        paths += sorted(
+            os.path.join(EQUIPMENT_DIR, f) for f in (os.listdir(EQUIPMENT_DIR) if os.path.isdir(EQUIPMENT_DIR) else [])
             if f.endswith(".glb"))
     arms = GLTF(arms_path) if os.path.exists(arms_path) else None
     failed = 0
@@ -338,16 +438,52 @@ def main(argv):
     else:
         print("FAILED: arms.glb missing")
         failed += 1
+    import check_attach                       # section 19: the attachment files
+    r = Report()
+    check_attach.check_models(r)
+    failed += report("models/attachment/*.glb", r)
     for path in paths:
         r = Report()
         names = GLTF(path).names
-        if "knife" in names:
+        claimed = _claimed_by(path, names)
+        if claimed is not None:                # later weapons: their own checker module (CHECK_MODULES)
+            claimed.check(path, arms, r)
+        elif "knife" in names:
             import check_knife
             check_knife.check(path, arms, r)
+        elif "bolt_handle" in names:           # section 23: bolt-action rifle (the bolt turns, then slides)
+            import check_sniper
+            check_sniper.check(path, arms, r)
+        elif "bolt" in names:                  # section 18: rifle (bolt carrier instead of a slide)
+            import check_rifle
+            check_rifle.check(path, arms, r)
         else:
             check_gun(path, arms, r)
         failed += report(os.path.basename(path), r)
+    import check_orient                       # section 6: faces wound outwards, no unintended see-through materials
+    r = Report()
+    check_orient.check_all(r, None if not argv else paths)
+    failed += report("mesh orientation (back faces, winding, alpha)", r)
     return 1 if failed else 0
+
+
+# Checkers of later weapons (parallel work): each module has `claims(path, names) -> bool` (names: node name -> index)
+# and `check(path, arms, r)`; the first module that claims a file checks it. Missing modules are skipped.
+CHECK_MODULES = ("check_tommy", "check_shotgun", "check_dual", "check_usp", "check_dagger", "check_rpd", "check_karambit", "check_equipment")
+
+
+def _claimed_by(path, names):
+    import importlib
+    for module in CHECK_MODULES:
+        try:
+            mod = importlib.import_module(module)
+        except ModuleNotFoundError as e:
+            if e.name == module:
+                continue
+            raise
+        if mod.claims(path, names):
+            return mod
+    return None
 
 
 def report(name, r):

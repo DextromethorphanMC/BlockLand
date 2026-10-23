@@ -1,5 +1,9 @@
 package com.blockland.gun;
 
+import com.blockland.craft.CraftCatalog;
+import com.blockland.craft.CraftData;
+import com.blockland.craft.Craftable;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -19,8 +23,8 @@ import net.minecraftforge.client.extensions.common.IClientItemExtensions;
 import java.util.function.Consumer;
 
 /**
- * A gun. Shooting, reloading and the gunsmith are handled by the gun services (server) and the viewmodel
- * (client); the item itself only disables vanilla behaviour (mining, melee, swinging) and describes itself.
+ * A gun. Shooting and reloading are handled by the gun services (server) and the viewmodel (client), its build by
+ * the 工匠 (craft) system; the item itself only disables vanilla behaviour (mining, melee, swinging) and describes itself.
  */
 public class GunItem extends Item {
     private final String gunId;
@@ -36,7 +40,7 @@ public class GunItem extends Item {
 
     @Override
     public Component getName(ItemStack stack) {
-        return GunCatalog.get().gun(gunId).<Component>map(gun -> Component.literal(gun.name)).orElseGet(() -> super.getName(stack));
+        return GunCatalog.get().gun(gunId).map(GunData.Gun::displayName).orElseGet(() -> super.getName(stack));
     }
 
     @Override
@@ -71,21 +75,32 @@ public class GunItem extends Item {
         GunState state = stack.get(GunContent.GUN_STATE.get());
         if (state == null) return;
         GunStats.of(gunId, state).ifPresent(stats -> {
-            tooltip.accept(Component.literal("§7弹匣 §f" + state.ammo() + "/" + stats.capacity() + " §8· §7" + stats.ammo().name));
-            tooltip.accept(Component.literal("§7" + stats.sight().name + " §8· §7" + stats.magazine().name
-                    + (stats.laser().hasBeam() ? " §8· §7" + stats.laser().name : "")));
-            tooltip.accept(Component.literal("§7皮肤 §f" + stats.skin().name));
-            tooltip.accept(Component.literal("§8手持时按 G 打开枪匠"));
+            Component ammoName = CraftCatalog.text("item.blockland." + stats.ammo().item, stats.ammo().name);
+            tooltip.accept(Component.translatable("blockland.craft.tooltip.ammo", state.ammo(), stats.capacity(), ammoName)
+                    .withStyle(ChatFormatting.GRAY));
+            // the fitted parts, slot by slot (empty slots are left out)
+            for (Craftable.Slot slot : stats.gun().slots()) {
+                String option = stats.build().option(slot.id(), slot.defaultOption());
+                if (option.equals(CraftData.NONE)) continue;
+                tooltip.accept(Component.translatable("blockland.craft.slot." + slot.id()).append(": ")
+                        .append(stats.gun().describe(slot.id(), option).name()).withStyle(ChatFormatting.GRAY));
+            }
+            tooltip.accept(Component.translatable("blockland.craft.skin").append(": ")
+                    .append(CraftCatalog.skinName(stats.gun(), stats.skin())).withStyle(ChatFormatting.GRAY));
+            tooltip.accept(Component.translatable("blockland.craft.tooltip.hint").withStyle(ChatFormatting.DARK_GRAY));
         });
     }
 
-    /** Third person: both arms raised, aiming like a handgun. Only called on the client. */
+    /**
+     * Third person: both arms raised, aiming like a handgun; a dual pair holds a gun out in each hand. Only called on the
+     * client.
+     */
     @Override
     public void initializeClient(Consumer<IClientItemExtensions> consumer) {
         consumer.accept(new IClientItemExtensions() {
             @Override
             public HumanoidModel.ArmPose getArmPose(LivingEntity entity, InteractionHand hand, ItemStack stack) {
-                return HumanoidModel.ArmPose.CROSSBOW_HOLD;
+                return com.blockland.client.gun.DualHold.pose(stack);
             }
         });
     }

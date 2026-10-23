@@ -7,8 +7,9 @@ import java.util.Map;
 
 /**
  * A parsed glTF 2.0 model: plain arrays, no GPU objects. Supports what the gun asset contract needs
- * (tools/assets/VIEWMODEL_SPEC.md): node hierarchy with TRS, triangle meshes (position/normal/uv/indices),
- * metallic-roughness materials with embedded PNGs, and TRS animations with event extras.
+ * (tools/assets/VIEWMODEL_SPEC.md): node hierarchy with TRS, triangle meshes (position/normal/uv/indices, baked AO in
+ * COLOR_0), metallic-roughness materials with embedded PNGs and the texture set / region extras of spec §20–21, TRS
+ * animations (STEP, LINEAR and CUBICSPLINE) with event extras, and string-valued node extras.
  */
 public final class GltfModel {
     public final List<Node> nodes = new ArrayList<>();
@@ -30,6 +31,8 @@ public final class GltfModel {
         public final float[] translation = {0, 0, 0};
         public final float[] rotation = {0, 0, 0, 1};
         public final float[] scale = {1, 1, 1};
+        /** String-valued {@code extras} of the node (e.g. which rig joint an arm mesh belongs to). */
+        public final Map<String, String> extras = new HashMap<>();
     }
 
     public static final class Mesh {
@@ -41,6 +44,8 @@ public final class GltfModel {
         public float[] positions;
         public float[] normals;
         public float[] uvs;
+        /** Baked ambient occlusion per vertex (COLOR_0 red, 1 = open), or null when the mesh has none. */
+        public float[] ao;
         public int[] indices;
         public int material = -1;
 
@@ -60,6 +65,12 @@ public final class GltfModel {
         public String alphaMode = "OPAQUE";
         public float alphaCutoff = 0.5f;
         public boolean doubleSided;
+        /** LabPBR texture set under {@code assets/blockland/} without {@code .png} (asset spec §20), or "". */
+        public String pbr = "";
+        /** Skin region (asset spec §21), or "" when the material does not say (the caller's default applies). */
+        public String region = "";
+        /** Multiplier on the material's UVs (texture set tiling). */
+        public float uvScale = 1;
 
         public boolean isEmissive() {
             return emissive[0] + emissive[1] + emissive[2] > 0.001f;
@@ -76,9 +87,11 @@ public final class GltfModel {
         public int node;
         public Path path;
         public float[] times;
-        /** 3 (T/S) or 4 (R) floats per key. */
+        /** 3 (T/S) or 4 (R) floats per key; for {@link #cubic} three such groups per key: in-tangent, value, out-tangent. */
         public float[] values;
         public boolean step;
+        /** CUBICSPLINE: Hermite curve through the keys with authored tangents (eases, overshoot) instead of straight lines. */
+        public boolean cubic;
     }
 
     public record Event(float time, String name) {

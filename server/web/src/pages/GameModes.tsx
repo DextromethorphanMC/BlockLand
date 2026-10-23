@@ -296,7 +296,7 @@ function GameModeEditor({
   const [mode, setMode] = useState<EditedMode>(initial)
   const [busy, setBusy] = useState(false)
   const set = (patch: Partial<EditedMode>) => setMode((m) => ({ ...m, ...patch }))
-  const { SettingsForm } = uiFor(mode.type)
+  const { SettingsForm, timeLimitHint } = uiFor(mode.type)
   const limited = mode.timeLimitSeconds != null
   const timed = mode.availableUntil != null
   const type = types.find((t) => t.id === mode.type)
@@ -375,7 +375,7 @@ function GameModeEditor({
           </Field>
         </div>
         <div className="grid-2">
-          <Field label="存活时间（可选）" hint="达到时间后，存活人数最多的队伍获胜；人数相同则平局">
+          <Field label="存活时间（可选）" hint={timeLimitHint ?? '达到时间后，存活人数最多的队伍获胜；人数相同则平局'}>
             <label className="check">
               <input
                 type="checkbox"

@@ -5,48 +5,68 @@ import com.blockland.anim.AnimValue;
 import com.blockland.anim.ColorMath;
 import com.blockland.anim.Ease;
 import com.blockland.anim.Ticker;
+import com.blockland.client.ClientAnnouncements;
 import com.blockland.client.ClientKitLayouts;
 import com.blockland.client.ClientLobbyState;
+import com.blockland.client.font.UiFont;
+import com.blockland.client.screen.lobby.AnnouncementReminder;
+import com.blockland.client.screen.lobby.AnnouncementsPanel;
 import com.blockland.client.screen.lobby.CharacterStage;
 import com.blockland.client.screen.lobby.MatchPanel;
 import com.blockland.client.screen.lobby.ModeBrowser;
 import com.blockland.client.screen.lobby.PartyPanel;
 import com.blockland.client.screen.lobby.TopBar;
+import com.blockland.client.settings.SettingsScreen;
 import com.blockland.client.ui.Draw;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.packet.C2SJoinQueue;
 import com.blockland.network.packet.C2SLeaveQueue;
 import com.blockland.network.packet.LobbyModeEntry;
+import com.blockland.network.packet.LobbyPackets;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 
+import javax.annotation.Nullable;
 import java.util.List;
+import java.util.function.Function;
 
 import static com.blockland.client.screen.lobby.LobbyTheme.*;
+import static com.blockland.client.ui.Tr.tr;
 
 /**
- * Main lobby screen, laid out like the CS2 main menu: tabs on top ("开始游戏" / "商店"); the play tab has the
- * mode browser on the left, the player's character in the middle and the matchmaking panel bottom right.
- * This class only lays out and wires the components in {@code lobby}; all motion runs on {@link Ticker}.
+ * Main lobby screen, laid out like the CS2 main menu: tabs on top ("开始游戏" / "工匠" / "公告" / "商店"), the lobby's
+ * own buttons top right (settings, leave). The play tab has the mode browser on the left, the player's character in
+ * the middle, the party and unread announcements top right and the matchmaking panel bottom right.
+ * <p>
+ * The lobby is the configuration phase: there is no world behind this screen, so it cannot be closed — Escape only
+ * steps back inside it. This class only lays out and wires the components in {@code lobby}; all motion runs on
+ * {@link Ticker}.
  */
 public final class LobbyScreen extends Screen {
     private static final int TOP_BAR = TopBar.HEIGHT;
     private static final int PAD = 16;
 
     private enum Tab {
-        PLAY("开始游戏"), SHOP("商店");
+        PLAY("blockland.lobby.tab.play"), CRAFT("blockland.lobby.tab.craft"), NEWS("blockland.lobby.tab.news"), SHOP("blockland.lobby.tab.shop");
 
-        final String label;
+        final String key;
 
-        Tab(String label) {
-            this.label = label;
+        Tab(String key) {
+            this.key = key;
         }
     }
 
+    /** Opens the 工匠 (craft) screen over the lobby; provided by the craft module, the lobby does not know it. */
+    @Nullable
+    private static Function<Screen, Screen> craftScreen;
     private static String selectedModeId = "";
     private static Tab tab = Tab.PLAY;
 
@@ -56,6 +76,8 @@ public final class LobbyScreen extends Screen {
     private MatchPanel match;
     private CharacterStage stage;
     private PartyPanel party;
+    private AnnouncementsPanel news;
+    private AnnouncementReminder reminder;
     private boolean introPlayed;
     private boolean switching;
     private final AnimValue contentAlpha = new AnimValue(1);
@@ -66,12 +88,16 @@ public final class LobbyScreen extends Screen {
     // layout, recomputed every frame from the screen size
     private int listX, listY, listW, listH;
     private int btnX, btnY, btnW, btnH;
-    private int infoY, infoH;
+    private int infoY, infoH, mapY;
     private int charLeft, charRight, charTop, charBottom;
     private boolean nameAbove;
 
     public LobbyScreen() {
-        super(Component.literal("BlockLand 大厅"));
+        super(Component.translatable("blockland.lobby.title"));
+    }
+
+    public static void setCraftScreen(@Nullable Function<Screen, Screen> factory) {
+        craftScreen = factory;
     }
 
     @Override
@@ -79,18 +105,30 @@ public final class LobbyScreen extends Screen {
         return false;
     }
 
+    /** Nothing lies behind the lobby while it is the configuration phase (an operator in the world may close it). */
+    @Override
+    public boolean shouldCloseOnEsc() {
+        return minecraft != null && minecraft.level != null;
+    }
+
     @Override
     protected void init() {
         layout();
         if (shop == null) {
-            shop = new ShopPanel(font);
-            topBar = new TopBar(font, List.of(Tab.PLAY.label, Tab.SHOP.label));
-            browser = new ModeBrowser(font);
-            match = new MatchPanel(font);
-            stage = new CharacterStage(font);
+            shop = new ShopPanel();
+            topBar = new TopBar(List.of(Tab.PLAY.key, Tab.CRAFT.key, Tab.NEWS.key, Tab.SHOP.key));
+            browser = new ModeBrowser();
+            match = new MatchPanel();
+            stage = new CharacterStage();
             party = new PartyPanel(font);
+            news = new AnnouncementsPanel();
+            reminder = new AnnouncementReminder(id -> {
+                news.select(id);
+                if (tab != Tab.NEWS) switchTab(Tab.NEWS);
+            });
         }
         if (tab == Tab.SHOP) shop.open();
+        if (tab == Tab.CRAFT) tab = Tab.PLAY;
         if (!introPlayed) {
             // init() also runs on resize and when returning from the loadout editor: animate the first open only
             introPlayed = true;
@@ -111,8 +149,9 @@ public final class LobbyScreen extends Screen {
         btnH = 40;
         btnX = width - PAD - btnW;
         btnY = height - PAD - btnH;
+        mapY = btnY - MatchPanel.MAP_H - 6;
         infoH = 60;
-        infoY = btnY - infoH - 8;
+        infoY = mapY - infoH - 6;
 
         charLeft = listX + listW + PAD;
         charRight = width - PAD;
@@ -155,15 +194,16 @@ public final class LobbyScreen extends Screen {
         float alpha = contentAlpha.get();
         g.pose().pushMatrix();
         g.pose().translate(0, contentShift.get());
-        if (tab == Tab.SHOP) {
-            shop.render(g, mouseX, mouseY, PAD, TOP_BAR + PAD, width - PAD * 2, height - TOP_BAR - PAD * 2 - 4);
-        } else {
-            renderPlay(g, mouseX, mouseY, alpha);
+        switch (tab) {
+            case SHOP -> shop.render(g, mouseX, mouseY, PAD, TOP_BAR + PAD, width - PAD * 2, height - TOP_BAR - PAD * 2 - 4);
+            case NEWS -> news.render(g, mouseX, mouseY, PAD + 4, TOP_BAR + PAD, width - PAD * 2 - 8, height - TOP_BAR - PAD * 2 - 4, alpha);
+            default -> renderPlay(g, mouseX, mouseY, alpha);
         }
         g.pose().popMatrix();
-        if (tab == Tab.SHOP && alpha < 1) g.fill(0, TOP_BAR, width, height, ColorMath.fade(BG_BOTTOM, 1 - alpha));
+        if (tab != Tab.PLAY && alpha < 1) g.fill(0, TOP_BAR, width, height, ColorMath.fade(BG_BOTTOM, 1 - alpha));
 
-        topBar.render(g, mouseX, mouseY, width, tab.ordinal());
+        int unread = ClientAnnouncements.unread().size();
+        topBar.render(g, mouseX, mouseY, width, tab.ordinal(), new int[]{0, 0, unread, 0});
     }
 
     private void renderPlay(GuiGraphics g, int mouseX, int mouseY, float alpha) {
@@ -177,30 +217,32 @@ public final class LobbyScreen extends Screen {
         Draw.rect(g, listX - 10, panelTop, listW + 20, listY + listH + 8 - panelTop, ColorMath.fade(PANEL, column));
         Draw.outline(g, listX - 10, panelTop, listW + 20, listY + listH + 8 - panelTop, ColorMath.fade(LINE, column));
         g.fill(listX, listY - 22, listX + 3, listY - 12, ColorMath.fade(ACCENT, column));
-        Draw.text(g, font, "选择游戏模式", listX + 8, listY - 21, 1f, ColorMath.fade(TEXT, column), false);
-        String count = ClientLobbyState.modes().size() + " 个模式";
-        Draw.text(g, font, count, listX + listW - font.width(count), listY - 21, 1f, ColorMath.fade(DIM, column), false);
+        Draw.text(g, tr("blockland.lobby.pick_mode"), listX + 8, listY - 21, 1f, ColorMath.fade(TEXT, column), false);
+        String count = tr("blockland.lobby.mode_count", ClientLobbyState.modes().size());
+        Draw.text(g, count, listX + listW - UiFont.width(count), listY - 21, 1f, ColorMath.fade(DIM, column), false);
         if (ClientLobbyState.modes().isEmpty()) {
-            Draw.text(g, font, "暂无可用的游戏模式", listX + 4, listY + 8, 1f, ColorMath.fade(MUTED, column), false);
-            Draw.text(g, font, "请在后台「小游戏管理」中添加", listX + 4, listY + 22, 1f, ColorMath.fade(DIM, column), false);
+            Draw.text(g, tr("blockland.lobby.no_modes"), listX + 4, listY + 8, 1f, ColorMath.fade(MUTED, column), false);
+            Draw.text(g, tr("blockland.lobby.no_modes_hint"), listX + 4, listY + 22, 1f, ColorMath.fade(DIM, column), false);
         } else {
             browser.render(g, mouseX, mouseY, listX, listY, listW, listH, selectedModeId, column);
         }
         g.pose().popMatrix();
+
+        // party strip and invitations top right, unread announcements under them
+        party.render(g, mouseX, mouseY, width - PAD, TOP_BAR + 8, alpha);
+        int reminderTop = Math.max(TOP_BAR + 36, party.bottom() + 8);
+        reminder.render(g, mouseX, mouseY, width - PAD, reminderTop, infoY - 10, alpha);
 
         // match panel rises in
         float p = panelIn.get();
         g.pose().pushMatrix();
         g.pose().translate(0, (1 - p) * 40);
         LobbyModeEntry selected = ClientLobbyState.mode(selectedModeId).orElse(null);
-        match.render(g, mouseX, mouseY, btnX, infoY, btnW, infoH, btnY, btnH, selected, alpha * Math.min(1, Math.max(0, p)));
+        match.render(g, mouseX, mouseY, btnX, infoY, btnW, infoH, mapY, btnY, btnH, selected, alpha * Math.min(1, Math.max(0, p)));
         g.pose().popMatrix();
 
-        // party strip and invitations float above everything else in the right column
-        party.render(g, mouseX, mouseY, width - PAD, TOP_BAR + 8, alpha);
-
-        String hint = browser.isInGroup() ? "ESC 返回上级  ·  M 打开大厅  ·  /bl leave 返回大厅" : "ESC 关闭  ·  M 打开大厅  ·  /bl leave 返回大厅";
-        Draw.text(g, font, hint, PAD, height - PAD + 2, 1f, ColorMath.fade(DIM, alpha), false);
+        String hint = tr(browser.isInGroup() ? "blockland.lobby.hint_group" : "blockland.lobby.hint");
+        Draw.text(g, hint, PAD, height - PAD + 2, 1f, ColorMath.fade(DIM, alpha), false);
     }
 
     // ---- input ---------------------------------------------------------------------------
@@ -213,10 +255,32 @@ public final class LobbyScreen extends Screen {
                 if (clickedTab != tab.ordinal()) switchTab(Tab.values()[clickedTab]);
                 return true;
             }
+            switch (topBar.buttonAt(mouseX, mouseY)) {
+                case SETTINGS -> {
+                    click();
+                    minecraft.setScreen(new SettingsScreen(this));
+                    return true;
+                }
+                case WORLD -> {
+                    click();
+                    BLNetwork.sendToServer(LobbyPackets.C2SEnterWorld.INSTANCE);
+                    return true;
+                }
+                case QUIT -> {
+                    click();
+                    quit();
+                    return true;
+                }
+                case NONE -> {
+                }
+            }
         }
         if (switching) return true;
         if (tab == Tab.SHOP) {
             return button == 0 && shop.mouseClicked(mouseX, mouseY) || super.mouseClicked(mouseX, mouseY, button);
+        }
+        if (tab == Tab.NEWS) {
+            return button == 0 && news.mouseClicked(mouseX, mouseY) || super.mouseClicked(mouseX, mouseY, button);
         }
         if (party.mouseClicked(mouseX, mouseY, button)) return true;
         if (button == 0) {
@@ -234,8 +298,16 @@ public final class LobbyScreen extends Screen {
                     }
                     return true;
                 }
+                case CONSUMED -> {
+                    click();
+                    return true;
+                }
                 case NONE -> {
                 }
+            }
+            if (reminder.mouseClicked(mouseX, mouseY)) {
+                click();
+                return true;
             }
             if (browser.mouseClicked(mouseX, mouseY, id -> {
                 if (!ClientLobbyState.isQueued()) selectedModeId = id;
@@ -257,11 +329,20 @@ public final class LobbyScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (tab == Tab.SHOP) return shop.mouseScrolled(scrollY);
+        if (tab == Tab.NEWS) return news.mouseScrolled(mouseX, mouseY, scrollY);
         return browser.mouseScrolled(mouseX, mouseY, scrollY);
     }
 
     private void switchTab(Tab next) {
         if (switching) return;
+        if (next == Tab.CRAFT) {
+            // 工匠 is its own full screen over the lobby
+            if (craftScreen != null) {
+                click();
+                minecraft.setScreen(craftScreen.apply(this));
+            }
+            return;
+        }
         switching = true;
         click();
         Anim.timeline()
@@ -279,20 +360,35 @@ public final class LobbyScreen extends Screen {
 
     private void onMatchButton() {
         if (ClientLobbyState.inGame()) return;
-        boolean leader = minecraft.player == null || ClientLobbyState.isPartyLeader(minecraft.player.getUUID());
         if (ClientLobbyState.isQueued()) {
             BLNetwork.sendToServer(C2SLeaveQueue.INSTANCE);
             click();
             return;
         }
-        if (!leader) return; // party members wait for the leader
+        if (!ClientLobbyState.isLeader()) return; // party members wait for the leader
         ClientLobbyState.mode(selectedModeId).filter(LobbyModeEntry::available).ifPresent(mode -> {
-            // the locally saved kit arrangement travels with the queue request; the server validates it
+            // the locally saved kit arrangement travels with the queue request; the server validates it (and the map)
             ClientKitLayouts.Layout layout = mode.hasKit() ? ClientKitLayouts.any(mode.id()).orElse(null) : null;
-            BLNetwork.sendToServer(layout == null ? new C2SJoinQueue(mode.id(), "", List.of())
-                    : new C2SJoinQueue(mode.id(), layout.signature(), layout.slots()));
+            String map = ClientLobbyState.chosenMap(mode.id());
+            BLNetwork.sendToServer(layout == null ? new C2SJoinQueue(mode.id(), map, "", List.of())
+                    : new C2SJoinQueue(mode.id(), map, layout.signature(), layout.slots()));
             click();
         });
+    }
+
+    /** Leaves the server. In the lobby there is no pause menu, so this is the way out. */
+    private void quit() {
+        Minecraft mc = minecraft;
+        if (mc.level != null) {
+            mc.level.disconnect(ClientLevel.DEFAULT_QUIT_MESSAGE);
+            mc.disconnect(new JoinMultiplayerScreen(new TitleScreen()), false);
+            return;
+        }
+        Connection connection = BLNetwork.clientConnection();
+        // nobody may tick the closed connection afterwards: vanilla would then show "disconnected" over the server list
+        BLNetwork.forgetClientConnection();
+        if (connection != null) connection.disconnect(Component.translatable("disconnect.quitting"));
+        mc.disconnect(new JoinMultiplayerScreen(new TitleScreen()), false);
     }
 
     @Override
@@ -303,8 +399,13 @@ public final class LobbyScreen extends Screen {
                 shop.closeModal();
                 return true;
             }
+            if (tab == Tab.PLAY && match.back()) return true;
             if (tab == Tab.PLAY && browser.back()) {
                 click();
+                return true;
+            }
+            if (tab != Tab.PLAY) {
+                switchTab(Tab.PLAY);
                 return true;
             }
         }
