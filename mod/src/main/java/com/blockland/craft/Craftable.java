@@ -23,13 +23,20 @@ public interface Craftable {
      * @param optionNodes option → weapon node shown only while that option is fitted (gun-specific parts such as
      *                    magazines); the nodes of the other options are hidden
      * @param noneName    display name of "none" in this slot ("" = the generic 无)
+     * @param excludes    slots this one takes over while it holds anything but its default (they fall back to theirs)
      */
     record Slot(String id, String mount, String defaultOption, List<String> options, List<String> hides,
-                Map<String, String> optionNodes, String noneName) {
+                Map<String, String> optionNodes, String noneName, List<String> excludes) {
         public Slot {
             options = List.copyOf(options);
             hides = List.copyOf(hides);
             optionNodes = Map.copyOf(optionNodes);
+            excludes = List.copyOf(excludes);
+        }
+
+        public Slot(String id, String mount, String defaultOption, List<String> options, List<String> hides,
+                    Map<String, String> optionNodes, String noneName) {
+            this(id, mount, defaultOption, options, hides, optionNodes, noneName, List.of());
         }
 
         public boolean allows(String option) {

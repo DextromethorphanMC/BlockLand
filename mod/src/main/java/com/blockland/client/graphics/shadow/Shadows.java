@@ -56,6 +56,8 @@ public final class Shadows {
         @Override
         public void beginFrame(FrameContext frame) {
             effects.reset();
+            // decided before the scene uniforms are written: the lit programs then leave the haze to the fog pass
+            Graphics.status().volumetricFogActive = effects.wantsFog(Graphics.settings());
         }
 
         @Override

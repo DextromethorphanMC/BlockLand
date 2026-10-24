@@ -12,6 +12,7 @@ import numpy as np
 
 import armrig
 import hands
+import motion_layer
 import p9_model as pm
 import p9_rig as rig
 from anim import Curve, drift, ring
@@ -328,3 +329,7 @@ INSPECT = Clip("inspect", 3.60, inspect_pose,
                events=[(0.02, "inspect_move"), (1.32, "inspect_move"), (2.42, "inspect_move"),
                        (2.80, "slide_back"), (T_PC_HOME - 0.005, "slide_forward")],
                extra_times=(2.70, T_PC_BACK, 3.07, T_PC_HOME, T_PC_HOME + 0.010))
+
+# section 31.6: the hand-keyed detail layer (overlap, settles, anticipation, hand adjustments, re-grips)
+RELOAD, RELOAD_EMPTY, INSPECT = (motion_layer.layered(c, rig, seed) for c, seed in
+                                 ((RELOAD, 402), (RELOAD_EMPTY, 403), (INSPECT, 404)))

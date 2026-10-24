@@ -9,6 +9,7 @@ import com.blockland.client.ClientAnnouncements;
 import com.blockland.client.ClientKitLayouts;
 import com.blockland.client.ClientLobbyState;
 import com.blockland.client.font.UiFont;
+import com.blockland.client.screen.lobby.ActivitiesPanel;
 import com.blockland.client.screen.lobby.AnnouncementReminder;
 import com.blockland.client.screen.lobby.AnnouncementsPanel;
 import com.blockland.client.screen.lobby.CharacterStage;
@@ -45,8 +46,8 @@ import static com.blockland.client.screen.lobby.LobbyTheme.*;
 import static com.blockland.client.ui.Tr.tr;
 
 /**
- * Main lobby screen, laid out like the CS2 main menu: tabs on top ("开始游戏" / "工匠" / "公告" / "商店" / "库存" / "个人主页"), the lobby's
- * own buttons top right (settings, leave). The play tab has the mode browser on the left, the player's character in
+ * Main lobby screen, laid out like the CS2 main menu: tabs on top ("开始游戏" / "活动" / "工匠" / "公告" / "商店" / "库存" / "个人主页"),
+ * the lobby's own buttons top right (settings, leave). The play tab has the mode browser on the left, the player's character in
  * the middle, the party and unread announcements top right and the matchmaking panel bottom right.
  * <p>
  * The lobby is the configuration phase: there is no world behind this screen, so it cannot be closed — Escape only
@@ -58,8 +59,8 @@ public final class LobbyScreen extends Screen {
     private static final int PAD = 16;
 
     private enum Tab {
-        PLAY("blockland.lobby.tab.play"), CRAFT("blockland.lobby.tab.craft"), NEWS("blockland.lobby.tab.news"), SHOP("blockland.lobby.tab.shop"),
-        INVENTORY("blockland.lobby.tab.inventory"), PROFILE("blockland.lobby.tab.profile");
+        PLAY("blockland.lobby.tab.play"), EVENTS("blockland.lobby.tab.events"), CRAFT("blockland.lobby.tab.craft"), NEWS("blockland.lobby.tab.news"),
+        SHOP("blockland.lobby.tab.shop"), INVENTORY("blockland.lobby.tab.inventory"), PROFILE("blockland.lobby.tab.profile");
 
         final String key;
 
@@ -85,6 +86,7 @@ public final class LobbyScreen extends Screen {
     private CharacterStage stage;
     private PartyPanel party;
     private AnnouncementsPanel news;
+    private ActivitiesPanel events;
     private AnnouncementReminder reminder;
     private boolean introPlayed;
     private boolean switching;
@@ -124,7 +126,7 @@ public final class LobbyScreen extends Screen {
         layout();
         if (shop == null) {
             shop = new ShopPanel();
-            topBar = new TopBar(List.of(Tab.PLAY.key, Tab.CRAFT.key, Tab.NEWS.key, Tab.SHOP.key, Tab.INVENTORY.key, Tab.PROFILE.key));
+            topBar = new TopBar(List.of(Tab.PLAY.key, Tab.EVENTS.key, Tab.CRAFT.key, Tab.NEWS.key, Tab.SHOP.key, Tab.INVENTORY.key, Tab.PROFILE.key));
             inventory = new InventoryPanel();
             profile = new ProfilePanel();
             craft = craftTabFactory == null ? null : craftTabFactory.get();
@@ -133,6 +135,11 @@ public final class LobbyScreen extends Screen {
             stage = new CharacterStage();
             party = new PartyPanel(font);
             news = new AnnouncementsPanel();
+            // each activity has its own screen; coming back returns to this tab
+            events = new ActivitiesPanel(id -> {
+                click();
+                minecraft.setScreen(new ActivityScreen(this, id));
+            });
             reminder = new AnnouncementReminder(id -> {
                 news.select(id);
                 if (tab != Tab.NEWS) switchTab(Tab.NEWS);
@@ -141,6 +148,7 @@ public final class LobbyScreen extends Screen {
         if (tab == Tab.SHOP) shop.open();
         if (tab == Tab.INVENTORY) inventory.open();
         if (tab == Tab.PROFILE) profile.open();
+        if (tab == Tab.EVENTS) events.open();
         if (tab == Tab.CRAFT) {
             if (craft == null) tab = Tab.PLAY;
             else craft.open();
@@ -215,6 +223,7 @@ public final class LobbyScreen extends Screen {
             case INVENTORY -> inventory.render(g, mouseX, mouseY, PAD + 4, TOP_BAR + PAD, width - PAD * 2 - 8, height - TOP_BAR - PAD * 2 - 4, alpha);
             case PROFILE -> profile.render(g, mouseX, mouseY, PAD + 4, TOP_BAR + PAD, width - PAD * 2 - 8, height - TOP_BAR - PAD * 2 - 4, alpha);
             case NEWS -> news.render(g, mouseX, mouseY, PAD + 4, TOP_BAR + PAD, width - PAD * 2 - 8, height - TOP_BAR - PAD * 2 - 4, alpha);
+            case EVENTS -> events.render(g, mouseX, mouseY, PAD + 4, TOP_BAR + PAD, width - PAD * 2 - 8, height - TOP_BAR - PAD * 2 - 4, alpha);
             case CRAFT -> {
                 if (craft != null) craft.render(g, mouseX, mouseY, PAD + 4, TOP_BAR + PAD, width - PAD * 2 - 8, height - TOP_BAR - PAD * 2 - 4, alpha);
             }
@@ -223,8 +232,9 @@ public final class LobbyScreen extends Screen {
         g.pose().popMatrix();
         if (tab != Tab.PLAY && alpha < 1) g.fill(0, TOP_BAR, width, height, ColorMath.fade(BG_BOTTOM, 1 - alpha));
 
-        int unread = ClientAnnouncements.unread().size();
-        topBar.render(g, mouseX, mouseY, width, tab.ordinal(), new int[]{0, 0, unread, 0, 0, 0});
+        int[] badges = new int[Tab.values().length];
+        badges[Tab.NEWS.ordinal()] = ClientAnnouncements.unread().size();
+        topBar.render(g, mouseX, mouseY, width, tab.ordinal(), badges);
     }
 
     private void renderPlay(GuiGraphics g, int mouseX, int mouseY, float alpha) {
@@ -312,6 +322,9 @@ public final class LobbyScreen extends Screen {
         if (tab == Tab.NEWS) {
             return button == 0 && news.mouseClicked(mouseX, mouseY) || super.mouseClicked(mouseX, mouseY, button);
         }
+        if (tab == Tab.EVENTS) {
+            return button == 0 && events.mouseClicked(mouseX, mouseY) || super.mouseClicked(mouseX, mouseY, button);
+        }
         if (party.mouseClicked(mouseX, mouseY, button)) return true;
         if (button == 0) {
             layout();
@@ -370,6 +383,7 @@ public final class LobbyScreen extends Screen {
         if (tab == Tab.INVENTORY) return inventory.mouseScrolled(mouseX, mouseY, scrollY);
         if (tab == Tab.PROFILE) return profile.mouseScrolled(mouseX, mouseY, scrollY);
         if (tab == Tab.NEWS) return news.mouseScrolled(mouseX, mouseY, scrollY);
+        if (tab == Tab.EVENTS) return events.mouseScrolled(mouseX, mouseY, scrollY);
         return browser.mouseScrolled(mouseX, mouseY, scrollY);
     }
 
@@ -386,6 +400,7 @@ public final class LobbyScreen extends Screen {
                     if (next == Tab.SHOP) shop.open();
                     if (next == Tab.INVENTORY) inventory.open();
                     if (next == Tab.PROFILE) profile.open();
+                    if (next == Tab.EVENTS) events.open();
                     if (next == Tab.CRAFT && craft != null) craft.open();
                     contentShift.snap(-14);
                 }, ">")

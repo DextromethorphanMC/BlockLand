@@ -4,8 +4,10 @@ import com.blockland.BlockLand;
 import com.blockland.anim.Ticker;
 import com.blockland.client.decal.Decals;
 import com.blockland.client.hud.HitMarker;
+import com.blockland.client.impact.Impacts;
 import com.blockland.client.input.WeaponInput;
 import com.blockland.client.viewmodel.Holster;
+import com.blockland.client.viewmodel.SwimPose;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.effect.ActionLocks;
 import com.blockland.melee.KnifeItem;
@@ -25,15 +27,12 @@ import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.particles.BlockParticleOption;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Input;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.AddGuiOverlayLayersEvent;
@@ -112,14 +111,14 @@ public final class ClientKnives {
         WatchedKnife.init();
         WeaponInput.onAttackPressed(() -> pressed(false));
         WeaponInput.onUsePressed(() -> pressed(true));
-        // no sprinting while attacking or inspecting: the knife needs the hand
+        // no sprinting while attacking or inspecting: the knife needs the hand (a swim goes on: it cuts from the swimming pose)
         MovementInputUpdateEvent.BUS.addListener(event -> {
-            if (!holdingKnife() || !busy()) return;
+            if (!holdingKnife() || !busy() || event.getEntity().isSwimming()) return;
             Input keys = event.getInput().keyPresses;
             if (keys.sprint()) {
                 event.getInput().keyPresses = new Input(keys.forward(), keys.backward(), keys.left(), keys.right(), keys.jump(), keys.shift(), false);
             }
-            if (event.getEntity().isSprinting()) event.getEntity().setSprinting(false);
+            SwimPose.stopRunning(event.getEntity());
         });
         ViewportEvent.ComputeCameraAngles.BUS.addListener(event -> {
             if (!holdingKnife() || !modelReady || Minecraft.getInstance().options.getCameraType() != CameraType.FIRST_PERSON) return;
@@ -280,7 +279,7 @@ public final class ClientKnives {
         }
         // holding the button keeps slashing
         if (free && mc.options.keyAttack.isDown() && ready(now)) attack(player, false, false);
-        viewmodel.update(dt, player, player.isSprinting());
+        viewmodel.update(dt, player, SwimPose.running(player));
     }
 
     // ---- input ----------------------------------------------------------------------------------------
@@ -317,7 +316,7 @@ public final class ClientKnives {
             }
             return;
         }
-        if (player.isSprinting()) player.setSprinting(false);
+        SwimPose.stopRunning(player);
         MeleeData.Attack attack = knife.attack(heavy);
         int combo = 0;
         if (!heavy) {
@@ -340,7 +339,7 @@ public final class ClientKnives {
 
     private static void inspect(LocalPlayer player) {
         if (knife == null || System.nanoTime() < drawEnd || busy()) return;
-        if (player.isSprinting()) player.setSprinting(false);
+        SwimPose.stopRunning(player);
         viewmodel.play(KnifeViewmodel.Action.INSPECT, knife.anims.inspect, 0);
     }
 
@@ -354,16 +353,17 @@ public final class ClientKnives {
         Vec3 eye = Slides.eyePosition(player);
         MeleeTrace.Hit hit = MeleeTrace.trace(level, player, eye, player.getViewVector(1), attack);
         Vec3 cut = cutDirection(player.getViewYRot(1), player.getViewXRot(1), swing.slashAngle);
+        Vec3 motion = bladeMotion(cut, player.getViewVector(1));
         switch (hit.type()) {
             case ENTITY -> {
                 Decals.onEntity(attack.bodyDecal, hit.entity(), eye, hit.point(), cut);
-                blood(level, hit.point(), cut);
+                Impacts.slashEntity(level, hit.point(), hit.entity(), eye, motion, attack.impactProfile);
                 playUi(knife.sounds.hitFlesh, 0.95f + random.nextFloat() * 0.1f, 0.9f);
                 viewmodel.impact(strikeHeavy ? 1.5f : 1f, attack.punch, swing.slashAngle);
             }
             case BLOCK -> {
                 Decals.onBlock(attack.blockDecal, hit.point(), hit.face(), hit.pos(), cut);
-                chips(level, hit.point(), hit.pos(), hit.face());
+                Impacts.slash(level, hit.point(), hit.face(), hit.pos(), motion, attack.impactProfile);
                 playUi(knife.sounds.hitBlock, 0.95f + random.nextFloat() * 0.1f, 0.8f);
                 BlockState state = level.getBlockState(hit.pos());
                 Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(state.getSoundType().getHitSound(), 0.8f, 0.5f));
@@ -385,17 +385,23 @@ public final class ClientKnives {
         if (used == null) return;
         MeleeData.Attack attack = used.attack(impact.heavy());
         Vec3 point = new Vec3(impact.x(), impact.y(), impact.z());
-        Vec3 from = attacker != null ? attacker.getEyePosition() : point.add(0, 0.5, 0);
+        // the strike came from the attacker's eyes (low while it slides)
+        Vec3 from = attacker != null ? Slides.eyePosition(attacker) : point.add(0, 0.5, 0);
         Vec3 cut = attacker != null ? cutDirection(attacker.getViewYRot(1), attacker.getViewXRot(1), attack.swing(impact.combo()).slashAngle) : null;
+        Vec3 look = point.subtract(from);
+        look = look.lengthSqr() > 1e-6 ? look.normalize() : new Vec3(0, -1, 0);
+        Vec3 motion = cut == null ? look : bladeMotion(cut, look);
         if (impact.target() == MeleePackets.Target.ENTITY) {
             Entity target = level.getEntity(impact.targetId());
-            if (target != null) Decals.onEntity(attack.bodyDecal, target, from, point, cut);
-            blood(level, point, cut == null ? new Vec3(1, 0, 0) : cut);
+            if (target != null) {
+                Decals.onEntity(attack.bodyDecal, target, from, point, cut);
+                Impacts.slashEntity(level, point, target, from, motion, attack.impactProfile);
+            }
         } else if (impact.face() >= 0 && impact.face() < Direction.values().length) {
             Direction face = Direction.values()[impact.face()];
             BlockPos pos = BlockPos.containing(point.subtract(face.getStepX() * 0.01, face.getStepY() * 0.01, face.getStepZ() * 0.01));
             Decals.onBlock(attack.blockDecal, point, face, pos, cut);
-            chips(level, point, pos, face);
+            Impacts.slash(level, point, face, pos, motion, attack.impactProfile);
         }
     }
 
@@ -414,26 +420,12 @@ public final class ClientKnives {
         return right.scale(Math.cos(a)).add(up.scale(Math.sin(a))).normalize();
     }
 
-    private static void blood(ClientLevel level, Vec3 at, Vec3 cut) {
-        BlockParticleOption drop = new BlockParticleOption(ParticleTypes.BLOCK, Blocks.REDSTONE_BLOCK.defaultBlockState());
-        for (int i = 0; i < 7; i++) {
-            double s = 0.05 + random.nextDouble() * 0.12;
-            level.addParticle(drop, at.x, at.y, at.z, cut.x * s + (random.nextDouble() - 0.5) * 0.06,
-                    cut.y * s + random.nextDouble() * 0.08, cut.z * s + (random.nextDouble() - 0.5) * 0.06);
-        }
-    }
-
-    private static void chips(ClientLevel level, Vec3 at, BlockPos pos, Direction face) {
-        BlockState state = level.getBlockState(pos);
-        if (state.isAir()) return;
-        BlockParticleOption chip = new BlockParticleOption(ParticleTypes.BLOCK, state);
-        double ox = face.getStepX() * 0.05, oy = face.getStepY() * 0.05, oz = face.getStepZ() * 0.05;
-        for (int i = 0; i < 5; i++) {
-            level.addParticle(chip, at.x + ox, at.y + oy, at.z + oz, face.getStepX() * 0.08 + (random.nextDouble() - 0.5) * 0.15,
-                    face.getStepY() * 0.08 + random.nextDouble() * 0.12, face.getStepZ() * 0.08 + (random.nextDouble() - 0.5) * 0.15);
-        }
-        // steel on stone: a couple of sparks
-        level.addParticle(ParticleTypes.CRIT, at.x + ox, at.y + oy, at.z + oz, face.getStepX() * 0.2, 0.1, face.getStepZ() * 0.2);
+    /**
+     * The blade's motion where it meets something: mostly along the cut (the swing across the view), a little forward
+     * into what it strikes (a thrust's profile throws back along the blade on its own).
+     */
+    private static Vec3 bladeMotion(Vec3 cut, Vec3 look) {
+        return cut.add(look.scale(0.35)).normalize();
     }
 
     // ---- rendering ------------------------------------------------------------------------------------

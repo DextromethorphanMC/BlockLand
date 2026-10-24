@@ -1144,7 +1144,9 @@ SETS = {
 # module has `sets(pt)` -> {name: SetDef}, `pt` being this module (its recipes and helpers). Missing modules are skipped.
 SET_MODULES = ("pbr_sets_tommy", "pbr_sets_ks3", "pbr_sets_usp", "pbr_sets_dagger", "pbr_sets_stocks",
                "pbr_sets_neon", "pbr_sets_karambit", "pbr_sets_equipment",
-               "pbr_sets_bomb")
+               "pbr_sets_bomb", "pbr_sets_camos",
+               "pbr_sets_uzi", "pbr_sets_p90", "pbr_sets_mp5", "pbr_sets_sten", "pbr_sets_ssg08", "pbr_sets_calico", "pbr_sets_scar", "pbr_sets_m4a1", "pbr_sets_jackhammer",
+               "pbr_sets_crowbar", "pbr_sets_knuckles")
 
 
 def _load_set_modules():

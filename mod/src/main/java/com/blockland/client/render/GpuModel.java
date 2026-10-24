@@ -39,6 +39,7 @@ public final class GpuModel implements AutoCloseable {
     private final GpuBuffer vertices;
     private final GpuBuffer indices;
     private final VertexFormat.IndexType indexType;
+    private final int vertexCount;
     private final List<List<Part>> meshParts = new ArrayList<>();
     private final GpuTexture[] textures;
     private final GpuTextureView[] views;
@@ -48,8 +49,11 @@ public final class GpuModel implements AutoCloseable {
     private final Vector4f color = new Vector4f();
     private final Vector3f shiftedOrigin = new Vector3f();
 
-    /** An index range of the shared buffers drawn with one material, and the triangles it came from. */
-    public record Part(int firstIndex, int indexCount, int material, GltfModel.Primitive primitive) {
+    /**
+     * An index range of the shared buffers drawn with one material, the triangles it came from and where its vertices
+     * start in the shared vertex buffer (its indices are rebased by that much).
+     */
+    public record Part(int firstIndex, int indexCount, int material, GltfModel.Primitive primitive, int baseVertex) {
     }
 
     /**
@@ -115,23 +119,21 @@ public final class GpuModel implements AutoCloseable {
             List<Part> parts = new ArrayList<>();
             for (GltfModel.Primitive p : mesh.primitives) {
                 for (int v = 0; v < p.vertexCount(); v++) {
-                    vb.putFloat(p.positions[v * 3]).putFloat(p.positions[v * 3 + 1]).putFloat(p.positions[v * 3 + 2]);
-                    vb.putFloat(p.uvs[v * 2]).putFloat(p.uvs[v * 2 + 1]);
-                    // normal as unsigned bytes (0..255 = −1..1) and the baked AO in the fourth byte
-                    vb.put(unit(p.normals[v * 3])).put(unit(p.normals[v * 3 + 1])).put(unit(p.normals[v * 3 + 2]))
-                            .put(p.ao == null ? (byte) 255 : (byte) Math.round(Math.max(0, Math.min(1, p.ao[v])) * 255));
+                    putVertex(vb, p.positions[v * 3], p.positions[v * 3 + 1], p.positions[v * 3 + 2], p.uvs[v * 2], p.uvs[v * 2 + 1],
+                            p.normals[v * 3], p.normals[v * 3 + 1], p.normals[v * 3 + 2], p.ao == null ? 1 : p.ao[v]);
                 }
                 // indices are rebased on upload so every draw uses base vertex 0
                 for (int index : p.indices) {
                     if (shortIndices) ib.putShort((short) (index + baseVertex));
                     else ib.putInt(index + baseVertex);
                 }
-                parts.add(new Part(firstIndex, p.indices.length, p.material, p));
+                parts.add(new Part(firstIndex, p.indices.length, p.material, p, baseVertex));
                 baseVertex += p.vertexCount();
                 firstIndex += p.indices.length;
             }
             meshParts.add(parts);
         }
+        this.vertexCount = vertexCount;
         vb.flip();
         ib.flip();
         GpuDevice device = RenderSystem.getDevice();
@@ -172,6 +174,21 @@ public final class GpuModel implements AutoCloseable {
 
     private static byte unit(float v) {
         return (byte) Math.round((Math.max(-1, Math.min(1, v)) * 0.5f + 0.5f) * 255);
+    }
+
+    /**
+     * One vertex in {@link GunPipelines#FORMAT}: position, uv, the normal as unsigned bytes (0..255 = −1..1) and the baked
+     * AO in the fourth byte. Buffers written for {@link #addMesh(DrawList, int, GpuBuffer, List, Matrix4f, Style, int, int, float)}
+     * use it too.
+     */
+    public static void putVertex(ByteBuffer to, float x, float y, float z, float u, float v, float nx, float ny, float nz, float ao) {
+        to.putFloat(x).putFloat(y).putFloat(z).putFloat(u).putFloat(v);
+        to.put(unit(nx)).put(unit(ny)).put(unit(nz)).put((byte) Math.round(Math.max(0, Math.min(1, ao)) * 255));
+    }
+
+    /** Vertices in the shared vertex buffer (a buffer standing in for it, see {@link #addMesh(DrawList, int, GpuBuffer, List, Matrix4f, Style, int, int, float)}, has as many). */
+    public int vertexCount() {
+        return vertexCount;
     }
 
     /** The shared vertex buffer (for passes that draw some parts with a pipeline of their own; see {@link #parts}). */
@@ -237,12 +254,30 @@ public final class GpuModel implements AutoCloseable {
      * @param alpha overall opacity (fades), multiplied into each material's colour
      */
     public void addMesh(DrawList list, int mesh, Matrix4f modelView, Style style, int blockLight, int skyLight, float alpha) {
-        addMesh(list, mesh, modelView, style, "", ZERO, blockLight, skyLight, alpha);
+        addMesh(list, mesh, null, null, modelView, style, "", ZERO, blockLight, skyLight, alpha);
+    }
+
+    /**
+     * Queues {@code mesh} drawn from {@code vertices} instead of the shared vertex buffer: a buffer laid out like it
+     * ({@link #putVertex}, every part at its {@link Part#baseVertex}) whose vertices change every frame (skinned arms,
+     * asset spec §7), with the static index ranges. {@code sources} are those vertices for the vanilla path, one per
+     * part (null = the file's).
+     */
+    public void addMesh(DrawList list, int mesh, GpuBuffer vertices, @Nullable List<GltfModel.Primitive> sources, Matrix4f modelView,
+                        Style style, int blockLight, int skyLight, float alpha) {
+        addMesh(list, mesh, vertices, sources, modelView, style, "", ZERO, blockLight, skyLight, alpha);
     }
 
     private void addMesh(DrawList list, int mesh, Matrix4f modelView, Style style, String defaultRegion, Vector3fc origin,
                          int blockLight, int skyLight, float alpha) {
-        for (Part part : meshParts.get(mesh)) {
+        addMesh(list, mesh, null, null, modelView, style, defaultRegion, origin, blockLight, skyLight, alpha);
+    }
+
+    private void addMesh(DrawList list, int mesh, @Nullable GpuBuffer vertexOverride, @Nullable List<GltfModel.Primitive> sources,
+                         Matrix4f modelView, Style style, String defaultRegion, Vector3fc origin, int blockLight, int skyLight, float alpha) {
+        List<Part> parts = meshParts.get(mesh);
+        for (int index = 0; index < parts.size(); index++) {
+            Part part = parts.get(index);
             GltfModel.Material material = part.material >= 0 && part.material < source.materials.size()
                     ? source.materials.get(part.material) : null;
             String name = material == null ? "" : material.name;
@@ -310,9 +345,9 @@ public final class GpuModel implements AutoCloseable {
             else if (material != null && material.isBlend() || alpha < 0.999f) pipeline = GunPipelines.TRANSLUCENT;
             else if (material != null && material.doubleSided) pipeline = GunPipelines.OPAQUE_NO_CULL;
             else pipeline = GunPipelines.OPAQUE;
-            list.add(pipeline, vertices, indices, indexType, part.firstIndex, part.indexCount, modelView, color,
-                    blockLight, skyLight, material(material, emissive, uvScale, layer, style.surge()), origin, albedo, normal, specular,
-                    part.primitive, id, managed);
+            list.add(pipeline, vertexOverride != null ? vertexOverride : vertices, indices, indexType, part.firstIndex, part.indexCount,
+                    modelView, color, blockLight, skyLight, material(material, emissive, uvScale, layer, style.surge()), origin, albedo,
+                    normal, specular, sources != null && index < sources.size() ? sources.get(index) : part.primitive, id, managed);
         }
     }
 

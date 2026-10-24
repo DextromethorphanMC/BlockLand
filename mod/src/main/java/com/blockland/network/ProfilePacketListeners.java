@@ -14,11 +14,12 @@ public final class ProfilePacketListeners {
 
     public interface Server {
         Server NOOP = new Server() {
-            @Override public void onRequest(UUID player, ProfilePackets.Kind kind) { }
+            @Override public void onRequest(UUID player, ProfilePackets.Kind kind, String modeId) { }
             @Override public void onEquip(UUID player, String slot, String key) { }
         };
 
-        void onRequest(UUID player, ProfilePackets.Kind kind);
+        /** {@code modeId}: the ladder's mode for a leaderboard request, else "". */
+        void onRequest(UUID player, ProfilePackets.Kind kind, String modeId);
 
         void onEquip(UUID player, String slot, String key);
     }

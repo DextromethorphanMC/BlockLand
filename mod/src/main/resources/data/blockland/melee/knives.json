@@ -47,6 +47,7 @@
           }
         ],
         "blockDecal": "knife_stab",
+        "impactProfile": "stab",
         "bodyDecal": "knife_cut",
         "swingSound": "blockland:knife.swing_heavy"
       },
@@ -253,6 +254,7 @@
           }
         ],
         "blockDecal": "knife_stab",
+        "impactProfile": "stab",
         "bodyDecal": "knife_cut",
         "swingSound": "blockland:knife.swing_heavy"
       },
@@ -409,6 +411,7 @@
           }
         ],
         "blockDecal": "knife_stab",
+        "impactProfile": "stab",
         "bodyDecal": "knife_cut",
         "swingSound": "blockland:knife.swing_heavy"
       },
@@ -459,6 +462,253 @@
           "regions": {
             "blade": {
               "pbr": "textures/pbr/skin/tiger/blade",
+              "uvScale": 0.5
+            }
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      }
+    },
+    "crowbar": {
+      "name": "撬棍",
+      "description": "60 厘米六角钢撬棍，鹅颈弯头带拔钉爪。挥动沉重缓慢但一击很痛；重击双手高举砸下，伤害极高。",
+      "model": "models/knife/crowbar.glb",
+      "drawTime": 0.8,
+      "comboWindow": 0.8,
+      "light": {
+        "damage": 7.0,
+        "range": 2.9,
+        "radius": 0.45,
+        "duration": 0.62,
+        "impact": 0.24,
+        "cooldown": 0.58,
+        "knockback": 0.45,
+        "backstabMultiplier": 1.0,
+        "punch": 1.6,
+        "swings": [
+          {
+            "clip": "light_1",
+            "slashAngle": 215
+          },
+          {
+            "clip": "light_2",
+            "slashAngle": 15
+          }
+        ],
+        "blockDecal": "blunt_dent",
+        "bodyDecal": "bruise",
+        "impactProfile": "blunt",
+        "swingSound": "blockland:knife.crowbar_swing"
+      },
+      "heavy": {
+        "damage": 15.0,
+        "range": 3.0,
+        "radius": 0.38,
+        "duration": 1.15,
+        "impact": 0.5,
+        "cooldown": 1.1,
+        "knockback": 0.9,
+        "backstabMultiplier": 1.3,
+        "punch": 3.2,
+        "swings": [
+          {
+            "clip": "heavy",
+            "slashAngle": 270
+          }
+        ],
+        "blockDecal": "blunt_dent",
+        "bodyDecal": "bruise",
+        "impactProfile": "blunt_heavy",
+        "swingSound": "blockland:knife.crowbar_swing_heavy"
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint",
+        "walk": "walk",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "equip": "blockland:knife.crowbar_equip",
+        "hitFlesh": "blockland:knife.crowbar_hit_flesh",
+        "hitBlock": "blockland:knife.crowbar_hit_wall",
+        "hitMarker": "blockland:gun.hitmarker",
+        "critical": "blockland:gun.headshot",
+        "kill": "blockland:gun.kill"
+      },
+      "handling": {
+        "weight": 1.3,
+        "sway": 1.2,
+        "bob": 1.15,
+        "inertia": 1.15,
+        "sprintOut": 0.25,
+        "tacticalSprint": 2.5,
+        "adsTilt": 0,
+        "cameraKick": 1.3,
+        "cameraRoll": 1.2,
+        "cameraFov": 1.1,
+        "cameraRumble": 1.0
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "black": {
+          "name": "暗影",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/crowbar/paint_black",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "rust": {
+          "name": "锈蚀",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/crowbar/rust",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "gold": {
+          "name": "镀金",
+          "rarity": "legendary",
+          "regions": {
+            "*": {
+              "pbr": "textures/pbr/common/polished_steel",
+              "uvScale": 1.25,
+              "tint": [1.0, 0.77, 0.34]
+            },
+            "handle": {
+              "pbr": "textures/pbr/crowbar/tape",
+              "uvScale": 1.0
+            }
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      }
+    },
+    "knuckles": {
+      "name": "拳套",
+      "description": "一对黄铜指虎，戴在双手上。左右快拳出手极快、距离短、单下伤害低；重击一记上勾拳。",
+      "model": "models/knife/knuckles.glb",
+      "drawTime": 0.55,
+      "comboWindow": 0.5,
+      "light": {
+        "damage": 3.0,
+        "range": 2.1,
+        "radius": 0.38,
+        "duration": 0.3,
+        "impact": 0.1,
+        "cooldown": 0.2,
+        "knockback": 0.25,
+        "backstabMultiplier": 1.0,
+        "punch": 0.9,
+        "swings": [
+          {
+            "clip": "light_1",
+            "slashAngle": 0
+          },
+          {
+            "clip": "light_2",
+            "slashAngle": 180
+          }
+        ],
+        "blockDecal": "punch_mark",
+        "bodyDecal": "bruise",
+        "impactProfile": "punch",
+        "swingSound": "blockland:knife.knuckles_swing"
+      },
+      "heavy": {
+        "damage": 8.0,
+        "range": 2.1,
+        "radius": 0.32,
+        "duration": 0.62,
+        "impact": 0.25,
+        "cooldown": 0.58,
+        "knockback": 0.7,
+        "backstabMultiplier": 1.5,
+        "punch": 2.0,
+        "swings": [
+          {
+            "clip": "heavy",
+            "slashAngle": 80
+          }
+        ],
+        "blockDecal": "punch_mark",
+        "bodyDecal": "bruise",
+        "impactProfile": "punch_heavy",
+        "swingSound": "blockland:knife.knuckles_swing_heavy"
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint",
+        "walk": "walk",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "equip": "blockland:knife.knuckles_equip",
+        "hitFlesh": "blockland:knife.knuckles_hit_flesh",
+        "hitBlock": "blockland:knife.knuckles_hit_wall",
+        "hitMarker": "blockland:gun.hitmarker",
+        "critical": "blockland:gun.headshot",
+        "kill": "blockland:gun.kill"
+      },
+      "handling": {
+        "weight": 0.35,
+        "sway": 1.0,
+        "bob": 0.9,
+        "inertia": 0.7,
+        "sprintOut": 0.1,
+        "tacticalSprint": 3.5,
+        "adsTilt": 0,
+        "cameraKick": 0.8,
+        "cameraRoll": 0.8,
+        "cameraFov": 0.9,
+        "cameraRumble": 0.5
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "black": {
+          "name": "暗影",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/dagger/blackened",
+              "uvScale": 0.833333
+            }
+          }
+        },
+        "chrome": {
+          "name": "镀铬",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/common/polished_steel",
+              "uvScale": 1.25
+            }
+          }
+        },
+        "damascus": {
+          "name": "大马士革",
+          "rarity": "legendary",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/skin/damascus/blade",
               "uvScale": 0.5
             }
           }

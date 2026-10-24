@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/m4a1_held",
+  "textures": {
+    "0": "blockland:item/m4a1_held_magma",
+    "particle": "blockland:item/m4a1_held_magma"
+  }
+}

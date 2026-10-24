@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np                       # noqa: E402
 
 from glbread import GLTF, quat_mat       # noqa: E402
+import armskin                           # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GUN_DIR = os.path.join(HERE, "..", "..", "mod", "src", "main", "resources", "assets", "blockland", "models", "gun")
@@ -50,11 +51,11 @@ REQUIRED_EVENTS = {"draw": {"equip"}, "reload": {"mag_release", "mag_out", "mag_
                    "reload_empty": {"mag_release", "mag_out", "mag_in", "slide_forward"},
                    "inspect": {"slide_back", "slide_forward", "inspect_move"}}
 MATERIALS = {"polymer", "grip", "slide", "barrel", "steel_dark", "sight_dots", "mag", "mag_base", "brass"}
-ARM_MESHES = [f"{s}_{g}_{v}{x}" for s in "RL" for g in ("upper", "fore") for v in ("wide", "slim")
-              for x in ("", "_sleeve")]
-# section 7 (v2): largest (width, depth) of a wide-skin segment (at its joint end; segments taper), slim skins are
-# ARM_SLIM as wide, the sleeve layer is inflated by ARM_INFLATE per side
-ARM_SECTIONS = {"upper": (0.056, 0.058), "fore": (0.050, 0.048)}
+ARM_MESHES = [f"{s}_arm_{v}{x}" for s in "RL" for v in ("wide", "slim") for x in ("", "_sleeve")]
+# section 7 (v3): (width, depth) of the wide-skin arm tube at the shoulder and at the wrist (it tapers), slim skins are
+# ARM_SLIM as wide, the sleeve layer is inflated by ARM_INFLATE per side; the tube runs from the shoulder (y = 0) to the
+# wrist (y = -0.60) of its anchor arm_X and is skinned to arm_X, arm_X_fore, arm_X_hand
+ARM_SECTIONS = {"shoulder": (0.056, 0.058), "wrist": (0.043, 0.038)}
 ARM_SLIM = 0.75
 ARM_INFLATE = 0.003
 
@@ -236,11 +237,15 @@ def check_eye_distance(g, arms, r, anims, root="gun", label="p9"):
         if "mesh" in n and n["name"] != "fx_shell":
             gun_meshes.append((i, np.concatenate(mesh_points(g, n["mesh"]))))
     arm_meshes = []
-    if arms is not None:                       # section 16: each arms.glb mesh is drawn at its extras.joint
+    if arms is not None:                       # section 16: each arms.glb mesh is drawn at its extras.joint (skinned)
         for n in arms.nodes:
             joint = n.get("extras", {}).get("joint")
             if "mesh" in n and joint in g.names:
-                arm_meshes.append((g.names[joint], np.concatenate(mesh_points(arms, n["mesh"]))))
+                if n["extras"].get("skin"):
+                    if n["extras"].get("variant") != "slim":      # slim tubes lie inside the wide ones
+                        arm_meshes.append((g.names[joint], n))
+                else:
+                    gun_meshes.append((g.names[joint], np.concatenate(mesh_points(arms, n["mesh"]))))
     worst = {}
     onscreen = {}
     t70 = np.tan(np.radians(FOV_Y / 2))
@@ -253,8 +258,12 @@ def check_eye_distance(g, arms, r, anims, root="gun", label="p9"):
         for t in times:
             W = g.world_matrices(g.sample(a, t) if a is not None else {})
             gun_pts = []
-            for node, pts in gun_meshes + arm_meshes:
-                M = W[node]
+            placed = [(node, pts, W[node]) for node, pts in gun_meshes]
+            for node, an in arm_meshes:
+                pts = [pos for _, pos, _ in armskin.mesh_world(arms, an, g, W)]
+                if pts:
+                    placed.append((node, np.concatenate(pts), np.eye(4)))
+            for node, pts, M in placed:
                 if abs(np.linalg.det(M[:3, :3])) < 1e-12:
                     continue
                 w = pts @ M[:3, :3].T + M[:3, 3]
@@ -306,13 +315,19 @@ def check_arms(a, r):
             r.check(uv.min() >= 0 and uv.max() <= 1, f"arms: {nm} UVs outside [0,1]")
             pos = p["positions"]
             g = ARM_INFLATE if nm.endswith("_sleeve") else 0.0
-            seg = "upper" if "_upper_" in nm else "fore"
-            w = ARM_SECTIONS[seg][0] * (ARM_SLIM if "_slim" in nm else 1.0) + 2 * g
-            d = ARM_SECTIONS[seg][1] + 2 * g
-            r.check(np.isclose(np.ptp(pos[:, 0]), w, atol=1e-5) and np.isclose(np.ptp(pos[:, 2]), d, atol=1e-5),
-                    f"arms: {nm} cross-section {np.ptp(pos[:, 0]):.4f} x {np.ptp(pos[:, 2]):.4f}, expected {w:.4f} x {d:.4f}")
-            r.check(np.isclose(pos[:, 1].max(), g, atol=1e-6) and np.isclose(pos[:, 1].min(), -0.30 - g, atol=1e-6),
+            for end, y in (("shoulder", g), ("wrist", -0.60 - g)):
+                ring = pos[np.abs(pos[:, 1] - y) < 1e-6]
+                w = ARM_SECTIONS[end][0] * (ARM_SLIM if "_slim" in nm else 1.0) + 2 * g
+                d = ARM_SECTIONS[end][1] + 2 * g
+                r.check(len(ring) > 0 and np.isclose(np.ptp(ring[:, 0]), w, atol=1e-5)
+                        and np.isclose(np.ptp(ring[:, 2]), d, atol=1e-5),
+                        f"arms: {nm} {end} section {np.ptp(ring[:, 0]) if len(ring) else 0:.4f} x "
+                        f"{np.ptp(ring[:, 2]) if len(ring) else 0:.4f}, expected {w:.4f} x {d:.4f}")
+            r.check(np.isclose(pos[:, 1].max(), g, atol=1e-6) and np.isclose(pos[:, 1].min(), -0.60 - g, atol=1e-6),
                     f"arms: {nm} length range {pos[:, 1].min():.3f}..{pos[:, 1].max():.3f}")
+            r.check(n.get("extras", {}).get("skin") == [f"arm_{nm[0]}", f"arm_{nm[0]}_fore:untwisted",
+                                                        f"arm_{nm[0]}_fore", f"arm_{nm[0]}_hand"],
+                    f"arms: {nm} must be skinned to arm_{nm[0]}, _fore:untwisted, _fore, _hand")
     seen = set()
     for n in a.nodes:
         if "mesh" not in n:
@@ -328,6 +343,7 @@ def check_arms(a, r):
                         f"arms: sleeve {nm} on a hand joint")
         for p in a.mesh_primitives(n["mesh"]):
             r.check(p["uvs"].min() >= 0 and p["uvs"].max() <= 1, f"arms: {nm} UVs outside [0,1]")
+        check_arm_skin(n, a, r, nm)
     for joint in HAND_JOINTS:
         for v in ("wide", "slim"):
             r.check((joint, v, "base") in seen, f"arms: no {v} mesh for {joint}")
@@ -336,6 +352,32 @@ def check_arms(a, r):
     mats = {m["name"]: m for m in a.json["materials"]}
     r.check(mats.get("skin_overlay", {}).get("alphaMode") == "MASK" and
             abs(mats["skin_overlay"].get("alphaCutoff", 0) - 0.1) < 1e-6, "arms: skin_overlay must be MASK 0.1")
+
+
+def check_arm_skin(n, a, r, nm):
+    """Section 7: a skinned arms mesh names its skin joints and their bind translations; every vertex has JOINTS_0 /
+    WEIGHTS_0 with valid indices and weights summing to 1; vertices weighted fully to the anchor keep its space."""
+    ex = n.get("extras", {})
+    skin = ex.get("skin")
+    prims = a.mesh_primitives(n["mesh"])
+    if not skin:
+        r.check(all(p.get("joints") is None for p in prims), f"arms: {nm} has JOINTS_0 but no extras.skin")
+        return
+    bind = ex.get("bind")
+    r.check(all(j.removesuffix(":untwisted") in VALID_JOINTS for j in skin), f"arms: {nm} skin joints {skin} not all rig joints")
+    r.check(ex.get("joint") in skin, f"arms: {nm} anchor {ex.get('joint')} not in its skin")
+    if not r.check(isinstance(bind, list) and len(bind) == len(skin) and all(len(b) == 3 for b in bind),
+                   f"arms: {nm} needs one bind translation per skin joint"):
+        return
+    r.check(np.allclose(bind[skin.index(ex["joint"])], 0, atol=1e-9) if ex.get("joint") in skin else False,
+            f"arms: {nm} anchor bind must be the origin")
+    for p in prims:
+        if not r.check(p.get("joints") is not None and p.get("weights") is not None,
+                       f"arms: {nm} skinned without JOINTS_0 / WEIGHTS_0"):
+            continue
+        w = p["weights"]
+        r.check(np.all(p["joints"] < len(skin)) and np.all(p["joints"] >= 0), f"arms: {nm} joint index out of range")
+        r.check(np.all(w >= -1e-6) and np.allclose(w.sum(1), 1, atol=1e-4), f"arms: {nm} weights not >= 0 summing to 1")
 
 
 def check_hand_joints(g, r, label):
@@ -463,6 +505,8 @@ def main(argv):
             check_rifle.check(path, arms, r)
         else:
             check_gun(path, arms, r)
+        import check_ads_clips                 # section 31.5: aimed clips keep the sight picture at every frame
+        check_ads_clips.check(path, r, os.path.basename(path)[:-4])
         failed += report(os.path.basename(path), r)
     import check_orient                       # section 6: faces wound outwards, no unintended see-through materials
     r = Report()
@@ -474,7 +518,8 @@ def main(argv):
 # Checkers of later weapons (parallel work): each module has `claims(path, names) -> bool` (names: node name -> index)
 # and `check(path, arms, r)`; the first module that claims a file checks it. Missing modules are skipped.
 CHECK_MODULES = ("check_tommy", "check_shotgun", "check_dual", "check_usp", "check_dagger", "check_rpd", "check_karambit", "check_equipment",
-                 "check_bomb")
+                 "check_bomb", "check_uzi", "check_p90", "check_mp5", "check_sten", "check_ssg08", "check_calico", "check_scar", "check_m4a1", "check_jackhammer",
+                 "check_crowbar", "check_knuckles")
 
 
 def _claimed_by(path, names):

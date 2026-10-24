@@ -10,6 +10,7 @@ import com.blockland.client.render.GpuModel;
 import com.blockland.client.render.MaterialLayer;
 import com.blockland.client.render.ModelCache;
 import com.blockland.client.render.TextureRef;
+import com.blockland.client.render.Wetness;
 import com.blockland.client.spray.SprayDecals;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.client.Camera;
@@ -68,10 +69,14 @@ public final class ViewmodelRig<A> {
     private GpuModel model;
     private Pose pose;
     private Pose layer;
+    /** The aimed variant's pose (spec §31.5), blended into the one-shot's layer. */
+    private Pose variantLayer;
     private final Map<String, ClipSampler> clips = new HashMap<>();
     /** Nodes outside the {@code viewmodel} subtree (helper roots such as {@code fx_shell}) are never drawn. */
     private boolean[] outside = new boolean[0];
     private int viewmodelRoot = -1, camera = -1;
+    /** The support arm's joint: the free arm while swimming (spec §31.4). */
+    private int armL = -1;
     /** View rotation from the animated {@code camera} node (degrees, Minecraft convention). */
     private float cameraPitch, cameraYaw, cameraRoll;
 
@@ -84,6 +89,10 @@ public final class ViewmodelRig<A> {
     @Nullable
     private A actionKind;
     private float actionTime, actionSpeed = 1;
+    /** An aimed variant of the playing clip (spec §31.5: {@code fire_ads}) and how much of it shows, 0..1. */
+    @Nullable
+    private ClipSampler variant;
+    private float variantWeight;
     /** The clip has finished and holds its last frame for {@link #END_HOLD} (it is no longer the weapon's action). */
     private boolean ended;
     private float endHeld;
@@ -108,6 +117,9 @@ public final class ViewmodelRig<A> {
 
     /** Attachment models at mount nodes, rebuilt when the weapon's build changes. */
     private List<Mounted> mounted = List.of();
+    /** The support hand's hold on the fitted underbarrel attachment (spec §35); null = the clips' hand. */
+    @Nullable
+    private SupportGrip supportGrip;
     /** The build's sprays (spec §29) and a dual gun's twin suffix; null = none. */
     @Nullable
     private Supplier<SprayDecals> sprays;
@@ -136,6 +148,7 @@ public final class ViewmodelRig<A> {
         model = ModelCache.get(location);
         clips.clear();
         mounted = List.of();
+        supportGrip = null;
         action = null;
         actionKind = null;
         ended = false;
@@ -145,6 +158,7 @@ public final class ViewmodelRig<A> {
         GltfModel source = model.source;
         pose = new Pose(source);
         layer = new Pose(source);
+        variantLayer = new Pose(source);
         int n = source.nodes.size();
         shownT = new float[n * 3];
         shownR = new float[n * 4];
@@ -164,6 +178,8 @@ public final class ViewmodelRig<A> {
         motion.setWalkClip(walkClip != null);
         viewmodelRoot = source.node("viewmodel");
         camera = source.node("camera");
+        // a dual gun's left hand holds its own gun (spec §26): never a free arm
+        armL = source.node("gun_L") >= 0 ? -1 : source.node("arm_L");
         outside = new boolean[source.nodes.size()];
         for (int index : source.order) {
             GltfModel.Node node = source.nodes.get(index);
@@ -235,6 +251,7 @@ public final class ViewmodelRig<A> {
         action = clip;
         actionKind = kind;
         actionTime = 0;
+        variant = null;
         ended = false;
         actionSpeed = seconds > 0 && clip.duration() > 0 ? clip.duration() / seconds : 1;
         transition(blend);
@@ -243,6 +260,18 @@ public final class ViewmodelRig<A> {
 
     public boolean hasClip(String name) {
         return clips.containsKey(name);
+    }
+
+    /**
+     * Blends the playing one-shot with its aimed variant (spec §31.5: a shot with the sights up keeps the sight picture)
+     * by {@code weight} (the aim amount, 0..1) until the clip ends. Call right after {@link #play}; a model without that
+     * clip plays the hip clip alone. The variant runs on the clip's clock (same length by contract) and its events are
+     * the clip's.
+     */
+    public void playVariant(String clipName, float weight) {
+        ClipSampler clip = action == null ? null : clips.get(clipName);
+        variant = clip != null && weight > 0.001f ? clip : null;
+        variantWeight = Math.min(1, Math.max(0, weight));
     }
 
     /** Seconds of a clip as authored (0 when missing). */
@@ -298,6 +327,8 @@ public final class ViewmodelRig<A> {
      */
     public void update(float dt, Player player, boolean sprinting, float calm) {
         if (!isReady()) return;
+        // a weapon brought out of the water stays wet a while (rendering spec §15, soaking)
+        draws.wetness(Wetness.of(player));
         charmTime += dt;
         sincePose += dt;
         idleTime += dt;
@@ -319,6 +350,8 @@ public final class ViewmodelRig<A> {
             ended = false;
             transition(BLEND_OUT);
         }
+        // swimming: any one-shot (a shot, a reload, a cut) brings the weapon up out of the swim carry
+        motion.swim().hands(action != null && !ended);
         motion.update(dt, player, sprinting, calm);
         cameraRig.update(dt, calm);
     }
@@ -360,11 +393,19 @@ public final class ViewmodelRig<A> {
         if (action != null) {
             base(layer);
             action.sample(actionTime, layer);
+            if (variant != null) {
+                base(variantLayer);
+                variant.sample(actionTime * variant.duration() / Math.max(1e-4f, action.duration()), variantLayer);
+                layer.blend(variantLayer, variantWeight);
+            }
             p.blend(layer, 1);
         }
         deadBlend(p);
+        motion.swim().poseFreeArm(p, armL);
         cameraFromPose(p);
         p.computeWorld(root);
+        // the support hand on the underbarrel attachment (spec §35), wherever the clip's hand holds the weapon
+        if (supportGrip != null && supportGrip.apply(p)) p.computeWorld(root);
         poseAttachments();
     }
 
@@ -695,6 +736,14 @@ public final class ViewmodelRig<A> {
         mounted = List.copyOf(list);
     }
 
+    /**
+     * The support hand holds the attachment at {@code mount} as {@code hold} says (spec §35), wherever the clips' hand
+     * holds the weapon; null = as the clips put it. Call after {@link #load}.
+     */
+    public void setSupportHold(String mount, @Nullable SupportGrip.Hold hold) {
+        supportGrip = hold == null || !isReady() ? null : SupportGrip.create(model.source, restPose(), mount, hold);
+    }
+
     /** Whether an attachment with this key is fitted and has a model. */
     public boolean hasAttachment(String key) {
         return find(key) != null;
@@ -785,13 +834,15 @@ public final class ViewmodelRig<A> {
     private static final String[] ARM_LAYERS = {"", "_sleeve"};
     private static final String[] VARIANTS = {"wide", "slim"};
 
-    /** One mesh of arms.glb and the viewmodel joint it is drawn at (spec §16: node extras). */
-    private record ArmPart(int mesh, String joint, String variant) {
+    /** One mesh of arms.glb and the viewmodel joint it is drawn at (spec §16: node extras); skinned when {@code node.skin} is set (§7). */
+    private record ArmPart(int mesh, String joint, String variant, @Nullable GltfModel.Node node) {
     }
 
     @Nullable
     private GpuModel armsSource;
     private List<ArmPart> armParts = List.of();
+    /** CPU skinning of the skinned arms meshes (elbow and wrist bend round, spec §7); this rig's own buffers. */
+    private final ArmSkin armSkin = new ArmSkin();
     @Nullable
     private TextureRef armsTexture;
     private final GpuModel.Style armsStyle = new GpuModel.Style() {
@@ -803,7 +854,8 @@ public final class ViewmodelRig<A> {
 
     /**
      * The player's own arms, hands and fingers (skin texture, wide or slim): every arms.glb mesh at the viewmodel
-     * joint its {@code extras.joint} names. A mesh whose joint the weapon file lacks (or hides) is not drawn.
+     * joint its {@code extras.joint} names, the skinned arm tubes and palms bent over their skin joints (spec §7). A mesh
+     * whose joint the weapon file lacks (or hides) is not drawn.
      */
     public void drawArms(Matrix4f base, AbstractClientPlayer player, @Nullable boolean[] hidden, int blockLight, int skyLight) {
         GpuModel arms = ModelCache.get(ARMS);
@@ -816,6 +868,10 @@ public final class ViewmodelRig<A> {
             if (!part.variant.equals(variant)) continue;
             int node = source.node(part.joint);
             if (node < 0 || hidden != null && hidden[node] || isCollapsed(node)) continue;
+            if (part.node != null && part.node.skin != null) {
+                armSkin.draw(draws, arms, part.node, pose, node, base, armsStyle, blockLight, skyLight);
+                continue;
+            }
             modelView.set(base).mul(pose.world[node]);
             arms.addMesh(draws, part.mesh, modelView, armsStyle, blockLight, skyLight, 1);
         }
@@ -828,7 +884,7 @@ public final class ViewmodelRig<A> {
         List<ArmPart> parts = new ArrayList<>();
         for (GltfModel.Node node : arms.source.nodes) {
             String joint = node.extras.get("joint");
-            if (node.mesh >= 0 && joint != null) parts.add(new ArmPart(node.mesh, joint, node.extras.getOrDefault("variant", "wide")));
+            if (node.mesh >= 0 && joint != null) parts.add(new ArmPart(node.mesh, joint, node.extras.getOrDefault("variant", "wide"), node));
         }
         if (parts.isEmpty()) {
             for (String[] joint : ARM_JOINTS) {
@@ -836,7 +892,7 @@ public final class ViewmodelRig<A> {
                     for (String layer : ARM_LAYERS) {
                         int index = arms.source.node(joint[1] + "_" + variant + layer);
                         if (index >= 0 && arms.source.nodes.get(index).mesh >= 0) {
-                            parts.add(new ArmPart(arms.source.nodes.get(index).mesh, joint[0], variant));
+                            parts.add(new ArmPart(arms.source.nodes.get(index).mesh, joint[0], variant, null));
                         }
                     }
                 }
@@ -859,6 +915,7 @@ public final class ViewmodelRig<A> {
     /** Submits everything queued this frame. */
     public void flush(GpuTextureView color, GpuTextureView depth, GpuTextureView lightmap, String label) {
         draws.flush(color, depth, lightmap, label);
+        armSkin.flushed();
     }
 
     /** View-space matrix of a node from the last drawn frame (for spawning effects in the world). */

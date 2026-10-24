@@ -7,12 +7,11 @@ def models():
             "ao": {"mode": "together", "root": "gun", "distance": 0.028,
                    "separate": [["bolt"], ["mag_stick"], ["mag_drum"]]},
             "split": {
-                "wood": [("wood_foregrip", ["foregrip"]), ("wood_grip", ["grip"])],
+                "wood": [("wood_grip", ["grip"])],
                 "steel": [("steel_barrel", ["barrel", "muzzle_brake"])],
             },
             "materials": {
                 "wood": ("tommy/walnut", "stock"),
-                "wood_foregrip": ("tommy/walnut", "handguard"),
                 "wood_grip": ("tommy/walnut", "grip"),
                 "steel": ("tommy/blued", "body"),
                 "steel_barrel": ("common/parkerized", "barrel"),

@@ -1,5 +1,6 @@
 package com.blockland.client.melee;
 
+import com.blockland.client.viewmodel.SwimPose;
 import com.blockland.client.viewmodel.ViewSubject;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.melee.MeleeContent;
@@ -73,7 +74,7 @@ final class WatchedKnife {
     static void frame(float dt) {
         if (!active()) return;
         ViewmodelRenderer.suppressViewBobbing(player);
-        viewmodel.update(dt, player, player.isSprinting());
+        viewmodel.update(dt, player, SwimPose.running(player));
     }
 
     /** The watched player's blade connected (the hit every tracker gets): the knife on screen jolts with it. */

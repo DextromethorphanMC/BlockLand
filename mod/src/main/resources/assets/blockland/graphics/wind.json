@@ -1,0 +1,20 @@
+{
+  "bend": { "lean": 0.18, "flutter": 0.035, "exponent": 1.75, "lag": 0.6 },
+  "stack": { "lean": 0.05, "flutter": 0.012, "pushCap": 0.35 },
+  "push": {
+    "radiusPad": 0.6,
+    "core": 0.15,
+    "lean": 70,
+    "flatten": 0.85,
+    "springPeriod": 0.45,
+    "springDamping": 0.35,
+    "trail": 0.08,
+    "kinds": { "bend": 1.0, "sway": 0.6, "leaves": 0.12, "water": 0.8 }
+  },
+  "columns": {
+    "up": ["minecraft:sugar_cane", "minecraft:bamboo", "minecraft:kelp", "minecraft:kelp_plant",
+           "minecraft:twisting_vines", "minecraft:twisting_vines_plant"],
+    "hang": ["minecraft:vine", "minecraft:cave_vines", "minecraft:cave_vines_plant", "minecraft:weeping_vines",
+             "minecraft:weeping_vines_plant", "minecraft:pale_hanging_moss", "minecraft:hanging_roots"]
+  }
+}

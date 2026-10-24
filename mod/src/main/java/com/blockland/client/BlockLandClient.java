@@ -32,6 +32,7 @@ import com.blockland.client.viewmodel.ViewmodelMotion;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.ClientPacketListener;
+import com.blockland.network.packet.ActivityPackets;
 import com.blockland.network.packet.C2SSubmitKit;
 import com.blockland.network.packet.LobbyPackets;
 import com.blockland.network.packet.MediaPackets;
@@ -97,6 +98,7 @@ public final class BlockLandClient {
             ClientShopState.clear();
             ClientMedia.resetRequests();
             ClientAnnouncements.clear();
+            ClientActivities.clear();
             com.blockland.client.render.LightSources.clear();
             BLNetwork.forgetClientConnection();
         });
@@ -115,6 +117,8 @@ public final class BlockLandClient {
         // the render pipeline (render scale, upscaling, anti-aliasing, HDR post, sun and shadows, dynamic lights): first,
         // so its frame hooks and HUD composite layer come before every feature's own
         Graphics.init(modBus);
+        com.blockland.client.textures.FluidTextures.init(modBus);
+        com.blockland.client.fluid.WaterInteractions.init();
         Holster.init();
         ViewmodelImpulses.init(modBus);
         ParticlePresets.init(modBus);
@@ -133,6 +137,7 @@ public final class BlockLandClient {
         MatchResults.init(modBus);
         com.blockland.client.loading.MatchLoading.init();
         com.blockland.client.combat.KillFeedback.init(modBus);
+        com.blockland.client.hud.KillIcon.init(modBus);
         ClientMorphs.init();
         ClientInfection.init(modBus);
         com.blockland.client.rank.ClientRank.init();
@@ -242,6 +247,11 @@ public final class BlockLandClient {
         @Override
         public void onAnnouncements(LobbyPackets.S2CAnnouncements announcements) {
             ClientAnnouncements.update(announcements);
+        }
+
+        @Override
+        public void onActivities(ActivityPackets.S2CActivities activities) {
+            ClientActivities.update(activities);
         }
     }
 }

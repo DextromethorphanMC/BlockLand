@@ -1,4 +1,4 @@
-import type { InventoryItem, RankTierId } from '../types'
+import type { GameMode, InventoryItem, RankTierId } from '../types'
 
 /** 排位段位, lowest first (mirrors the mod's common/RankTier). */
 export const TIERS: { id: RankTierId; label: string; color: string }[] = [
@@ -20,6 +20,11 @@ export function TierBadge({ tier }: { tier: string }) {
       {t.label}
     </span>
   )
+}
+
+/** A ladder's mode as the admin named it, or its id when the mode is gone or the list is not loaded yet. */
+export function modeTitle(id: string, modes: GameMode[] | undefined) {
+  return modes?.find((m) => m.id === id)?.title ?? id
 }
 
 /** "永久", "剩余 N 天 · 至 date" or "已过期" for an entitlement's end. */

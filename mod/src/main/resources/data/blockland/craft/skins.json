@@ -215,6 +215,19 @@
         }
       }
     },
+    "gold_beads": {
+      "name": "黄金链珠",
+      "rarity": "legendary",
+      "for": [
+        "gun"
+      ],
+      "regions": {
+        "*": {
+          "pbr": "textures/pbr/skin/camo/gold_beads",
+          "uvScale": 0.416667
+        }
+      }
+    },
     "neon": {
       "name": "霓虹回路",
       "rarity": "legendary",

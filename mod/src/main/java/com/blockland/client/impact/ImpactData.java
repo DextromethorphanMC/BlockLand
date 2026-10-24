@@ -40,6 +40,8 @@ final class ImpactData {
         Dust dust = new Dust();
         Sparks sparks = new Sparks();
         Splash splash;
+        /** A living target's blood (replaces debris and dust for it), or null. */
+        Blood blood;
         /** Debris and droplets take their look from the struck block's own texture (false: {@code sprite} tinted by {@code color}). */
         boolean blockTexture = true;
         /** Block atlas sprite for untextured debris (droplets, blood), e.g. {@code minecraft:block/white_concrete}. */
@@ -77,6 +79,11 @@ final class ImpactData {
         float spin = 720;
         /** 0..1 how much the wind carries them. */
         float wind = 0.05f;
+        /**
+         * Density relative to water: above 1 a chunk falling into water sinks (faster the denser, at its terminal speed
+         * there), below 1 it comes back up and floats, drifting with the current (wood, leaves, snow, ice).
+         */
+        float density = 2.5f;
     }
 
     /**
@@ -144,6 +151,75 @@ final class ImpactData {
         float foam = 0.6f;
     }
 
+    /**
+     * Blood of a living target (rendering spec §12, blood). In the air: drops thrown back out of the wound towards the
+     * shooter, a larger, faster spray out of the exit along the round, a fine mist at both (the exit's the bigger), drops
+     * that land as splats and stay a while. In water: no drops and no mist, a slow plume that drifts, swirls, spreads and
+     * colours the water around it for several seconds; a hit at the surface splashes pinkish water.
+     */
+    static final class Blood {
+        /** Drops out of the entry (towards the shooter) and out of the exit (along the round), count for energy 1. */
+        float backDrops = 6;
+        float exitDrops = 14;
+        /** Speeds (blocks per second) and cone half-angles (degrees) of the two sprays. */
+        float[] backSpeed = {1.0f, 2.6f};
+        float[] exitSpeed = {2.5f, 6.5f};
+        float backSpread = 50;
+        float exitSpread = 26;
+        /** Drop half-size range. */
+        float[] dropSize = {0.01f, 0.028f};
+        /** Seconds a drop lies where it landed (a splat). */
+        float splatLife = 9;
+        /** The fine mist: mass at the entry and at the exit (× the round's energy). */
+        float backMist = 0.5f;
+        float exitMist = 1.4f;
+        /** Mist radius [just after the burst, at the end] for a mass of 1, its life (seconds) and optical density. */
+        float[] mistSize = {0.22f, 0.9f};
+        float[] mistLife = {0.9f, 1.6f};
+        float mistOpacity = 0.6f;
+        String mistColor = "#8a1010";
+        /** In water: the plume's mass per wound, radius [start, end] for a mass of 1, life (seconds), optical density. */
+        float plume = 1.2f;
+        float[] plumeSize = {0.15f, 1.6f};
+        float[] plumeLife = {7, 12};
+        float plumeOpacity = 0.9f;
+        String plumeColor = "#5a0808";
+        /** How much blood colours a splash at the surface (0 water … 1 blood). */
+        float splashTint = 0.35f;
+        /**
+         * The fine spray of a gunshot wound: many tiny drops thrown out of the exit (and a third of them out of the
+         * entry) at high speed in a narrow cone, braked hard by the air — the red burst seen in the first tenth of a
+         * second. Count for energy 1, speed range (blocks per second), half-size range.
+         */
+        float fineDrops = 22;
+        float[] fineSpeed = {5, 10};
+        float[] fineSize = {0.004f, 0.009f};
+        /** A head hit throws this much more (drops, spray and mist). */
+        float headMultiplier = 1.6f;
+        /**
+         * 0..1 share of the drops of each spray that burst out sideways round the wound — up, down, left, right, 60° to
+         * 95° off the round's line — rather than along it (blood leaves a wound in a crown, not a jet).
+         */
+        float radial = 0.35f;
+        /**
+         * Landed drops: how readily a splat on a wall runs down it (0 never … 1 the larger ones always), the seconds a
+         * splat stays wet and glossy before it dries matte and darker, and how much rain on it washes it out (dilutes,
+         * spreads and fades it; 0 = rain does nothing).
+         */
+        float runs = 0.6f;
+        float dryTime = 6;
+        float rainWash = 1;
+        /** A blade's cast-off: drops flung along the cut (count for a blade profile's energy 1) and their speed. */
+        float castOff = 12;
+        float[] castSpeed = {1.4f, 3.6f};
+        /**
+         * The wound goes on bleeding a moment: for this many seconds (× the blood setting, a head hit's more), drops falling
+         * from it at this rate per second at first, fewer and fewer (0 = none).
+         */
+        float bleed = 2.5f;
+        float bleedRate = 4;
+    }
+
     /** How a round scales the effect (pistol 1). */
     static final class Ammo {
         /** Speed of what is thrown out. */
@@ -153,6 +229,14 @@ final class ImpactData {
         float size = 1;
         /** Volume of the dust (a heavy round pulverises more). */
         float dust = 1;
+        /** Number of sparks (a blade scrapes fewer than a round). */
+        float sparks = 1;
+        /**
+         * A blade, not a round: it throws its chips and drops along the cut rather than out of a crater, makes no exit
+         * wound, and a thrust (a stab) throws back along the blade instead of across it.
+         */
+        boolean blade;
+        boolean thrust;
     }
 
     /** What the weather and the surroundings change. */
@@ -170,5 +254,14 @@ final class ImpactData {
         float wind = 0.6f;
         float rainWind = 1.8f;
         float thunderWind = 2.6f;
+        /** Rain quenches sparks: their count and life × this on a wet surface. Wet debris bounces × {@link #wetBounce}. */
+        float rainSparks = 0.6f;
+        float wetBounce = 0.5f;
+        /** How fast a fluid's current carries what is in it (blocks per second at vanilla's full flow). */
+        float current = 0.5f;
+        /** Bubbles rise at this speed (blocks per second) for their smallest and largest size. */
+        float[] bubbleRise = {0.22f, 0.45f};
+        /** A round under water leaves a trail of its cavity's air: bubbles per block of its path (× its energy there). */
+        float trailBubbles = 9;
     }
 }

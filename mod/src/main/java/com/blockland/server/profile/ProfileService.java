@@ -13,7 +13,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -41,11 +44,11 @@ public final class ProfileService implements ProfilePacketListeners.Server {
     }
 
     @Override
-    public void onRequest(UUID player, ProfilePackets.Kind kind) {
+    public void onRequest(UUID player, ProfilePackets.Kind kind, String modeId) {
         switch (kind) {
             case INVENTORY -> sendInventory(player);
             case PROFILE -> sendProfile(player);
-            case LEADERBOARD -> sendLeaderboard(player);
+            case LEADERBOARD -> sendLeaderboard(player, modeId);
         }
     }
 
@@ -70,20 +73,38 @@ public final class ProfileService implements ProfilePacketListeners.Server {
         BLNetwork.sendTo(player, new ProfilePackets.S2CInventory(inventory.inventory(player)));
     }
 
+    /** The profile with the player's standing in every ranked mode on offer, then in other modes they played ranked. */
     public void sendProfile(UUID player) {
-        Ranks.RankInfo rank = Ranks.get().rankOf(player);
+        Ranks.View view = Ranks.get();
+        List<ProfilePackets.ModeRank> ranks = new ArrayList<>();
+        Set<String> listed = new HashSet<>();
+        for (Ranks.RankedMode mode : view.rankedModes()) {
+            listed.add(mode.id());
+            ranks.add(modeRank(mode.id(), mode.title(), view.rankOf(player, mode.id())));
+        }
+        view.ranksOf(player).forEach((mode, rank) -> {
+            if (listed.add(mode)) ranks.add(modeRank(mode, mode, rank));
+        });
         String name = players.name(player);
-        BLNetwork.sendTo(player, new ProfilePackets.S2CProfile(name == null ? "" : name, cardOf(player), rank.score(), rank.tier().id(),
-                rank.position(), rank.matches(), rank.wins(), profiles.playtimeSeconds(player), Ranks.get() != Ranks.View.NONE));
+        BLNetwork.sendTo(player, new ProfilePackets.S2CProfile(name == null ? "" : name, cardOf(player), ranks,
+                profiles.playtimeSeconds(player), view != Ranks.View.NONE));
     }
 
-    private void sendLeaderboard(UUID player) {
-        Ranks.get().leaderboard(LEADERBOARD).whenComplete((entries, error) -> server.execute(() -> {
+    private static ProfilePackets.ModeRank modeRank(String modeId, String title, Ranks.RankInfo rank) {
+        return new ProfilePackets.ModeRank(modeId, title, rank.score(), rank.tier().id(), rank.position(), rank.matches(), rank.wins());
+    }
+
+    private void sendLeaderboard(UUID player, String modeId) {
+        if (modeId == null || modeId.isEmpty()) {
+            BLNetwork.sendTo(player, new ProfilePackets.S2CLeaderboard("", List.of()));
+            return;
+        }
+        Ranks.get().leaderboard(modeId, LEADERBOARD).whenComplete((entries, error) -> server.execute(() -> {
             if (!players.isOnline(player)) return;
             List<ProfilePackets.Line> lines = error != null || entries == null ? List.of() : entries.stream()
                     .map(e -> new ProfilePackets.Line(e.player().toString(), e.name(), e.score(), e.tier().id(), e.position(), cardOf(e.player())))
                     .toList();
-            BLNetwork.sendTo(player, new ProfilePackets.S2CLeaderboard(lines));
+            BLNetwork.sendTo(player, new ProfilePackets.S2CLeaderboard(modeId, lines));
         }));
     }
 

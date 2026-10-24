@@ -50,6 +50,14 @@ public final class GraphicsStatus {
     /** Share of the voxel box that holds its blocks (0..1) and the box's size in blocks. */
     public volatile float rayVoxelsReady;
     public volatile String rayVolume = "";
+    /** BlockLand's volumetric clouds replace vanilla's this frame (decided at frame start, read by the scene uniforms). */
+    public volatile boolean cloudsActive;
+    /** Why the volumetric clouds do not run although they are on (key), or null. */
+    @Nullable
+    public volatile String cloudsReason;
+    public volatile float cloudMillis;
+    /** The volumetric fog pass is the haze this frame (decided at frame start; the lit programs then draw only its edge). */
+    public volatile boolean volumetricFogActive;
     /** The traced light is denoised by DLSS Ray Reconstruction this frame. */
     public volatile boolean rayReconstructionActive;
     /** DLSS Ray Reconstruction can run (its runtime files are there and it did not fail). */

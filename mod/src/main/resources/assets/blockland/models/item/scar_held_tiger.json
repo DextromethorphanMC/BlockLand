@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/scar_held",
+  "textures": {
+    "0": "blockland:item/scar_held_tiger",
+    "particle": "blockland:item/scar_held_tiger"
+  }
+}

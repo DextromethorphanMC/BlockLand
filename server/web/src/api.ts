@@ -125,7 +125,10 @@ export const api = {
   rankedConfig: () => request<RankedConfig>('/api/admin/ranked/config'),
   saveRankedConfig: (c: RankedConfig) => request<RankedConfig>('/api/admin/ranked/config', { method: 'PUT', body: json(c) }),
   resetRankedSeason: () => request<RankedConfig>('/api/admin/ranked/reset', { method: 'POST' }),
-  rankedLeaderboard: (limit = 100) => request<RankedLeaderEntry[]>(`/api/admin/ranked/leaderboard?limit=${limit}`),
+  /** The modes that have a ladder (each ranked mode has its own). */
+  rankedModes: () => request<string[]>('/api/admin/ranked/modes'),
+  rankedLeaderboard: (mode: string, limit = 100) =>
+    request<RankedLeaderEntry[]>(`/api/admin/ranked/leaderboard?mode=${encodeURIComponent(mode)}&limit=${limit}`),
   rankedPlayer: (uuid: string) => request<RankedPlayer>(`/api/admin/ranked/players/${uuid}`),
 }
 

@@ -85,7 +85,10 @@ class GLTF:
                         "uvs": self.accessor(at["TEXCOORD_0"]).astype(np.float64) if "TEXCOORD_0" in at else None,
                         "indices": self.accessor(p["indices"]).reshape(-1, 3).astype(np.int64),
                         "material": p.get("material"),
-                        "colors": self._colors(at["COLOR_0"]) if "COLOR_0" in at else None})
+                        "colors": self._colors(at["COLOR_0"]) if "COLOR_0" in at else None,
+                        # skinned arms (VIEWMODEL_SPEC section 7): joint indices into the node's extras.skin, weights
+                        "joints": self.accessor(at["JOINTS_0"]).astype(np.int64) if "JOINTS_0" in at else None,
+                        "weights": self._colors(at["WEIGHTS_0"]) if "WEIGHTS_0" in at else None})
         return out
 
     # ------------------------------------------------------------------ transforms & animation

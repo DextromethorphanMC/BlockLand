@@ -35,7 +35,6 @@ def build_meshes(src):
     return {
         "receiver": tm.receiver_mesh(src),
         "barrel": tm.barrel_mesh(),
-        "foregrip": tm.foregrip_mesh(src),
         "grip": tm.grip_mesh(src),
         "stock": tm.stock_mesh(src),
         "muzzle_brake": d(tm.muzzle_brake_mesh(), "muzzle_brake"),

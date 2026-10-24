@@ -1,5 +1,6 @@
 package com.blockland.network;
 
+import com.blockland.network.packet.ActivityPackets;
 import com.blockland.network.packet.LobbyPackets;
 import com.blockland.network.packet.MediaPackets;
 import com.blockland.network.packet.S2CKitData;
@@ -20,6 +21,7 @@ public interface ClientPacketListener {
         @Override public void onMatchResult(S2CMatchResult result) { }
         @Override public void onNotice(LobbyPackets.S2CNotice notice) { }
         @Override public void onAnnouncements(LobbyPackets.S2CAnnouncements announcements) { }
+        @Override public void onActivities(ActivityPackets.S2CActivities activities) { }
     };
 
     void onLobbyState(S2CLobbyState state);
@@ -41,4 +43,6 @@ public interface ClientPacketListener {
     void onNotice(LobbyPackets.S2CNotice notice);
 
     void onAnnouncements(LobbyPackets.S2CAnnouncements announcements);
+
+    void onActivities(ActivityPackets.S2CActivities activities);
 }

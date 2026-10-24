@@ -1,6 +1,7 @@
 package com.blockland.client.gun;
 
 import com.blockland.client.gltf.GltfModel;
+import com.blockland.client.impact.Impacts;
 import com.blockland.combat.HitShapes;
 import com.blockland.craft.CraftData;
 import com.blockland.gun.GunContent;
@@ -24,10 +25,12 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -227,14 +230,17 @@ final class GunParticles {
 
     // ---- shell casing -------------------------------------------------------------------------------
 
-    /** A spent case flying out of the ejection port, tumbling, bouncing once or twice with a tink. */
+    /**
+     * A spent case flying out of the ejection port, tumbling, bouncing once or twice with a tink; into water it splashes,
+     * then sinks slowly, its tumble dying down, and settles on the bottom without a sound.
+     */
     static final class Shell extends Particle {
         @Nullable
         private final GltfModel.Primitive mesh;
         private final Quaternionf spin = new Quaternionf();
         private final Vector3f axis;
         private float angularSpeed;
-        private boolean landed;
+        private boolean landed, inWater;
 
         Shell(ClientLevel level, Vec3 at, Vec3 velocity, @Nullable GltfModel.Primitive mesh) {
             super(level, at.x, at.y, at.z);
@@ -249,15 +255,33 @@ final class GunParticles {
             this.axis = new Vector3f(random.nextFloat() - 0.5f, random.nextFloat() - 0.5f, random.nextFloat() - 0.5f).normalize();
             this.angularSpeed = 0.6f + random.nextFloat() * 0.6f;
             this.spin.rotateAxis(random.nextFloat() * 6.28f, axis);
+            // ejected under water: in it from the start (no splash deep down)
+            this.inWater = level.getFluidState(BlockPos.containing(at)).is(FluidTags.WATER);
         }
 
         @Override
         public void tick() {
+            BlockPos pos = BlockPos.containing(x, y, z);
+            FluidState fluid = level.getFluidState(pos);
+            boolean wet = Impacts.settings().fluidPhysics && fluid.is(FluidTags.WATER) && y - pos.getY() <= fluid.getHeight(level, pos);
+            if (wet && !inWater) {
+                // into the water: a little splash where it went in, most of its speed gone at once
+                Impacts.disturb(level, new Vec3(x, pos.getY() + fluid.getHeight(level, pos), z), fluid, pos, new Vec3(xd, yd, zd).normalize(), 0.12f);
+                xd *= 0.3;
+                yd *= 0.3;
+                zd *= 0.3;
+            }
+            inWater = wet;
+            // a hollow brass case sinks slowly in water, tumbling less and less
+            gravity = wet ? 0.1f : 1.1f;
+            friction = wet ? 0.82f : 0.96f;
+            if (wet) angularSpeed *= 0.9f;
             super.tick();
             spin.rotateAxis(angularSpeed, axis);
             if (onGround && !landed) {
                 landed = true;
                 angularSpeed *= 0.25f;
+                if (inWater) return;
                 yd = 0.12;
                 SoundEvent tink = GunContent.sound("gun.shell");
                 if (tink != null) {

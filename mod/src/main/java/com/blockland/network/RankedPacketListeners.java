@@ -9,11 +9,11 @@ public final class RankedPacketListeners {
 
     public interface Client {
         Client NOOP = new Client() {
-            @Override public void onRank(RankedPackets.S2CRank rank) { }
+            @Override public void onRanks(RankedPackets.S2CRanks ranks) { }
             @Override public void onRankChange(RankedPackets.S2CRankChange change) { }
         };
 
-        void onRank(RankedPackets.S2CRank rank);
+        void onRanks(RankedPackets.S2CRanks ranks);
 
         void onRankChange(RankedPackets.S2CRankChange change);
     }

@@ -16,14 +16,15 @@ public final class ProfilePackets {
 
     public enum Kind { INVENTORY, PROFILE, LEADERBOARD }
 
-    /** The client opened a tab and wants its data. */
-    public record C2SRequest(Kind kind) {
+    /** The client opened a tab and wants its data ({@code modeId}: the ladder's mode for {@link Kind#LEADERBOARD}, else ""). */
+    public record C2SRequest(Kind kind, String modeId) {
         public static void encode(C2SRequest msg, FriendlyByteBuf buf) {
             buf.writeEnum(msg.kind);
+            buf.writeUtf(msg.modeId, 64);
         }
 
         public static C2SRequest decode(FriendlyByteBuf buf) {
-            return new C2SRequest(buf.readEnum(Kind.class));
+            return new C2SRequest(buf.readEnum(Kind.class), buf.readUtf(64));
         }
     }
 
@@ -89,29 +90,51 @@ public final class ProfilePackets {
     }
 
     /**
+     * The player's standing in one ranked mode.
+     *
+     * @param tier     a {@code RankTier} id
+     * @param position place on the mode's ladder, 0 = not placed
+     */
+    public record ModeRank(String modeId, String title, int score, String tier, int position, int matches, int wins) {
+    }
+
+    /**
      * The player's own profile.
      *
-     * @param card     the equipped card's id ("" = the default card)
-     * @param tier     a {@code RankTier} id
-     * @param position place on the server's ladder, 0 = not placed
+     * @param card  the equipped card's id ("" = the default card)
+     * @param ranks the ranked modes (the open ones first, then others the player has played), each with its own ladder
      */
-    public record S2CProfile(String name, String card, int score, String tier, int position, int matches, int wins,
-                             long playtimeSeconds, boolean ranked) {
+    public record S2CProfile(String name, String card, List<ModeRank> ranks, long playtimeSeconds, boolean ranked) {
+        public S2CProfile {
+            ranks = List.copyOf(ranks);
+        }
+
         public static void encode(S2CProfile msg, FriendlyByteBuf buf) {
             buf.writeUtf(msg.name, 64);
             buf.writeUtf(msg.card, 64);
-            buf.writeVarInt(msg.score);
-            buf.writeUtf(msg.tier, 32);
-            buf.writeVarInt(msg.position);
-            buf.writeVarInt(msg.matches);
-            buf.writeVarInt(msg.wins);
+            buf.writeVarInt(msg.ranks.size());
+            for (ModeRank r : msg.ranks) {
+                buf.writeUtf(r.modeId, 64);
+                buf.writeUtf(r.title, 128);
+                buf.writeVarInt(r.score);
+                buf.writeUtf(r.tier, 32);
+                buf.writeVarInt(r.position);
+                buf.writeVarInt(r.matches);
+                buf.writeVarInt(r.wins);
+            }
             buf.writeVarLong(msg.playtimeSeconds);
             buf.writeBoolean(msg.ranked);
         }
 
         public static S2CProfile decode(FriendlyByteBuf buf) {
-            return new S2CProfile(buf.readUtf(64), buf.readUtf(64), buf.readVarInt(), buf.readUtf(32), buf.readVarInt(),
-                    buf.readVarInt(), buf.readVarInt(), buf.readVarLong(), buf.readBoolean());
+            String name = buf.readUtf(64), card = buf.readUtf(64);
+            int count = Math.min(buf.readVarInt(), 256);
+            List<ModeRank> ranks = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) {
+                ranks.add(new ModeRank(buf.readUtf(64), buf.readUtf(128), buf.readVarInt(), buf.readUtf(32), buf.readVarInt(),
+                        buf.readVarInt(), buf.readVarInt()));
+            }
+            return new S2CProfile(name, card, ranks, buf.readVarLong(), buf.readBoolean());
         }
     }
 
@@ -119,13 +142,14 @@ public final class ProfilePackets {
     public record Line(String uuid, String name, int score, String tier, int position, String card) {
     }
 
-    /** The top of the server's ladder, best first. */
-    public record S2CLeaderboard(List<Line> lines) {
+    /** The top of one mode's ladder, best first. */
+    public record S2CLeaderboard(String modeId, List<Line> lines) {
         public S2CLeaderboard {
             lines = List.copyOf(lines);
         }
 
         public static void encode(S2CLeaderboard msg, FriendlyByteBuf buf) {
+            buf.writeUtf(msg.modeId, 64);
             buf.writeVarInt(msg.lines.size());
             for (Line line : msg.lines) {
                 buf.writeUtf(line.uuid, 64);
@@ -138,12 +162,13 @@ public final class ProfilePackets {
         }
 
         public static S2CLeaderboard decode(FriendlyByteBuf buf) {
+            String modeId = buf.readUtf(64);
             int count = Math.min(buf.readVarInt(), 500);
             List<Line> lines = new ArrayList<>(count);
             for (int i = 0; i < count; i++) {
                 lines.add(new Line(buf.readUtf(64), buf.readUtf(64), buf.readVarInt(), buf.readUtf(32), buf.readVarInt(), buf.readUtf(64)));
             }
-            return new S2CLeaderboard(lines);
+            return new S2CLeaderboard(modeId, lines);
         }
     }
 

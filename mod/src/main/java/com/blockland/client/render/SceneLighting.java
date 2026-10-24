@@ -27,6 +27,8 @@ public final class SceneLighting {
     public static final int MAX_LIGHTS = 32;
     public static final int MAX_MATERIALS = 96;
     public static final int CASCADES = 4;
+    /** Wind (rendering spec §18): travelling gusts, entities pushing plants aside, plants swinging back behind them. */
+    public static final int MAX_GUSTS = 6, MAX_PUSHERS = 16, MAX_SWAYS = 48;
     /** Size of the {@code BlockLandScene} block (std140, see scene.glsl for the member order). */
     public static final int UBO_SIZE = layoutSize();
     /** Uniform buffer binding point the lighting pack's vanilla programs read the block from (rendering spec §3). */
@@ -149,6 +151,18 @@ public final class SceneLighting {
         for (int i = 0; i < MAX_LIGHTS * 2; i++) size.putVec4(); // BlLights[]
         size.putVec4(); // BlMaterialInfo
         for (int i = 0; i < MAX_MATERIALS * 2; i++) size.putVec4(); // BlMaterials[]
+        size.putVec4(); // BlBlockLight
+        size.putVec4(); // BlFog
+        size.putVec4(); // BlClouds
+        size.putVec4(); // BlCloudShape
+        size.putVec4(); // BlWeather
+        for (int i = 0; i < WaterRipples.MAX * 2; i++) size.putVec4(); // BlRipples[]
+        size.putMat4f(); // BlPrevView
+        size.putVec4(); // BlPrevProj
+        size.putVec4(); // BlWind
+        size.putVec4(); // BlWindInfo
+        for (int i = 0; i < 5; i++) size.putVec4(); // BlWindBend, BlWindStack, BlWindPush, BlWindSpring, BlWindKinds
+        for (int i = 0; i < (MAX_GUSTS + MAX_PUSHERS + MAX_SWAYS) * 2; i++) size.putVec4(); // BlGusts[], BlPushers[], BlSways[]
         return size.get();
     }
 }

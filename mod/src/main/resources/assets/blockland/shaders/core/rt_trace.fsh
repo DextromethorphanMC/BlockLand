@@ -6,7 +6,8 @@
 // Ray traced diffuse light and ambient occlusion (ray tracing resolution): a few cosine-weighted rays per pixel from the
 // surface into the voxels. rgb = average light arriving from the faces they hit (rt_radiance: one bounce of Minecraft's
 // own light, the blocks' glow, sun bounce), the light Minecraft's lighting leaves out; misses add nothing (the sky's
-// light is in Minecraft's already). a = how open the surface is within the ambient occlusion radius.
+// light is in Minecraft's already). a = how open the surface is within the ambient occlusion radius. A ray's light is
+// capped (a rare ray into a lamp or a sunlit patch would otherwise stand out as a blotch the filters smear around).
 
 uniform sampler2D DepthSampler;
 uniform sampler2D GuideSampler;
@@ -30,12 +31,15 @@ void main() {
     vec3 light = vec3(0.0);
     float occlusion = 0.0;
     for (int i = 0; i < rays; i++) {
-        vec3 dir = rt_cosine(normal, rt_random(seed), rt_random(seed));
+        vec2 u = rt_sample(p, i);
+        vec3 dir = rt_cosine(normal, u.x, u.y);
         float t;
         ivec3 cell, front;
         vec3 face;
         if (rt_march(origin, dir, RtTrace.y, int(RtTrace.z), seed, t, cell, front, face)) {
-            light += rt_radiance(origin + dir * t, cell, front, face, seed);
+            vec3 radiance = rt_radiance(origin + dir * t, cell, front, face, seed);
+            float level = max(radiance.r, max(radiance.g, radiance.b));
+            light += radiance * (level > 3.0 ? 3.0 / level : 1.0);
             occlusion += 1.0 - clamp(t / RtTrace.w, 0.0, 1.0);
         }
     }

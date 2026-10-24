@@ -1,13 +1,14 @@
 #version 150
 
 // BlockLand lighting pack (tools/assets/RENDERING_SPEC.md §3): vanilla's entity fragment shader with the sun, its
-// shadows and dynamic lights on top, and emission written to alpha by opaque programs. Unpatched (BlRole 0) or without
-// world lighting and emission encoding, the result is exactly vanilla's.
+// shadows and dynamic lights on top, emission written to alpha by opaque programs, and BlockLand's fog (§14). Unpatched
+// (BlRole 0) or without world lighting and emission encoding, the result is exactly vanilla's.
 
 #moj_import <minecraft:fog.glsl>
 #moj_import <minecraft:dynamictransforms.glsl>
 #moj_import <blockland:scene.glsl>
 #moj_import <blockland:bl_lighting.glsl>
+#moj_import <blockland:bl_fog.glsl>
 
 uniform sampler2D Sampler0;
 
@@ -20,6 +21,7 @@ in vec2 texCoord0;
 in vec3 worldPos;
 in vec3 worldNormal;
 in vec4 blockLightColor;
+in float skyExposure;
 
 out vec4 fragColor;
 
@@ -46,13 +48,25 @@ void main() {
         float sun = bl_sunVisibility(worldPos, n, gl_FragCoord.xy);
         vec3 light = bl_skyShade(lightMapColor.rgb, blockLightColor.rgb, sun) + bl_pointLightsDisplay(worldPos, n);
         color *= vec4(min(light, vec3(1.0)), lightMapColor.a);
+        // rain (spec §15): fur, skin and cloth darken when soaked, and a sheen of water catches the sky
+        float wet = bl_wetness(skyExposure, n);
+        if (wet > 0.01) {
+            vec3 v = normalize(-worldPos);
+            color.rgb *= mix(1.0, 0.72, wet);
+            float sheen = clamp(bl_fresnel(max(dot(n, v), 0.0), 0.02) * wet * 0.5, 0.0, 0.5);
+            color.rgb = mix(color.rgb, bl_reflection(reflect(-v, n), skyExposure, FogColor.rgb), sheen);
+        }
     } else {
         color *= lightMapColor;
     }
 #endif
-    fragColor = apply_fog(color, sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart, FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd, FogColor);
-    if (patched && BlRole == 1 && bl_encodeEmission()) {
-        float fog = total_fog_value(sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart, FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd) * FogColor.a;
+    if (!patched) {
+        fragColor = apply_fog(color, sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart, FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd, FogColor);
+        return;
+    }
+    float fog;
+    fragColor = bl_fog(color, sphericalVertexDistance, cylindricalVertexDistance, worldPos, fog);
+    if (BlRole == 1 && bl_encodeEmission()) {
         fragColor.a = bl_emissionAlpha(emission * (1.0 - fog));
     }
 }

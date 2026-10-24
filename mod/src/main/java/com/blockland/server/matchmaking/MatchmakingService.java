@@ -24,7 +24,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
-import java.util.function.ToIntFunction;
+import java.util.function.ToIntBiFunction;
 
 /**
  * One queue per game mode. A queue entry is a group that plays on the same team (a solo player or a party);
@@ -47,8 +47,8 @@ public final class MatchmakingService {
     private final GameManager games;
     private final Runnable onStateChanged;
     private final Predicate<UUID> hasPriority;
-    /** Ranked score of a player (the ladder's, a default for players it does not know yet). */
-    private ToIntFunction<UUID> score = id -> 0;
+    /** Ranked score of a player in a mode (that mode's ladder's, a default for players it does not know yet). */
+    private ToIntBiFunction<UUID, String> score = (id, mode) -> 0;
     private final Map<String, List<Entry>> queues = new LinkedHashMap<>();
     private final Map<UUID, Entry> byPlayer = new HashMap<>();
     private int tickCounter;
@@ -63,7 +63,7 @@ public final class MatchmakingService {
         this.hasPriority = hasPriority;
     }
 
-    public void setScoreSource(ToIntFunction<UUID> score) {
+    public void setScoreSource(ToIntBiFunction<UUID, String> score) {
         this.score = score;
     }
 
@@ -270,7 +270,7 @@ public final class MatchmakingService {
 
     private int averageScore(Entry entry) {
         long sum = 0;
-        for (UUID id : entry.members) sum += score.applyAsInt(id);
+        for (UUID id : entry.members) sum += score.applyAsInt(id, entry.modeId);
         return entry.members.isEmpty() ? 0 : (int) (sum / entry.members.size());
     }
 

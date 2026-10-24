@@ -34,11 +34,12 @@ import java.util.Map;
  * compiled here ahead of time (exactly as the draw would) so it is never drawn unpatched.
  */
 final class VanillaPrograms {
-    static final int ROLE_OPAQUE = 1, ROLE_BLENDED = 2, ROLE_TRANSLUCENT_TERRAIN = 3, ROLE_COMPOSITE = 4;
+    static final int ROLE_OPAQUE = 1, ROLE_BLENDED = 2, ROLE_TRANSLUCENT_TERRAIN = 3, ROLE_COMPOSITE = 4, ROLE_CLOUDS = 5;
 
     private static final ResourceLocation TERRAIN = ResourceLocation.withDefaultNamespace("core/terrain");
     private static final ResourceLocation ENTITY = ResourceLocation.withDefaultNamespace("core/entity");
     private static final ResourceLocation TRANSPARENCY = ResourceLocation.withDefaultNamespace("post/transparency");
+    private static final ResourceLocation CLOUDS = ResourceLocation.withDefaultNamespace("core/rendertype_clouds");
     private static final ResourceLocation TRANSPARENCY_CHAIN = ResourceLocation.withDefaultNamespace("transparency");
 
     @Nullable
@@ -127,6 +128,8 @@ final class VanillaPrograms {
         }
         if (vertex.equals(ENTITY)) return blended ? ROLE_BLENDED : ROLE_OPAQUE;
         if (pipeline.getFragmentShader().equals(TRANSPARENCY)) return ROLE_COMPOSITE;
+        // vanilla's clouds: hidden while BlockLand's volumetric clouds replace them
+        if (pipeline.getFragmentShader().equals(CLOUDS)) return ROLE_CLOUDS;
         return 0;
     }
 
@@ -137,6 +140,8 @@ final class VanillaPrograms {
         GL31.glUniformBlockBinding(program, block, SceneLighting.VANILLA_UBO_BINDING);
         setInt(program, GL20.glGetUniformLocation(program, "BlShadowMap"), SceneLighting.VANILLA_SHADOW_UNIT);
         setInt(program, GL20.glGetUniformLocation(program, "BlMaterialMap"), GlSlots.MATERIAL_UNIT);
+        setInt(program, GL20.glGetUniformLocation(program, "BlPrevScene"), GlSlots.REFLECTION_UNIT);
+        setInt(program, GL20.glGetUniformLocation(program, "BlPlantColumns"), GlSlots.COLUMNS_UNIT);
         setInt(program, roleLocation, role);
         lit++;
     }

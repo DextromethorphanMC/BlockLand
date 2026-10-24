@@ -15,6 +15,7 @@ import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.util.ARGB;
 
 import javax.annotation.Nullable;
 import java.io.InputStreamReader;
@@ -27,8 +28,9 @@ import java.util.Optional;
 
 /**
  * Block materials (rendering spec §7, {@code graphics/block_materials.json}): which block textures glow, which are water,
- * glass or polished metal. After every atlas stitch they are resolved to the block atlas: a material map (one texel per
- * atlas cell, sampled by the lighting pack's terrain shader on unit 13) and the first {@link SceneLighting#MAX_MATERIALS}
+ * glass or polished metal, and how the wind moves the plants (§18). After every atlas stitch they are resolved to the block
+ * atlas: a material map (one texel per atlas cell, sampled by the lighting pack's terrain shaders on unit 13; B packs the
+ * kind and the wind bits, see bl_lighting.glsl) and the first {@link SceneLighting#MAX_MATERIALS}
  * sprite rectangles for the scene block.
  */
 final class BlockMaterials {
@@ -43,6 +45,36 @@ final class BlockMaterials {
         float threshold;
         String kind = "plain";
         float reflectivity;
+        /** How the wind moves the sprite's plant (rendering spec §18); an entry with only this sets no material. */
+        @Nullable
+        WindEntry wind;
+
+        boolean material() {
+            return wind == null || emission > 0 || threshold > 0 || reflectivity > 0 || kind(kind) != 0;
+        }
+    }
+
+    /** {@code "wind": {"mode": "bend" | "sway" | "leaves", "flex": 0.5..2, "upper": bool, "water": bool}}. */
+    static final class WindEntry {
+        String mode = "bend";
+        float flex = 1;
+        /** The upper half of a two-block plant: it bends on from where the lower half's top went. */
+        boolean upper;
+        /** A water plant: swayed by a slow current, not by the wind. */
+        boolean water;
+
+        /** Bits 2-7 of the map's B byte (bl_lighting.glsl): mode, upper half, water, flex level. */
+        int bits() {
+            int mode = switch (this.mode == null ? "" : this.mode.trim().toLowerCase(Locale.ROOT)) {
+                case "bend" -> 1;
+                case "sway" -> 2;
+                case "leaves" -> 3;
+                default -> 0;
+            };
+            if (mode == 0) return 0;
+            int flexLevel = Math.max(0, Math.min(3, Math.round(flex * 2) - 1));
+            return (mode | (upper ? 4 : 0) | (water ? 8 : 0) | flexLevel << 4) << 2;
+        }
     }
 
     private static final class File {
@@ -113,18 +145,21 @@ final class BlockMaterials {
         int mapWidth = Math.max(1, width / cell), mapHeight = Math.max(1, height / cell);
 
         try (NativeImage image = new NativeImage(mapWidth, mapHeight, true)) {
+            // materials first, then the wind bits of plant sprites over them (B byte: kind in bits 0-1, the wind above)
             for (Entry entry : entries) {
+                if (!entry.material()) continue;
                 int kind = kind(entry.kind);
-                for (String name : entry.textures == null ? List.<String>of() : entry.textures) {
-                    ResourceLocation id = ResourceLocation.tryParse(name);
-                    if (id == null || !atlas.getTextureLocations().contains(id)) continue;
-                    TextureAtlasSprite sprite = atlas.getSprite(id);
-                    int x0 = sprite.getX() / cell, y0 = sprite.getY() / cell;
-                    int x1 = Math.min(mapWidth, Math.max(x0 + 1, (sprite.getX() + sprite.contents().width()) / cell));
-                    int y1 = Math.min(mapHeight, Math.max(y0 + 1, (sprite.getY() + sprite.contents().height()) / cell));
-                    int abgr = byteOf(entry.reflectivity) << 24 | byteOf(kind / 3f) << 16 | byteOf(entry.threshold) << 8 | byteOf(entry.emission);
-                    for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) image.setPixelABGR(x, y, abgr);
+                for (TextureAtlasSprite sprite : sprites(atlas, entry)) {
+                    int abgr = byteOf(entry.reflectivity) << 24 | kind << 16 | byteOf(entry.threshold) << 8 | byteOf(entry.emission);
+                    fill(image, sprite, cell, mapWidth, mapHeight, abgr, 0xFFFFFFFF);
                     rects.add(new Rect(sprite.getU0(), sprite.getV0(), sprite.getU1(), sprite.getV1(), entry, kind));
+                }
+            }
+            for (Entry entry : entries) {
+                int wind = entry.wind == null ? 0 : entry.wind.bits();
+                if (wind == 0) continue;
+                for (TextureAtlasSprite sprite : sprites(atlas, entry)) {
+                    fill(image, sprite, cell, mapWidth, mapHeight, wind << 16, 0xFC << 16);
                 }
             }
             if (map != null) map.close();
@@ -135,6 +170,25 @@ final class BlockMaterials {
         } catch (RuntimeException e) {
             BlockLand.LOGGER.error("[BlockLand] Cannot build the block material map", e);
             map = null;
+        }
+    }
+
+    private static List<TextureAtlasSprite> sprites(TextureAtlas atlas, Entry entry) {
+        List<TextureAtlasSprite> sprites = new ArrayList<>();
+        for (String name : entry.textures == null ? List.<String>of() : entry.textures) {
+            ResourceLocation id = ResourceLocation.tryParse(name);
+            if (id != null && atlas.getTextureLocations().contains(id)) sprites.add(atlas.getSprite(id));
+        }
+        return sprites;
+    }
+
+    /** Writes {@code abgr} into the sprite's cells, only the bits of {@code mask} (the rest of the texel is kept). */
+    private static void fill(NativeImage image, TextureAtlasSprite sprite, int cell, int mapWidth, int mapHeight, int abgr, int mask) {
+        int x0 = sprite.getX() / cell, y0 = sprite.getY() / cell;
+        int x1 = Math.min(mapWidth, Math.max(x0 + 1, (sprite.getX() + sprite.contents().width()) / cell));
+        int y1 = Math.min(mapHeight, Math.max(y0 + 1, (sprite.getY() + sprite.contents().height()) / cell));
+        for (int y = y0; y < y1; y++) {
+            for (int x = x0; x < x1; x++) image.setPixelABGR(x, y, ARGB.toABGR(image.getPixel(x, y)) & ~mask | abgr & mask);
         }
     }
 

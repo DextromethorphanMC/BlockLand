@@ -21,7 +21,8 @@ from glbread import GLTF
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODELS = os.path.join(HERE, "..", "..", "mod", "src", "main", "resources", "assets", "blockland", "models")
 #: materials allowed to be BLEND / MASK / double sided (glass, lens glass, reticle dots, the skin's sleeve layer)
-SEE_THROUGH = {"glass", "lens", "lens_front", "reticle", "skin_overlay"}
+SEE_THROUGH = {"glass", "lens", "lens_front", "reticle", "skin_overlay",
+               "mag_window"}         # section 40: a translucent magazine body (the P90's)
 VIEWS = [np.array(v, float) / np.linalg.norm(v) for v in
          [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1),
           (1, 1, 1), (1, 1, -1), (1, -1, 1), (1, -1, -1), (-1, 1, 1), (-1, 1, -1), (-1, -1, 1), (-1, -1, -1)]]

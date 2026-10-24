@@ -664,5 +664,218 @@
       "blockland:graffiti/wheel"
     ],
     "subtitle": "subtitles.blockland.graffiti.wheel"
+  },
+  "gun.uzi.fire": {
+    "sounds": [
+      "blockland:gun/uzi_fire_1",
+      "blockland:gun/uzi_fire_2",
+      "blockland:gun/uzi_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.uzi.fire"
+  },
+  "gun.uzi.fire_far": {
+    "sounds": [
+      "blockland:gun/uzi_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.uzi.fire_far"
+  },
+  "gun.p90.fire": {
+    "sounds": [
+      "blockland:gun/p90_fire_1",
+      "blockland:gun/p90_fire_2",
+      "blockland:gun/p90_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.p90.fire"
+  },
+  "gun.p90.fire_far": {
+    "sounds": [
+      "blockland:gun/p90_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.p90.fire_far"
+  },
+  "gun.mp5.fire": {
+    "sounds": [
+      "blockland:gun/mp5_fire_1",
+      "blockland:gun/mp5_fire_2",
+      "blockland:gun/mp5_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.mp5.fire"
+  },
+  "gun.mp5.fire_far": {
+    "sounds": [
+      "blockland:gun/mp5_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.mp5.fire_far"
+  },
+  "gun.sten.fire": {
+    "sounds": [
+      "blockland:gun/sten_fire_1",
+      "blockland:gun/sten_fire_2",
+      "blockland:gun/sten_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.sten.fire"
+  },
+  "gun.sten.fire_far": {
+    "sounds": [
+      "blockland:gun/sten_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.sten.fire_far"
+  },
+  "gun.ssg08.fire": {
+    "sounds": [
+      "blockland:gun/ssg08_fire_1",
+      "blockland:gun/ssg08_fire_2",
+      "blockland:gun/ssg08_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.ssg08.fire"
+  },
+  "gun.ssg08.fire_far": {
+    "sounds": [
+      "blockland:gun/ssg08_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.ssg08.fire_far"
+  },
+  "gun.calico.fire": {
+    "sounds": [
+      "blockland:gun/calico_fire_1",
+      "blockland:gun/calico_fire_2",
+      "blockland:gun/calico_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.calico.fire"
+  },
+  "gun.calico.fire_far": {
+    "sounds": [
+      "blockland:gun/calico_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.calico.fire_far"
+  },
+  "gun.scar.fire": {
+    "sounds": [
+      "blockland:gun/scar_fire_1",
+      "blockland:gun/scar_fire_2",
+      "blockland:gun/scar_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.scar.fire"
+  },
+  "gun.scar.fire_far": {
+    "sounds": [
+      "blockland:gun/scar_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.scar.fire_far"
+  },
+  "gun.m4a1.fire": {
+    "sounds": [
+      "blockland:gun/m4a1_fire_1",
+      "blockland:gun/m4a1_fire_2",
+      "blockland:gun/m4a1_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.m4a1.fire"
+  },
+  "gun.m4a1.fire_far": {
+    "sounds": [
+      "blockland:gun/m4a1_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.m4a1.fire_far"
+  },
+  "gun.jackhammer.fire": {
+    "sounds": [
+      "blockland:gun/jackhammer_fire_1",
+      "blockland:gun/jackhammer_fire_2",
+      "blockland:gun/jackhammer_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.jackhammer.fire"
+  },
+  "gun.jackhammer.fire_far": {
+    "sounds": [
+      "blockland:gun/jackhammer_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.jackhammer.fire_far"
+  },
+  "knife.knuckles_equip": {
+    "sounds": [
+      "blockland:knife/knuckles_equip"
+    ],
+    "subtitle": "subtitles.blockland.knife.knuckles_equip"
+  },
+  "knife.knuckles_clink": {
+    "sounds": [
+      "blockland:knife/knuckles_clink_1",
+      "blockland:knife/knuckles_clink_2"
+    ],
+    "subtitle": "subtitles.blockland.knife.knuckles_clink"
+  },
+  "knife.knuckles_swing": {
+    "sounds": [
+      "blockland:knife/knuckles_swing_1",
+      "blockland:knife/knuckles_swing_2",
+      "blockland:knife/knuckles_swing_3"
+    ],
+    "subtitle": "subtitles.blockland.knife.knuckles_swing"
+  },
+  "knife.knuckles_swing_heavy": {
+    "sounds": [
+      "blockland:knife/knuckles_swing_heavy_1",
+      "blockland:knife/knuckles_swing_heavy_2"
+    ],
+    "subtitle": "subtitles.blockland.knife.knuckles_swing_heavy"
+  },
+  "knife.knuckles_hit_flesh": {
+    "sounds": [
+      "blockland:knife/knuckles_hit_flesh_1",
+      "blockland:knife/knuckles_hit_flesh_2",
+      "blockland:knife/knuckles_hit_flesh_3"
+    ],
+    "subtitle": "subtitles.blockland.knife.knuckles_hit_flesh"
+  },
+  "knife.knuckles_hit_wall": {
+    "sounds": [
+      "blockland:knife/knuckles_hit_wall_1",
+      "blockland:knife/knuckles_hit_wall_2"
+    ],
+    "subtitle": "subtitles.blockland.knife.knuckles_hit_wall"
+  },
+  "knife.crowbar_equip": {
+    "sounds": [
+      "blockland:knife/crowbar_equip"
+    ],
+    "subtitle": "subtitles.blockland.knife.crowbar_equip"
+  },
+  "knife.crowbar_swing": {
+    "sounds": [
+      "blockland:knife/crowbar_swing_1",
+      "blockland:knife/crowbar_swing_2",
+      "blockland:knife/crowbar_swing_3"
+    ],
+    "subtitle": "subtitles.blockland.knife.crowbar_swing"
+  },
+  "knife.crowbar_swing_heavy": {
+    "sounds": [
+      "blockland:knife/crowbar_swing_heavy_1",
+      "blockland:knife/crowbar_swing_heavy_2"
+    ],
+    "subtitle": "subtitles.blockland.knife.crowbar_swing_heavy"
+  },
+  "knife.crowbar_hit_flesh": {
+    "sounds": [
+      "blockland:knife/crowbar_hit_flesh_1",
+      "blockland:knife/crowbar_hit_flesh_2",
+      "blockland:knife/crowbar_hit_flesh_3"
+    ],
+    "subtitle": "subtitles.blockland.knife.crowbar_hit_flesh"
+  },
+  "knife.crowbar_hit_wall": {
+    "sounds": [
+      "blockland:knife/crowbar_hit_wall_1",
+      "blockland:knife/crowbar_hit_wall_2",
+      "blockland:knife/crowbar_hit_wall_3"
+    ],
+    "subtitle": "subtitles.blockland.knife.crowbar_hit_wall"
+  },
+  "knife.crowbar_tap": {
+    "sounds": [
+      "blockland:knife/crowbar_tap_1",
+      "blockland:knife/crowbar_tap_2"
+    ],
+    "subtitle": "subtitles.blockland.knife.crowbar_tap"
   }
 }

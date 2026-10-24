@@ -5,6 +5,7 @@
   "maxStartSpeed": 0.56,
   "holdTicks": 3,
   "friction": 0.92,
+  "wetFriction": 0.945,
   "endSpeed": 0.17,
   "maxTicks": 22,
   "airTicks": 3,

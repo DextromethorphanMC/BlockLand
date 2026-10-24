@@ -10,6 +10,8 @@ import com.mojang.blaze3d.textures.GpuTexture;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.material.FogType;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
@@ -73,7 +75,8 @@ public final class WorldLighting {
             if (level == null) return;
             GraphicsSettings settings = Graphics.settings();
             Vec3 camera = new Vec3(frame.camX, frame.camY, frame.camZ);
-            sky.update(level, camera, frame.partialTick, settings);
+            boolean openAir = mc.gameRenderer.getMainCamera().getFluidInCamera() == FogType.NONE && !blinded(mc);
+            sky.update(level, camera, frame.partialTick, settings, openAir);
             boolean lit = settings.worldLighting;
             lights.collect(lit ? level : null, frame.camX, frame.camY, frame.camZ, frame.partialTick, settings);
             GpuTexture map = materials.resolve();
@@ -98,6 +101,12 @@ public final class WorldLighting {
         public void endFrame(FrameContext frame) {
             uniforms.endFrame();
         }
+    }
+
+    /** Blindness and darkness bring a fog of their own that BlockLand's haze must not lift. */
+    private static boolean blinded(Minecraft mc) {
+        return mc.getCameraEntity() instanceof LivingEntity living
+                && (living.hasEffect(MobEffects.BLINDNESS) || living.hasEffect(MobEffects.DARKNESS));
     }
 
     /** What the 画质 tab shows about world lighting. */

@@ -1,8 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api'
 import { Empty, ErrorBox, Field, Modal, NumberInput, PageHeader, useLoad, useToast } from '../components/ui'
-import { TierBadge, categoryLabel, expiryText } from '../components/Ranks'
-import type { Entitlement, InventoryItem, PlayerAccount, RankedLeaderEntry } from '../types'
+import { TierBadge, categoryLabel, expiryText, modeTitle } from '../components/Ranks'
+import type { Entitlement, GameMode, InventoryItem, PlayerAccount, RankedLeaderEntry } from '../types'
+
+/** A player's line in one mode's ladder. */
+type ModeRank = { mode: string; entry: RankedLeaderEntry }
 
 export function formatPlaytime(seconds: number) {
   const h = Math.floor(seconds / 3600)
@@ -28,9 +31,17 @@ export function Users() {
   const [debounced, setDebounced] = useState('')
   const users = useLoad(() => api.users(debounced), [debounced])
   const registryLoad = useLoad(api.inventoryRegistry)
-  const ladder = useLoad(() => api.rankedLeaderboard(500))
+  const gameModes = useLoad(api.gameModes)
+  // every mode has its own ladder
+  const ladders = useLoad(async () => {
+    const modes = await api.rankedModes()
+    return Promise.all(modes.map(async (mode) => ({ mode, entries: await api.rankedLeaderboard(mode, 500) })))
+  })
   const registry = new Map((registryLoad.data ?? []).map((i) => [i.key, i]))
-  const ranks = new Map((ladder.data ?? []).map((e) => [e.uuid, e]))
+  const ranks = new Map<string, ModeRank[]>()
+  for (const { mode, entries } of ladders.data ?? []) {
+    for (const entry of entries) ranks.set(entry.uuid, [...(ranks.get(entry.uuid) ?? []), { mode, entry }])
+  }
   const [action, setAction] = useState<Action | null>(null)
 
   useEffect(() => {
@@ -111,7 +122,7 @@ export function Users() {
                   )}
                 </td>
                 <td>
-                  <RankCell entry={ranks.get(u.uuid)} />
+                  <RankCell ranks={ranks.get(u.uuid)} modes={gameModes.data} />
                 </td>
                 <td>
                   <div className="badges">
@@ -167,6 +178,7 @@ export function Users() {
         <DetailDialog
           user={users.data?.find((u) => u.uuid === action.user.uuid) ?? action.user}
           registry={registry}
+          modes={gameModes.data}
           onClose={() => setAction(null)}
           onRevoke={(key) => run(api.revoke(action.user.uuid, key), `已收回 ${itemName({ key }, registry)}`)}
         />
@@ -247,27 +259,35 @@ function RestrictionDialog({
   )
 }
 
-function RankCell({ entry }: { entry: RankedLeaderEntry | undefined }) {
-  if (!entry) return <span className="muted small">未定级</span>
+/** One line per mode whose ladder the player is on. */
+function RankCell({ ranks, modes }: { ranks: ModeRank[] | undefined; modes: GameMode[] | undefined }) {
+  if (!ranks?.length) return <span className="muted small">未定级</span>
   return (
-    <div className="row">
-      <TierBadge tier={entry.tier} />
-      <span className="small">
-        {entry.score} 分 · 第 {entry.position} 名
-      </span>
+    <div>
+      {ranks.map(({ mode, entry }) => (
+        <div key={mode} className="row">
+          <span className="small muted">{modeTitle(mode, modes)}</span>
+          <TierBadge tier={entry.tier} />
+          <span className="small">
+            {entry.score} 分 · 第 {entry.position} 名
+          </span>
+        </div>
+      ))}
     </div>
   )
 }
 
-/** The player's inventory (owned items with their end), what they put on, and their ranked record. */
+/** The player's inventory (owned items with their end), what they put on, and their ranked record in each mode. */
 function DetailDialog({
   user,
   registry,
+  modes,
   onClose,
   onRevoke,
 }: {
   user: PlayerAccount
   registry: Map<string, InventoryItem>
+  modes: GameMode[] | undefined
   onClose: () => void
   onRevoke: (key: string) => void
 }) {
@@ -321,17 +341,19 @@ function DetailDialog({
         <section>
           <h3>排位</h3>
           <ErrorBox error={rank.error} />
-          {r && (
-            <>
+          {r?.modes.length === 0 && <p className="muted small">还没有打过排位赛。</p>}
+          {r?.modes.map((m) => (
+            <div key={m.modeId} className="field">
+              <span className="field-label">{modeTitle(m.modeId, modes)}</span>
               <div className="row">
-                <TierBadge tier={r.standing.tier} />
-                <strong>{r.standing.score} 分</strong>
-                <span className="muted small">{r.standing.position > 0 ? `全服第 ${r.standing.position} 名` : '未定级'}</span>
+                <TierBadge tier={m.standing.tier} />
+                <strong>{m.standing.score} 分</strong>
+                <span className="muted small">{m.standing.position > 0 ? `本模式第 ${m.standing.position} 名` : '未定级'}</span>
               </div>
               <p className="small">
-                {r.standing.matches} 场 · {r.standing.wins} 胜 {r.losses} 负 {r.draws} 平
+                {m.standing.matches} 场 · {m.standing.wins} 胜 {m.losses} 负 {m.draws} 平
               </p>
-              {r.seasons.length > 0 && (
+              {m.seasons.length > 0 && (
                 <table className="table table-compact">
                   <thead>
                     <tr>
@@ -343,7 +365,7 @@ function DetailDialog({
                     </tr>
                   </thead>
                   <tbody>
-                    {r.seasons.map((end) => (
+                    {m.seasons.map((end) => (
                       <tr key={end.season}>
                         <td>第 {end.season} 赛季</td>
                         <td>{end.score}</td>
@@ -357,8 +379,8 @@ function DetailDialog({
                   </tbody>
                 </table>
               )}
-            </>
-          )}
+            </div>
+          ))}
         </section>
       </div>
     </Modal>

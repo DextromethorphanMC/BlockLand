@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/mp5_held",
+  "textures": {
+    "0": "blockland:item/mp5_held_magma",
+    "particle": "blockland:item/mp5_held_magma"
+  }
+}

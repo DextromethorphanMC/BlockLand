@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/jackhammer_held",
+  "textures": {
+    "0": "blockland:item/jackhammer_held_magma",
+    "particle": "blockland:item/jackhammer_held_magma"
+  }
+}

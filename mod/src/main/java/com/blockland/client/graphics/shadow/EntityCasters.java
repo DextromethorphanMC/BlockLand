@@ -14,18 +14,13 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.EntityRenderer;
-import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
-import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
-import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.AreaEffectCloud;
 import net.minecraft.world.entity.Display;
@@ -49,7 +44,8 @@ import java.util.Map;
  * (third-person weapons included: they take their vanilla-render-type path while {@link ShadowPass} is set) — into a
  * capturing buffer source that keeps only the opaque and alpha-tested entity geometry; the captured meshes then go into
  * one vertex buffer and are drawn depth-only, alpha-tested against their own textures, into the near cascades. The local
- * player casts a shadow in first person too (without the head, which would cover the eye — and the weapon — itself).
+ * player casts a whole shadow in first person too, head included; the first-person weapon does not take that shadow
+ * (it looks past what is right behind it towards the sun: gun.fsh), so the head around the eye does not darken it.
  */
 final class EntityCasters implements MultiBufferSource {
     static final float RANGE = 32f;
@@ -100,15 +96,13 @@ final class EntityCasters implements MultiBufferSource {
         if (dispatcher.camera == null) return;
         collect(level, camX, camY, camZ);
         if (nearby.isEmpty()) return;
-        Entity cameraEntity = mc.getCameraEntity();
-        boolean firstPerson = mc.options.getCameraType().isFirstPerson();
         ShadowPass.set(true);
         try {
             for (Entity entity : nearby) {
                 double x = Mth.lerp(partialTick, entity.xOld, entity.getX()) - camX;
                 double y = Mth.lerp(partialTick, entity.yOld, entity.getY()) - camY;
                 double z = Mth.lerp(partialTick, entity.zOld, entity.getZ()) - camZ;
-                if (render(dispatcher, entity, x, y, z, partialTick, firstPerson && entity == cameraEntity)) entities++;
+                if (render(dispatcher, entity, x, y, z, partialTick)) entities++;
             }
         } finally {
             ShadowPass.set(false);
@@ -133,22 +127,11 @@ final class EntityCasters implements MultiBufferSource {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private boolean render(EntityRenderDispatcher dispatcher, Entity entity, double x, double y, double z, float partialTick, boolean headless) {
+    private boolean render(EntityRenderDispatcher dispatcher, Entity entity, double x, double y, double z, float partialTick) {
         EntityRenderer renderer = dispatcher.getRenderer(entity);
-        PlayerModel model = headless && renderer instanceof PlayerRenderer player ? player.getModel() : null;
-        boolean headVisible = model == null || model.head.visible;
         try {
             EntityRenderState state = renderer.createRenderState(entity, partialTick);
             Vec3 offset = renderer.getRenderOffset(state);
-            if (headless) {
-                // the eye sits inside the head: no head, hat, helmet or worn skull, or the player shadows their own view
-                if (model != null) model.head.visible = false;
-                if (state instanceof HumanoidRenderState humanoid) humanoid.headEquipment = ItemStack.EMPTY;
-                if (state instanceof LivingEntityRenderState living) {
-                    living.headItem.clear();
-                    living.wornHeadType = null;
-                }
-            }
             pose.pushPose();
             pose.translate(x + offset.x, y + offset.y, z + offset.z);
             renderer.render(state, pose, this, LightTexture.FULL_BRIGHT);
@@ -160,7 +143,6 @@ final class EntityCasters implements MultiBufferSource {
             }
             return false;
         } finally {
-            if (model != null) model.head.visible = headVisible;
             while (!pose.isEmpty()) pose.popPose();
         }
     }

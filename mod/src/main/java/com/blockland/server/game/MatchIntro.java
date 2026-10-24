@@ -30,9 +30,9 @@ final class MatchIntro {
         for (List<MatchRoster.Member> side : joining.teams()) {
             for (MatchRoster.Member self : side) {
                 List<S2CMatchFound.Member> team = new ArrayList<>();
-                team.add(member(self));
+                team.add(member(self, mode.id));
                 for (MatchRoster.Member other : side) {
-                    if (!other.id().equals(self.id())) team.add(member(other));
+                    if (!other.id().equals(self.id())) team.add(member(other, mode.id));
                 }
                 int opponents = dropIn ? 0 : Math.max(0, players - side.size());
                 BLNetwork.sendTo(self.id(), new S2CMatchFound(mode.id, title, type.displayName(), type.accentColor(),
@@ -42,11 +42,11 @@ final class MatchIntro {
         }
     }
 
-    private static S2CMatchFound.Member member(MatchRoster.Member member) {
+    private static S2CMatchFound.Member member(MatchRoster.Member member, String modeId) {
         String card = Cosmetics.get().get(member.id(), Cosmetics.CARD);
         if (card == null) card = "";
         if (card.startsWith("card:")) card = card.substring("card:".length());
-        Ranks.RankInfo rank = Ranks.get().rankOf(member.id());
+        Ranks.RankInfo rank = Ranks.get().rankOf(member.id(), modeId);
         return new S2CMatchFound.Member(member.id(), member.name(), card, rank.tier().id(), rank.score(), rank.position() > 0 || rank.matches() > 0);
     }
 }

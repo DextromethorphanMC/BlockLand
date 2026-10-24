@@ -17,6 +17,9 @@ import equip_model
 from glbread import GLTF
 from meshkit import build_primitives, newell_normal
 from model_quality import BUDGETS, SETTINGS, arc_segments, refine_samples
+
+#: weapon files in the pistol budget
+PISTOLS = ("p9", "p9a", "usp", "usp_dual", "usp_dual_cerberus", "calico")
 import shapes as sh
 
 MODELS = Path(__file__).resolve().parents[2] / "mod/src/main/resources/assets/blockland/models"
@@ -168,7 +171,8 @@ def check_assets(baseline=None):
             g = GLTF(path)
             tris = sum(g.json["accessors"][p["indices"]]["count"] // 3
                        for mesh in g.json["meshes"] for p in mesh["primitives"])
-            key = category if category != "gun" else ("pistol" if path.stem.startswith(("p9", "usp")) else "long_gun")
+            # pistols by name (not by prefix: the P90 is a long gun)
+            key = category if category != "gun" else ("pistol" if path.stem in PISTOLS else "long_gun")
             # Conservative whole-file ceiling also includes spare magazines and shells.
             limit = BUDGETS[key] * (2 if "dual" in path.stem else 1)
             if tris > limit:

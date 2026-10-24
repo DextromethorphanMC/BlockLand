@@ -5,6 +5,7 @@ import struct
 import numpy as np
 
 FLOAT = 5126
+UINT8 = 5121
 UINT16 = 5123
 UINT32 = 5125
 ARRAY_BUFFER = 34962
@@ -36,8 +37,8 @@ class GLB:
 
     def _accessor(self, array, kind, target=None, minmax=False, normalized=False):
         array = np.ascontiguousarray(array)
-        if array.dtype in (np.uint16, np.uint32):
-            ctype = UINT16 if array.dtype == np.uint16 else UINT32
+        if array.dtype in (np.uint8, np.uint16, np.uint32):
+            ctype = {np.dtype(np.uint8): UINT8, np.dtype(np.uint16): UINT16, np.dtype(np.uint32): UINT32}[array.dtype]
         else:
             array = array.astype(np.float32)
             ctype = FLOAT
@@ -86,7 +87,7 @@ class GLB:
 
     # ----------------------------------------------------------------- meshes
     def add_mesh(self, name, primitives):
-        """primitives: list of dicts {positions, normals, uvs, indices, material(name)}."""
+        """primitives: list of dicts {positions, normals, uvs, indices, material(name)[, joints, weights]}."""
         prims = []
         for p in primitives:
             pos = np.asarray(p["positions"], np.float32)
@@ -94,6 +95,9 @@ class GLB:
                      "NORMAL": self._accessor(np.asarray(p["normals"], np.float32), "VEC3", ARRAY_BUFFER)}
             if p.get("uvs") is not None:
                 attrs["TEXCOORD_0"] = self._accessor(np.asarray(p["uvs"], np.float32), "VEC2", ARRAY_BUFFER)
+            if p.get("joints") is not None:          # skinned meshes (arms.glb, VIEWMODEL_SPEC section 7)
+                attrs["JOINTS_0"] = self._accessor(np.asarray(p["joints"], np.uint8), "VEC4", ARRAY_BUFFER)
+                attrs["WEIGHTS_0"] = self._accessor(np.asarray(p["weights"], np.float32), "VEC4", ARRAY_BUFFER)
             idx = np.asarray(p["indices"]).reshape(-1)
             idx = idx.astype(np.uint16 if len(pos) < 65536 else np.uint32)
             prims.append({"attributes": attrs,

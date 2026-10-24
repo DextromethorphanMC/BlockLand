@@ -6,6 +6,7 @@ import com.blockland.client.craft.WeaponLook;
 import com.blockland.client.gltf.GltfModel;
 import com.blockland.client.render.GpuModel;
 import com.blockland.client.render.ModelCache;
+import com.blockland.client.viewmodel.SwimPose;
 import com.blockland.client.viewmodel.ViewSubject;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.craft.CraftData;
@@ -14,6 +15,7 @@ import com.blockland.gun.GunData;
 import com.blockland.gun.GunItem;
 import com.blockland.gun.GunState;
 import com.blockland.gun.GunStats;
+import com.blockland.movement.Slides;
 import com.blockland.network.packet.GunPackets;
 import com.blockland.network.packet.ViewmodelPackets;
 import net.minecraft.client.Camera;
@@ -150,9 +152,9 @@ final class WatchedGun {
     static void frame(float dt) {
         if (!active()) return;
         boolean up = aiming && stats.gun().canAim() && viewmodel.action() != Viewmodel.Action.RELOAD;
-        viewmodel.ads.toIfChanged(up ? 1 : 0, stats.adsTime(), Ease.SINE_IN_OUT);
+        viewmodel.ads.toIfChanged(up ? 1 : 0, SwimPose.adsTime(player, stats.adsTime()), Ease.SINE_IN_OUT);
         ViewmodelRenderer.suppressViewBobbing(player);
-        viewmodel.update(dt, player, player.isSprinting());
+        viewmodel.update(dt, player, SwimPose.running(player));
     }
 
     /** The server's aim report for a player (every tracker gets it). */
@@ -246,7 +248,7 @@ final class WatchedGun {
         Vec3[] muzzles = new Vec3[2];
         for (int gun = 0; gun < 2; gun++) {
             Matrix4f at = viewmodel.nodeMatrix("muzzle", gun, base, tmp);
-            muzzles[gun] = gun == 1 && at == null ? muzzles[0] : ViewmodelRenderer.viewToWorld(camera, at, player.getEyePosition());
+            muzzles[gun] = gun == 1 && at == null ? muzzles[0] : ViewmodelRenderer.viewToWorld(camera, at, Slides.eyePosition(player));
         }
         CraftData.SkinFx skinFx = stats == null ? null : stats.skinFx();
         for (PendingTracer tracer : pendingTracers) {

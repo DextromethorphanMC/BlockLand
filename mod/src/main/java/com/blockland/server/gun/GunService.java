@@ -3,8 +3,10 @@ package com.blockland.server.gun;
 import com.blockland.server.spectate.Watchers;
 import com.blockland.network.packet.ViewmodelPackets;
 import com.blockland.BlockLand;
+import com.blockland.combat.Ballistics;
 import com.blockland.combat.HitRecords;
 import com.blockland.combat.HitShapes;
+import com.blockland.server.combat.HitHistory;
 import com.blockland.effect.ActionLocks;
 import com.blockland.gun.GunContent;
 import com.blockland.gun.GunData;
@@ -63,9 +65,17 @@ public final class GunService implements GunPacketListeners.Server {
      * client counts a round when its clip ends, our tick may come a little after.
      */
     private static final long SHELL_EARLY_NANOS = 120_000_000L;
+    /**
+     * Lag compensation: a client draws the others up to this many ticks behind the latest position it was sent
+     * (position updates every 2-3 ticks, interpolated over 3) on top of the round trip; the shooter's claimed target is
+     * tried from the round trip back to this many ticks more.
+     */
+    private static final int VIEW_DELAY_TICKS = 6;
 
     private final MinecraftServer server;
     private final Map<UUID, Shooter> shooters = new HashMap<>();
+    @Nullable
+    private HitHistory history;
     /** Players whose reloads take no ammo items (creative, or a practice mode's infinite ammo). */
     private Predicate<ServerPlayer> infiniteAmmo = player -> false;
 
@@ -129,6 +139,11 @@ public final class GunService implements GunPacketListeners.Server {
     }
 
     /** Who reloads without using ammo items besides creative players (the composition root asks the player's match). */
+    /** Where entities stood over the last second: a shot is checked against the world as its shooter saw it. */
+    public void setHistory(HitHistory history) {
+        this.history = history;
+    }
+
     public void setInfiniteAmmo(Predicate<ServerPlayer> infiniteAmmo) {
         this.infiniteAmmo = infiniteAmmo;
     }
@@ -191,12 +206,14 @@ public final class GunService implements GunPacketListeners.Server {
         // a sliding shooter's eyes are low (where its camera is)
         Vec3 eye = Slides.eyePosition(player);
         int pellets = Math.max(1, stats.ammo().pellets);
+        Rewind rewind = rewind(player);
         for (int round = 0; round < shots; round++) {
             // the client numbers a volley's pellets on from the first gun's, with the same seed
             int hand = volley ? round : fire.hand();
             for (int pellet = 0; pellet < pellets; pellet++) {
-                Vec3 dir = GunMath.spreadDirection(yaw, pitch, spread, fire.seed(), round * pellets + pellet);
-                Shot shot = trace(level, player, eye, dir, stats.range());
+                int index = round * pellets + pellet;
+                Vec3 dir = GunMath.spreadDirection(yaw, pitch, spread, fire.seed(), index);
+                Shot shot = trace(level, player, eye, dir, stats.range(), stats.ammo().medium(), fire.seenAt(index), rewind);
                 if (shot.entity != null) damage(level, player, stats, shot, eye);
                 BLNetwork.sendToTracking(player, new GunPackets.S2CShot(player.getId(), shot.end.x, shot.end.y, shot.end.z, shot.hitBlock,
                         shot.face, stats.suppressed(), hand));
@@ -216,20 +233,43 @@ public final class GunService implements GunPacketListeners.Server {
      * Where one projectile ends: the first entity (not an ally) or block on its path ({@code face}: struck side,
      * {@code head}: the entity was hit on the head).
      */
-    private record Shot(Vec3 end, @Nullable Entity entity, boolean hitBlock, int face, boolean head) {
+    private record Shot(Vec3 end, @Nullable Entity entity, boolean hitBlock, int face, boolean head, float energy) {
     }
 
-    private static Shot trace(ServerLevel level, ServerPlayer shooter, Vec3 from, Vec3 dir, double range) {
+    /** How far back the shooter's view of the others may be: from {@code first} to {@code last} ticks ago. */
+    private record Rewind(@Nullable HitHistory history, int first, int last) {
+    }
+
+    private Rewind rewind(ServerPlayer shooter) {
+        int trip = Math.round(Math.max(0, shooter.connection.latency()) / 50f);
+        int first = Math.min(HitHistory.TICKS - 1, trip);
+        return new Rewind(history, first, Math.min(HitHistory.TICKS - 1, trip + VIEW_DELAY_TICKS));
+    }
+
+    private static boolean hittable(ServerPlayer shooter, Entity e) {
+        return e.isPickable() && e.isAlive() && !e.isSpectator() && !shooter.isAlliedTo(e) && e != shooter.getVehicle();
+    }
+
+    /**
+     * The round's path: to the first block, unless water or lava on the way spends it first or it skips off a water
+     * surface ({@link Ballistics}); what it strikes in a fluid it strikes with the energy it has left there. Entities
+     * are where they are now, and the one the shooter's client saw this round strike ({@code seen}) also where it stood
+     * when the shooter saw it ({@link Rewind}): it counts if the round passed through it then, short of the block and of
+     * anything the round strikes now. A claim alone moves nothing: the round must really have crossed the target.
+     */
+    private static Shot trace(ServerLevel level, ServerPlayer shooter, Vec3 from, Vec3 dir, double range, Ballistics.Medium medium,
+                              int seen, Rewind rewind) {
         Vec3 to = from.add(dir.scale(range));
         BlockHitResult block = level.clip(new ClipContext(from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, shooter));
         boolean hitBlock = block.getType() != HitResult.Type.MISS;
-        Vec3 end = hitBlock ? block.getLocation() : to;
+        Ballistics.Path path = Ballistics.trace(level, from, dir, hitBlock ? from.distanceTo(block.getLocation()) : range, medium);
+        if (path.stoppedInFluid()) hitBlock = false;
+        Vec3 end = hitBlock ? block.getLocation() : path.end();
         Entity best = null;
         HitShapes.Hit bestHit = null;
         double bestDistance = from.distanceToSqr(end);
         AABB sweep = new AABB(from, end).inflate(1.0);
-        for (Entity candidate : level.getEntities(shooter, sweep,
-                e -> e.isPickable() && e.isAlive() && !e.isSpectator() && !shooter.isAlliedTo(e) && e != shooter.getVehicle())) {
+        for (Entity candidate : level.getEntities(shooter, sweep, e -> hittable(shooter, e))) {
             // hit boxes, not the bounding box: a sliding player is low, with the head behind the hips
             HitShapes.Hit hit = HitShapes.clip(candidate, from, end, Math.max(0.05, candidate.getPickRadius()));
             if (hit == null) continue;
@@ -240,14 +280,42 @@ public final class GunService implements GunPacketListeners.Server {
                 bestDistance = distance;
             }
         }
-        return best != null ? new Shot(bestHit.point(), best, false, -1, bestHit.head())
-                : new Shot(end, null, hitBlock, hitBlock ? block.getDirection().ordinal() : -1, false);
+        Entity claimed = seen == GunPackets.C2SFire.NONE ? null : level.getEntity(seen);
+        if (claimed != null && claimed != best && claimed != shooter && rewind.history() != null && hittable(shooter, claimed)) {
+            HitShapes.Hit then = rewound(claimed, from, end, rewind);
+            if (then != null && from.distanceToSqr(then.point()) < bestDistance) {
+                best = claimed;
+                bestHit = then;
+            }
+        }
+        if (best != null) return new Shot(bestHit.point(), best, false, -1, bestHit.head(), path.energyAt(from.distanceTo(bestHit.point())));
+        // what the others are told about a round that hit nothing: the face it struck, or how a fluid stopped it
+        int face = hitBlock ? block.getDirection().ordinal()
+                : path.skipped ? GunPackets.S2CShot.SKIPPED : path.spent ? GunPackets.S2CShot.SPENT : -1;
+        return new Shot(end, null, hitBlock, face, false, path.energyAt(path.length));
+    }
+
+    /**
+     * Where the segment met the entity as it stood over the rewind's ticks (from the round trip back), in world space
+     * then; null when the segment passed it by every time. Its hit boxes are moved back as a whole.
+     */
+    @Nullable
+    private static HitShapes.Hit rewound(Entity target, Vec3 from, Vec3 end, Rewind rewind) {
+        double inflate = Math.max(0.05, target.getPickRadius());
+        for (int ago = rewind.first(); ago <= rewind.last(); ago++) {
+            Vec3 shift = target.position().subtract(rewind.history().positionAgo(target, ago));
+            HitShapes.Hit hit = HitShapes.clip(target, from.add(shift), end.add(shift), inflate);
+            if (hit != null) return new HitShapes.Hit(hit.point().subtract(shift), hit.head());
+        }
+        return null;
     }
 
     private void damage(ServerLevel level, ServerPlayer shooter, GunStats stats, Shot shot, Vec3 eye) {
         Entity target = shot.entity;
         boolean head = shot.head;
-        float amount = stats.damageAt(eye.distanceTo(shot.end)) * (head ? stats.ammo().headshotMultiplier : 1);
+        // a round slowed by water or lava hits with what it has left
+        float amount = stats.damageAt(eye.distanceTo(shot.end)) * (head ? stats.ammo().headshotMultiplier : 1) * shot.energy;
+        if (amount <= 0.05f) return;
         DamageSource source = new DamageSource(level.registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE).getOrThrow(GunContent.BULLET),
                 shooter, shooter);
         // bullets are fast: every one counts, not just the first in vanilla's hurt cooldown

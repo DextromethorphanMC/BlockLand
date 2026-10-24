@@ -4,7 +4,8 @@ import java.util.Locale;
 
 /**
  * The player's bullet impact settings (kept with the other client settings, {@code config/blockland-settings.json} key
- * {@code impacts}; field names = JSON keys): a quality level and three switches.
+ * {@code impacts}; field names = JSON keys): a quality level, switches for dust, bounces, the surroundings and fluids,
+ * and the blood.
  */
 public final class ImpactSettings {
     /**
@@ -46,6 +47,21 @@ public final class ImpactSettings {
     public boolean dust = true;
     /** Weather and surroundings change the effect (rain, snow, under water, wind). */
     public boolean environment = true;
+    /** How much blood a hit on a living target throws (drops, mist, plumes), 0..2 (0 = none). */
+    public float blood = 1;
+    /** Blood spreads in water as a drifting, colouring plume (off: no blood under water). */
+    public boolean bloodInWater = true;
+    /**
+     * How long landed blood stays on floors, walls and ceilings (× the data's time), 0..2 (0 = drops vanish where they
+     * land).
+     */
+    public float bloodStains = 1;
+    /**
+     * Fluids act on what is in them: chunks splash into water and sink or float and drift with the current, burn up in
+     * lava, sparks die in water, bubbles rise and wobble, rounds leave a trail of bubbles under water (off: pieces only
+     * fall more slowly in water).
+     */
+    public boolean fluidPhysics = true;
 
     public Quality qualityLevel() {
         return Quality.of(quality);
@@ -53,5 +69,7 @@ public final class ImpactSettings {
 
     public void sanitize() {
         quality = Quality.of(quality).id();
+        blood = Float.isNaN(blood) ? 1 : Math.max(0, Math.min(2, blood));
+        bloodStains = Float.isNaN(bloodStains) ? 1 : Math.max(0, Math.min(2, bloodStains));
     }
 }

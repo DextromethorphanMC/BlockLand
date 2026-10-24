@@ -49,6 +49,12 @@ public final class FrameContext {
      */
     @Nullable
     public GpuTextureView rayAlbedo, rayNormals;
+    /**
+     * The cloud layer this frame (scene.glsl {@code BlClouds}, {@code BlCloudShape}): the camera's cloud noise position x
+     * and z, the layer's bottom and top relative to the camera, coverage, density, shadow strength (0 = no clouds) and
+     * drift time. Filled at {@code cameraReady} by the volumetric clouds (zero while they do not run).
+     */
+    public final float[] clouds = new float[8];
     /** DLSS Frame Generation generates frames around this one (motion blur is halved for it). */
     public boolean frameGenerating;
 

@@ -5,10 +5,11 @@
 // BlockLand post chain, step 1 (client/graphics/post/PostChain): the frame as drawn (display colours, emission in the
 // alpha of opaque pixels, rendering spec §3) into linear HDR at the internal resolution. World pixels get the ambient
 // occlusion, the ray traced light (client/graphics/raytrace: added, its ambient occlusion replacing the screen-space one)
-// and the volumetric light; the hand and the viewmodel (drawn after the level: depth < 1 in the hand depth) get none; the sun and the moon (the brightest sky pixels) are lifted into HDR so they bloom. Output alpha = 1 on
+// the volumetric clouds (client/graphics/sky: the picture behind them × their transmittance, plus their light) and the
+// volumetric light; the hand and the viewmodel (drawn after the level: depth < 1 in the hand depth) get none; the sun and the moon (the brightest sky pixels) are lifted into HDR so they bloom. Output alpha = 1 on
 // hand / viewmodel pixels (the temporal and blur passes keep them apart from the world).
 //   Params[0] = (emission boost: HDR multiplier added at full emission, AO strength, AO present, volumetric light present)
-//   Params[1] = (the alpha carries emission, ray traced light present, -, -)
+//   Params[1] = (the alpha carries emission, ray traced light present, clouds present, -)
 
 uniform sampler2D SceneSampler;
 uniform sampler2D WorldDepthSampler;
@@ -16,6 +17,7 @@ uniform sampler2D HandDepthSampler;
 uniform sampler2D AoSampler;
 uniform sampler2D VolumetricSampler;
 uniform sampler2D RayTracedSampler;
+uniform sampler2D CloudSampler;
 
 in vec2 texCoord;
 
@@ -42,8 +44,14 @@ void main() {
         } else if (Params[0].z > 0.5 && worldDepth < 1.0) {
             color *= mix(1.0, texture(AoSampler, texCoord).r, Params[0].y);
         }
+        if (Params[1].z > 0.5) {
+            vec4 clouds = texture(CloudSampler, texCoord);
+            color = color * clouds.a + clouds.rgb;
+        }
         if (Params[0].w > 0.5) {
-            color += texture(VolumetricSampler, texCoord).rgb;
+            // the volumetric fog: what lies behind it dimmed by its transmittance, then the light it scatters
+            vec4 fog = texture(VolumetricSampler, texCoord);
+            color = color * fog.a + fog.rgb;
         }
     }
     fragColor = vec4(max(color, vec3(0.0)), hand);

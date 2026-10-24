@@ -26,13 +26,26 @@ public final class RankedControllers {
             this.ranked = ranked;
         }
 
-        public record PlayersRequest(List<String> uuids) {
+        public record PlayersRequest(String modeId, List<String> uuids) {
         }
 
-        /** Standings of the given players (keyed by the uuid as sent), e.g. for matchmaking or the lobby. */
+        /** Standings of the given players in one mode (keyed by the uuid as sent). */
         @PostMapping("/players")
         public Map<String, RankedService.Standing> players(@RequestBody PlayersRequest request) {
-            return ranked.standings(request == null ? List.of() : request.uuids());
+            return ranked.standings(request == null ? null : request.modeId(), request == null ? List.of() : request.uuids());
+        }
+
+        /**
+         * @param fresh   the standing in a mode a player has not played yet
+         * @param players uuid as sent → mode → standing, for every mode the player played ranked
+         */
+        public record AllStandings(RankedService.Standing fresh, Map<String, Map<String, RankedService.Standing>> players) {
+        }
+
+        /** Standings of the given players in every mode, e.g. for the lobby. */
+        @PostMapping("/standings")
+        public AllStandings standings(@RequestBody PlayersRequest request) {
+            return new AllStandings(ranked.fresh(), ranked.allStandings(request == null ? List.of() : request.uuids()));
         }
 
         /** A ranked match was decided; reporting the same match id again returns the same changes. */
@@ -42,8 +55,9 @@ public final class RankedControllers {
         }
 
         @GetMapping("/leaderboard")
-        public List<RankedService.LeaderEntry> leaderboard(@RequestParam(value = "limit", defaultValue = "100") int limit) {
-            return ranked.leaderboard(limit);
+        public List<RankedService.LeaderEntry> leaderboard(@RequestParam("mode") String mode,
+                                                           @RequestParam(value = "limit", defaultValue = "100") int limit) {
+            return ranked.leaderboard(mode, limit);
         }
     }
 
@@ -67,15 +81,22 @@ public final class RankedControllers {
             return ranked.saveConfig(config);
         }
 
-        /** 新赛季: every score back to the start, the old season's end kept per player. */
+        /** 新赛季: every score in every mode back to the start, the old season's end kept per player and mode. */
         @PostMapping("/reset")
         public RankedConfig reset() {
             return ranked.resetSeason();
         }
 
         @GetMapping("/leaderboard")
-        public List<RankedService.LeaderEntry> leaderboard(@RequestParam(value = "limit", defaultValue = "100") int limit) {
-            return ranked.leaderboard(limit);
+        public List<RankedService.LeaderEntry> leaderboard(@RequestParam("mode") String mode,
+                                                           @RequestParam(value = "limit", defaultValue = "100") int limit) {
+            return ranked.leaderboard(mode, limit);
+        }
+
+        /** The modes that have a ladder. */
+        @GetMapping("/modes")
+        public List<String> modes() {
+            return ranked.modes();
         }
 
         @GetMapping("/players/{uuid}")

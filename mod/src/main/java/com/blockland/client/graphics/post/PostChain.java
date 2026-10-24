@@ -32,7 +32,7 @@ import javax.annotation.Nullable;
 public final class PostChain implements AutoCloseable {
     private static final RenderPipeline DECODE = Fullscreen.pipeline("gfx_decode")
             .withSampler("SceneSampler").withSampler("WorldDepthSampler").withSampler("HandDepthSampler")
-            .withSampler("AoSampler").withSampler("VolumetricSampler").withSampler("RayTracedSampler")
+            .withSampler("AoSampler").withSampler("VolumetricSampler").withSampler("RayTracedSampler").withSampler("CloudSampler")
             .build();
     private static final RenderPipeline FINAL = Fullscreen.pipeline("gfx_final")
             .withSampler("ColorSampler").withSampler("BloomSampler").withSampler("ExposureSampler")
@@ -96,10 +96,11 @@ public final class PostChain implements AutoCloseable {
         // 1. decode
         hdr.ensure(ctx.internalWidth, ctx.internalHeight);
         GpuTextureView ao = s.ambientOcclusion > 0.001f ? in.effects().ambientOcclusion() : null;
-        GpuTextureView volumetric = s.volumetricLight > 0.001f ? in.effects().volumetricLight() : null;
+        GpuTextureView volumetric = in.effects().volumetricLight();
         GpuTextureView traced = in.effects().rayTraced();
+        GpuTextureView clouds = in.effects().clouds();
         decodeUbo.pass(NONE, EMISSION_BOOST * s.emission, s.ambientOcclusion, ao != null ? 1 : 0, volumetric != null ? 1 : 0,
-                in.emissionEncoded() ? 1 : 0, traced != null ? 1 : 0);
+                in.emissionEncoded() ? 1 : 0, traced != null ? 1 : 0, clouds != null ? 1 : 0);
         Fullscreen.pass("BlockLand post: decode", hdr.view(), DECODE)
                 .sampler("SceneSampler", in.scene())
                 .sampler("WorldDepthSampler", worldDepth)
@@ -107,6 +108,7 @@ public final class PostChain implements AutoCloseable {
                 .sampler("AoSampler", ao != null ? ao : none)
                 .sampler("VolumetricSampler", volumetric != null ? volumetric : none)
                 .sampler("RayTracedSampler", traced != null ? traced : none)
+                .sampler("CloudSampler", clouds != null ? clouds : none)
                 .uniform(decodeUbo)
                 .draw();
 

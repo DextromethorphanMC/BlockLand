@@ -48,6 +48,8 @@ OPTIC_BASE = np.array([0.0, 0.0124, 0.0530])     # slide space: the optic cut in
 MOUNTS = {
     "mount_optic": ("slide", OPTIC_BASE, None, None),
     "mount_laser": ("gun", G(pm.LASER_ORIGIN), None, None),                    # under the frame rail
+    # section 35: the same short rail holds a grip instead (guns.json: the underbarrel slot excludes the laser)
+    "mount_underbarrel": ("gun", G(pm.LASER_ORIGIN), None, None),
     "mount_barrel": ("gun", G((0.0, 0.0, pm.SZ0 - 0.0010)), None, None),      # just in front of the slide
     # stock kit at the bottom of the back strap: rises towards the shoulder (butt near the bore line), pistol-sized
     "mount_stock": ("gun", G((0.0, -0.0985, 0.1010)), quat_axis_angle((1, 0, 0), -28.0), np.full(3, 0.70)),

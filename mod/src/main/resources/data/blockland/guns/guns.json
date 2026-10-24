@@ -11,7 +11,9 @@
         "usp_standard",
         "usp_extended",
         "usp_dual_standard",
-        "usp_dual_extended"
+        "usp_dual_extended",
+        "calico_50",
+        "calico_100"
       ]
     },
     "smg": {
@@ -21,7 +23,13 @@
       "headshotMultiplier": 1.6,
       "magazines": [
         "tommy_stick",
-        "tommy_drum"
+        "tommy_drum",
+        "uzi_32",
+        "uzi_50",
+        "p90_50",
+        "mp5_30",
+        "mp5_40",
+        "sten_32"
       ]
     },
     "shotgun": {
@@ -32,7 +40,8 @@
       "headshotMultiplier": 1.4,
       "magazines": [
         "ks3_tube",
-        "ks3_tube_ext"
+        "ks3_tube_ext",
+        "jackhammer_10"
       ]
     },
     "sniper": {
@@ -41,7 +50,8 @@
       "damage": 17.0,
       "headshotMultiplier": 2.5,
       "magazines": [
-        "awp_standard"
+        "awp_standard",
+        "ssg08_10"
       ]
     },
     "rifle": {
@@ -53,7 +63,11 @@
         "ak_standard",
         "ak_extended",
         "rpd_box",
-        "rpd_box_ext"
+        "rpd_box_ext",
+        "scar_20",
+        "scar_30",
+        "m4_30",
+        "m4_45"
       ]
     }
   },
@@ -221,6 +235,128 @@
       "node": "mag_extended",
       "reloadTimeScale": 1.1,
       "adsTimeScale": 1.08
+    },
+    "uzi_32": {
+      "name": "32 发弹匣",
+      "description": "32 发 9 毫米直弹匣。",
+      "ammo": "smg",
+      "capacity": 32,
+      "guns": ["uzi"],
+      "node": "mag_standard"
+    },
+    "uzi_50": {
+      "name": "50 发弹匣",
+      "description": "50 发加长弹匣：火力更持久，换弹与开镜稍慢。",
+      "ammo": "smg",
+      "capacity": 50,
+      "guns": ["uzi"],
+      "node": "mag_extended",
+      "reloadTimeScale": 1.1,
+      "adsTimeScale": 1.05
+    },
+    "p90_50": {
+      "name": "50 发弹匣",
+      "description": "50 发 5.7 毫米顶置弹匣。",
+      "ammo": "smg",
+      "capacity": 50,
+      "guns": ["p90"],
+      "node": "mag_standard"
+    },
+    "mp5_30": {
+      "name": "30 发弹匣",
+      "description": "30 发 9 毫米弯弹匣。",
+      "ammo": "smg",
+      "capacity": 30,
+      "guns": ["mp5"],
+      "node": "mag_standard"
+    },
+    "mp5_40": {
+      "name": "40 发弹匣",
+      "description": "40 发加长弹匣：多带 10 发，换弹稍慢。",
+      "ammo": "smg",
+      "capacity": 40,
+      "guns": ["mp5"],
+      "node": "mag_extended",
+      "reloadTimeScale": 1.08,
+      "adsTimeScale": 1.04
+    },
+    "sten_32": {
+      "name": "32 发弹匣",
+      "description": "32 发 9 毫米侧插弹匣。",
+      "ammo": "smg",
+      "capacity": 32,
+      "guns": ["sten"],
+      "node": "mag_standard"
+    },
+    "ssg08_10": {
+      "name": "标准弹匣",
+      "description": "10 发 .308 弹匣。",
+      "ammo": "sniper",
+      "capacity": 10,
+      "guns": ["ssg08"],
+      "node": "mag_standard"
+    },
+    "calico_50": {
+      "name": "50 发螺旋弹匣",
+      "description": "50 发 9 毫米顶置螺旋弹匣。",
+      "ammo": "pistol",
+      "capacity": 50,
+      "guns": ["calico"],
+      "node": "mag_standard"
+    },
+    "calico_100": {
+      "name": "100 发螺旋弹匣",
+      "description": "100 发加长螺旋弹匣：几乎不用换弹，但枪更重、开镜和换弹更慢。",
+      "ammo": "pistol",
+      "capacity": 100,
+      "guns": ["calico"],
+      "node": "mag_extended",
+      "reloadTimeScale": 1.15,
+      "adsTimeScale": 1.1
+    },
+    "scar_20": {
+      "name": "20 发弹匣",
+      "description": "20 发 7.62 毫米弹匣。",
+      "ammo": "rifle",
+      "capacity": 20,
+      "guns": ["scar"],
+      "node": "mag_standard"
+    },
+    "scar_30": {
+      "name": "30 发弹匣",
+      "description": "30 发加长弹匣：火力更持久，换弹与开镜稍慢。",
+      "ammo": "rifle",
+      "capacity": 30,
+      "guns": ["scar"],
+      "node": "mag_extended",
+      "reloadTimeScale": 1.08,
+      "adsTimeScale": 1.05
+    },
+    "m4_30": {
+      "name": "30 发弹匣",
+      "description": "30 发 5.56 毫米弹匣。",
+      "ammo": "rifle",
+      "capacity": 30,
+      "guns": ["m4a1"],
+      "node": "mag_standard"
+    },
+    "m4_45": {
+      "name": "45 发弹匣",
+      "description": "45 发加长弹匣：多带 15 发，换弹与开镜稍慢。",
+      "ammo": "rifle",
+      "capacity": 45,
+      "guns": ["m4a1"],
+      "node": "mag_extended",
+      "reloadTimeScale": 1.1,
+      "adsTimeScale": 1.05
+    },
+    "jackhammer_10": {
+      "name": "10 发转鼓",
+      "description": "10 发 12 号转鼓弹仓，整鼓更换。",
+      "ammo": "shotgun",
+      "capacity": 10,
+      "guns": ["jackhammer"],
+      "node": "mag_standard"
     }
   },
   "guns": {
@@ -1056,6 +1192,11 @@
             "stock"
           ]
         },
+        "underbarrel": {
+          "node": "mount_underbarrel",
+          "default": "tommy_grip",
+          "options": ["vertical_grip", "angled_grip"]
+        },
         "charm": {
           "node": "mount_charm",
           "default": "none"
@@ -1226,6 +1367,11 @@
           "hides": [
             "stock"
           ]
+        },
+        "underbarrel": {
+          "node": "mount_underbarrel",
+          "default": "none",
+          "options": ["vertical_grip", "angled_grip"]
         },
         "charm": {
           "node": "mount_charm",
@@ -1681,7 +1827,9 @@
               "surgeFade": 1.6,
               "impulse": "cerberus.kill",
               "fov": 0.8
-            }
+            },
+            "killIcon": {"texture": "textures/gui/kill_icon/cerberus", "size": 68, "seconds": 2.3, "color": "#FF3A14",
+                         "embers": 28}
           },
           "inspect": {
             "clip": "inspect_cerberus",
@@ -1907,6 +2055,1758 @@
             ]
           }
         }
+      }
+    },
+    "uzi": {
+      "name": "UZI 冲锋枪",
+      "description": "以色列 9 毫米冲锋枪：小巧、射速高，近距离压制力强；枪身短，连射时抖动明显。",
+      "category": "smg",
+      "model": "models/gun/uzi.glb",
+      "ammo": "smg",
+      "magazines": ["uzi_32", "uzi_50"],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": ["sight_rear", "sight_iron"]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管",
+          "hides": ["muzzle_brake"]
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "noneName": "折叠枪托",
+          "hides": ["stock"]
+        },
+        "underbarrel": {
+          "node": "mount_underbarrel",
+          "default": "none",
+          "options": ["vertical_grip", "angled_grip"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": ["auto", "semi"],
+      "rpm": 760,
+      "damageScale": 0.92,
+      "range": 70,
+      "falloff": {
+        "start": 12,
+        "end": 32,
+        "min": 0.5
+      },
+      "spread": {
+        "hip": 4.0,
+        "ads": 0.5,
+        "move": 1.6,
+        "air": 4.6,
+        "perShot": 0.38,
+        "max": 6.8,
+        "recovery": 10.5
+      },
+      "recoil": {
+        "vertical": 0.95,
+        "horizontal": 0.7,
+        "kick": 0.9,
+        "ads": 0.72
+      },
+      "adsTime": 0.2,
+      "drawTime": 0.5,
+      "reload": {
+        "tactical": 2.1,
+        "empty": 2.6
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.uzi.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [0.0, 0.0, 0.0]
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "tiger": {
+          "name": "虎纹",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+              "steel": [1.0, 0.77, 0.34],
+              "steel_dark": [1.0, 0.77, 0.34],
+              "barrel": [1.0, 0.77, 0.34],
+              "steel_stock": [1.0, 0.77, 0.34],
+              "barrel_knurl": [1.0, 0.77, 0.34],
+              "steel_dark_knurl": [1.0, 0.77, 0.34]
+            }
+        }
+      },
+      "handling": {
+        "weight": 1.3,
+        "sway": 0.95,
+        "bob": 1.0,
+        "inertia": 1.05,
+        "sprintOut": 0.24,
+        "tacticalSprint": 2.7,
+        "adsTilt": 7,
+        "recoilBack": 0.9,
+        "recoilRise": 0.55,
+        "recoilTwist": 1.25,
+        "recoilSnap": 1.35,
+        "recoilShake": 1.1,
+        "recoilPivot": 0.1,
+        "cameraKick": 0.85,
+        "cameraRoll": 1.1,
+        "cameraFov": 0.75,
+        "cameraRumble": 0.3
+      }
+    },
+    "p90": {
+      "name": "P90 冲锋枪",
+      "description": "比利时 5.7 毫米无托冲锋枪：顶置 50 发弹匣，后坐力轻、弹道稳定，适合中近距离持续压制。",
+      "category": "smg",
+      "model": "models/gun/p90.glb",
+      "ammo": "smg",
+      "magazines": ["p90_50"],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": ["sight_rear", "sight_iron"]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "原厂枪口",
+          "hides": ["muzzle_brake"]
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "underbarrel": {
+          "node": "mount_underbarrel",
+          "default": "none",
+          "options": ["vertical_grip", "angled_grip"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": ["auto", "semi"],
+      "rpm": 900,
+      "damageScale": 0.95,
+      "range": 85,
+      "falloff": {
+        "start": 16,
+        "end": 40,
+        "min": 0.55
+      },
+      "spread": {
+        "hip": 3.8,
+        "ads": 0.4,
+        "move": 1.5,
+        "air": 4.4,
+        "perShot": 0.3,
+        "max": 6.0,
+        "recovery": 11.0
+      },
+      "recoil": {
+        "vertical": 0.75,
+        "horizontal": 0.4,
+        "kick": 0.8,
+        "ads": 0.7
+      },
+      "adsTime": 0.22,
+      "drawTime": 0.55,
+      "reload": {
+        "tactical": 2.7,
+        "empty": 3.2
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.p90.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [0.0, 0.0, 0.0]
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "tiger": {
+          "name": "虎纹",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+              "steel": [1.0, 0.77, 0.34],
+              "steel_dark": [1.0, 0.77, 0.34],
+              "barrel": [1.0, 0.77, 0.34]
+            }
+        }
+      },
+      "handling": {
+        "weight": 1.4,
+        "sway": 0.95,
+        "bob": 1.0,
+        "inertia": 1.1,
+        "sprintOut": 0.25,
+        "tacticalSprint": 2.7,
+        "adsTilt": 6,
+        "recoilBack": 0.85,
+        "recoilRise": 0.5,
+        "recoilTwist": 0.8,
+        "recoilSnap": 1.2,
+        "recoilShake": 0.8,
+        "recoilPivot": 0.1,
+        "cameraKick": 0.8,
+        "cameraRoll": 0.9,
+        "cameraFov": 0.7,
+        "cameraRumble": 0.25
+      }
+    },
+    "mp5": {
+      "name": "MP5 冲锋枪",
+      "description": "德国 9 毫米冲锋枪：闭膛待击，精度高、后坐力平稳，是近距离作战的标杆。",
+      "category": "smg",
+      "model": "models/gun/mp5.glb",
+      "ammo": "smg",
+      "magazines": ["mp5_30", "mp5_40"],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": ["sight_rear", "sight_iron"]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管",
+          "hides": ["muzzle_brake"]
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "noneName": "伸缩枪托",
+          "hides": ["stock"]
+        },
+        "underbarrel": {
+          "node": "mount_underbarrel",
+          "default": "none",
+          "options": ["vertical_grip", "angled_grip"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": ["auto", "semi"],
+      "rpm": 800,
+      "damageScale": 0.95,
+      "range": 80,
+      "falloff": {
+        "start": 15,
+        "end": 38,
+        "min": 0.55
+      },
+      "spread": {
+        "hip": 3.6,
+        "ads": 0.38,
+        "move": 1.5,
+        "air": 4.3,
+        "perShot": 0.3,
+        "max": 5.8,
+        "recovery": 11.0
+      },
+      "recoil": {
+        "vertical": 0.8,
+        "horizontal": 0.45,
+        "kick": 0.85,
+        "ads": 0.68
+      },
+      "adsTime": 0.21,
+      "drawTime": 0.55,
+      "reload": {
+        "tactical": 2.2,
+        "empty": 2.7
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.mp5.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [0.0, 0.0, 0.0]
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "tiger": {
+          "name": "虎纹",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+              "steel": [1.0, 0.77, 0.34],
+              "steel_dark": [1.0, 0.77, 0.34],
+              "barrel": [1.0, 0.77, 0.34],
+              "steel_stock": [1.0, 0.77, 0.34]
+            }
+        }
+      },
+      "handling": {
+        "weight": 1.35,
+        "sway": 1.0,
+        "bob": 1.0,
+        "inertia": 1.1,
+        "sprintOut": 0.25,
+        "tacticalSprint": 2.7,
+        "adsTilt": 7,
+        "recoilBack": 0.9,
+        "recoilRise": 0.55,
+        "recoilTwist": 0.9,
+        "recoilSnap": 1.25,
+        "recoilShake": 0.9,
+        "recoilPivot": 0.1,
+        "cameraKick": 0.8,
+        "cameraRoll": 1.0,
+        "cameraFov": 0.75,
+        "cameraRumble": 0.3
+      }
+    },
+    "sten": {
+      "name": "STEN Mk II 冲锋枪",
+      "description": "二战英军 9 毫米冲锋枪：结构简陋、侧插 32 发弹匣，射速不高但稳定可靠。",
+      "category": "smg",
+      "model": "models/gun/sten.glb",
+      "ammo": "smg",
+      "magazines": ["sten_32"],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": ["sight_rear", "sight_iron"]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管",
+          "hides": ["muzzle_brake"]
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "noneName": "钢管枪托",
+          "hides": ["stock"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": ["auto", "semi"],
+      "rpm": 540,
+      "damageScale": 1.0,
+      "range": 70,
+      "falloff": {
+        "start": 12,
+        "end": 34,
+        "min": 0.5
+      },
+      "spread": {
+        "hip": 4.5,
+        "ads": 0.55,
+        "move": 1.8,
+        "air": 5.0,
+        "perShot": 0.4,
+        "max": 7.0,
+        "recovery": 9.5
+      },
+      "recoil": {
+        "vertical": 0.9,
+        "horizontal": 0.6,
+        "kick": 0.95,
+        "ads": 0.72
+      },
+      "adsTime": 0.23,
+      "drawTime": 0.55,
+      "reload": {
+        "tactical": 2.4,
+        "empty": 2.9
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.sten.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [0.0, 0.0, -0.09]
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "tiger": {
+          "name": "虎纹",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+              "steel": [1.0, 0.77, 0.34],
+              "barrel": [1.0, 0.77, 0.34],
+              "steel_dark": [1.0, 0.77, 0.34],
+              "steel_stock": [1.0, 0.77, 0.34],
+              "steel_grip": [1.0, 0.77, 0.34]
+            }
+        }
+      },
+      "handling": {
+        "weight": 1.3,
+        "sway": 1.0,
+        "bob": 1.05,
+        "inertia": 1.1,
+        "sprintOut": 0.26,
+        "tacticalSprint": 2.6,
+        "adsTilt": 8,
+        "recoilBack": 0.95,
+        "recoilRise": 0.6,
+        "recoilTwist": 1.0,
+        "recoilSnap": 1.2,
+        "recoilShake": 1.0,
+        "recoilPivot": 0.1,
+        "cameraKick": 0.9,
+        "cameraRoll": 1.1,
+        "cameraFov": 0.75,
+        "cameraRumble": 0.3
+      }
+    },
+    "ssg08": {
+      "name": "SSG 08 狙击步枪",
+      "description": "轻型栓动 .308 狙击步枪：比 AWP 轻快，开镜快、移动时更准，爆头一击必杀，打身体通常需要两枪。",
+      "category": "sniper",
+      "model": "models/gun/ssg08.glb",
+      "ammo": "sniper",
+      "magazines": ["ssg08_10"],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "scope_sniper",
+          "options": ["scope_sniper", "scope_2x", "holo", "reddot", "mini_reddot", "reddot_rect"]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管",
+          "hides": ["muzzle_brake"]
+        },
+        "magazine": {},
+        "underbarrel": {
+          "node": "mount_underbarrel",
+          "default": "none",
+          "options": ["bipod"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": ["semi"],
+      "rpm": 48,
+      "damageScale": 0.85,
+      "range": 180,
+      "falloff": {
+        "start": 40,
+        "end": 110,
+        "min": 0.75
+      },
+      "spread": {
+        "hip": 5.5,
+        "ads": 0.03,
+        "move": 3.5,
+        "air": 8.0,
+        "perShot": 1.2,
+        "max": 9.0,
+        "recovery": 7.0
+      },
+      "recoil": {
+        "vertical": 3.4,
+        "horizontal": 0.9,
+        "kick": 1.7,
+        "ads": 0.8
+      },
+      "adsTime": 0.24,
+      "drawTime": 0.75,
+      "reload": {
+        "tactical": 2.7,
+        "empty": 3.3
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.ssg08.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [0.0, 0.0, 0.0]
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "tiger": {
+          "name": "虎纹",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+              "steel": [1.0, 0.77, 0.34],
+              "barrel": [1.0, 0.77, 0.34],
+              "steel_dark": [1.0, 0.77, 0.34]
+            }
+        }
+      },
+      "handling": {
+        "weight": 1.8,
+        "sway": 1.1,
+        "bob": 1.05,
+        "inertia": 1.3,
+        "sprintOut": 0.32,
+        "tacticalSprint": 2.4,
+        "adsTilt": 5,
+        "recoilBack": 0.95,
+        "recoilRise": 0.7,
+        "recoilTwist": 0.6,
+        "recoilSnap": 0.75,
+        "recoilShake": 1.1,
+        "recoilPivot": 0.16,
+        "cameraKick": 1.2,
+        "cameraRoll": 1.0,
+        "cameraFov": 1.3,
+        "cameraRumble": 0.8
+      },
+      "boltAction": true,
+      "ejectEvent": "bolt_back"
+    },
+    "calico": {
+      "name": "Calico M950 手枪",
+      "description": "9 毫米半自动手枪：顶置螺旋弹匣，装弹量远超普通手枪，但枪身前重、换弹较慢。",
+      "category": "pistol",
+      "model": "models/gun/calico.glb",
+      "ammo": "pistol",
+      "magazines": ["calico_50", "calico_100"],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": ["sight_rear", "sight_iron"]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管",
+          "hides": ["muzzle_brake"]
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "options": ["tactical_stock", "heavy_stock", "wire_stock"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": ["semi"],
+      "rpm": 600,
+      "damageScale": 0.9,
+      "range": 80,
+      "falloff": {
+        "start": 16,
+        "end": 42,
+        "min": 0.6
+      },
+      "spread": {
+        "hip": 3.6,
+        "ads": 0.32,
+        "move": 1.6,
+        "air": 4.0,
+        "perShot": 0.7,
+        "max": 6.5,
+        "recovery": 9.0
+      },
+      "recoil": {
+        "vertical": 1.2,
+        "horizontal": 0.45,
+        "kick": 0.95,
+        "ads": 0.7
+      },
+      "adsTime": 0.18,
+      "drawTime": 0.55,
+      "reload": {
+        "tactical": 2.6,
+        "empty": 3.1
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.calico.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [0.0, 0.0, 0.0]
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "tiger": {
+          "name": "虎纹",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+              "steel": [1.0, 0.77, 0.34],
+              "steel_dark": [1.0, 0.77, 0.34],
+              "barrel": [1.0, 0.77, 0.34]
+            }
+        }
+      },
+      "handling": {
+        "weight": 1.15,
+        "sway": 1.0,
+        "bob": 1.0,
+        "inertia": 1.05,
+        "sprintOut": 0.22,
+        "tacticalSprint": 2.6,
+        "adsTilt": 6,
+        "recoilBack": 1.0,
+        "recoilRise": 0.95,
+        "recoilTwist": 1.0,
+        "recoilSnap": 1.15,
+        "recoilShake": 0.85,
+        "recoilPivot": 0.0,
+        "cameraKick": 0.95,
+        "cameraRoll": 1.0,
+        "cameraFov": 0.8,
+        "cameraRumble": 0.25
+      }
+    },
+    "scar": {
+      "name": "SCAR-H 突击步枪",
+      "description": "7.62 毫米战斗步枪：单发威力大、射程远，射速中等，后坐力偏重。",
+      "category": "rifle",
+      "model": "models/gun/scar.glb",
+      "ammo": "rifle",
+      "magazines": ["scar_20", "scar_30"],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": ["sight_rear", "sight_iron"]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管",
+          "hides": ["muzzle_brake"]
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "noneName": "折叠枪托",
+          "hides": ["stock"]
+        },
+        "underbarrel": {
+          "node": "mount_underbarrel",
+          "default": "none",
+          "options": ["vertical_grip", "angled_grip"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": ["auto", "semi"],
+      "rpm": 600,
+      "damageScale": 1.08,
+      "range": 130,
+      "falloff": {
+        "start": 38,
+        "end": 85,
+        "min": 0.72
+      },
+      "spread": {
+        "hip": 4.5,
+        "ads": 0.2,
+        "move": 2.3,
+        "air": 5.4,
+        "perShot": 0.5,
+        "max": 7.4,
+        "recovery": 7.5
+      },
+      "recoil": {
+        "vertical": 1.7,
+        "horizontal": 0.7,
+        "kick": 1.3,
+        "ads": 0.6
+      },
+      "adsTime": 0.27,
+      "drawTime": 0.7,
+      "reload": {
+        "tactical": 2.5,
+        "empty": 3.0
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.scar.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [0.0, 0.0, 0.099]
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "tiger": {
+          "name": "虎纹",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+              "barrel": [1.0, 0.77, 0.34],
+              "steel": [1.0, 0.77, 0.34],
+              "steel_dark": [1.0, 0.77, 0.34]
+            }
+        }
+      },
+      "handling": {
+        "weight": 1.85,
+        "sway": 1.15,
+        "bob": 1.1,
+        "inertia": 1.3,
+        "sprintOut": 0.3,
+        "tacticalSprint": 2.7,
+        "adsTilt": 8,
+        "recoilBack": 1.1,
+        "recoilRise": 0.8,
+        "recoilTwist": 1.2,
+        "recoilSnap": 0.95,
+        "recoilShake": 1.1,
+        "recoilPivot": 0.14,
+        "cameraKick": 1.15,
+        "cameraRoll": 1.2,
+        "cameraFov": 1.05,
+        "cameraRumble": 0.5
+      }
+    },
+    "m4a1": {
+      "name": "M4A1 卡宾枪",
+      "description": "5.56 毫米卡宾枪：射速高、后坐力平稳、操控灵活，各距离都表现均衡。",
+      "category": "rifle",
+      "model": "models/gun/m4a1.glb",
+      "ammo": "rifle",
+      "magazines": ["m4_30", "m4_45"],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": ["sight_rear", "sight_iron"]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管",
+          "hides": ["muzzle_brake"]
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "stock": {
+          "node": "mount_stock",
+          "default": "none",
+          "noneName": "伸缩枪托",
+          "hides": ["stock"]
+        },
+        "underbarrel": {
+          "node": "mount_underbarrel",
+          "default": "none",
+          "options": ["vertical_grip", "angled_grip"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": ["auto", "semi"],
+      "rpm": 800,
+      "damageScale": 0.9,
+      "range": 120,
+      "falloff": {
+        "start": 32,
+        "end": 80,
+        "min": 0.7
+      },
+      "spread": {
+        "hip": 4.25,
+        "ads": 0.2,
+        "move": 2.1,
+        "air": 5.2,
+        "perShot": 0.42,
+        "max": 7.0,
+        "recovery": 8.0
+      },
+      "recoil": {
+        "vertical": 1.15,
+        "horizontal": 0.5,
+        "kick": 1.05,
+        "ads": 0.6
+      },
+      "adsTime": 0.24,
+      "drawTime": 0.6,
+      "reload": {
+        "tactical": 2.2,
+        "empty": 2.7
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.m4a1.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [0.0, 0.0, 0.076]
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "tiger": {
+          "name": "虎纹",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "stock": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+              "steel": [1.0, 0.77, 0.34],
+              "steel_dark": [1.0, 0.77, 0.34],
+              "barrel": [1.0, 0.77, 0.34]
+            }
+        }
+      },
+      "handling": {
+        "weight": 1.6,
+        "sway": 1.05,
+        "bob": 1.05,
+        "inertia": 1.2,
+        "sprintOut": 0.27,
+        "tacticalSprint": 2.8,
+        "adsTilt": 7,
+        "recoilBack": 1.0,
+        "recoilRise": 0.65,
+        "recoilTwist": 1.0,
+        "recoilSnap": 1.1,
+        "recoilShake": 0.95,
+        "recoilPivot": 0.12,
+        "cameraKick": 1.0,
+        "cameraRoll": 1.1,
+        "cameraFov": 0.95,
+        "cameraRumble": 0.4
+      }
+    },
+    "jackhammer": {
+      "name": "Pancor Jackhammer 霰弹枪",
+      "description": "全自动无托霰弹枪：10 发转鼓弹仓，可连续射击；单发威力略低于泵动霰弹枪，整鼓更换。",
+      "category": "shotgun",
+      "model": "models/gun/jackhammer.glb",
+      "ammo": "shotgun",
+      "magazines": ["jackhammer_10"],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": ["sight_rear", "sight_iron"]
+        },
+        "barrel": {
+          "node": "mount_barrel",
+          "default": "none",
+          "noneName": "标准枪管",
+          "hides": ["muzzle_brake"]
+        },
+        "laser": {
+          "node": "mount_laser",
+          "default": "none"
+        },
+        "magazine": {},
+        "underbarrel": {
+          "node": "mount_underbarrel",
+          "default": "none",
+          "options": ["vertical_grip", "angled_grip"]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "ejectEvent": "none",
+      "fireModes": ["auto", "semi"],
+      "rpm": 240,
+      "damageScale": 0.75,
+      "range": 35,
+      "falloff": {
+        "start": 5,
+        "end": 20,
+        "min": 0.2
+      },
+      "spread": {
+        "hip": 6.5,
+        "ads": 3.4,
+        "move": 1.3,
+        "air": 3.2,
+        "perShot": 0.9,
+        "max": 9.0,
+        "recovery": 6.0
+      },
+      "recoil": {
+        "vertical": 2.6,
+        "horizontal": 1.0,
+        "kick": 1.6,
+        "ads": 0.85
+      },
+      "adsTime": 0.28,
+      "drawTime": 0.8,
+      "reload": {
+        "tactical": 3.2,
+        "empty": 3.8
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.jackhammer.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "bolt",
+        "offset": [0.0, 0.0, 0.0]
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "woodland": {
+          "name": "林地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/woodland",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "tiger": {
+          "name": "虎纹",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "handguard": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            },
+            "grip": {
+              "pbr": "textures/pbr/skin/camo/tiger",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "gold": {
+          "name": "鎏金",
+          "rarity": "legendary",
+          "tints": {
+              "steel": [1.0, 0.77, 0.34],
+              "barrel": [1.0, 0.77, 0.34],
+              "steel_dark": [1.0, 0.77, 0.34]
+            }
+        }
+      },
+      "handling": {
+        "weight": 2.0,
+        "sway": 1.2,
+        "bob": 1.1,
+        "inertia": 1.4,
+        "sprintOut": 0.34,
+        "tacticalSprint": 2.4,
+        "adsTilt": 7,
+        "recoilBack": 1.05,
+        "recoilRise": 0.65,
+        "recoilTwist": 0.9,
+        "recoilSnap": 0.8,
+        "recoilShake": 1.3,
+        "recoilPivot": 0.16,
+        "cameraKick": 1.25,
+        "cameraRoll": 1.2,
+        "cameraFov": 1.4,
+        "cameraRumble": 0.9
       }
     }
   }

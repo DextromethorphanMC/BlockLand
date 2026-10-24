@@ -200,20 +200,41 @@ def _panels(side, variant):
     return u0, v0, w, d
 
 
+# the palm's start blends half into the forearm (VIEWMODEL_SPEC section 7: the forearm's end blends half into the hand,
+# so both meet at the half-angle); rigid on the hand beyond PALM_BLEND
+PALM_TOP = 0.004
+PALM_BLEND = 0.013
+PALM_RINGS = (PALM_TOP, -0.0045, -PALM_BLEND, -PALM_LEN)
+
+
+def palm_fore_weight(y):
+    """Forearm weight of a palm vertex at bind height y (hand joint space)."""
+    u = min(max(y / -PALM_BLEND, 0.0), 1.0)
+    return 0.5 * (1.0 - u * u * (3 - 2 * u))
+
+
 def hand_mesh(side, variant):
-    """Palm box (4 px wide, 2 px thick, 4 px long) mapped to the lowest four rows of the arm skin."""
+    """Palm box (4 px wide, 2 px thick, 4 px long) mapped to the lowest four rows of the arm skin; split in rings
+    (PALM_RINGS) so its wrist end can bend with the forearm."""
     u0, v0, w, d = _panels(side, variant)
     W = palm_width(variant)
     r0, r1 = v0 + d + 8, v0 + d + 12
+    row = lambda y: r0 + (r1 - r0) * (PALM_TOP - y) / (PALM_TOP + PALM_LEN)
     m = Mesh()
-    _box_uv(m, -W / 2, W / 2, -PALM_LEN, 0.004, -PALM_T / 2, PALM_T / 2, "skin", {
-        "fz": (u0 + d, r0, u0 + d + w, r1),                       # front panel
-        "bz": (u0 + 2 * d + w, r0, u0 + 2 * d + 2 * w, r1),       # back panel
-        "px": (u0 + 1, r0, u0 + 3, r1),                           # panel 1, middle columns
-        "nx": (u0 + d + w + 1, r0, u0 + d + w + 3, r1),           # panel 3, middle columns
-        "ny": (u0 + d + w, v0 + 1, u0 + d + 2 * w, v0 + 3),       # bottom face
-        "py": (u0 + d + w, v0 + 1, u0 + d + 2 * w, v0 + 3),
-    })
+    last = len(PALM_RINGS) - 2
+    for k, (ya, yb) in enumerate(zip(PALM_RINGS, PALM_RINGS[1:])):
+        ra, rb = row(ya), row(yb)
+        uv = {
+            "fz": (u0 + d, ra, u0 + d + w, rb),                       # front panel
+            "bz": (u0 + 2 * d + w, ra, u0 + 2 * d + 2 * w, rb),       # back panel
+            "px": (u0 + 1, ra, u0 + 3, rb),                           # panel 1, middle columns
+            "nx": (u0 + d + w + 1, ra, u0 + d + w + 3, rb),           # panel 3, middle columns
+        }
+        if k == last:
+            uv["ny"] = (u0 + d + w, v0 + 1, u0 + d + 2 * w, v0 + 3)  # bottom face
+        if k == 0:
+            uv["py"] = (u0 + d + w, v0 + 1, u0 + d + 2 * w, v0 + 3)
+        _box_uv(m, -W / 2, W / 2, yb, ya, -PALM_T / 2, PALM_T / 2, "skin", uv)
     return m
 
 

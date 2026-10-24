@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ITEMS = os.path.join(HERE, "..", "..", "mod", "src", "main", "resources", "assets", "blockland", "items")
 FIRST_PERSON = ["firstperson_righthand", "firstperson_lefthand"]
 # weapons whose root frame is turned against their held model (degrees XYZ, applied to the weapon first)
-TUNING = {"karambit": {"rotation": [0, 0, 90]}}
+TUNING = {"karambit": {"rotation": [0, 0, 90]}, "knuckles": {"rotation": [0, -90, 0]}}
 
 
 def base_model(held):

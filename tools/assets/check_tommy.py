@@ -9,7 +9,7 @@ from check_glb import (check_container, check_curve_rate, check_eye_distance, ch
                        check_sights)
 from glbread import GLTF
 
-STATIC = ("receiver", "barrel", "foregrip", "grip", "stock")
+STATIC = ("receiver", "barrel", "grip", "stock")
 PARENTS = {
     "viewmodel": None, "gun": "viewmodel", **{n: "gun" for n in STATIC}, "bolt": "gun", "selector": "gun",
     "trigger": "gun", "sight_iron": "gun", "sight_rear": "gun", "muzzle_brake": "gun", "aim_iron": "gun",
@@ -23,8 +23,8 @@ MESH_NODES = set(STATIC) | {"bolt", "selector", "trigger", "sight_iron", "sight_
 EMPTY_NODES = {"viewmodel", "aim_iron", "mag", "muzzle", "ejection", "arm_R", "arm_R_fore", "arm_L", "arm_L_fore",
                "camera", "mount_optic", "mount_laser", "mount_barrel", "mount_stock", "mount_charm"}
 MATERIALS = {"wood", "steel", "steel_dark", "mag", "mag_base", "brass"}
-SPLIT_MATERIALS = {"wood_foregrip", "wood_grip", "steel_barrel"}       # pbr_apply.py (section 21)
-REGIONS = {"wood": "stock", "wood_foregrip": "handguard", "wood_grip": "grip", "steel": "body",
+SPLIT_MATERIALS = {"wood_grip", "steel_barrel"}       # pbr_apply.py (section 21)
+REGIONS = {"wood": "stock", "wood_grip": "grip", "steel": "body",
            "steel_barrel": "barrel", "steel_dark": "detail", "mag": "magazine", "mag_base": "magazine",
            "brass": "none"}
 DURATIONS = {"idle": (2.0, 2.0), "draw": (0.5, 0.8), "fire": (0.07, 0.10), "fire_last": (0.07, 0.10),

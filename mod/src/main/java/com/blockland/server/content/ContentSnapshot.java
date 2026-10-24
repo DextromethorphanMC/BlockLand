@@ -1,5 +1,6 @@
 package com.blockland.server.content;
 
+import com.blockland.server.content.model.ActivityDef;
 import com.blockland.server.content.model.AnnouncementDef;
 import com.blockland.server.content.model.GameModeDef;
 import com.blockland.server.content.model.MapDef;
@@ -25,6 +26,8 @@ public final class ContentSnapshot {
     public Map<String, JsonElement> typeData = new LinkedHashMap<>();
     /** Published announcements, oldest first. */
     public List<AnnouncementDef> announcements = new ArrayList<>();
+    /** Lobby activities, in no particular order (reserved: the backend does not publish them yet). */
+    public List<ActivityDef> activities = new ArrayList<>();
 
     private transient Map<String, GameModeDef> modeIndex;
     private transient Map<String, MapDef> mapIndex;

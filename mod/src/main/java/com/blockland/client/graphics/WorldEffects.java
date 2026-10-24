@@ -28,7 +28,19 @@ public interface WorldEffects {
         return null;
     }
 
-    /** Light scattered towards the eye (RGB in linear light, added before tone mapping), or null. */
+    /**
+     * Volumetric clouds (client/graphics/sky): RGB light they scatter towards the eye (linear), A the transmittance the
+     * picture behind them is multiplied by; or null.
+     */
+    @Nullable
+    default GpuTextureView clouds() {
+        return null;
+    }
+
+    /**
+     * The volumetric fog and light: RGB light it scatters towards the eye (linear, added before tone mapping), A the
+     * transmittance the picture behind it is multiplied by; or null.
+     */
     @Nullable
     default GpuTextureView volumetricLight() {
         return null;

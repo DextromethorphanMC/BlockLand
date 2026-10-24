@@ -194,6 +194,11 @@
       "name": "垂直握把",
       "description": "装在护木下方的垂直前握把：后坐力 -12%，开镜稍慢（+5%）。",
       "model": "models/attachment/vertical_grip.glb",
+      "grip": {
+        "wrist": [-0.0456, -0.047, 0.0386],
+        "palm": [0.4153, 0.4153, 0.5723, 0.5723],
+        "fingers": {"thumb": [-80.0, -41.0], "index": [-54.0, -54.0], "middle": [-65.0, -56.0], "ring": [-59.0, -56.0], "pinky": [-52.0, -42.0]}
+      },
       "recoilScale": 0.88,
       "adsTimeScale": 1.05
     },
@@ -202,17 +207,38 @@
       "name": "斜角握把",
       "description": "低矮的斜角前握把：开镜更快（-7%），后坐力 -5%。",
       "model": "models/attachment/angled_grip.glb",
+      "grip": {
+        "wrist": [-0.0343, -0.0354, 0.0787],
+        "palm": [-0.4618, 0.396, 0.7163, 0.3418],
+        "fingers": {"thumb": [-4.0, -2.0], "index": [-54.0, -48.0], "middle": [-60.0, -54.0], "ring": [-64.0, -58.0], "pinky": [-68.0, -60.0]}
+      },
       "recoilScale": 0.95,
       "adsTimeScale": 0.93
     },
     "bipod": {
       "slot": "underbarrel",
       "name": "两脚架",
-      "description": "折叠两脚架：后坐力 -18%，但更重，开镜更慢（+12%），腰射散布 +10%。",
+      "description": "折叠两脚架（仅限机枪与狙击枪）：后坐力 -18%，但更重，开镜更慢（+12%），腰射散布 +10%。",
       "model": "models/attachment/bipod.glb",
+      "grip": {
+        "wrist": [-0.0306, -0.0389, 0.0637],
+        "palm": [-0.4884, 0.3695, 0.732, 0.2985],
+        "fingers": {"thumb": [-12.0, -6.0], "index": [-40.0, -34.0], "middle": [-46.0, -40.0], "ring": [-50.0, -44.0], "pinky": [-54.0, -46.0]}
+      },
       "recoilScale": 0.82,
       "adsTimeScale": 1.12,
       "hipSpreadScale": 1.1
+    },
+    "tommy_grip": {
+      "slot": "underbarrel",
+      "name": "汤姆逊木质前握把",
+      "description": "汤姆逊原装的胡桃木竖握把，带指槽：手感与原枪一致。",
+      "model": "models/attachment/tommy_grip.glb",
+      "grip": {
+        "wrist": [-0.0419, -0.0715, 0.0554],
+        "palm": [0.3401, 0.3539, 0.6473, 0.5832],
+        "fingers": {"thumb": [-48.0, -28.0], "index": [-82.0, -70.0], "middle": [-86.0, -76.0], "ring": [-86.0, -78.0], "pinky": [-84.0, -76.0]}
+      }
     },
     "charm_grass": {
       "slot": "charm",

@@ -43,6 +43,8 @@ final class VoxelWorld implements AutoCloseable {
     private final BlockVoxels palette = new BlockVoxels();
     private final IntBuffer colors = MemoryUtil.memAllocInt(TILE * TILE);
     private final IntBuffer lights = MemoryUtil.memAllocInt(TILE * TILE);
+    /** An empty tile (nothing a ray stops at, no light), written over a tile whose section left the box. */
+    private final IntBuffer zeros = MemoryUtil.memCallocInt(TILE * TILE);
     private final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
     @Nullable
     private GpuTexture colorAtlas, lightAtlas;
@@ -78,6 +80,14 @@ final class VoxelWorld implements AutoCloseable {
         cornerY = Math.max(level.getMinSectionY(), Math.min(level.getMaxSectionY() - ny + 1, cy - ny / 2));
         cornerZ = cz - nz / 2;
 
+        // the box moved: tiles still holding a section from the far side of it are emptied at once, whatever the budget
+        // (rays would otherwise meet those blocks here for the frames it takes to fill them: blinking shadows)
+        for (int[] offset : order) {
+            int sx = cx + offset[0], sy = cy + offset[1], sz = cz + offset[2];
+            if (!inside(sx, sy, sz)) continue;
+            int slot = slot(sx, sy, sz);
+            if (slots[slot] != EMPTY && slots[slot] != key(sx, sy, sz)) clear(slot);
+        }
         // sections that are new to their tile, nearest first
         for (int[] offset : order) {
             if (System.nanoTime() > deadline) return;
@@ -150,6 +160,17 @@ final class VoxelWorld implements AutoCloseable {
         if (slots[slot] == EMPTY) filled++;
         slots[slot] = key(sx, sy, sz);
         complete[slot] = chunk != null;
+    }
+
+    /** Empties a tile (its section is no longer in the box). */
+    private void clear(int slot) {
+        int tileX = (slot % COLUMNS) * TILE, tileY = (slot / COLUMNS) * TILE;
+        var encoder = RenderSystem.getDevice().createCommandEncoder();
+        encoder.writeToTexture(colorAtlas, zeros, NativeImage.Format.RGBA, 0, 0, tileX, tileY, TILE, TILE);
+        encoder.writeToTexture(lightAtlas, zeros, NativeImage.Format.RGBA, 0, 0, tileX, tileY, TILE, TILE);
+        slots[slot] = EMPTY;
+        complete[slot] = false;
+        filled--;
     }
 
     private void reset(ClientLevel level, int sections) {
@@ -243,5 +264,6 @@ final class VoxelWorld implements AutoCloseable {
         close();
         MemoryUtil.memFree(colors);
         MemoryUtil.memFree(lights);
+        MemoryUtil.memFree(zeros);
     }
 }

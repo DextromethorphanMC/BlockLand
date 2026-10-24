@@ -10,6 +10,7 @@ import com.blockland.client.graphics.frame.FrameStage;
 import com.blockland.client.graphics.gpu.Fullscreen;
 import com.blockland.client.graphics.gpu.RenderTexture;
 import com.blockland.client.graphics.gpu.Ubo;
+import com.blockland.client.graphics.light.LightColors;
 import com.blockland.client.graphics.shadow.SunPath;
 import com.mojang.blaze3d.buffers.Std140SizeCalculator;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -33,14 +34,15 @@ import javax.annotation.Nullable;
  * applies the occlusion ({@link WorldEffects#rayTraced()}).
  * <p>
  * Passes: a guide (world normal, linear depth) and the albedo at the internal resolution; the rays at the quality's
- * resolution; then either BlockLand's denoiser (temporal accumulation by reprojection, three à-trous passes) or nothing,
- * when DLSS Ray Reconstruction denoises the frame instead (its guides go to the upscaler through {@link FrameContext}); a
- * resolve brings the light to the internal resolution and multiplies the albedo in. Any failure switches ray tracing off
+ * resolution; then either BlockLand's denoiser (temporal accumulation by reprojection with luminance moments, four
+ * variance-guided à-trous passes, the first of which becomes the next frame's history) or nothing, when DLSS Ray
+ * Reconstruction denoises the frame instead (its own albedo guide and the normals go to the upscaler through
+ * {@link FrameContext}); a resolve brings the light to the internal resolution and multiplies the plain albedo in. Any failure switches ray tracing off
  * for the session (the status says so).
  */
 public final class RayTracing implements FrameStage, WorldEffects {
     private static final int INFO_SIZE = new Std140SizeCalculator().putMat4f().putMat4f()
-            .putVec4().putVec4().putVec4().putVec4().putVec4().putVec4().putVec4().putVec4().putVec4().get();
+            .putVec4().putVec4().putVec4().putVec4().putVec4().putVec4().putVec4().putVec4().putVec4().putVec4().get();
     /** Ambient occlusion reaches this far (blocks). */
     private static final float AO_RADIUS = 3f;
     /** CPU time per frame for voxel updates. */
@@ -53,7 +55,9 @@ public final class RayTracing implements FrameStage, WorldEffects {
     private static final RenderPipeline TRACE = pipeline("rt_trace").withSampler("DepthSampler").withSampler("GuideSampler").build();
     private static final RenderPipeline TEMPORAL = pipeline("rt_temporal").withSampler("DepthSampler").withSampler("GuideSampler")
             .withSampler("CurrentSampler").withSampler("HistorySampler").withSampler("MetaSampler").build();
-    private static final RenderPipeline FILTER = pipeline("rt_filter").withSampler("InSampler").withSampler("GuideSampler").build();
+    private static final RenderPipeline FILTER = pipeline("rt_filter").withSampler("InSampler").withSampler("GuideSampler")
+            .withSampler("MetaSampler").build();
+    private static final int FILTER_PASSES = 4;
     private static final RenderPipeline RESOLVE = pipeline("rt_resolve").withSampler("InSampler").withSampler("GuideSampler")
             .withSampler("AlbedoSampler").build();
 
@@ -62,20 +66,22 @@ public final class RayTracing implements FrameStage, WorldEffects {
     private final VoxelWorld voxels = new VoxelWorld();
     private final RenderTexture guide = new RenderTexture("BlockLand ray tracing guide", RenderTexture.Format.RGBA16F, FilterMode.NEAREST);
     private final RenderTexture albedo = new RenderTexture("BlockLand ray tracing albedo", RenderTexture.Format.RGBA16F, FilterMode.NEAREST);
+    private final RenderTexture reconstructionAlbedo = new RenderTexture("BlockLand ray tracing RR albedo", RenderTexture.Format.RGBA16F,
+            FilterMode.NEAREST);
     private final RenderTexture traced = new RenderTexture("BlockLand ray traced light", RenderTexture.Format.RGBA16F, FilterMode.LINEAR);
     private final RenderTexture[] history = {
             new RenderTexture("BlockLand ray tracing history A", RenderTexture.Format.RGBA16F, FilterMode.LINEAR),
             new RenderTexture("BlockLand ray tracing history B", RenderTexture.Format.RGBA16F, FilterMode.LINEAR)};
     private final RenderTexture[] meta = {
-            new RenderTexture("BlockLand ray tracing history length A", RenderTexture.Format.RG16F, FilterMode.NEAREST),
-            new RenderTexture("BlockLand ray tracing history length B", RenderTexture.Format.RG16F, FilterMode.NEAREST)};
+            new RenderTexture("BlockLand ray tracing history length A", RenderTexture.Format.RGBA16F, FilterMode.NEAREST),
+            new RenderTexture("BlockLand ray tracing history length B", RenderTexture.Format.RGBA16F, FilterMode.NEAREST)};
     private final RenderTexture[] scratch = {
             new RenderTexture("BlockLand ray tracing filter A", RenderTexture.Format.RGBA16F, FilterMode.NEAREST),
             new RenderTexture("BlockLand ray tracing filter B", RenderTexture.Format.RGBA16F, FilterMode.NEAREST)};
     private final RenderTexture result = new RenderTexture("BlockLand ray traced lighting", RenderTexture.Format.RGBA16F, FilterMode.LINEAR);
     @Nullable
-    private Ubo info, guidePass, albedoPass, temporalColor, temporalMeta, resolvePass;
-    private final Ubo[] filterPasses = new Ubo[3];
+    private Ubo info, guidePass, albedoPass, reconstructionPass, temporalColor, temporalMeta, resolvePass;
+    private final Ubo[] filterPasses = new Ubo[FILTER_PASSES];
     private final Matrix4f viewToWorld = new Matrix4f();
     private final Vector3f sun = new Vector3f();
     @Nullable
@@ -174,10 +180,19 @@ public final class RayTracing implements FrameStage, WorldEffects {
         GpuTextureView depth = frame.worldDepth;
         GpuTextureView voxelColor = voxels.colors(), voxelLight = voxels.light();
         pass("BlockLand ray tracing: guide", guide.view(), GUIDE, guidePass, voxelColor, voxelLight).sampler("DepthSampler", depth).draw();
-        albedoPass.pass(new Matrix4f(), reconstruction ? 1 : 0);
         pass("BlockLand ray tracing: albedo", albedo.view(), ALBEDO, albedoPass, voxelColor, voxelLight)
                 .sampler("DepthSampler", depth).sampler("GuideSampler", guide.view())
                 .sampler("SceneSampler", frame.scene.getColorTextureView()).draw();
+        if (reconstruction) {
+            // Ray Reconstruction's own albedo guide; the resolve keeps the plain one, or the added light would be the
+            // already lit scene × the light again
+            reconstructionAlbedo.ensure(w, h);
+            pass("BlockLand ray tracing: RR albedo", reconstructionAlbedo.view(), ALBEDO, reconstructionPass, voxelColor, voxelLight)
+                    .sampler("DepthSampler", depth).sampler("GuideSampler", guide.view())
+                    .sampler("SceneSampler", frame.scene.getColorTextureView()).draw();
+        } else {
+            reconstructionAlbedo.close();
+        }
         pass("BlockLand ray tracing: rays", traced.view(), TRACE, guidePass, voxelColor, voxelLight)
                 .sampler("DepthSampler", depth).sampler("GuideSampler", guide.view()).draw();
 
@@ -187,23 +202,25 @@ public final class RayTracing implements FrameStage, WorldEffects {
             current ^= 1;
             temporalColor.pass(new Matrix4f(), 0, historyValid ? MAX_HISTORY : 1);
             temporalMeta.pass(new Matrix4f(), 1, historyValid ? MAX_HISTORY : 1);
-            pass("BlockLand ray tracing: accumulate", history[current].view(), TEMPORAL, temporalColor, voxelColor, voxelLight)
+            pass("BlockLand ray tracing: accumulate", scratch[0].view(), TEMPORAL, temporalColor, voxelColor, voxelLight)
                     .sampler("DepthSampler", depth).sampler("GuideSampler", guide.view()).sampler("CurrentSampler", traced.view())
                     .sampler("HistorySampler", history[previous].view()).sampler("MetaSampler", meta[previous].view()).draw();
             pass("BlockLand ray tracing: history", meta[current].view(), TEMPORAL, temporalMeta, voxelColor, voxelLight)
                     .sampler("DepthSampler", depth).sampler("GuideSampler", guide.view()).sampler("CurrentSampler", traced.view())
                     .sampler("HistorySampler", history[previous].view()).sampler("MetaSampler", meta[previous].view()).draw();
             historyValid = true;
-            light = history[current].view();
-            for (int i = 0; i < 3; i++) {
-                RenderTexture into = scratch[i & 1];
+            // the first filter pass is the next frame's history (SVGF): the history no longer holds raw noise
+            light = scratch[0].view();
+            for (int i = 0; i < FILTER_PASSES; i++) {
+                RenderTexture into = i == 0 ? history[current] : scratch[i & 1];
                 pass("BlockLand ray tracing: filter " + (1 << i), into.view(), FILTER, filterPasses[i], voxelColor, voxelLight)
-                        .sampler("InSampler", light).sampler("GuideSampler", guide.view()).draw();
+                        .sampler("InSampler", light).sampler("GuideSampler", guide.view())
+                        .sampler("MetaSampler", meta[current].view()).draw();
                 light = into.view();
             }
         } else {
             historyValid = false;
-            frame.rayAlbedo = albedo.view();
+            frame.rayAlbedo = reconstructionAlbedo.view();
             frame.rayNormals = guide.view();
         }
         pass("BlockLand ray tracing: resolve", result.view(), RESOLVE, resolvePass, voxelColor, voxelLight)
@@ -233,7 +250,11 @@ public final class RayTracing implements FrameStage, WorldEffects {
         float rain = level.getRainLevel(frame.partialTick);
         float strength = (day ? Mth.clamp(elevation / 0.15f, 0, 1) * 1.6f : Mth.clamp(elevation / 0.15f, 0, 1) * 0.12f) * (1 - 0.8f * rain);
         float warm = Mth.clamp(elevation / 0.35f, 0, 1);
-        float r = day ? 1f : 0.55f, g = day ? Mth.lerp(warm, 0.62f, 0.95f) : 0.65f, b = day ? Mth.lerp(warm, 0.4f, 0.88f) : 0.85f;
+        float[] color = {day ? 1f : 0.55f, day ? Mth.lerp(warm, 0.62f, 0.95f) : 0.65f, day ? Mth.lerp(warm, 0.4f, 0.88f) : 0.85f};
+        // the player's light colours, as on the lit faces
+        LightColors.tintSky(settings, day, color);
+        float[] block = new float[3];
+        LightColors.blockLight(settings, block);
         float distance = settings.rayDistance;
         int cells = Math.min(160, Math.round(distance * quality.cellsPerBlock * 1.7f));
         info.write(o -> o.putMat4f(viewToWorld).putMat4f(reprojection)
@@ -245,8 +266,9 @@ public final class RayTracing implements FrameStage, WorldEffects {
                 .putVec4(quality.rays, distance, cells, AO_RADIUS)
                 .putVec4(daylight, settings.rayGlobalIllumination, settings.rayEmission, settings.raySunBounce ? 1 : 0)
                 .putVec4(sun.x, sun.y, sun.z, strength)
-                .putVec4(r, g, b, settings.rayAmbientOcclusion));
-        for (int i = 0; i < 3; i++) filterPasses[i].pass(new Matrix4f(), 1 << i);
+                .putVec4(color[0], color[1], color[2], settings.rayAmbientOcclusion)
+                .putVec4(block[0], block[1], block[2], 0));
+        for (int i = 0; i < FILTER_PASSES; i++) filterPasses[i].pass(new Matrix4f(), 1 << i);
     }
 
     /** Current unjittered NDC → previous clip (as the post chain's, camera motion included). */
@@ -261,11 +283,12 @@ public final class RayTracing implements FrameStage, WorldEffects {
         if (info != null) return;
         info = new Ubo("ray tracing", INFO_SIZE);
         guidePass = Ubo.pass("ray tracing guide").pass(new Matrix4f());
-        albedoPass = Ubo.pass("ray tracing albedo");
+        albedoPass = Ubo.pass("ray tracing albedo").pass(new Matrix4f(), 0);
+        reconstructionPass = Ubo.pass("ray tracing RR albedo").pass(new Matrix4f(), 1);
         temporalColor = Ubo.pass("ray tracing accumulate");
         temporalMeta = Ubo.pass("ray tracing history");
         resolvePass = Ubo.pass("ray tracing resolve").pass(new Matrix4f());
-        for (int i = 0; i < 3; i++) filterPasses[i] = Ubo.pass("ray tracing filter " + i);
+        for (int i = 0; i < FILTER_PASSES; i++) filterPasses[i] = Ubo.pass("ray tracing filter " + i);
     }
 
     private void release() {
@@ -274,6 +297,7 @@ public final class RayTracing implements FrameStage, WorldEffects {
         voxels.close();
         guide.close();
         albedo.close();
+        reconstructionAlbedo.close();
         traced.close();
         result.close();
         for (RenderTexture t : history) t.close();

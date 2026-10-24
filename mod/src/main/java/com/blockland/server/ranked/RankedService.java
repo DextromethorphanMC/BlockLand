@@ -16,6 +16,8 @@ import net.minecraft.server.MinecraftServer;
 
 import javax.annotation.Nullable;
 import java.lang.reflect.Type;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -29,17 +31,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
- * The ranked ladder (排位) on this server: one ladder for every mode with the {@code ranked} setting, kept by the
- * backend (scores, tiers, positions, the Elo of a result). This service mirrors the standing of the players online —
- * fetched when they enter the lobby and after each of their ranked matches — for matchmaking by score and the screens
- * ({@link Ranks}), reports every ranked match's result (players who left before it as defeats) and tells each player
- * what it did to their score. Backend calls run off the server thread; their answers are applied on it. Fails open:
- * without the backend matches are still played, only not counted.
+ * The ranked ladders (排位) on this server: every mode with the {@code ranked} setting has a ladder of its own, kept by
+ * the backend (scores, tiers, positions, the Elo of a result). This service mirrors the standings of the players online
+ * in every mode — fetched when they enter the lobby and after each of their ranked matches — for matchmaking by the
+ * queued mode's score and the screens ({@link Ranks}), reports every ranked match's result with its mode (players who
+ * left before it as defeats) and tells each player what it did to their score. Backend calls run off the server thread;
+ * their answers are applied on it. Fails open: without the backend matches are still played, only not counted.
  */
 public final class RankedService implements Ranks.View {
     /** The backend's start score: a fair guess for matchmaking until a player's real one arrives. */
     private static final int DEFAULT_SCORE = 1000;
-    private static final Type STANDINGS = new TypeToken<Map<String, Standing>>() { }.getType();
+    private static final Type STANDINGS = new TypeToken<AllStandings>() { }.getType();
     private static final Type CHANGES = new TypeToken<List<Change>>() { }.getType();
     private static final Type LADDER = new TypeToken<List<Line>>() { }.getType();
 
@@ -49,7 +51,11 @@ public final class RankedService implements Ranks.View {
     private final GameTypeRegistry types;
     /** The match a player is in right now (to tie a published result to its game). */
     private final Function<UUID, GameInstance> gameOf;
-    private final Map<UUID, Ranks.RankInfo> standings = new ConcurrentHashMap<>();
+    /** Standings by player, then mode (only modes the player has played). */
+    private final Map<UUID, Map<String, Ranks.RankInfo>> standings = new ConcurrentHashMap<>();
+    /** The standing in a mode not played yet (the backend's start score), null until the backend answered once. */
+    @Nullable
+    private volatile Ranks.RankInfo fresh;
     /** Players who left a running ranked match, by match id: they are reported as defeats with its result. */
     private final Map<UUID, Set<UUID>> leavers = new HashMap<>();
 
@@ -61,6 +67,11 @@ public final class RankedService implements Ranks.View {
         int position;
         int matches;
         int wins;
+    }
+
+    static final class AllStandings {
+        Standing fresh;
+        Map<String, Map<String, Standing>> players;
     }
 
     static final class Change {
@@ -102,15 +113,33 @@ public final class RankedService implements Ranks.View {
     // ---- Ranks.View ---------------------------------------------------------------------------
 
     @Override
-    public Ranks.RankInfo rankOf(UUID player) {
-        Ranks.RankInfo info = standings.get(player);
-        return info == null ? Ranks.RankInfo.UNRANKED : info;
+    public Ranks.RankInfo rankOf(UUID player, String modeId) {
+        Map<String, Ranks.RankInfo> modes = standings.get(player);
+        if (modes == null) return Ranks.RankInfo.UNRANKED;
+        Ranks.RankInfo info = modes.get(modeId);
+        return info != null ? info : fresh != null ? fresh : Ranks.RankInfo.UNRANKED;
     }
 
     @Override
-    public CompletableFuture<List<Ranks.Entry>> leaderboard(int limit) {
+    public Map<String, Ranks.RankInfo> ranksOf(UUID player) {
+        Map<String, Ranks.RankInfo> modes = standings.get(player);
+        return modes == null ? Map.of() : Map.copyOf(modes);
+    }
+
+    @Override
+    public List<Ranks.RankedMode> rankedModes() {
+        List<Ranks.RankedMode> out = new ArrayList<>();
+        for (GameModeDef mode : content.snapshot().enabledModes()) {
+            if (mode.isOpen() && countsForRank(mode)) out.add(new Ranks.RankedMode(mode.id, mode.title == null || mode.title.isBlank() ? mode.id : mode.title));
+        }
+        return out;
+    }
+
+    @Override
+    public CompletableFuture<List<Ranks.Entry>> leaderboard(String modeId, int limit) {
         int n = Math.max(1, Math.min(500, limit));
-        return backend.<List<Line>>get("/api/server/ranked/leaderboard?limit=" + n, LADDER).thenApply(lines -> {
+        String query = "?mode=" + URLEncoder.encode(modeId, StandardCharsets.UTF_8) + "&limit=" + n;
+        return backend.<List<Line>>get("/api/server/ranked/leaderboard" + query, LADDER).thenApply(lines -> {
             List<Ranks.Entry> entries = new ArrayList<>();
             if (lines == null) return entries;
             for (Line line : lines) {
@@ -121,10 +150,13 @@ public final class RankedService implements Ranks.View {
         });
     }
 
-    /** The score matchmaking uses: the ladder's, or the start score for a player it does not know yet. */
-    public int matchScore(UUID player) {
-        Ranks.RankInfo info = standings.get(player);
-        return info == null ? DEFAULT_SCORE : info.score();
+    /** The score matchmaking uses: the player's on the mode's ladder, or the start score for a mode they have not played. */
+    public int matchScore(UUID player, String modeId) {
+        Map<String, Ranks.RankInfo> modes = standings.get(player);
+        Ranks.RankInfo info = modes == null ? null : modes.get(modeId);
+        if (info != null) return info.score();
+        Ranks.RankInfo start = fresh;
+        return start != null ? start.score() : DEFAULT_SCORE;
     }
 
     // ---- players ------------------------------------------------------------------------------
@@ -146,26 +178,40 @@ public final class RankedService implements Ranks.View {
     private void refresh(Collection<UUID> players) {
         if (players.isEmpty()) return;
         List<String> ids = players.stream().map(UUID::toString).toList();
-        backend.<Map<String, Standing>>post("/api/server/ranked/players", new PlayersBody(ids), STANDINGS)
+        backend.<AllStandings>post("/api/server/ranked/standings", new PlayersBody(ids), STANDINGS)
                 .whenComplete((answer, error) -> server.execute(() -> {
                     if (error != null) {
                         BlockLand.LOGGER.debug("[BlockLand] Ranked standings unavailable: {}", error.toString());
                         return;
                     }
-                    if (answer == null) return;
-                    answer.forEach((key, standing) -> {
+                    if (answer == null || answer.players == null) return;
+                    if (answer.fresh != null) fresh = info(answer.fresh);
+                    answer.players.forEach((key, modes) -> {
                         UUID id = parse(key);
-                        if (id == null || standing == null) return;
-                        Ranks.RankInfo info = new Ranks.RankInfo(standing.score, RankTier.of(standing.tier), standing.position,
-                                standing.matches, standing.wins);
-                        standings.put(id, info);
-                        send(id, info);
+                        if (id == null) return;
+                        Map<String, Ranks.RankInfo> infos = new LinkedHashMap<>();
+                        if (modes != null) modes.forEach((mode, standing) -> {
+                            if (mode != null && standing != null) infos.put(mode, info(standing));
+                        });
+                        standings.put(id, infos);
+                        send(id, infos);
                     });
                 }));
     }
 
-    private static void send(UUID player, Ranks.RankInfo info) {
-        BLNetwork.sendTo(player, new RankedPackets.S2CRank(info.score(), info.tier().id(), info.position(), info.matches(), info.wins()));
+    private static Ranks.RankInfo info(Standing standing) {
+        return new Ranks.RankInfo(standing.score, RankTier.of(standing.tier), standing.position, standing.matches, standing.wins);
+    }
+
+    private void send(UUID player, Map<String, Ranks.RankInfo> modes) {
+        Ranks.RankInfo start = fresh != null ? fresh : new Ranks.RankInfo(DEFAULT_SCORE, RankTier.COAL, 0, 0, 0);
+        List<RankedPackets.Standing> list = new ArrayList<>();
+        modes.forEach((mode, info) -> list.add(standing(mode, info)));
+        BLNetwork.sendTo(player, new RankedPackets.S2CRanks(standing("", start), list));
+    }
+
+    private static RankedPackets.Standing standing(String mode, Ranks.RankInfo info) {
+        return new RankedPackets.Standing(mode, info.score(), info.tier().id(), info.position(), info.matches(), info.wins());
     }
 
     // ---- results ------------------------------------------------------------------------------

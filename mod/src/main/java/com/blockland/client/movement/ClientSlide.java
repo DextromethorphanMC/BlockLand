@@ -62,6 +62,8 @@ public final class ClientSlide {
     private static boolean cancelled;
     private static int ticks, airTicks;
     private static float startSpeed;
+    /** This tick's speed along the slide (friction per tick, more slippery on wet ground). */
+    private static float speed;
     /** Direction sent to the server (hit boxes, others' view) and the steered direction actually moved along. */
     private static float startYaw, yaw;
     private static long startNanos, endNanos;
@@ -184,6 +186,7 @@ public final class ClientSlide {
     private static void start(LocalPlayer player) {
         SlideRules rules = SlideRules.get();
         startSpeed = rules.startSpeed(moved);
+        speed = startSpeed;
         // along the sprint (a strafing sprint slides diagonally)
         startYaw = movedYaw;
         yaw = startYaw;
@@ -208,7 +211,8 @@ public final class ClientSlide {
         SlideRules rules = SlideRules.get();
         ticks++;
         airTicks = player.onGround() ? 0 : airTicks + 1;
-        float speed = rules.speedAt(startSpeed, ticks);
+        // rain on the ground under the slide: a film of water, less friction
+        speed = rules.next(speed, ticks, player.level().isRainingAt(player.blockPosition()));
         if (jump) {
             // jumping out keeps the slide's speed; the jump itself is vanilla's
             move(player, speed);
@@ -216,7 +220,7 @@ public final class ClientSlide {
             return;
         }
         boolean blocked = player.horizontalCollision && !player.minorHorizontalCollision;
-        if (cancelled || !allowed || blocked || airTicks > rules.airTicks || rules.isOver(startSpeed, ticks)
+        if (cancelled || !allowed || blocked || airTicks > rules.airTicks || ticks >= rules.maxTicks || speed < rules.endSpeed
                 || player.isPassenger() || player.isSpectator() || player.isInWater() || player.getAbilities().flying) {
             end(player, cancelled);
             return;

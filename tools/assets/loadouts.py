@@ -26,7 +26,7 @@ MODELS = {"mini_reddot": ("optic", ("aim",)), "reddot": ("optic", ("aim",)), "la
           "heavy_stock": ("stock", ()), "wire_stock": ("stock", ()),
           # section 35: the rectangular red dot, the underbarrel slot
           "reddot_rect": ("optic", ("aim",)), "vertical_grip": ("underbarrel", ()), "angled_grip": ("underbarrel", ()),
-          "bipod": ("underbarrel", ())}
+          "bipod": ("underbarrel", ()), "tommy_grip": ("underbarrel", ())}
 # magnified optics (section 22): eyepiece glass instead of a reticle quad
 SCOPES = ("scope_2x", "scope_sniper")
 # reflex sights without a reticle node: the runtime draws the reticle in the `glass` window (the holographic sight)
@@ -270,14 +270,18 @@ def scene(g, arms, anim, t, loadout="default", arm_variant="wide", extra_matrix=
         for i, n in enumerate(a.nodes):
             if "mesh" in n:
                 instance(a, amats, n["mesh"], AW[i], items)
-    if arms is not None and with_arms:      # section 16: every arms.glb mesh is drawn at its extras.joint
+    if arms is not None and with_arms:      # section 16: every arms.glb mesh is drawn at its extras.joint (skinned)
+        import armskin
         amats = load_materials(arms)
         for node in arms.nodes:
             ex = node.get("extras", {})
             if "mesh" in node and ex.get("variant") == arm_variant and ex.get("joint") in g.names:
-                j = g.names[ex["joint"]]
-                if j not in hide:
-                    instance(arms, amats, node["mesh"], W[j], items)
+                if g.names[ex["joint"]] in hide:
+                    continue
+                for p, pos, nrm in armskin.mesh_world(arms, node, g, W):
+                    items.append({"pos": pos, "nrm": nrm, "uv": p["uvs"], "idx": p["indices"],
+                                  "mat": amats[p["material"]],
+                                  "ao": p["colors"][:, 0] if p.get("colors") is not None else None})
     return items
 
 
@@ -288,3 +292,23 @@ def aim_matrix(g, optic=None):
         return W[g.names["aim_iron"]]
     a = model(optic)
     return W[g.names[SLOTS["optic"]]] @ a.world_matrices({})[a.names["aim"]]
+
+
+# Section 40: the mounts and hidden parts of these guns follow their slots in guns.json (absent slots included: never
+# assume every new weapon is an AK with all six mounts).
+SECTION_40 = ("uzi", "p90", "mp5", "sten", "ssg08", "calico", "scar", "m4a1", "jackhammer")
+
+
+def _section_40():
+    import json
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "mod", "src", "main", "resources", "data",
+                        "blockland", "guns", "guns.json")
+    with open(path, encoding="utf-8") as f:
+        guns = json.load(f)["guns"]
+    for name in SECTION_40:
+        slots = guns.get(name, {}).get("slots", {})
+        MOUNTS_OF[name] = tuple(s["node"] for s in slots.values() if s.get("node"))
+        HIDES[name] = {slot: tuple(s.get("hides", [])) for slot, s in slots.items() if s.get("hides")}
+
+
+_section_40()

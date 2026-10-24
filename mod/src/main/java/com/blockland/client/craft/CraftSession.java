@@ -209,6 +209,16 @@ final class CraftSession {
     void choose(String category, String id) {
         if (id.equals(selected(category, edited))) return;
         edited = with(category, edited, id);
+        // the newest choice wins a shared mount: what it excludes, and what excludes it, go back to their defaults
+        Craftable.Slot chosen = weapon == null ? null : weapon.slot(category).orElse(null);
+        if (chosen != null && !id.equals(chosen.defaultOption())) {
+            for (Craftable.Slot slot : weapon.slots()) {
+                if (slot == chosen) continue;
+                if (chosen.excludes().contains(slot.id()) || slot.excludes().contains(category)) {
+                    edited = edited.with(slot.id(), slot.defaultOption());
+                }
+            }
+        }
         playUi(1.0f, 0.5f);
     }
 

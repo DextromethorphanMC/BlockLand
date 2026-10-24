@@ -63,6 +63,7 @@ FORE_TOP = np.array([0.0, -0.0500, -0.1000])    # vertical foregrip: top centre 
 FORE_AXIS = np.array([0.0, -np.cos(np.radians(9.5)), np.sin(np.radians(9.5))])
 FORE_FRONT = np.array([0.0, -np.sin(np.radians(9.5)), -np.cos(np.radians(9.5))])
 FORE_DEPTH_SCALE = 0.86          # the hand-held part of the foregrip, slimmed front to back
+FORE_MOUNT = np.array([0.0, -0.0258, -0.1050])  # underbarrel mount: the barrel clamp plate's underside (section 35)
 
 
 def grip_center(d):

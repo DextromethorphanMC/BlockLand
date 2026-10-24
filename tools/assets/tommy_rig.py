@@ -28,7 +28,7 @@ POLE_L = np.array([-1.0, -0.80, 0.05])
 
 TRIGGER_PULL = 14.0
 
-STATIC = ("receiver", "barrel", "foregrip", "grip", "stock")
+STATIC = ("receiver", "barrel", "grip", "stock")   # the wooden foregrip is an attachment (tommy_grip, section 35)
 NODES = {   # name: (parent, translation in parent space)
     **{n: ("gun", G((0, 0, 0))) for n in STATIC},
     "bolt": ("gun", G((0, 0, 0))),
@@ -57,6 +57,9 @@ MOUNTS = {
     # laser on the right of the receiver's front block: the module hangs along the attachment's -Y, turn it onto +X
     "mount_laser": ("gun", G((tm.REC_W + 0.0004, -0.0080, 0.0060)), quat_axis_angle((0, 0, 1), 90.0), None),
     "mount_barrel": ("gun", G((0.0, 0.0, tm.CROWN_Z)), None, None),                  # compensator unscrewed
+    # section 35: under the barrel clamp's plate, where the wooden foregrip sat (it is the slot's default attachment,
+    # `tommy_grip`, built from the same source part); the clips' support hand holds it there
+    "mount_underbarrel": ("gun", G(tm.FORE_MOUNT), None, None),
     "mount_stock": ("gun", G((0.0, -0.0100, tm.REC_Z1 - 0.0005)), None, None),      # replaces the wooden stock
     # low on the left of the frame behind the grip; -Y hangs straight down in the hip pose
     "mount_charm": ("gun", G((-tm.REC_W - 0.0016, -0.0320, 0.2300)), quat_conj(GUN_Q), None),

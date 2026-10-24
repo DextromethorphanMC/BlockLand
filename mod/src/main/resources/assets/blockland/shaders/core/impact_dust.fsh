@@ -12,7 +12,9 @@
 // optical depth of the Gaussian towards the light, with a multiple-scattering tail: powder is bright, light that gets in
 // keeps bouncing) times a mild forward-scattering lobe — so dust in the sun is as bright as the sunlit wall it came off
 // and never a dark film over it; the skylight dims under a thick cloud; BlockLand's dynamic lights. Without world
-// lighting the lightmap with the same self-shadowing. Writes no emission.
+// lighting the lightmap with the same self-shadowing. Writes no emission. A cloud in water (a plume of blood) has no
+// substance above the water's surface, and seen from above it is not cut off by the surface itself (the water's depth is
+// in the depth copy): the ray goes on through it into the plume, which shows through the water a little dimmed.
 
 #moj_import <minecraft:fog.glsl>
 #moj_import <minecraft:dynamictransforms.glsl>
@@ -23,10 +25,11 @@
 
 #define IMPACT_CLOUDS 128
 
-// cloud i: [3i] (centre xyz camera-relative, radius), [3i+1] (lobe density, cloud density, seed, age 0..1),
-// [3i+2] (throw direction × stretch along it (1 = round), sag below the centre (0 = round))
+// cloud i: [4i] (centre xyz camera-relative, radius), [4i+1] (lobe density, cloud density, seed, age 0..1),
+// [4i+2] (throw direction × stretch along it (1 = round), sag below the centre (0 = round)),
+// [4i+3] (water surface height camera-relative, 1 = in water, -, -)
 layout(std140) uniform ImpactClouds {
-    vec4 Clouds[IMPACT_CLOUDS * 3];
+    vec4 Clouds[IMPACT_CLOUDS * 4];
 };
 
 uniform sampler2D DepthSampler;
@@ -46,7 +49,11 @@ in float cylindricalVertexDistance;
 out vec4 fragColor;
 
 // The cloud's density at a point (optical depth per block).
-float density(vec3 p, vec3 c, float r, float rho, float seed, float age, vec4 shape) {
+float density(vec3 p, vec3 c, float r, float rho, float seed, float age, vec4 shape, vec4 water) {
+    // in water: nothing above the surface (a plume stays under it, flattening against it)
+    if (water.y > 0.5 && p.y > water.x) {
+        return 0.0;
+    }
     vec3 q = p - c;
     // the heavy part sinks: below the centre the cloud hangs lower
     q.y /= q.y < 0.0 ? 1.0 + shape.w : 1.0;
@@ -68,9 +75,11 @@ float density(vec3 p, vec3 c, float r, float rho, float seed, float age, vec4 sh
 }
 
 void main() {
-    vec4 c0 = Clouds[cloud * 3];
-    vec4 c1 = Clouds[cloud * 3 + 1];
-    vec4 c2 = Clouds[cloud * 3 + 2];
+    vec4 c0 = Clouds[cloud * 4];
+    vec4 c1 = Clouds[cloud * 4 + 1];
+    vec4 c2 = Clouds[cloud * 4 + 2];
+    vec4 c3 = Clouds[cloud * 4 + 3];
+    bool inWater = c3.y > 0.5;
     vec3 c = c0.xyz;
     float r = max(c0.w, 1e-3);
     float rhoLobe = c1.x;
@@ -91,7 +100,13 @@ void main() {
     if (impact_softDepth()) {
         // where the ray meets the world (the depth buffer stores view depth: along the ray it is longer)
         float scene = impact_viewDistance(texelFetch(DepthSampler, ivec2(gl_FragCoord.xy), 0).r);
-        t1 = min(t1, scene / max(dot(dir, -impact_back()), 1e-3));
+        float tScene = scene / max(dot(dir, -impact_back()), 1e-3);
+        // a plume seen from above: the water's surface in the depth copy does not stop the ray, the bed under it does
+        // (approximated: the plume's own far side)
+        bool throughSurface = inWater && c3.x < 0.0 && abs(dir.y * tScene - c3.x) < 0.12;
+        if (!throughSurface) {
+            t1 = min(t1, tScene);
+        }
     }
     if (t1 <= t0 + 1e-4) {
         discard;
@@ -100,13 +115,17 @@ void main() {
     // four samples along the chord (the eroded edge has more detail than three resolve without shimmering)
     float tau = 0.0;
     for (int i = 0; i < 4; i++) {
-        tau += density(dir * (t0 + seg * (float(i) + 0.5) * 0.25), c, r, rhoLobe, seed, age, c2);
+        tau += density(dir * (t0 + seg * (float(i) + 0.5) * 0.25), c, r, rhoLobe, seed, age, c2, c3);
     }
     tau *= seg * 0.25;
     vec3 pm = dir * (t0 + seg * 0.5);
     // a puff right in front of the camera fades instead of filling the screen
     tau *= clamp((t0 - 0.15) / 0.6, 0.0, 1.0) + step(0.75, t0);
     float alpha = 1.0 - exp(-tau);
+    // under the surface, seen from above: dimmed by the water in front of it
+    if (inWater && c3.x < 0.0) {
+        alpha *= 0.8;
+    }
     if (alpha < 0.003) {
         discard;
     }

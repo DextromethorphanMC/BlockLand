@@ -103,12 +103,12 @@ public final class VoxelTraceCheck {
                 """;
         int program = program(vertex, fragment);
         GL20.glUseProgram(program);
-        // RtInfo: two mat4, then nine vec4 (std140)
-        FloatBuffer info = BufferUtils.createFloatBuffer(32 + 36);
+        // RtInfo: two mat4, then ten vec4 (std140)
+        FloatBuffer info = BufferUtils.createFloatBuffer(32 + 40);
         for (int i = 0; i < 32; i++) info.put(i, i % 5 == 0 ? 1 : 0);
         float[] vecs = {0, 0, 0, 0, 0, 0, RAYS, 1, 0, 0, 0, 0,
                 NX, NY, NZ, COLUMNS, Math.floorMod(CORNER_X, NX), Math.floorMod(CORNER_Y, NY), Math.floorMod(CORNER_Z, NZ), 0,
-                1, 40, 200, 3, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1};
+                1, 40, 200, 3, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0};
         for (int i = 0; i < vecs.length; i++) info.put(32 + i, vecs[i]);
         int ubo = GL15.glGenBuffers();
         GL15.glBindBuffer(GL31.GL_UNIFORM_BUFFER, ubo);

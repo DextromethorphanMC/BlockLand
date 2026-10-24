@@ -5,6 +5,7 @@ import com.blockland.client.gltf.GltfModel;
 import com.blockland.client.render.GpuModel;
 import com.blockland.client.render.MaterialLayer;
 import com.blockland.client.render.TextureRef;
+import com.blockland.client.viewmodel.SupportGrip;
 import com.blockland.client.viewmodel.ViewmodelRig;
 import com.blockland.craft.Build;
 import com.blockland.craft.CraftCatalog;
@@ -28,6 +29,7 @@ import java.util.Set;
  * slot's region unless they name one), its older per-material colours and textures apply where the materials match.
  */
 public final class WeaponLook {
+    private static final String UNDERBARREL = "underbarrel";
     private static final Map<CraftData.Skin, GpuModel.Style> styles = new IdentityHashMap<>();
 
     private WeaponLook() {
@@ -78,6 +80,18 @@ public final class WeaponLook {
             }
         }
         return list;
+    }
+
+    /**
+     * The support hand's hold on the build's underbarrel attachment (asset spec §35: grips, bipod), at the slot's mount;
+     * without one (or without a {@code grip} in its data) the clips keep the hand on the handguard.
+     */
+    public static void fitSupportHold(ViewmodelRig<?> rig, Craftable weapon, Build build) {
+        String mount = weapon.slot(UNDERBARREL).map(Craftable.Slot::mount).orElse("");
+        CraftData.Attachment attachment = mount.isEmpty() ? null : CraftCatalog.fitted(build, UNDERBARREL);
+        CraftData.Grip grip = attachment == null ? null : attachment.grip;
+        rig.setSupportHold(mount, grip == null || grip.wrist == null || grip.palm == null ? null
+                : SupportGrip.Hold.of(grip.wrist, grip.palm, grip.fingers == null ? Map.of() : grip.fingers));
     }
 
     /** The skin of a build (the default one when it names an unknown skin). */

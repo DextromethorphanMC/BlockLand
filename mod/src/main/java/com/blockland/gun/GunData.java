@@ -1,5 +1,6 @@
 package com.blockland.gun;
 
+import com.blockland.combat.Ballistics;
 import com.blockland.common.Handling;
 import com.blockland.craft.CraftCatalog;
 import com.blockland.craft.CraftData;
@@ -33,7 +34,22 @@ public final class GunData {
         public int pellets = 1;
         /** Decal type (assets/blockland/decals.json) a projectile leaves on the block it hits. */
         public String decal = "bullet_hole";
+        /** Decal type a projectile leaves on the body it hits (the entry wound). */
+        public String bodyDecal = "bullet_wound";
         public List<String> magazines = List.of();
+        /**
+         * Rounds in fluids ({@code combat/Ballistics}): blocks of water and of lava that spend a round (its energy and
+         * damage falling linearly on the way; 0 = that fluid does not slow it), and the angle (degrees) to a level water
+         * surface below which it skips off instead of going in (0 = never).
+         */
+        public float waterRange = 2.5f;
+        public float lavaRange = 0.3f;
+        public float skipAngle = 7;
+
+        /** How this round fares in fluids. */
+        public Ballistics.Medium medium() {
+            return new Ballistics.Medium(waterRange, lavaRange, skipAngle);
+        }
     }
 
     /** A magazine attachment: capacity and which guns accept it. */
@@ -131,6 +147,11 @@ public final class GunData {
         public String reload = "reload";
         public String reloadEmpty = "reload_empty";
         public String inspect = "inspect";
+        /**
+         * Aimed variants (spec §31.5): a fire clip plays blended with {@code <clip><aimedSuffix>} by the aim amount when the
+         * model has it ({@code fire_ads}, {@code fire_last_ads}); without one the hip clip plays alone.
+         */
+        public String aimedSuffix = "_ads";
         /** Optional loops (spec §17): walk, the lowered running carry and the raised tactical sprint. */
         public String walk = "walk";
         public String sprint = "sprint";

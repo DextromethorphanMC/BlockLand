@@ -1,5 +1,6 @@
 package com.blockland.client.decal;
 
+import com.blockland.client.render.EntityPoses;
 import com.blockland.client.render.WorldFx;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -38,14 +39,16 @@ import java.util.Random;
  * Damage decals: bullet holes, knife slashes and stabs on blocks, cuts on bodies. Each decal has its own lifetime
  * (its type's lifetime ± jitter) and fades out at the end of it; a type holds at most {@code max} at once, the
  * oldest making room. Block decals lie flat on the struck face, clipped to it, and vanish when the block changes;
- * body decals follow the entity's body part. Everything is drawn in one batch per decal texture.
+ * body decals lie on the struck cube of the entity's drawn model ({@link EntityPoses}), clipped to its face, and follow
+ * it as the model animates (not drawn in a frame the model was not drawn in); bodies whose model was not drawn lately
+ * fall back to rest-pose parts ({@link BodySurface}). Everything is drawn in one batch per decal texture.
  *
  * <p>Client only and weapon-agnostic: weapons call {@link #onBlock} / {@link #onEntity} with a decal type id
  * from their data.
  */
 public final class Decals {
     private static final double RENDER_DISTANCE_SQR = 96 * 96;
-    /** Body decals sit this far outside the part box (the model's outer skin layer). */
+    /** Body decals sit this far outside the cube or part box they lie on. */
     private static final float BODY_LIFT = 0.012f;
     private static final int FORCED_FADE_TICKS = 6;
 
@@ -71,8 +74,11 @@ public final class Decals {
         BlockState state;
         int light;
         float shade = 1;
-        // body decals: positions in the part's space
+        // body decals: positions in the model cube's space (modelPath set) or in a rest-pose part's
         int entityId = -1;
+        @Nullable
+        String modelPath;
+        int modelCube;
         @Nullable
         BodySurface.Part part;
 
@@ -106,6 +112,8 @@ public final class Decals {
                     clear();
                 }));
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> tick());
+        // body decals lie on the drawn models
+        EntityPoses.init();
         ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(event -> clear());
         // on the faces: under the dust, smoke and debris in front of them
         WorldFx.register(WorldFx.Layer.SURFACE, Decals::render);
@@ -157,6 +165,11 @@ public final class Decals {
         if (type == null || world == null || !target.isAlive()) return;
         Vec3 dir = point.subtract(from);
         if (dir.lengthSqr() < 1e-6) return;
+        BodySurface.ModelAnchor onModel = BodySurface.onModel(target, from, dir.normalize());
+        if (onModel != null) {
+            onModel(type, world, target, onModel, along);
+            return;
+        }
         BodySurface.Anchor anchor = BodySurface.anchor(target, from, dir.normalize());
         // the cut direction in part space, sized in part units (humanoid parts are scaled with the entity)
         Matrix4f toLocal = BodySurface.partToWorld(target, anchor.part(), 1, from, new Matrix4f()).invert();
@@ -176,6 +189,33 @@ public final class Decals {
         Decal decal = new Decal(type, polygon, new Vector3f(anchor.normal()), world.getGameTime());
         decal.entityId = target.getId();
         decal.part = anchor.part();
+        add(world, decal);
+    }
+
+    /** A body decal on a cube of the drawn model, laid out in the cube's space (model pixels) and clipped to its face. */
+    private static void onModel(DecalTypes.Type type, ClientLevel world, Entity target, BodySurface.ModelAnchor anchor, @Nullable Vec3 along) {
+        Matrix4f toWorld = anchor.toWorld();
+        // blocks per model pixel here (the entity's scale, a baby's, the 1/16)
+        Vector3f scale = toWorld.getScale(new Vector3f());
+        float size = (scale.x + scale.y + scale.z) / 3;
+        if (size < 1e-6f) return;
+        Vec3 localAlong = null;
+        if (along != null) {
+            Vector3f a = new Matrix4f(toWorld).invert().transformDirection(new Vector3f((float) along.x, (float) along.y, (float) along.z));
+            localAlong = new Vec3(a.x, a.y, a.z);
+        }
+        Vector3f normal = anchor.normal();
+        int axis = Math.abs(normal.x) > 0.5f ? 0 : Math.abs(normal.y) > 0.5f ? 1 : 2;
+        float[] b = anchor.bounds();
+        int sAxis = axis == 0 ? 1 : 0, tAxis = axis == 2 ? 1 : 2;
+        float[] rect = {b[sAxis], b[tAxis], b[sAxis + 3], b[tAxis + 3]};
+        Vector3f centre = new Vector3f(anchor.point()).fma(BODY_LIFT / size, normal);
+        DecalGeometry.Polygon polygon = layOut(type, centre, normal, localAlong, axis, rect, 1 / size);
+        if (polygon == null) return;
+        Decal decal = new Decal(type, polygon, new Vector3f(normal), world.getGameTime());
+        decal.entityId = target.getId();
+        decal.modelPath = anchor.path();
+        decal.modelCube = anchor.cube();
         add(world, decal);
     }
 
@@ -358,7 +398,15 @@ public final class Decals {
                     if (entity == null || entity.isInvisible() || entity.distanceToSqr(cam) > RENDER_DISTANCE_SQR) continue;
                     // the camera's own body is not drawn in first person
                     if (entity == camera.getEntity() && !camera.isDetached()) continue;
-                    BodySurface.partToWorld(entity, d.part, partialTick, cam, partMatrix);
+                    if (d.modelPath != null) {
+                        // where its cube was drawn this frame; not drawn (culled, out of range) = no decal either
+                        EntityPoses.Capture drawn = EntityPoses.drawn(entity, partialTick);
+                        EntityPoses.Box box = drawn == null ? null : drawn.find(d.modelPath, d.modelCube);
+                        if (box == null) continue;
+                        drawn.toWorld(box, cam, null, partMatrix);
+                    } else {
+                        BodySurface.partToWorld(entity, d.part, partialTick, cam, partMatrix);
+                    }
                     color |= 0xE6E6E6;
                     light = mc.getEntityRenderDispatcher().getPackedLightCoords(entity, partialTick);
                 }

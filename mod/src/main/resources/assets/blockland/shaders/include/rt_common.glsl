@@ -16,6 +16,7 @@ layout(std140) uniform RtInfo {
     vec4 RtLight;         // x daylight 0..1, y global illumination strength, z emission strength, w sun bounce on
     vec4 RtSun;           // xyz towards the sun or moon (world), w its direct strength (0 below the horizon / no world lighting)
     vec4 RtSunColor;      // rgb its colour (linear), a ambient occlusion strength
+    vec4 RtBlockLight;    // rgb block light tint × strength (the player's light colours; 1 = vanilla's), w -
 };
 
 uniform sampler2D VoxelColor;   // rgb average block colour (display colours), a kind: 0 empty, 1 full, between: hit chance
@@ -60,6 +61,17 @@ float rt_random(inout uint seed) {
 
 uint rt_seed(ivec2 pixel, int salt) {
     return rt_hash(uint(pixel.x) * 1973u ^ uint(pixel.y) * 9277u ^ uint(RtCamera.w) * 26699u ^ uint(salt) * 112909u);
+}
+
+// The i-th of this pixel's two random numbers for one ray this frame: the R2 sequence over frames and rays (Roberts 2018:
+// successive frames fill the square evenly, so accumulation converges much faster than with independent numbers),
+// shifted per pixel by interleaved gradient noise (neighbours start apart, so the noise left is fine-grained, which the
+// filters remove without blotches).
+vec2 rt_sample(ivec2 pixel, int ray) {
+    float n = RtCamera.w * RtTrace.x + float(ray);
+    vec2 shift = vec2(fract(52.9829189 * fract(dot(vec2(pixel), vec2(0.06711056, 0.00583715)))),
+                      fract(52.9829189 * fract(dot(vec2(pixel) + vec2(47.0, 17.0), vec2(0.06711056, 0.00583715)))));
+    return fract(shift + n * vec2(0.7548776662, 0.5698402910));
 }
 
 // A cosine-weighted direction around n.
@@ -122,7 +134,7 @@ vec3 rt_radiance(vec3 hit, ivec3 cell, ivec3 front, vec3 normal, inout uint seed
     vec4 color = rt_color(cell);
     vec3 albedo = pow(max(color.rgb, vec3(0.0)), vec3(2.2));
     vec4 light = rt_light(front);
-    vec3 incoming = vec3(0.78, 0.86, 1.0) * rt_level(light.r) * RtLight.x + vec3(1.0, 0.8, 0.55) * rt_level(light.g);
+    vec3 incoming = vec3(0.78, 0.86, 1.0) * rt_level(light.r) * RtLight.x + vec3(1.0, 0.8, 0.55) * RtBlockLight.rgb * rt_level(light.g);
     vec3 radiance = albedo * incoming;
     radiance += albedo * rt_light(cell).b * 2.0 * RtLight.z;
     if (RtLight.w > 0.5 && RtSun.w > 0.0) {

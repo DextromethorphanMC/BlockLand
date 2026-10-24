@@ -33,6 +33,8 @@ import org.joml.Vector3f;
  *   <li>aiming down sights: the weapon swings in on an arc (a cant, a dip, a pull towards the cheek half-way) and
  *       settles with a small dip;</li>
  *   <li>whole-body moves from outside ({@link BodyMotion}): in a slide the weapon tilts and drops low;</li>
+ *   <li>swimming ({@link SwimPose}): the weapon rests in a low carry riding the strokes, the free arm out of view, and
+ *       comes up quickly whenever the hands work it or it is aimed;</li>
  *   <li>the hands working the weapon (spec §31.4): clip events shove the whole rig — weapon, both arms, camera — by
  *       {@link ViewmodelImpulses}, so a slap jolts the hand that only holds the weapon too;</li>
  *   <li>weight and rotational inertia: the weapon's mass and its reach (eye to muzzle, measured from the model) set how
@@ -94,6 +96,8 @@ public final class ViewmodelMotion {
     /** 0..1 how hard a wall in front presses the weapon back / something on the right tucks it in; view pitch -1..1. */
     private final Spring blocked = new Spring(0).config(110, 19), tucked = new Spring(0).config(90, 17);
     private final Spring lookDown = new Spring(0).config(60, 14);
+    /** The swimming pose's layer: the carry, the strokes, the weapon brought up to be used. */
+    private final SwimPose swim = new SwimPose();
     /** Eye to muzzle (or blade tip) in the rest pose, metres; rotational inertia relative to a pistol. */
     private float reach = 0.45f, inertia = 1;
     private boolean wasCrouching;
@@ -292,7 +296,7 @@ public final class ViewmodelMotion {
         lastPitch = pitch;
         if (dt > 0 && Math.abs(dYaw) < 90) {
             // turn rate in, clamped per second (frame-rate independent); the rotational inertia is in the springs
-            float calm = (1 - 0.7f * aim) * handling.sway;
+            float calm = (1 - 0.7f * swim.aimCalm(aim)) * handling.sway;
             lookYaw.impulse(Mth.clamp(-dYaw / dt * 7f, -9600, 9600) * dt * calm);
             lookPitch.impulse(Mth.clamp(-dPitch / dt * 7f, -9600, 9600) * dt * calm);
         }
@@ -304,6 +308,7 @@ public final class ViewmodelMotion {
 
         // breathing: slower and shallower at rest, quick and deep after a sprint
         breathPhase += dt * (1.55 + 2.2 * exertion);
+        swim.update(dt, player, aim);
         updateCamera(aim);
     }
 
@@ -439,6 +444,7 @@ public final class ViewmodelMotion {
                 + pushBack.get() * 0.001f + wall * 0.055f
                 + (-Math.max(0, down) * 0.006f + Math.max(0, -down) * 0.006f) * hip;
         root.translate(x, y, z);
+        swim.applyOffsets(root, aim);
     }
 
     /** How far the wall pose is in: the push-back spring eased (anim library), so the weapon tips away smoothly. */
@@ -518,9 +524,15 @@ public final class ViewmodelMotion {
         root.rotateZ((float) Math.toRadians(roll));
         root.rotateY((float) Math.toRadians(yaw));
         root.rotateX((float) Math.toRadians(pitch));
+        swim.applyRotations(root, aim);
     }
 
     // ---- outputs ----------------------------------------------------------------------------------
+
+    /** The swimming layer (its carry style; the rig tells it when the hands work the weapon). */
+    public SwimPose swim() {
+        return swim;
+    }
 
     /** 0..1 how far into a sprint carry (run or tactical) the weapon is; firing waits until it is lowered. */
     public float sprintAmount() {

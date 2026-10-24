@@ -43,6 +43,8 @@ public final class DrawList {
     private int size;
     /** Draws of the world's frame (viewmodel, third person), not of a GUI picture. */
     private boolean scene;
+    /** How soaked the weapon is (0..1, {@link Wetness}): packed into the flags' fraction (gun.fsh). */
+    private float wetness;
     /** Unjittered projection of a list that records its motion ({@link #motion}), or null. */
     @Nullable
     private Matrix4f motionProjection;
@@ -120,6 +122,8 @@ public final class DrawList {
 
     // flags in ModelOffset.z (see gun.fsh)
     static final int FULLBRIGHT = 1, NORMAL_MAP = 2, SPECULAR_MAP = 4, PREMULTIPLY = 8, SCENE = 16, OPAQUE = 32, WORLD_LIT = 64;
+    /** The wetness rides in the flags' fraction: 0 … this (gun.fsh divides it back out). */
+    private static final float WETNESS_SCALE = 0.45f;
 
     /**
      * Marks this list's draws as part of the world's frame (the viewmodel, third-person weapons): they store emission in
@@ -128,6 +132,16 @@ public final class DrawList {
      */
     public DrawList scene(boolean value) {
         scene = value;
+        return this;
+    }
+
+    /**
+     * How soaked the weapons this list draws are, 0..1 (rendering spec §15, soaking: out of the water they stay wet and
+     * dry slowly; rain wetness comes on top in the shader). Rides in ModelOffset.z's fraction, under one half so the flags
+     * still round to themselves.
+     */
+    public DrawList wetness(float value) {
+        wetness = Math.max(0, Math.min(1, value));
         return this;
     }
 
@@ -245,7 +259,7 @@ public final class DrawList {
         int flags = (material.fullbright() ? FULLBRIGHT : 0) | (normal != null ? NORMAL_MAP : 0)
                 | (specular != null ? SPECULAR_MAP : 0) | (additive ? PREMULTIPLY : 0) | (opaque ? OPAQUE : 0)
                 | (scene ? SCENE : 0) | (scene && SceneLighting.weaponsLit() ? WORLD_LIT : 0);
-        e.offset.set(blockLight, skyLight, flags);
+        e.offset.set(blockLight, skyLight, flags + (scene ? WETNESS_SCALE * wetness : 0));
         // TextureMat columns: (metallic, roughness, cutoff, uv scale) (origin, time) (effect params) (effect colour,
         // effect + its surge: the id's whole part, the surge × SURGE_SCALE its fraction)
         float[] p = material.params();

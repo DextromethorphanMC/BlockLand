@@ -16,6 +16,7 @@ import com.blockland.movement.Slides;
 import com.blockland.network.BLNetwork;
 import com.blockland.server.arena.ArenaService;
 import com.blockland.server.backend.BackendClient;
+import com.blockland.server.combat.HitHistory;
 import com.blockland.server.combat.KillTracker;
 import com.blockland.server.command.BlockLandCommands;
 import com.blockland.server.config.BlockLandConfig;
@@ -112,6 +113,7 @@ public final class BlockLandServer {
     public final GameManager games;
     public final MatchmakingService matchmaking;
     public final MapPreviewService previews;
+    public final HitHistory hitHistory = new HitHistory();
     public final GunService gunService;
     public final MeleeService meleeService;
     public final EquipmentService equipmentService;
@@ -168,6 +170,7 @@ public final class BlockLandServer {
         });
         this.previews = new MapPreviewService(services);
         this.gunService = new GunService(server);
+        this.gunService.setHistory(hitHistory);
         this.gunService.setInfiniteAmmo(player -> {
             GameInstance game = games.gameOf(player);
             return game != null && game.infiniteAmmo(player);
@@ -432,12 +435,14 @@ public final class BlockLandServer {
         BombItem.setDropHandler(null);
         BLNetwork.setBattleRoyaleServerListener(null);
         current.gunService.clear();
+        current.hitHistory.clear();
         current.meleeService.clear();
         current.equipmentService.clear();
         instance = null;
     }
 
     private void tick() {
+        hitHistory.tick(server);
         sessions.tick();
         jobs.tick();
         games.tick();
@@ -463,5 +468,6 @@ public final class BlockLandServer {
         types.all().forEach(type -> type.onContentChanged(services, snapshot));
         lobby.markDirty();
         lobby.announcementsChanged();
+        lobby.activitiesChanged();
     }
 }

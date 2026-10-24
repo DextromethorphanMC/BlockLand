@@ -49,6 +49,8 @@ public final class MeleeData {
         /** Decal types (assets/blockland/decals.json) left on blocks and on bodies. */
         public String blockDecal = "knife_slash";
         public String bodyDecal = "knife_cut";
+        /** Impact profile ({@code assets/blockland/impacts.json} ammo): what the blade throws out (slash, stab). */
+        public String impactProfile = "slash";
         /** Sound event id others hear when the swing starts. */
         public String swingSound = "blockland:knife.swing";
 

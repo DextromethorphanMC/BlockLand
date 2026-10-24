@@ -4,13 +4,18 @@ the underbarrel slot's `vertical_grip`, `angled_grip` and `bipod`.
 Same frame as every attachment (attach_models.py): origin = the mount point, +X right, +Y up, -Z towards the muzzle.
 An optic stands on the rail (+Y); an underbarrel attachment clamps to the underside of the handguard / rail and hangs
 along -Y. attach_models.MODELS picks the builders up from MODELS below."""
+import os
+import sys
+
 import numpy as np
 
-import p9_parts as pp
-import shapes as sh
-from meshkit import Mesh
-from p9_model import chamfer_bevel, extrude_z
-from stock_models import rod
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))     # run as a script: python -I underbarrel_models.py grips
+
+import p9_parts as pp                                                # noqa: E402
+import shapes as sh                                                  # noqa: E402
+from meshkit import Mesh                                             # noqa: E402
+from p9_model import chamfer_bevel, extrude_z                        # noqa: E402
+from stock_models import rod                                         # noqa: E402
 
 
 def _attach():
@@ -19,13 +24,13 @@ def _attach():
 
 
 # ------------------------------------------------------------------------------------- rectangular red dot
-RECT_W, RECT_H = 0.0320, 0.0220    # window (glass) width / height
+RECT_W, RECT_H = 0.0420, 0.0220    # window (glass) width / height: a wide, low window
 RECT_R = 0.0020                    # window corner radius
 RECT_C = 0.0242                    # window centre over the mount point (the sight line)
 RECT_Z = -0.0120                   # glass plane (the frame's rear face)
 RECT_D = 0.0035                    # frame depth in front of the glass
-RECT_DRAFT = (0.13, 0.11)          # the frame's inner walls open forward more steeply than the sight lines from the eye
-                                   # to the window's edges (0.114, 0.079): none of them shows through the glass
+RECT_DRAFT = (0.17, 0.11)          # the frame's inner walls open forward more steeply than the sight lines from the eye
+                                   # to the window's edges (0.150, 0.079): none of them shows through the glass
 RECT_BEVEL = 0.0008                # the window's rear edge, chamfered towards the eye
 BODY_TOP = 0.0115                  # the base housing stays under the sight lines to the window's bottom edge
 
@@ -155,4 +160,97 @@ def bipod():
     return p
 
 
-MODELS = {"reddot_rect": reddot_rect, "vertical_grip": vertical_grip, "angled_grip": angled_grip, "bipod": bipod}
+def tommy_grip():
+    """The Thompson's wooden vertical foregrip (section 24's source part, slimmed front to back) as an underbarrel
+    attachment: its long top along the barrel clamp and the finger-grooved grip under it, moved from the gun's design
+    frame to its mount (tommy_model.FORE_MOUNT). Material `wood_foregrip` keeps the Thompson skins' tints on it."""
+    import tommy_model as tm
+    p = _attach().Part()
+    m = tm.foregrip_mesh(tm.default_source()).translated(-tm.FORE_MOUNT)
+    m.set_material(lambda c, n: True, "wood_foregrip")
+    p.meshes["attachment"] = m
+    return p
+
+
+# ------------------------------------------------------------------------------- support-hand holds (section 35)
+def _hold(palm, fwd, thumb, pose):
+    """Left hand with its palm centre at `palm` (the attachment's frame), fingers along `fwd`, the thumb side towards
+    `thumb` -> (wrist, palm quaternion, finger curls)."""
+    import hands
+    from vmath import quat_rotate
+    q = hands.palm_frame(fwd, thumb, "L")
+    wrist = np.asarray(palm, float) - quat_rotate(q, (0.0, -hands.PALM_LEN / 2, 0.0))
+    curls = hands.POSES[pose] if isinstance(pose, str) else pose
+    return wrist, q, {f: tuple(float(c) for c in curls[f]) for f in hands.FINGERS}
+
+
+def _round(centre, fwd, thumb, pose, r, push=0.0):
+    """Left hand round a part: the palm face `r` from `centre` (towards the part), slid `push` along the fingers (as
+    the weapon rigs' anchors)."""
+    import hands
+    from vmath import norm, quat_rotate
+    z = quat_rotate(hands.palm_frame(fwd, thumb, "L"), (0.0, 0.0, 1.0))
+    return _hold(np.asarray(centre, float) - hands.wrap_distance(r) * z + push * norm(fwd), fwd, thumb, pose)
+
+
+def _tommy_hold():
+    """The Thompson clips' own support hold (tommy_rig's rest solve: the "support" anchor as the arm reaches it, wrist
+    limits applied), moved to the mount: fitted on the Thompson, the runtime grip changes nothing."""
+    import hands
+    import tommy_model as tm
+    import tommy_rig as tr
+    from vmath import quat_conj, quat_mul, quat_rotate
+    pose = tr.Pose()
+    _, ik = pose.solve()
+    left, (_, _, curls) = ik["L"], ik["target_L"]
+    wrist = quat_rotate(quat_conj(pose.gun_q), left["hand"] - pose.gun_t) - tr.G(tm.FORE_MOUNT)
+    q = quat_mul(quat_conj(pose.gun_q), left["q_palm"])
+    return wrist, q, {f: tuple(float(c) for c in curls[f]) for f in hands.FINGERS}
+
+
+def _fwd(right, up, back):
+    from vmath import norm
+    return norm((right, up, back))
+
+
+# fingers of the holds (curl of the first segment, of the second; negative closes)
+# round a vertical grip (r 16 mm) below the clamp, the thumb wrapped over the fingers; fitted so no finger sinks into it
+FIST = {"thumb": (-80, -41), "index": (-54, -54), "middle": (-65, -56), "ring": (-59, -56), "pinky": (-52, -42)}
+CLAMP = {"thumb": (-4, -2), "index": (-54, -48), "middle": (-60, -54), "ring": (-64, -58), "pinky": (-68, -60)}
+CRADLE = {"thumb": (-12, -6), "index": (-40, -34), "middle": (-46, -40), "ring": (-50, -44), "pinky": (-54, -46)}
+
+
+def grip_holds():
+    """attachment -> (wrist, palm quaternion, curls) of the support hand in the attachment's frame (origin = the
+    mount point): the `grip` objects of craft/attachments.json (`python -I underbarrel_models.py grips` prints them).
+    Vertical grips: a fist round the grip below the clamp, palm on its left, fingers round its front, thumb over.
+    Angled grip: palm and the web of the thumb against the ramp's rear face, thumb forward along the left of the
+    handguard, fingers forward under it and up its right side (a C-clamp). Bipod: the hand cups the folded legs from
+    below just behind its clamp (the legs folded along the barrel ahead of it), palm up, fingers round the forend."""
+    return {
+        "vertical_grip": _round((0.0, -0.047, 0.0), _fwd(0.31, 0.0, -0.95), (0.0, 1.0, 0.0), FIST, 0.0335, -0.020),
+        "tommy_grip": _tommy_hold(),
+        "angled_grip": _hold((-0.008, -0.0215, 0.071), _fwd(0.85, 0.45, -0.25), (-0.10, 0.25, -1.0), CLAMP),
+        "bipod": _hold((-0.006, -0.0220, 0.056), _fwd(0.80, 0.55, -0.25), (0.0, 0.30, -1.0), CRADLE),
+    }
+
+
+def grip_json():
+    """The holds as craft/attachments.json `grip` objects (wrist m, palm quaternion xyzw, finger curls in degrees)."""
+    out = {}
+    for name, (wrist, q, curls) in grip_holds().items():
+        out[name] = {"wrist": [round(float(v), 4) for v in wrist], "palm": [round(float(v), 4) for v in q],
+                     "fingers": {f: [round(c, 1) for c in curls[f]] for f in curls}}
+    return out
+
+
+MODELS = {"reddot_rect": reddot_rect, "vertical_grip": vertical_grip, "angled_grip": angled_grip, "bipod": bipod,
+          "tommy_grip": tommy_grip}
+
+
+if __name__ == "__main__":
+    import json
+    import sys
+    if sys.argv[1:] == ["grips"]:
+        for name, grip in grip_json().items():
+            print(f'"{name}": {json.dumps(grip)}')

@@ -51,8 +51,8 @@ def rig():
 def all_clips():
     m = modules()
     c, long, loco = m["p9_clips"], m["p9_clips_long"], m["p9_loco"]
-    return [c.IDLE, c.DRAW, c.FIRE, c.FIRE_LAST, long.RELOAD, long.RELOAD_EMPTY, long.INSPECT, loco.WALK, loco.SPRINT,
-            loco.TAC_SPRINT]
+    return [c.IDLE, c.DRAW, c.FIRE, c.FIRE_LAST, c.FIRE_ADS, c.FIRE_LAST_ADS, long.RELOAD, long.RELOAD_EMPTY,
+            long.INSPECT, loco.WALK, loco.SPRINT, loco.TAC_SPRINT]
 
 
 def build_meshes():

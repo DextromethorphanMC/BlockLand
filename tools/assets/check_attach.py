@@ -300,45 +300,91 @@ def _eye_distance(g, r, label, build):
                f"(closest: {worst[3]} in {worst[1]} t={worst[2]:.2f})")
 
 
-HOLD_CLIPS = ("idle", "fire", "fire_last", "walk")     # the support hand holds the handguard: never in the grip
-HAND_GAP = 0.004            # least gap (m) between an underbarrel attachment and the support hand's skin while holding
+HOLD_CLIPS = ("idle", "fire", "fire_last", "walk")     # the clips' support hand holds the weapon throughout
+HOLD_REACH = 0.002          # the arm reaches the hold within this (m), the shoulder coming forward if it must
+HOLD_DEPTH = 0.0025         # no point of the hand's skin deeper than this inside the attachment while it holds (idle,
+                            # walk); a shot's hand reaction (a wrist roll on a pump) is a transient: reported only
+AS_AUTHORED = ("tommy_grip",)   # holds that are the weapon clips' own (the Thompson's foregrip): reported only
+DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "mod", "src", "main", "resources", "data",
+                    "blockland")
+
+
+def _data(*path):
+    import json
+    with open(os.path.join(DATA, *path), encoding="utf-8") as f:
+        return json.load(f)
 
 
 def _hand_clearance(g, arms, r, label):
-    """Section 35: an underbarrel attachment sits ahead of the support hand, which stays on the handguard: in the
-    holding clips the hand (palm and fingers, arms.glb meshes) never reaches into it; other clips (reloads, inspect)
-    are reported."""
-    hand = []
-    for n in arms.nodes:
-        ex = n.get("extras", {})
-        if "mesh" in n and ex.get("variant") == "wide" and ex.get("layer") == "base"                 and str(ex.get("joint", "")).startswith("arm_L_") and ex.get("joint") != "arm_L_fore":
-            if ex["joint"] in g.names:
-                hand.append((g.names[ex["joint"]], np.concatenate([p["positions"] for p in arms.mesh_primitives(n["mesh"])])))
-    for name in ("vertical_grip", "angled_grip", "bipod"):
+    """Section 35: with an underbarrel attachment fitted the runtime moves the support hand onto its hold
+    (support_grip.py mirrors client/viewmodel/SupportGrip). For every attachment the weapon's slot offers: its
+    `grip` in attachments.json is the one underbarrel_models.grip_holds() authors, and in the holding clips the hand
+    is on the hold (the clip's hand on its idle hold), the arm reaches it, and the hand does not sink into the
+    attachment."""
+    import support_grip as sg
+    import underbarrel_models as um
+    from glbread import trs
+    slot = _data("guns", "guns.json")["guns"].get(lo.weapon_name(g), {}).get("slots", {}).get("underbarrel")
+    if not slot:
+        return
+    offered = [o for o in [slot.get("default", "none")] + list(slot.get("options") or []) if o != "none"]
+    data = _data("craft", "attachments.json")["attachments"]
+    authored = um.grip_json()
+    idle0 = g.sample(g.animation("idle"), 0.0) if g.animation("idle") else {}
+    mount, hand = g.names["mount_underbarrel"], g.names["arm_L_hand"]
+    I = g.world_matrices(idle0)
+    H0 = np.linalg.inv(I[mount]) @ I[hand]
+    for name in dict.fromkeys(offered):
+        grip = data.get(name, {}).get("grip")
+        if grip is None:
+            r.note(f"{label}: {name} has no grip: the clips keep the support hand [report only]")
+            continue
+        want = authored.get(name)
+        same = want is not None and all(np.allclose(grip[k], want[k], atol=1e-4) for k in ("wrist", "palm")) and all(
+            np.allclose(grip["fingers"][f], want["fingers"][f], atol=0.05) for f in want["fingers"])
+        r.check(same, f"attachments.json {name}: grip differs from underbarrel_models.grip_holds() "
+                      f"(python -I tools/assets/underbarrel_models.py grips)")
+        hold = (np.asarray(grip["wrist"], float), np.asarray(grip["palm"], float),
+                {f: tuple(c) for f, c in grip["fingers"].items()})
         a = lo.model(name)
-        apts = _points(a, a.world_matrices({}))[::2]
-        for anim in g.json.get("animations", []):
+        G = trs(hold[0], hold[1], (1, 1, 1))
+        worst = {"reach": (0.0, "", 0.0), "depth": (0.0, "", 0.0), "shot": (0.0, "", 0.0), "gap": (np.inf, "", 0.0),
+                 "shift": 0.0}
+        for anim in [g.animation(c) for c in HOLD_CLIPS if g.animation(c)]:
             dur = g.duration(anim)
-            worst = (np.inf, 0.0)
-            for t in np.unique(np.concatenate([np.arange(0, dur + 1e-9, 1 / 30), [dur]])):
-                W = g.world_matrices(g.sample(anim, t))
-                M = W[g.names["mount_underbarrel"]]
-                A = apts @ M[:3, :3].T + M[:3, 3]
-                H = np.concatenate([pts @ W[j][:3, :3].T + W[j][:3, 3] for j, pts in hand])
-                lo_, hi_ = A.min(0) - 0.03, A.max(0) + 0.03
-                H = H[np.all((H >= lo_) & (H <= hi_), axis=1)]
-                if len(H):
-                    d = float(np.sqrt(((H[:, None, :] - A[None, :, :]) ** 2).sum(-1)).min())
-                    if d < worst[0]:
-                        worst = (d, float(t))
-            if worst[0] == np.inf:
-                continue
-            if anim["name"] in HOLD_CLIPS:
-                r.check(worst[0] >= HAND_GAP, f"{label}: {name} within {worst[0] * 1000:.1f} mm of the support hand in "
-                                              f"{anim['name']} t={worst[1]:.2f}")
-            elif worst[0] < HAND_GAP:
-                r.note(f"{label}: {name} meets the support hand in {anim['name']} t={worst[1]:.2f} "
-                       f"({worst[0] * 1000:.1f} mm) [report only]")
+            for t in np.unique(np.concatenate([np.arange(0, dur + 1e-9, 1 / 15), [dur]])):
+                ov, w, d, shift = sg.apply(g, g.sample(anim, t), idle0, hold)
+                W = g.world_matrices(ov)
+                M = W[mount]
+                if anim["name"] == "idle" and t == 0:
+                    r.check(w > 0.999, f"{label}: {name}: the idle's hand is not on its hold (weight {w:.2f})")
+                if w < 0.999:
+                    continue
+                # where the hand should be: the hold, carrying the clip's deviation from the idle's hand
+                Wc = g.world_matrices(g.sample(anim, t))
+                want = M @ G @ np.linalg.inv(H0) @ np.linalg.inv(Wc[mount]) @ Wc[hand]
+                reach = float(np.linalg.norm(W[hand][:3, 3] - want[:3, 3]))
+                dist, depth = sg.gap(sg.hand_points(g, arms, W), sg.surface(a, M))
+                if reach > worst["reach"][0]:
+                    worst["reach"] = (reach, anim["name"], float(t))
+                kind = "shot" if anim["name"].startswith("fire") else "depth"
+                if depth > worst[kind][0]:
+                    worst[kind] = (depth, anim["name"], float(t))
+                if dist < worst["gap"][0]:
+                    worst["gap"] = (dist, anim["name"], float(t))
+                worst["shift"] = max(worst["shift"], shift)
+        rv, rc, rt = worst["reach"]
+        dv, dc, dt = worst["depth"]
+        r.check(rv <= HOLD_REACH, f"{label}: {name}: the support hand misses its hold by {rv * 1000:.1f} mm "
+                                  f"({rc} t={rt:.2f})")
+        r.check(dv <= HOLD_DEPTH or name in AS_AUTHORED, f"{label}: {name}: the support hand sinks {dv * 1000:.1f} mm "
+                                                         f"into it ({dc} t={dt:.2f})")
+        sv, sc, st = worst["shot"]
+        if sv > HOLD_DEPTH:
+            r.note(f"{label}: {name}: a shot's hand reaction sinks {sv * 1000:.1f} mm into it ({sc} t={st:.2f}) "
+                   f"[report only]")
+        r.note(f"{label}: {name} held: closest skin {worst['gap'][0] * 1000:.1f} mm, deepest {dv * 1000:.1f} mm, "
+               f"shoulder forward up to {worst['shift'] * 1000:.0f} mm")
 
 
 def _ads(g, r, label, optic):
@@ -382,7 +428,8 @@ def _ads(g, r, label, optic):
     w = 640
     f = (h / 2) / np.tan(np.radians(FOV_Y / 2))
     gpx = f * gp[:, :2] / -gp[:, 2:3]
-    radius = float(np.median(np.linalg.norm(gpx, axis=1)))
+    # the window's inscribed radius: a wide, low window (the rectangular red dot) is only as clear as it is high
+    radius = float(min(np.abs(gpx[:, 0]).max(), np.abs(gpx[:, 1]).max(), np.median(np.linalg.norm(gpx, axis=1))))
     items = lo.scene(g, None, None, 0.0, build, extra_matrix=inv, with_arms=False, draw_slots=())
     buf, _ = rs.rasterize(items, rs.Camera(w, h, FOV_Y, near=NEAR), w, h)
     hit = (buf["mid"] >= 0).reshape(h, w)

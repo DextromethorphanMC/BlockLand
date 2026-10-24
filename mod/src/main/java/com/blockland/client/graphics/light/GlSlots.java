@@ -18,12 +18,17 @@ import java.lang.reflect.Field;
 /**
  * The fixed GL slots the lighting pack's vanilla programs read from (rendering spec §3): the scene block on uniform
  * binding point 15, the shadow atlas on texture unit 12 and the block material map on unit 13. Blaze3D only uses the low
- * binding points and units 0..11 (its state cache tracks no more), so whatever is bound here stays bound; binding goes
+ * binding points and units 0..11 (its state cache tracks no more), so whatever is bound here stays bound (and last
+ * frame's world for reflections on unit 14); binding goes
  * through raw GL and the active texture unit is put back to what Blaze3D's cache believes.
  */
 final class GlSlots {
     /** Texture unit of {@code BlMaterialMap} in the lighting pack's programs. */
     static final int MATERIAL_UNIT = 13;
+    /** Texture unit of {@code BlPrevScene} (last frame's world for screen-space reflections). */
+    static final int REFLECTION_UNIT = 14;
+    /** Texture unit of {@code BlPlantColumns} (the wind's plant columns, rendering spec §18; read by the vertex shader). */
+    static final int COLUMNS_UNIT = 15;
 
     @Nullable
     private static final Field BUFFER_HANDLE = handleField();
@@ -47,6 +52,14 @@ final class GlSlots {
 
     static void bindMaterials(GpuTexture texture) {
         bindTexture(MATERIAL_UNIT, texture);
+    }
+
+    static void bindReflections(GpuTexture texture) {
+        bindTexture(REFLECTION_UNIT, texture);
+    }
+
+    static void bindColumns(GpuTexture texture) {
+        bindTexture(COLUMNS_UNIT, texture);
     }
 
     private static void bindTexture(int unit, GpuTexture texture) {

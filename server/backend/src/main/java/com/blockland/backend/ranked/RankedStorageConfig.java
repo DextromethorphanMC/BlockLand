@@ -7,13 +7,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/** Ratings and counted matches are runtime data: writing them does not change the game configuration version. */
+/**
+ * Ratings (one per player and mode) and counted matches are runtime data: writing them does not change the game
+ * configuration version.
+ */
 @Configuration
 public class RankedStorageConfig {
 
     @Bean
     public Repository<Rating> rankedRatings(ObjectMapper mapper, BlockLandProperties properties) {
-        return new JsonFileRepository<>(mapper, properties.dataPath().resolve("ranked-ratings.json"), Rating.class, Rating::uuid, null);
+        return new JsonFileRepository<>(mapper, properties.dataPath().resolve("ranked-ratings.json"), Rating.class, Rating::key, null);
     }
 
     @Bean

@@ -19,7 +19,9 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.LightLayer;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
@@ -27,12 +29,14 @@ import javax.annotation.Nullable;
 
 /**
  * The screen-space effects of the world (rendering spec §1), made in the frame's after-level phase from the world depth,
- * before the hand and the viewmodel are drawn: ambient occlusion and volumetric light. Both run at half the internal
- * resolution, are smoothed with a depth-aware blur and brought back to the internal resolution with a depth-aware
- * upsample, so the post chain's decode pass can sample them per pixel without halos along silhouettes.
+ * before the hand and the viewmodel are drawn: ambient occlusion and the volumetric fog and light (§14: haze, ground mist
+ * and light shafts as one participating medium that dims what lies behind it). Both run at half the internal resolution,
+ * are smoothed with a depth-aware blur and brought back to the internal resolution with a depth-aware upsample, so the
+ * post chain's decode pass can sample them per pixel without halos along silhouettes.
  */
 final class WorldFx implements WorldEffects {
     private static final int FX_SIZE = new Std140SizeCalculator().putVec4().putVec4().putVec4().putVec4().get();
+    private static final Matrix4f IDENTITY = new Matrix4f();
     private static final int VOLUMETRIC_SIZE = volumetricSize();
     /** Ambient occlusion radius in blocks. */
     private static final float AO_RADIUS = 1.25f;
@@ -62,6 +66,8 @@ final class WorldFx implements WorldEffects {
     private final Matrix4f viewToWorld = new Matrix4f();
     private float millis;
     private boolean broken;
+    /** How open the camera stands to the sky (0..1), eased so stepping out of a cave does not switch the fog's light. */
+    private float openness = 1;
 
     private static RenderPipeline.Builder screen(String fragment) {
         return RenderPipeline.builder()
@@ -78,7 +84,7 @@ final class WorldFx implements WorldEffects {
     private static int volumetricSize() {
         Std140SizeCalculator size = new Std140SizeCalculator().putMat4f();
         for (int i = 0; i < 4; i++) size.putMat4f();
-        for (int i = 0; i < 5; i++) size.putVec4();
+        for (int i = 0; i < 7; i++) size.putVec4();
         return size.get();
     }
 
@@ -111,7 +117,7 @@ final class WorldFx implements WorldEffects {
         if (broken || frame.worldDepth == null) return;
         // ray tracing brings its own ambient occlusion
         boolean wantAo = settings.ambientOcclusion > 0.01f && !(settings.rayTracing && com.blockland.client.graphics.Graphics.status().rayTracingActive);
-        boolean wantLight = settings.volumetricLight > 0.01f && shadows != null && shadows.count() > 0 && shadows.strength() > 0.01f;
+        boolean wantLight = wantsFog(settings);
         if (!wantAo && !wantLight) {
             release();
             return;
@@ -145,6 +151,11 @@ final class WorldFx implements WorldEffects {
         millis = millis * 0.9f + (System.nanoTime() - start) / 1e6f * 0.1f;
     }
 
+    /** The volumetric fog and light runs: there is a medium (fog on, or light shafts asked for). */
+    boolean wantsFog(GraphicsSettings settings) {
+        return !broken && ((settings.fog && settings.fogDensity > 0.001f) || settings.volumetricLight > 0.01f);
+    }
+
     private GpuTextureView ambientOcclusion(FrameContext frame, GraphicsSettings settings, int w, int h, int hw, int hh) {
         fx(aoInfo, frame, hw, hh, AO_RADIUS, settings.ambientOcclusion, frame.frame % 64, 0.12f, 0, 0, 0, 0);
         aoHalf.ensure(hw, hh);
@@ -159,42 +170,60 @@ final class WorldFx implements WorldEffects {
         return aoFull.view();
     }
 
-    private GpuTextureView volumetric(FrameContext frame, GraphicsSettings settings, ShadowInfo shadows, int w, int h, int hw, int hh) {
+    private GpuTextureView volumetric(FrameContext frame, GraphicsSettings settings, @Nullable ShadowInfo shadows, int w, int h,
+                                      int hw, int hh) {
         ClientLevel level = Minecraft.getInstance().level;
         if (level == null) return null;
         SunPath.light(level, frame.partialTick, sun);
         boolean day = SunPath.isSun(level, frame.partialTick);
         float elevation = Math.max(0, sun.y);
         float rain = level.getRainLevel(frame.partialTick);
-        // thicker haze at dawn and dusk and in rain; dense, blue and short-sighted under water
-        float density = frame.submerged ? 0.06f : 0.006f * (1 + 2.5f * Math.max(0, 1 - elevation / 0.3f)) * (1 + 3 * rain);
-        float range = Math.min(VOLUMETRIC_RANGE, shadows.splits()[shadows.count() - 1]);
-        int steps = 12 + Math.round(8 * settings.volumetricLight);
-        float intensity = settings.volumetricLight * 1.6f;
-        float anisotropy = frame.submerged ? 0.3f : 0.62f;
+        boolean shadowed = shadows != null && shadows.count() > 0;
+        float sky = Mth.clamp((level.getBrightness(LightLayer.SKY, BlockPos.containing(frame.camX, frame.camY, frame.camZ)) - 6) / 9f, 0, 1);
+        openness += (sky - openness) * 0.05f;
+        if (!level.dimensionType().hasSkyLight()) openness = 0;
+        float low = Math.max(0, 1 - elevation / 0.3f);
+        // light shafts: a thin medium, thicker at dawn and dusk and in rain; dense, blue and short-sighted under water
+        float shaft = frame.submerged ? 0.06f : 0.0025f * settings.volumetricLight * (1 + 2.5f * low) * (1 + 3 * rain);
+        // ground mist lies in the low land at dawn and dusk and in rain (none where the sky does not reach)
+        float mist = settings.fog && !frame.submerged ? 0.035f * settings.fogDensity * (low * low * (day ? 1 : 0.6f) + 0.5f * rain) * openness : 0;
+        GraphicsSettings.FogQuality quality = settings.fogQualityMode();
+        float range = shadowed ? Math.min(VOLUMETRIC_RANGE, shadows.splits()[shadows.count() - 1]) : VOLUMETRIC_RANGE * 0.5f;
+        int steps = quality.steps;
+        // the sun scatters in the fog by nature; 体积光 adds to it (shafts)
+        float intensity = (settings.fog ? 1 : 0) + settings.volumetricLight * 1.6f;
+        float anisotropy = frame.submerged ? 0.3f : 0.7f;
+        // without a shadow map, only an open sky lets the sun into the fog (caves stay dark)
+        float reach = shadowed ? shadows.strength() : openness * SunPath.shadowStrength(level, frame.partialTick);
+        float renderDistance = Minecraft.getInstance().options.getEffectiveRenderDistance() * 16f;
         // the light's colour when the scene uniforms carry none (world lighting off): warm low, white high, cold moon
         float warm = Mth.clamp(elevation / 0.35f, 0, 1);
         float r = day ? 1f : 0.14f, g = day ? Mth.lerp(warm, 0.55f, 0.95f) : 0.18f, bl = day ? Mth.lerp(warm, 0.3f, 0.88f) : 0.26f;
-        float frameIndex = frame.frame % 64;
+        // without a temporal pass (anti-aliasing off or FXAA) a moving jitter would shimmer: keep one pattern, the blur hides it
+        float frameIndex = frame.jitterX == 0 && frame.jitterY == 0 ? 0 : frame.frame % 64;
         viewToWorld.set(frame.viewRotation).transpose();
         float underwater = frame.submerged ? 1 : 0;
+        float seaLevel = level.getSeaLevel();
+        boolean lights = settings.dynamicLights && settings.worldLighting;
         volumetricInfo.write(b -> {
             b.putMat4f(viewToWorld);
-            for (int c = 0; c < 4; c++) b.putMat4f(shadows.cascades()[c]);
-            float[] s = shadows.splits();
+            for (int c = 0; c < 4; c++) b.putMat4f(shadowed ? shadows.cascades()[c] : IDENTITY);
+            float[] s = shadowed ? shadows.splits() : new float[4];
             b.putVec4(s[0], s[1], s[2], s[3]);
-            b.putVec4(sun.x, sun.y, sun.z, shadows.strength());
+            b.putVec4(sun.x, sun.y, sun.z, reach);
             b.putVec4(r, g, bl, frameIndex);
-            b.putVec4(density, range, steps, (float) frame.camY);
-            b.putVec4(underwater, shadows.count(), intensity, anisotropy);
+            b.putVec4(shaft, range, steps, (float) frame.camY);
+            b.putVec4(underwater, shadowed ? shadows.count() : 0, intensity, anisotropy);
+            b.putVec4(mist, 9f, seaLevel, openness);
+            b.putVec4(renderDistance, lights ? 1 : 0, 0, 0);
         });
         fx(lightInfo, frame, hw, hh, 0, 0, frameIndex, 0, 0, 0, 0, 0);
         lightHalf.ensure(hw, hh);
         lightScratch.ensure(hw, hh);
         lightFull.ensure(w, h);
         GpuTextureView depth = frame.worldDepth;
-        Fullscreen.pass("BlockLand volumetric light", lightHalf.view(), VOLUMETRIC).sampler("DepthSampler", depth)
-                .sampler("BlShadowMap", shadows.atlas())
+        Fullscreen.pass("BlockLand volumetric fog", lightHalf.view(), VOLUMETRIC).sampler("DepthSampler", depth)
+                .sampler("BlShadowMap", shadowed ? shadows.atlas() : SceneLighting.lit())
                 .uniform("FxInfo", lightInfo.buffer().slice())
                 .uniform("BlockLandScene", SceneLighting.uniforms())
                 .uniform("VolumetricInfo", volumetricInfo.buffer().slice()).draw();

@@ -83,6 +83,46 @@ public final class GraphicsSettings {
     /** What denoises the traced light: BlockLand's own temporal + spatial filter, or DLSS Ray Reconstruction. */
     public enum RayDenoiser { BLOCKLAND, DLSS_RR }
 
+    /**
+     * Volumetric clouds: share of the internal resolution per axis they are marched at, steps along the view ray and
+     * towards the sun.
+     */
+    public enum CloudQuality {
+        LOW(0.33f, 32, 3), MEDIUM(0.5f, 48, 4), HIGH(0.5f, 72, 6);
+
+        public final float scale;
+        public final int steps;
+        public final int lightSteps;
+
+        CloudQuality(float scale, int steps, int lightSteps) {
+            this.scale = scale;
+            this.steps = steps;
+            this.lightSteps = lightSteps;
+        }
+    }
+
+    /** Volumetric fog: steps along the view ray (half the internal resolution). */
+    public enum FogQuality {
+        LOW(16), MEDIUM(28), HIGH(44);
+
+        public final int steps;
+
+        FogQuality(int steps) {
+            this.steps = steps;
+        }
+    }
+
+    /** Screen-space reflections on water and puddles: the most steps a reflected ray takes (0 = off). */
+    public enum ReflectionQuality {
+        OFF(0), LOW(20), HIGH(40);
+
+        public final int steps;
+
+        ReflectionQuality(int steps) {
+            this.steps = steps;
+        }
+    }
+
     /** Motion blur samples per pixel (along the motion of its neighbourhood). */
     public enum MotionBlurQuality {
         LOW(8), MEDIUM(16), HIGH(24);
@@ -179,6 +219,49 @@ public final class GraphicsSettings {
     public boolean waterRefraction = true;
     /** Weapons (first and third person) lit by the world's sun, shadows and lights instead of only studio lights. */
     public boolean weaponWorldLighting = true;
+    /** Colour temperature of sunlight, −1 cool … +1 warm (0 = BlockLand's own sun colours over the day). */
+    public float sunTemperature = 0f;
+    /** Colour temperature of moonlight, −1 cool … +1 warm. */
+    public float moonTemperature = 0f;
+    /** Colour temperature of block light (torches, lava, glowstone …), −1 cool … +1 warm (0 = vanilla's). */
+    public float blockLightTemperature = 0f;
+    /** Brightness of block light, 0..2 (1 = vanilla's). */
+    public float blockLightStrength = 1f;
+
+    // ---- fog and sky ------------------------------------------------------------------------------------------------
+    /**
+     * Distance fog in the open air (off: only a thin fade where the loaded world ends; water, lava, blindness and
+     * darkness keep their fog).
+     */
+    public boolean fog = true;
+    /** Volumetric fog density (haze and ground mist), 0..2 (0 = vanilla's fog only). */
+    public float fogDensity = 1f;
+    public String fogQuality = "medium";
+    /** How much rain wets the world, the entities and the weapons (darker, glossier, puddles on flat ground), 0..1. */
+    public float rainWetness = 1f;
+    /** Ripples and splashes where entities move, attack, fall and blocks are placed in water. */
+    public boolean waterRipples = true;
+    /**
+     * Things come out of water wet: entities drip and dry over about 45 s (slower in the rain), the weapon in hand stays
+     * wet and beaded with water (rendering spec §15, soaking).
+     */
+    public boolean soaking = true;
+    /**
+     * Wind (rendering spec §18, needs world lighting): gusts bend and shake grass, flowers, crops, vines and leaves, and
+     * creatures walking through plants push them aside.
+     */
+    public boolean wind = true;
+    /** How far the wind moves the plants, 0..2 (1 = natural). */
+    public float windStrength = 1f;
+    /** BlockLand's high-resolution fluid textures (a built-in resource pack; switching reloads resources). */
+    public boolean fluidTextures = true;
+    /** Screen-space reflections on water and puddles ({@link ReflectionQuality} id). */
+    public String reflections = "high";
+    /** Ray-marched clouds in place of vanilla's (needs world lighting). */
+    public boolean volumetricClouds = false;
+    public String cloudQuality = "medium";
+    /** Share of the sky the clouds cover in fair weather, 0..1 (rain and thunder add to it). */
+    public float cloudCoverage = 0.45f;
 
     // ---- screen-space effects ---------------------------------------------------------------------------------------
     /** Screen-space ambient occlusion strength, 0 = off. */
@@ -258,6 +341,18 @@ public final class GraphicsSettings {
         return parse(RayDenoiser.class, rayDenoiser, RayDenoiser.DLSS_RR);
     }
 
+    public ReflectionQuality reflectionQualityMode() {
+        return parse(ReflectionQuality.class, reflections, ReflectionQuality.HIGH);
+    }
+
+    public FogQuality fogQualityMode() {
+        return parse(FogQuality.class, fogQuality, FogQuality.MEDIUM);
+    }
+
+    public CloudQuality cloudQualityMode() {
+        return parse(CloudQuality.class, cloudQuality, CloudQuality.MEDIUM);
+    }
+
     /** DLSS Ray Reconstruction is asked for: ray tracing on, DLSS Super Resolution or DLAA chosen, RR as the denoiser. */
     public boolean rayReconstruction() {
         return rayTracing && dlssChosen() && rayDenoiserMode() == RayDenoiser.DLSS_RR;
@@ -315,6 +410,9 @@ public final class GraphicsSettings {
                 motionBlur = 0;
                 motionBlurViewmodel = 0;
                 motionBlurQuality = id(MotionBlurQuality.LOW);
+                volumetricClouds = false;
+                cloudQuality = id(CloudQuality.LOW);
+                fogQuality = id(FogQuality.LOW);
             }
             case MEDIUM -> {
                 upscaler = id(Upscaler.TAAU);
@@ -330,6 +428,9 @@ public final class GraphicsSettings {
                 motionBlur = 0.35f;
                 motionBlurViewmodel = 0.5f;
                 motionBlurQuality = id(MotionBlurQuality.MEDIUM);
+                volumetricClouds = false;
+                cloudQuality = id(CloudQuality.LOW);
+                fogQuality = id(FogQuality.LOW);
             }
             case HIGH -> {
                 upscaler = id(Upscaler.NONE);
@@ -345,6 +446,9 @@ public final class GraphicsSettings {
                 motionBlur = 0.5f;
                 motionBlurViewmodel = 0.6f;
                 motionBlurQuality = id(MotionBlurQuality.HIGH);
+                volumetricClouds = true;
+                cloudQuality = id(CloudQuality.MEDIUM);
+                fogQuality = id(FogQuality.MEDIUM);
             }
             case ULTRA -> {
                 upscaler = id(Upscaler.NONE);
@@ -360,6 +464,9 @@ public final class GraphicsSettings {
                 motionBlur = 0.5f;
                 motionBlurViewmodel = 0.6f;
                 motionBlurQuality = id(MotionBlurQuality.HIGH);
+                volumetricClouds = true;
+                cloudQuality = id(CloudQuality.HIGH);
+                fogQuality = id(FogQuality.HIGH);
             }
             case CUSTOM -> {
             }
@@ -393,6 +500,17 @@ public final class GraphicsSettings {
         shadowDistance = clamp(shadowDistance, 16, 256);
         shadowSoftness = clamp(shadowSoftness, 0.25f, 3);
         sunStrength = clamp(sunStrength, 0, 2);
+        sunTemperature = clamp(sunTemperature, -1, 1);
+        moonTemperature = clamp(moonTemperature, -1, 1);
+        blockLightTemperature = clamp(blockLightTemperature, -1, 1);
+        blockLightStrength = clamp(blockLightStrength, 0, 2);
+        fogDensity = clamp(fogDensity, 0, 2);
+        cloudQuality = id(cloudQualityMode());
+        fogQuality = id(fogQualityMode());
+        rainWetness = clamp(rainWetness, 0, 1);
+        windStrength = clamp(windStrength, 0, 2);
+        reflections = id(reflectionQualityMode());
+        cloudCoverage = clamp(cloudCoverage, 0, 1);
         emission = clamp(emission, 0, 2);
         ambientOcclusion = clamp(ambientOcclusion, 0, 1);
         volumetricLight = clamp(volumetricLight, 0, 1);

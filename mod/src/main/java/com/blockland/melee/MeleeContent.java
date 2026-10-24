@@ -49,7 +49,12 @@ public final class MeleeContent {
     /** Sound events in the {@code blockland} namespace (assets/blockland/sounds.json, spec §13). */
     public static final List<String> SOUND_EVENTS = List.of(
             "knife.equip", "knife.open", "knife.flip", "knife.catch", "knife.swing", "knife.swing_heavy",
-            "knife.hit_flesh", "knife.hit_wall");
+            "knife.hit_flesh", "knife.hit_wall",
+            // the crowbar and the knuckles (spec §41, §42): their clip events are named after them
+            "knife.crowbar_equip", "knife.crowbar_swing", "knife.crowbar_swing_heavy", "knife.crowbar_hit_flesh",
+            "knife.crowbar_hit_wall", "knife.crowbar_tap",
+            "knife.knuckles_equip", "knife.knuckles_swing", "knife.knuckles_swing_heavy", "knife.knuckles_hit_flesh",
+            "knife.knuckles_hit_wall", "knife.knuckles_clink");
 
     private static final Map<String, RegistryObject<Item>> KNIFE_ITEMS = new LinkedHashMap<>();
 

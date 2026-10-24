@@ -5,7 +5,8 @@
 
 // Ray traced lighting for the post chain (internal resolution): the filtered light brought up from the ray tracing
 // resolution (the four nearest texels, weighted by how alike their surfaces are), times the albedo and the strength;
-// alpha the ambient occlusion with its strength applied. The decode pass adds rgb and multiplies by alpha.
+// alpha the ambient occlusion with its strength applied. The decode pass adds rgb and multiplies by alpha. Both fade out
+// towards the end of the box around the camera (where rays leave it early), so no edge shows where ray tracing ends.
 
 uniform sampler2D InSampler;
 uniform sampler2D GuideSampler;
@@ -39,5 +40,14 @@ void main() {
     vec4 traced = weights > 1e-5 ? sum / weights
             : texelFetch(InSampler, clamp(ivec2(low + 0.5), ivec2(0), ivec2(RtSize.zw) - 1), 0);
     vec3 albedo = texelFetch(AlbedoSampler, p, 0).rgb;
-    fragColor = vec4(albedo * traced.rgb * RtLight.y, mix(1.0, traced.a, RtSunColor.a));
+    // how far inside the part of the box the camera always has around it (the box follows the camera by whole
+    // sections, so measuring from its faces would jump by 16 blocks each time it moves)
+    vec2 ndc = (vec2(p) + 0.5) / RtSize.xy * 2.0 - 1.0;
+    vec3 view = vec3(ndc.x * centre.a / RtProj.x, ndc.y * centre.a / RtProj.y, -centre.a);
+    vec3 offset = abs(mat3(RtViewToWorld) * view);
+    float reachXZ = floor(RtVolume.x * 0.5) * 16.0 - 16.0, reachY = floor(RtVolume.y * 0.5) * 16.0 - 16.0;
+    float inside = min(reachXZ - max(offset.x, offset.z), reachY - offset.y);
+    // full strength while rays are mostly whole, gone where the box may end (up to a section beyond the guaranteed reach)
+    float edge = smoothstep(-16.0, 0.15 * RtTrace.y, inside);
+    fragColor = vec4(albedo * traced.rgb * RtLight.y * edge, mix(1.0, traced.a, RtSunColor.a * edge));
 }

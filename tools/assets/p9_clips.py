@@ -7,7 +7,9 @@ extreme or a hit) plus secondary motion from anim.ring (the weapon answering eve
 holds) and finger lag, so nothing starts or stops dead except where a part really hits something (section 31)."""
 import numpy as np
 
+import ads_fire
 import hands
+import motion_layer
 import p9_rig as rig
 from anim import EASES, Curve, damped, ring, smoothstep
 from vmath import quat_euler, quat_mul
@@ -152,6 +154,7 @@ def draw_pose(t):
 
 
 DRAW = Clip("draw", 0.60, draw_pose, events=[(0.0, "equip")], extra_times=(T_CATCH,))
+DRAW = motion_layer.layered(DRAW, rig, 401)            # section 31.6: the hand-keyed detail layer
 
 # ------------------------------------------------------------------------------------------- fire
 # The shot at t = 0: trigger breaks, hammer falls, the slide is blown back to full travel by 0.022 (11 %: the P9A's
@@ -213,13 +216,18 @@ def fire_pose(last):
 
 FIRE = Clip("fire", 0.20, fire_pose(False), fps=120, extra_times=FIRE_KEYS)
 FIRE_LAST = Clip("fire_last", 0.20, fire_pose(True), fps=120, extra_times=FIRE_KEYS)
+# aimed (section 31.5): the same shot with the sight picture held - a shove back along the sight line (ads_fire).
+# Optics ride the slide, which brings them 34 mm closer to the eye: almost no roll or tilt is left
+PISTOL_ADS = {"roll": 0.02, "lateral": 0.01, "max_turn": 0.006}
+FIRE_ADS = ads_fire.aimed(FIRE, rig, rig.NODES["slide"][1] + rig.AIM_IRON_T, IDLE, **PISTOL_ADS)
+FIRE_LAST_ADS = ads_fire.aimed(FIRE_LAST, rig, rig.NODES["slide"][1] + rig.AIM_IRON_T, IDLE, **PISTOL_ADS)
 
 
 def all_clips():
     import p9_clips_long as long
     import p9_loco as loco
-    return [IDLE, DRAW, FIRE, FIRE_LAST, long.RELOAD, long.RELOAD_EMPTY, long.INSPECT, loco.WALK, loco.SPRINT,
-            loco.TAC_SPRINT]
+    return [IDLE, DRAW, FIRE, FIRE_LAST, FIRE_ADS, FIRE_LAST_ADS, long.RELOAD, long.RELOAD_EMPTY, long.INSPECT,
+            loco.WALK, loco.SPRINT, loco.TAC_SPRINT]
 
 
 __all__ = ["Clip", "Weights", "apply_gun", "cam", "V", "damped", "all_clips", "ease", "left_hand", "poses"]

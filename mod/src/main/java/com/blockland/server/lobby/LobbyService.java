@@ -1,6 +1,7 @@
 package com.blockland.server.lobby;
 
 import com.blockland.network.BLNetwork;
+import com.blockland.network.packet.ActivityPackets;
 import com.blockland.network.packet.LobbyGroupEntry;
 import com.blockland.network.packet.LobbyModeEntry;
 import com.blockland.network.packet.LobbyPackets;
@@ -9,6 +10,7 @@ import com.blockland.network.packet.S2CLobbyState;
 import com.blockland.network.packet.TextJson;
 import com.blockland.server.content.ContentRepository;
 import com.blockland.server.content.ContentSnapshot;
+import com.blockland.server.content.model.ActivityDef;
 import com.blockland.server.content.model.AnnouncementDef;
 import com.blockland.server.content.model.GameModeDef;
 import com.blockland.server.content.model.ModeGroupDef;
@@ -104,6 +106,7 @@ public final class LobbyService {
     public void enteredLobby(UUID id) {
         BLNetwork.sendTo(id, buildState(id, true));
         sendAnnouncements(id);
+        sendActivities(id);
     }
 
     /** The disconnected player's lobby bookkeeping. */
@@ -128,6 +131,23 @@ public final class LobbyService {
         }
         list.sort(Comparator.comparingLong(LobbyPackets.Announcement::publishedAt));
         BLNetwork.sendTo(id, new LobbyPackets.S2CAnnouncements(list, read.stream().filter(existing::contains).toList()));
+    }
+
+    /** The backend's activities changed: every lobby gets the new list. */
+    public void activitiesChanged() {
+        for (UUID id : players.inLobby()) sendActivities(id);
+    }
+
+    public void sendActivities(UUID id) {
+        List<ActivityPackets.Activity> list = new ArrayList<>();
+        List<ActivityDef> defs = content.snapshot().activities;
+        for (ActivityDef a : defs == null ? List.<ActivityDef>of() : defs) {
+            if (a == null || a.id == null) continue;
+            list.add(new ActivityPackets.Activity(a.id, nullToEmpty(a.title), nullToEmpty(a.summary), nullToEmpty(a.content),
+                    a.kind == null || a.kind.isBlank() ? "info" : a.kind, a.data == null ? "{}" : a.data.toString(), a.accentArgb(),
+                    nullToEmpty(a.coverVersion), a.pinned, a.order, a.startsMillis(), a.endsMillis()));
+        }
+        BLNetwork.sendTo(id, new ActivityPackets.S2CActivities(list));
     }
 
     public void markRead(UUID id, List<String> announcementIds) {

@@ -3,7 +3,8 @@ package com.blockland.network.packet;
 import net.minecraft.network.FriendlyByteBuf;
 
 /**
- * Images from the backend media store (shop products, mode covers, group covers). The client asks for
+ * Images from the backend media store (shop products, mode covers, group covers,
+ * activity covers). The client asks for
  * an image it has not cached; the server relays the PNG so clients never contact the backend themselves.
  */
 public final class MediaPackets {
@@ -11,6 +12,7 @@ public final class MediaPackets {
     public static final String MODE = "mode";
     public static final String GROUP = "group";
     public static final String MAP = "map";
+    public static final String ACTIVITY = "activity";
 
     private MediaPackets() {
     }

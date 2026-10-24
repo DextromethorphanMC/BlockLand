@@ -20,16 +20,19 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * The server-wide ranked ladder (排位) over every ranked mode. Game servers report each ranked match once it is decided;
- * scores move by team Elo — a team's strength is its players' average score, every pair of teams is a game (the better
- * placement, or VICTORY over DEFEAT, wins it; equal ones draw) — times each player's K (larger in their placement
- * matches). Reports are idempotent per match id. Places on the ladder count players who played at least one match, by
- * score (equal scores: who reached it first). Tiers come from the score thresholds; 猎首 also needs a place in the top
- * {@link RankedConfig#headhunterTop}. Must stay in sync with the mod's {@code common/RankTier} and ranked service.
+ * The ranked ladders (排位), one per ranked mode: a player has a score, a tier and a place in every mode they played
+ * ranked, each on its own. Game servers report each ranked match with its mode once it is decided; scores move by team
+ * Elo — a team's strength is its players' average score in that mode, every pair of teams is a game (the better
+ * placement, or VICTORY over DEFEAT, wins it; equal ones draw) — times each player's K (larger in their placement matches
+ * in that mode). Reports are idempotent per match id. Places on a ladder count players who played at least one match in
+ * its mode, by score (equal scores: who reached it first). Tiers come from the score thresholds; 猎首 also needs a place
+ * in the top {@link RankedConfig#headhunterTop} of the mode's ladder. The config and the season are shared by every mode.
+ * Must stay in sync with the mod's {@code common/RankTier} and ranked service.
  */
 @Service
 public class RankedService {
     private static final Pattern UUID_PATTERN = Pattern.compile("^[0-9a-fA-F-]{32,36}$");
+    private static final Pattern MODE_PATTERN = Pattern.compile("^[A-Za-z0-9_.:-]{1,64}$");
     private static final Set<String> OUTCOMES = Set.of("VICTORY", "DEFEAT", "DRAW");
     /** Counted matches kept for idempotent retries (the oldest are dropped). */
     private static final int KEPT_MATCHES = 5000;
@@ -43,7 +46,7 @@ public class RankedService {
         }
     }
 
-    /** A player's standing as the game server sees it. {@code position} 0 = not placed yet. */
+    /** A player's standing in one mode as the game server sees it. {@code position} 0 = not placed yet. */
     public record Standing(int score, String tier, int position, int matches, int wins) {
     }
 
@@ -62,8 +65,12 @@ public class RankedService {
     public record Change(String uuid, int before, int after, int delta, String tier, String tierBefore, int position) {
     }
 
-    /** Admin view of one player: the standing plus the record and earlier seasons. */
-    public record PlayerView(String uuid, String name, Standing standing, int losses, int draws, List<Rating.SeasonEnd> seasons) {
+    /** Admin view of one player in one mode: the standing plus the record and earlier seasons. */
+    public record ModeView(String modeId, Standing standing, int losses, int draws, List<Rating.SeasonEnd> seasons) {
+    }
+
+    /** Admin view of one player: every mode they have a rating in. */
+    public record PlayerView(String uuid, String name, List<ModeView> modes) {
     }
 
     private final Repository<Rating> ratings;
@@ -81,24 +88,55 @@ public class RankedService {
 
     // ---- reading --------------------------------------------------------------------------------
 
-    public synchronized Map<String, Standing> standings(List<String> uuids) {
-        Map<String, Integer> positions = positions();
+    /** Standings of the given players in one mode (keyed by the uuid as sent). */
+    public synchronized Map<String, Standing> standings(String modeId, List<String> uuids) {
+        String mode = mode(modeId);
+        Map<String, Integer> positions = positions(mode);
         RankedConfig c = config.get();
         Map<String, Standing> out = new LinkedHashMap<>();
         if (uuids == null) return out;
         for (String raw : uuids) {
             if (raw == null || !UUID_PATTERN.matcher(raw).matches()) continue;
             String uuid = normalize(raw);
-            Rating rating = ratings.findById(uuid).orElse(null);
+            Rating rating = ratings.findById(Rating.key(mode, uuid)).orElse(null);
             out.put(raw, standing(rating, positions.getOrDefault(uuid, 0), c));
         }
         return out;
     }
 
-    public synchronized List<LeaderEntry> leaderboard(int limit) {
+    /** The standing of a player in a mode they have not played yet. */
+    public Standing fresh() {
+        return standing(null, 0, config.get());
+    }
+
+    /** Standings of the given players in every mode they have a rating in (keyed by the uuid as sent, then the mode). */
+    public synchronized Map<String, Map<String, Standing>> allStandings(List<String> uuids) {
+        RankedConfig c = config.get();
+        Map<String, Map<String, Integer>> positions = new HashMap<>();
+        Map<String, List<Rating>> byPlayer = new HashMap<>();
+        for (Rating r : ratings.findAll()) {
+            if (r.modeId() != null) byPlayer.computeIfAbsent(r.uuid(), k -> new ArrayList<>()).add(r);
+        }
+        Map<String, Map<String, Standing>> out = new LinkedHashMap<>();
+        if (uuids == null) return out;
+        for (String raw : uuids) {
+            if (raw == null || !UUID_PATTERN.matcher(raw).matches()) continue;
+            Map<String, Standing> modes = new LinkedHashMap<>();
+            for (Rating r : byPlayer.getOrDefault(normalize(raw), List.of())) {
+                int position = positions.computeIfAbsent(r.modeId(), this::positions).getOrDefault(r.uuid(), 0);
+                modes.put(r.modeId(), standing(r, position, c));
+            }
+            out.put(raw, modes);
+        }
+        return out;
+    }
+
+    /** The top of one mode's ladder. */
+    public synchronized List<LeaderEntry> leaderboard(String modeId, int limit) {
+        String mode = mode(modeId);
         int n = Math.max(1, Math.min(MAX_LEADERBOARD, limit));
         RankedConfig c = config.get();
-        List<Rating> ladder = ladder();
+        List<Rating> ladder = ladder(mode);
         List<LeaderEntry> out = new ArrayList<>();
         for (int i = 0; i < Math.min(n, ladder.size()); i++) {
             Rating r = ladder.get(i);
@@ -107,14 +145,26 @@ public class RankedService {
         return out;
     }
 
+    /** The modes that have a ladder (someone played a ranked match in them this or an earlier season), sorted. */
+    public synchronized List<String> modes() {
+        return ratings.findAll().stream().map(Rating::modeId).filter(m -> m != null && !m.isBlank()).distinct().sorted().toList();
+    }
+
     public synchronized PlayerView player(String uuid) {
         if (uuid == null || !UUID_PATTERN.matcher(uuid).matches()) throw ApiException.badRequest("无效的 UUID: " + uuid);
         String id = normalize(uuid);
-        Rating rating = ratings.findById(id).orElse(null);
-        Standing standing = standing(rating, positions().getOrDefault(id, 0), config.get());
-        String name = rating != null ? rating.name() : players.status(id).map(PlayerService.PlayerStatus::name).orElse(null);
-        return new PlayerView(id, name, standing, rating == null ? 0 : rating.losses(), rating == null ? 0 : rating.draws(),
-                rating == null ? List.of() : rating.seasons());
+        RankedConfig c = config.get();
+        String name = null;
+        List<ModeView> modes = new ArrayList<>();
+        for (Rating rating : ratings.findAll()) {
+            if (!id.equals(rating.uuid()) || rating.modeId() == null) continue;
+            if (name == null) name = rating.name();
+            Standing standing = standing(rating, positions(rating.modeId()).getOrDefault(id, 0), c);
+            modes.add(new ModeView(rating.modeId(), standing, rating.losses(), rating.draws(), rating.seasons()));
+        }
+        modes.sort(Comparator.comparing(ModeView::modeId));
+        if (name == null) name = players.status(id).map(PlayerService.PlayerStatus::name).orElse(null);
+        return new PlayerView(id, name, modes);
     }
 
     public RankedConfig config() {
@@ -130,6 +180,10 @@ public class RankedService {
         }
         Optional<RankedMatch> counted = matches.findById(request.matchId());
         if (counted.isPresent()) return counted.get().changes();
+        if (request.modeId() == null || !MODE_PATTERN.matcher(request.modeId()).matches()) {
+            throw ApiException.badRequest("缺少或无效的 modeId");
+        }
+        String mode = request.modeId();
 
         List<List<String>> teams = new ArrayList<>();
         List<String> outcomes = new ArrayList<>();
@@ -157,10 +211,12 @@ public class RankedService {
         if (!errors.isEmpty()) throw ApiException.invalid(errors);
 
         RankedConfig c = config.get();
-        Map<String, Integer> positionsBefore = positions();
+        Map<String, Integer> positionsBefore = positions(mode);
         Map<String, Rating> current = new HashMap<>();
         for (List<String> team : teams) {
-            for (String id : team) current.put(id, ratings.findById(id).orElseGet(() -> Rating.fresh(id, nameOf(id), c.startScore())));
+            for (String id : team) {
+                current.put(id, ratings.findById(Rating.key(mode, id)).orElseGet(() -> Rating.fresh(mode, id, nameOf(id), c.startScore())));
+            }
         }
         // nothing to win against: a match force-started with one side changes nobody
         if (teams.size() < 2) {
@@ -197,7 +253,7 @@ public class RankedService {
         }
         ratings.saveAll(updated);
 
-        Map<String, Integer> positionsAfter = positions();
+        Map<String, Integer> positionsAfter = positions(mode);
         List<Change> changes = new ArrayList<>();
         for (Rating r : updated) {
             int old = before.get(r.uuid());
@@ -205,7 +261,7 @@ public class RankedService {
             changes.add(new Change(r.uuid(), old, r.score(), r.score() - old, tier(r.score(), position, c).id(),
                     tier(old, positionsBefore.getOrDefault(r.uuid(), 0), c).id(), position));
         }
-        matches.save(new RankedMatch(request.matchId(), request.modeId(), c.season(), now, changes));
+        matches.save(new RankedMatch(request.matchId(), mode, c.season(), now, changes));
         pruneMatches();
         return changes;
     }
@@ -221,13 +277,17 @@ public class RankedService {
         return withSeason;
     }
 
-    /** A new season: every score back to the start (the old season's end is kept per player), the season counted up. */
+    /**
+     * A new season: every score in every mode back to the start (the old season's end is kept per player and mode), the
+     * season counted up.
+     */
     public synchronized RankedConfig resetSeason() {
         RankedConfig c = config.get();
-        Map<String, Integer> positions = positions();
+        Map<String, Map<String, Integer>> positions = new HashMap<>();
         List<Rating> reset = new ArrayList<>();
         for (Rating r : ratings.findAll()) {
-            int position = positions.getOrDefault(r.uuid(), 0);
+            if (r.modeId() == null) continue;
+            int position = positions.computeIfAbsent(r.modeId(), this::positions).getOrDefault(r.uuid(), 0);
             Rating.SeasonEnd end = r.matches() == 0 ? null
                     : new Rating.SeasonEnd(c.season(), r.score(), tier(r.score(), position, c).id(), position, r.matches(), r.wins());
             reset.add(r.reset(c.startScore(), end));
@@ -269,19 +329,20 @@ public class RankedService {
         return new Standing(rating.score(), tier(rating.score(), position, c).id(), position, rating.matches(), rating.wins());
     }
 
-    /** Placed players, best first. */
-    private List<Rating> ladder() {
+    /** Placed players of a mode, best first. */
+    private List<Rating> ladder(String modeId) {
         return ratings.findAll().stream()
-                .filter(r -> r.matches() > 0)
+                .filter(r -> modeId.equals(r.modeId()) && r.matches() > 0)
                 .sorted(Comparator.comparingInt(Rating::score).reversed()
                         .thenComparing(Rating::reachedAt, Comparator.nullsLast(Comparator.naturalOrder()))
                         .thenComparing(Rating::uuid))
                 .toList();
     }
 
-    private Map<String, Integer> positions() {
+    /** Places on a mode's ladder by player uuid. */
+    private Map<String, Integer> positions(String modeId) {
         Map<String, Integer> out = new HashMap<>();
-        List<Rating> ladder = ladder();
+        List<Rating> ladder = ladder(modeId);
         for (int i = 0; i < ladder.size(); i++) out.put(ladder.get(i).uuid(), i + 1);
         return out;
     }
@@ -295,6 +356,11 @@ public class RankedService {
         if (all.size() <= KEPT_MATCHES) return;
         all.stream().sorted(Comparator.comparing(RankedMatch::at)).limit(all.size() - KEPT_MATCHES)
                 .forEach(m -> matches.deleteById(m.matchId()));
+    }
+
+    private static String mode(String modeId) {
+        if (modeId == null || !MODE_PATTERN.matcher(modeId).matches()) throw ApiException.badRequest("缺少或无效的模式: " + modeId);
+        return modeId;
     }
 
     private static String normalize(String uuid) {

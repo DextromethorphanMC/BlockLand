@@ -237,7 +237,7 @@ public final class SpectateService implements SpectatePacketListeners.Server {
                     ticksLeft, total, respawn >= 0, canFree, targets);
         }
         UUID id = watched.getUUID();
-        Ranks.RankInfo rank = Ranks.get().rankOf(id);
+        Ranks.RankInfo rank = Ranks.get().rankOf(id, game.mode().id);
         String card = Cosmetics.get().get(id, Cosmetics.CARD);
         String cardId = card == null ? "" : card.startsWith("card:") ? card.substring(5) : card;
         return new SpectatePackets.S2CState(SpectatePackets.Mode.TARGET, watched.getId(), watched.getGameProfile().getName(), cardId,

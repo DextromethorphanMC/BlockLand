@@ -63,7 +63,8 @@ public final class CraftCatalog {
             }
         }
         return new Craftable.Slot(id, def.node == null ? "" : def.node, fallback, options,
-                def.hides == null ? List.of() : def.hides, Map.of(), def.noneName == null ? "" : def.noneName);
+                def.hides == null ? List.of() : def.hides, Map.of(), def.noneName == null ? "" : def.noneName,
+                def.excludes == null ? List.of() : def.excludes);
     }
 
     /** Slots declared in a weapon's data, in declaration order. */
@@ -108,6 +109,11 @@ public final class CraftCatalog {
         for (Craftable.Slot slot : weapon.slots()) {
             String option = build == null ? slot.defaultOption() : build.option(slot.id(), slot.defaultOption());
             slots.put(slot.id(), slot.allows(option) ? option : slot.defaultOption());
+        }
+        // a filled slot takes over the slots it excludes (they fall back to their defaults)
+        for (Craftable.Slot slot : weapon.slots()) {
+            if (slot.excludes().isEmpty() || slot.defaultOption().equals(slots.get(slot.id()))) continue;
+            for (String other : slot.excludes()) weapon.slot(other).ifPresent(o -> slots.put(o.id(), o.defaultOption()));
         }
         List<Spray> sprays = new ArrayList<>();
         if (build != null) {

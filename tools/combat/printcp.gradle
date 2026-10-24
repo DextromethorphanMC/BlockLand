@@ -1,0 +1,13 @@
+// Gradle init script for tools/combat/check_ballistics.py: writes the mod's compile classpath to -Dbl.cpout
+// (configuration only; compiles nothing).
+allprojects {
+    afterEvaluate { p ->
+        if (p.extensions.findByName('sourceSets') != null) {
+            p.tasks.register('blPrintClasspath') {
+                doLast {
+                    new File(System.getProperty('bl.cpout')).text = p.sourceSets.main.compileClasspath.asPath + '\n'
+                }
+            }
+        }
+    }
+}

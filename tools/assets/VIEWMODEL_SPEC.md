@@ -86,6 +86,7 @@ A node not targeted by a clip keeps its rest pose during that clip.
 | `draw` | ~0.6 s | gun rises from bottom-right into the rest pose, hands already on it |
 | `fire` | ~0.2 s | slide blowback (+Z ≈ 0.034 in ~0.022 s, home by ~0.08 s with a ~1 mm rebound), hammer cocks, trigger pull/reset, small kick |
 | `fire_last` | ~0.2 s | like `fire` but the slide stays locked back at the end |
+| `fire_ads`, `fire_last_ads` | as `fire` / `fire_last` (optional) | the same shot with the sights up: the sight picture holds (§31.5) |
 | `reload` | ~1.9 s | tactical: magazine out, new magazine in, slide stays forward |
 | `reload_empty` | ~2.3 s | slide starts locked back; magazine swap; slide released (slide stop or rack) |
 | `inspect` | ~3.6 s | COD-style inspect: show left side, right side, press-check (pull slide ~0.012 back), return |
@@ -159,16 +160,38 @@ above 3 %, and any inconsistent edge or inside-out closed surface.
 
 ## 7. Arms (`arms.glb`)
 
-Root nodes (identity transforms) each carrying one mesh, named `<side>_<segment>_<variant>[_sleeve]`:
-side `R`/`L`, segment `upper`/`fore`, variant `wide` (4 px skins) / `slim` (3 px skins, 3/4 as wide).
-Real-arm proportions (v2): every segment is a box that tapers from its joint end to its far end —
-upper arm 0.056 × 0.058 at the shoulder to 0.050 × 0.050 at the elbow, forearm 0.050 × 0.048 at the elbow to
-0.043 × 0.038 at the wrist (width × depth, wide skin; v1 used 0.07 × 0.07 boxes, which read as far too thick in
-first person). Meshes are in joint-local space (segment from y = 0 down to y = −0.30). UVs map to the 64×64 player
-skin: right arm base (40,16) overlay (40,32), left arm base (32,48) overlay (48,48); the upper segment uses the top
-6 px rows of the side faces, the forearm the bottom 6 px rows; the hand end is the bottom face. `_sleeve` meshes are
-the overlay layer, inflated by 0.003 per side, material `skin_overlay` (MASK, cutoff 0.1). Base meshes use material
-`skin`. The runtime binds the local player's skin texture to both.
+Root nodes (identity transforms) each carrying one mesh. **v3 (skinned arms):** each arm is ONE continuous tube from
+the shoulder to the wrist, named `<side>_arm_<variant>[_sleeve]`: side `R`/`L`, variant `wide` (4 px skins) / `slim`
+(3 px skins, 3/4 as wide). Real-arm proportions: a box section that tapers 0.056 × 0.058 at the shoulder → 0.050 ×
+0.049 at the elbow → 0.043 × 0.038 at the wrist (width × depth, wide skin; v1 used 0.07 × 0.07 boxes, v2 two separate
+boxes per arm that folded rigidly at the elbow). The tube is in the shoulder joint's space in the **bind pose**, the
+straight arm: y = 0 at the shoulder, the elbow at y = −0.30, the wrist at −0.60; 20 rings, densest around the elbow.
+UVs map to the 64×64 player skin: right arm base (40,16) overlay (40,32), left arm base (32,48) overlay (48,48); the
+12-px side strip runs down the whole tube (upper arm = the top 6 rows, forearm = the bottom 6, as the two v2 boxes
+did); the shoulder cap is the top face, the wrist cap the bottom face. `_sleeve` meshes are the overlay layer, inflated
+by 0.003 per side, material `skin_overlay` (MASK, cutoff 0.1). Base meshes use material `skin`. The runtime binds the
+local player's skin texture to both.
+
+**Skinning (v3).** A mesh node's `extras.joint` is its *anchor* (it is drawn at that joint; its vertices are in the
+anchor's space in the bind pose). A skinned mesh adds `extras.skin` (the joints its vertices follow, indexed by the
+`JOINTS_0` attribute, VEC4 unsigned) and `extras.bind` (per skin joint its translation in the anchor's space in the
+bind pose: rotations are identity, the arm is straight); `WEIGHTS_0` (VEC4 float) sum to 1. No glTF `skins`: the
+joints are the weapon file's rig joints, found by name. A skin joint named `<joint>:untwisted` is that joint with its
+twist about its own Y (relative to its parent) taken out. Vertices blend their joints with **dual quaternions**, so
+bends and twists keep their volume (no collapsing elbow, no candy-wrapper wrist).
+
+| Mesh | Anchor | `skin` | Weights |
+|---|---|---|---|
+| `<s>_arm_<v>[_sleeve]` | `arm_<s>` | `arm_<s>`, `arm_<s>_fore:untwisted`, `arm_<s>_fore`, `arm_<s>_hand` (bind y 0, −0.30, −0.30, −0.60) | upper → forearm smoothly over ±0.045 around the elbow (into the *untwisted* forearm, so the elbow is a clean hinge); the forearm's twist (pronation, which the rig gives the forearm) comes in below the hinge over the forearm's upper half (0.01–0.15 below the elbow, as the radius turns about the ulna; mostly out of view, so the forearm on screen stays a straight box); the last 0.03 blends half into the hand |
+| `<s>_hand_<v>` (palm) | `arm_<s>_hand` | `arm_<s>_fore`, `arm_<s>_hand` (bind y +0.30, 0) | the palm's wrist end is half forearm, fully hand 0.013 down: palm and forearm meet at the same half-angle, so the wrist bends round |
+
+Fingers stay rigid on their joints. The runtime (`client/viewmodel/ArmSkin`) skins on the CPU every frame (a few
+hundred vertices per arm) into a per-rig vertex buffer laid out like the arms model's own and draws it with the
+anchor's model-view and the static index ranges (rendering spec §4: the hand-motion pass measures the anchor's motion;
+only the change of the bend between two frames is not in the motion vectors). A skin joint the weapon file lacks (or
+that is collapsed) follows the anchor; a mesh without `skin` is drawn rigidly at its joint as before. The offline tools
+skin the same way (`armskin.py`, used by `loadouts.scene`, previews, coverage, `check_glb`'s eye distance and the
+support-grip clearance); `check_glb` checks the tubes' sections, the skin joints and binds, and that weights sum to 1.
 
 ## 8. Item model definition (`items/<gun>.json`)
 
@@ -282,6 +305,20 @@ daylight. Decal look and lifetime are defined in `assets/blockland/decals.json`.
 
 The frame's X axis follows the cut direction (the runtime aligns it with the swing).
 
+**On bodies** (`Decals.onEntity`: `bullet_wound`, `knife_cut`, …) the decal lies on the entity's model as drawn, not on
+its hitbox. `client/render/EntityPoses` records, after each living entity's draw within 96 blocks
+(`RenderLivingEvent.Post`; not the shadow map's capture, not GUI previews), every drawn cube of its model (visible
+parts only) as cube pixels → world, with the renderer's own placement replayed (sleeping offset, scale,
+`setupRotations`, the flip, the renderer's `scale`, −1.501) on the event's pose stack, so walking, the head's turn,
+crouching, swimming, a slide's lean and baby or scaled mobs are all in it. At the hit the attack's line is cast
+against the last frame's cubes, placed where the entity stands now (a grazing melee line is re-aimed at the cube
+passing closest to it); an overlay shell (a player's hat, jacket, sleeves, a villager's robe: a cube of the same part
+or a child of it, ≤ 0.045 blocks in front) gives way to the cube it covers. The decal is laid out in that cube's space
+(model pixels; its size by the cube's scale to blocks), 0.012 blocks off the face and clipped to the face's rectangle,
+and keyed by the part's path and cube index; each frame it is drawn by the matrix that cube was drawn with, and not at
+all in a frame the model was not drawn in. An entity not drawn lately (out of sight or range) falls back to rest-pose
+humanoid parts or the bounding box (`BodySurface`).
+
 ---
 
 # Animation system v2 (COD-standard first person)
@@ -319,9 +356,11 @@ arm_X_fore
   thumb on the mag release, fingers wrapping the magazine, fingers pinching the charging handle / slide serrations,
   the thumb rolling the balisong handles.
 * `arms.glb`: every mesh node carries `extras`:
-  `{"joint": "<viewmodel joint name>", "variant": "wide" | "slim", "layer": "base" | "sleeve"}`.
-  The runtime draws each mesh at that joint's matrix, with the variant that matches the player's skin model, and
-  both layers. Joints can be added without code changes. A mesh whose joint is missing in a weapon file is not drawn.
+  `{"joint": "<viewmodel joint name>", "variant": "wide" | "slim", "layer": "base" | "sleeve"}`, skinned meshes
+  also `skin` and `bind` (§7).
+  The runtime draws each mesh at that joint's matrix (a skinned mesh bent over its skin joints), with the variant that
+  matches the player's skin model, and both layers. Joints can be added without code changes. A mesh whose joint is
+  missing in a weapon file is not drawn.
 * Hand and finger UVs map to the 64×64 player skin (the lower arm pixels and the arm's bottom face), so every player
   sees their own hands. Sleeve overlays only cover the arm segments.
 * Proportions (v2): one skin pixel of the hand is 0.0154 (0.88 × the arm's 0.0175): palm 0.062 long, 0.062 wide
@@ -397,7 +436,7 @@ are data (`data/blockland/craft/attachments.json`, the weapons' `slots` in guns.
 | barrel | `mount_barrel` | `suppressor.glb` (Ø 0.033, 0.16 long; threads on at the origin) | `muzzle` |
 | stock | `mount_stock` | `tactical_stock.glb` (skeletonised folding stock, extends +Z ~0.24) | — |
 | charm | `mount_charm` | `charm_grass.glb` (a 2.3 cm grass block on a ring and two chain links) | `pivot` |
-| underbarrel | `mount_underbarrel` (only on weapons that offer it) | `vertical_grip.glb`, `angled_grip.glb`, `bipod.glb` (§35) | — |
+| underbarrel | `mount_underbarrel` (only on weapons that offer it) | `vertical_grip.glb`, `angled_grip.glb`, `bipod.glb`, `tommy_grip.glb` (§35) | — |
 
 **Attachment file:** root node `attachment` (identity transform, origin = the mount point), modelled at real scale in
 the weapon convention (+X right, +Y up, −Z towards the muzzle). Optic: `aim` eye point (§5, 0.14 behind the
@@ -753,12 +792,13 @@ finger contacts, third-person crowds) remains a user-side in-game check; these t
 
 Based on *Gangster Tommy Gun* by Pieter Ferreira (CC-BY-4.0). A 1928-pattern .45 SMG at real scale (overall ≈ 0.85 m,
 barrel ≈ 0.27 m): finned barrel with a compensator, receiver with the cocking knob on top, rear leaf sight, front
-post, wooden buttstock, wooden vertical foregrip, wooden pistol grip, stick magazine and drum. Built like §18:
+post, wooden buttstock, wooden pistol grip, stick magazine and drum; its wooden vertical foregrip is the underbarrel
+slot's default attachment `tommy_grip` (§35). Built like §18:
 
 ```
 viewmodel
 ├─ gun                       pivot at the pistol grip
-│  ├─ receiver, barrel, foregrip, grip, stock         meshes (stock: wooden butt; hidden by the stock slot)
+│  ├─ receiver, barrel, grip, stock                   meshes (stock: wooden butt; hidden by the stock slot)
 │  ├─ muzzle_brake           compensator (hidden by the barrel slot)
 │  ├─ bolt                   cocking knob on top of the receiver, +Z = rearward; cycles in `fire`, pulled in `reload_empty`
 │  ├─ trigger, selector      meshes
@@ -767,7 +807,8 @@ viewmodel
 │  ├─ mag ─ mag_stick (30-round stick, default), mag_drum (50-round drum)
 │  ├─ muzzle (at the compensator), ejection (right side of the receiver)
 │  └─ mount_optic (on a riser rail ahead of the cocking slot), mount_laser (right of the receiver's front block),
-│                            mount_barrel (crown), mount_stock (receiver rear), mount_charm (left of the frame)
+│                            mount_barrel (crown), mount_stock (receiver rear), mount_charm (left of the frame),
+│                            mount_underbarrel (under the barrel clamp's plate: the wooden foregrip, §35)
 ├─ camera, arm joints (§16)
 fx_shell                     separate root: .45 ACP brass case
 ```
@@ -786,7 +827,7 @@ the screen, lined up and driven home (`mag_in` at 1.52 s). The empty reload haul
 | `steel` | body | receiver, cocking knob slot, trigger guard |
 | `steel_barrel` | barrel | barrel, cooling fins, compensator |
 | `steel_dark` | detail | bolt knob, trigger, selector, sights, screws |
-| `wood` | stock | buttstock (split: `wood_foregrip` → handguard, `wood_grip` → grip) |
+| `wood` | stock | buttstock (split: `wood_grip` → grip; the foregrip's `wood_foregrip` is `tommy_grip`'s, §35) |
 | `mag`, `mag_base` | magazine | stick magazine, drum |
 | `brass` | none | `fx_shell` |
 
@@ -1149,8 +1190,56 @@ clips do not double it.
   the right tucks it in; looking down raises and extends it a little, looking up lowers it; a jump leaves it behind and
   it floats in the air, a landing compresses the arms (deeper for heavy weapons) with a muzzle dip and a camera jolt;
   crouching and pushing off into a sprint jolt it.
+* **Swimming** (`client/viewmodel/SwimPose`, a layer of the motion). Vanilla's swimming pose is a sprint in water, so
+  weapons stop only a *run* when the hands need them (`SwimPose.stopRunning`; the movement input's sprint-key drop
+  skips a swimmer) and the run's carries and its "fire waits for the carry" rule never apply to a swim
+  (`SwimPose.running`). While swimming the weapon rests in a carry (guns low and close, canted in, muzzle down; knives
+  held forward, `SwimPose.Style`), rides the strokes (a cycle per 2.4 blocks swum, a slow paddle when treading water:
+  roll, bob and a surge on each pull) and the body's slow rise and fall; the support arm (`arm_L`, not on dual guns) is
+  out of view pulling the water. Any one-shot clip (a shot, a reload, a cut) or aiming brings it up forward within
+  ≈ 0.1 s and the free arm back on the weapon; 0.45 s after the hands last worked it, it sinks back into the carry.
+  Aimed in the water the sights come up 1.6× slower and the weapon wanders more (look sway calmed less, a slow drift).
 * **Frame-rate independence.** Every runtime layer runs on springs (fixed 240 Hz substeps) or elapsed time, input
   rates are clamped per second, not per frame, and clip curves are read smoothly (§15).
+
+### 31.5 Aimed clips (`<clip>_ads`)
+
+A clip named `<clip>` + `_ads` (guns.json `anims.aimedSuffix`, default `_ads`) is the aimed variant of `<clip>`; today
+`fire_ads` and `fire_last_ads`. When the runtime plays a fire clip it blends it with its aimed variant by the aim amount
+(0 at the hip, 1 fully aimed; `ViewmodelRig.playVariant`), on the hip clip's clock; a model without the variant plays
+the hip clip alone. Contract (`check_ads_clips.py`, run by `check_glb.py` on every weapon file):
+
+* the hip clip exists; same length (±1 ms) and the same events at the same times;
+* the camera inside the §4 limits and at rest at the end;
+* at EVERY frame, with the viewmodel moved as the runtime aims (the idle's first frame's eye point on the camera): the
+  front post tip and, through every optic (`loadouts.OPTICS`), its reticle / window centre / eyepiece within 2 px of
+  the screen centre at 1920×1080, and nothing in front of the eye closer than 0.03.
+
+`ads_fire.aimed(FIRE, rig, eye_point, IDLE, **shape)` derives them from the hip pose function, so the mechanism, fingers
+and events are the hip clip's: the hands' shove back is kept along the sight line (≤ `max_along`, 3 mm), sideways drift,
+pitch and yaw are cut to a trace and taken about the eye point (≤ `max_turn`), the roll about the sight line is kept
+small (an optic sits 3–5 cm above the iron line), the camera is calmed; the runtime's aimed recoil does the rest
+(§31.4). Pistols ride their optics on the slide (34 mm closer to the eye at the peak), so they keep almost no roll or
+tilt; tight-clearance guns (UZI rear ears, Jackhammer, KS-3 stock) take smaller shapes. Bolt actions (AWP, SSG 08) have
+none: their sight comes down for the bolt (`BoltCycle`). Built for: AK-47, M4A1, MP5, P9, USP, UZI, P90, STEN, Calico,
+SCAR-H, Jackhammer, RPD.
+
+### 31.6 The hand-keyed detail layer (`motion_layer.py`)
+
+Code-authored clips are clean C1 curves through sparse keys; an animator's keys or a mocap take carry a dense layer of
+small irregular motion. `motion_layer.layered(clip, rig, seed)` returns the same clip (name, length, events) with it:
+
+| Part | What |
+|---|---|
+| overlapping action | the weapon follows its authored path through damped springs (position 7.5 Hz ζ 0.5, turn 6 Hz ζ 0.45; the lag capped at 6 mm / 4°): it trails fast moves and overshoots / settles; the gun hand stays on the grip but its palm turns on the authored path, so the wrist leads |
+| settle micro-motion | where a big turn (> 60°/s) comes to rest, a small damped wobble (5–5.5 Hz, ζ 0.35, ≤ 1.5 mm / 1.2°) along the way it came; a handheld tremor (0.35 mm, 0.18°, ~2 Hz) stronger in holds |
+| anticipation | before `mag_release`, `mag_out`, `slide_back`, `bolt_back`, `slide_release`: a counter-move of 18 % of the next 0.14 s of motion (≤ 3 mm / 2°) over 0.13 s |
+| asymmetric hand adjustments | a support hand placed in viewmodel space wanders on its own seeded curve (1.2 mm, in holds); every wrapping finger wanders with its own amplitude and phase |
+| finger re-grips | in calm stretches away from events (about one per 1.4 s) the gun hand's middle / ring / pinky loosen 14° and clamp back with an overshoot, staggered 25 ms per finger; the support hand's follow 0.11 s later while it holds the weapon |
+
+Deterministic (`seed`), faded in over 0.1 s and exactly gone at the end (clips still start and end on their authored
+pose), inside the eye-distance and framing checks. Applied to `draw`, `reload`, `reload_empty`, `inspect` of the AK-47,
+M4A1, MP5 and P9 (the USP inherits the P9's). Other guns: wrap their clips the same way (one line per file).
 
 ## 32. Camera feedback
 
@@ -1289,9 +1378,9 @@ fractions, the index finger through the ring, crosshair, eye distance, budget). 
 **`reddot_rect`** (长方形红点镜, slot `optic`, `models/attachment/reddot_rect.glb`, `underbarrel_models.py`): an open
 reflex sight with a rectangular window, no magnification (`zoom` 1.12 like the iron sights, `adsTimeScale` 1.03,
 `reflex` dot 10 MOA). A low picatinny clamp with a clamp screw, a flat base housing (brightness buttons left, battery tray
-right, the LED emitter at the rear) and a thin frame round the window. The window is one flat `glass` face 32 × 22 mm
-with 2 mm corner radii, centred 0.0242 over the mount point at z −0.012 (the frame's rear face), facing +Z, UV 0..1
-across it (u along +X, v down); the frame's inner walls (`interior`) open forward (13 % sideways, 11 % up and down) more
+right, the LED emitter at the rear) and a thin frame round the window. The window is one flat `glass` face 42 × 22 mm
+(a wide, low window) with 2 mm corner radii, centred 0.0242 over the mount point at z −0.012 (the frame's rear face), facing +Z, UV 0..1
+across it (u along +X, v down); the frame's inner walls (`interior`) open forward (17 % sideways, 11 % up and down) more
 steeply than the sight lines from `aim` to the window's edges, and the base housing stays under the sight lines to its
 bottom edge, so from the eye only the window shows. A `reticle` quad (the dot when picture in picture is off) sits on the sight
 line just behind the glass, `aim` 0.14 behind it. Region `optic`; materials `attachment`, `steel_dark`, `glass`,
@@ -1299,23 +1388,58 @@ line just behind the glass, `aim` 0.14 behind it. Region `optic`; materials `att
 
 **Underbarrel slot** (`underbarrel`, 下挂, skin region `underbarrel`): attachments clamped under the handguard or rail.
 The weapon file carries an empty `mount_underbarrel` (§19 mount rules: −Z down the bore, +Y up; the attachment hangs
-along −Y) on the underside of the handguard / forend rail, **ahead of the support hand**: the hand stays on the
-handguard in every clip, no clip changes with the attachment. Models (`underbarrel_models.py`, frame as every
-attachment, root `attachment`):
+along −Y) on the underside of the handguard / forend rail, ahead of the support hand: the clips keep the hand on the
+handguard, no clip changes with the attachment, and the runtime moves the hand onto the attachment (*The support
+hand's hold*, below). Models (`underbarrel_models.py`, frame as every attachment, root `attachment`):
 
 | File | Look | Data |
 |---|---|---|
 | `vertical_grip.glb` | rail clamp with a thumb screw, a tapered finger-grooved grip ≈ 0.10 m straight down, end cap | recoil × 0.88, ADS × 1.05 |
 | `angled_grip.glb` | a long low clamp and a wedge whose rear face slopes down and forward (a palm stop), ribs on the ramp | recoil × 0.95, ADS × 0.93 |
 | `bipod.glb` | clamp, hinge yoke, two legs folded forward along −Z (≈ 0.18 m), rubber feet | recoil × 0.82, ADS × 1.12, hip spread × 1.1 |
+| `tommy_grip.glb` | the Thompson's wooden vertical foregrip (§24's source part, slimmed front to back: its long top along the barrel clamp and the finger-grooved grip), material `wood_foregrip` (walnut, `tommy/walnut`) | none (the gun as issued) |
 
-Materials `attachment`, `steel_dark` (region `underbarrel`), `stock_pad` (the bipod's feet, `none`). Mounts as built:
-AK-47 under the lower handguard near its front (gun-local design point (0, −0.0315, −0.178), the grip's front edge at
-the handguard's front), AWP on the accessory rail under the front of the forend. guns.json: ak47 `underbarrel`
-[vertical_grip, angled_grip], awp [bipod]; a weapon without the slot needs no mount (`loadouts.OPTIONAL_SLOTS`).
+Materials `attachment`, `steel_dark` (region `underbarrel`), `stock_pad` (the bipod's feet, `none`), `wood_foregrip`
+(region `underbarrel`; the Thompson skins' tints name it). Mounts as built: AK-47 under the lower handguard near its
+front (gun-local design point (0, −0.0315, −0.178), the grip's front edge at the handguard's front), AWP on the
+accessory rail under the front of the forend, RPD under the gas tube; the Thompson under the barrel clamp's plate where
+its foregrip sat (`tommy_model.FORE_MOUNT`, design (0, −0.0258, −0.105)); the KS-3 under the front of the forend,
+parented to `pump` (pump space (0, −0.039, −0.135)) so it rides the pump's stroke ahead of the support hand. Pistols
+(p9, p9a, usp, usp_dual, calico) have no underbarrel slot (their files may keep the mount; nothing is drawn there), and
+the bipod is for machine guns and sniper rifles only. guns.json options: ak47, ks3 and the section 40 rifles, SMGs and
+shotguns [vertical_grip, angled_grip], awp and ssg08 [bipod], rpd [vertical_grip, angled_grip, bipod], tommy default
+`tommy_grip` [vertical_grip, angled_grip]; a weapon file without the mount simply does not draw the attachment
+(`loadouts.OPTIONAL_SLOTS`).
+
+**The support hand's hold** (`client/viewmodel/SupportGrip`, mirrored for checks and previews by `support_grip.py`):
+an underbarrel attachment's `grip` in `craft/attachments.json` is where the left hand holds it, in the attachment's
+frame: `wrist` (m), `palm` (quaternion x y z w, the hand joint frame of §16) and `fingers` (per finger the two curls in
+degrees, §16 sign; a missing finger keeps the clip's). Authored with the rigs' hand helpers in
+`underbarrel_models.grip_holds()`; `python -I tools/assets/underbarrel_models.py grips` prints the JSON. The holds: vertical
+grip — a fist round the grip below the clamp, palm on its left, fingers round its front, the thumb over them (curls
+fitted so no finger sinks into the 16 mm grip); angled grip — the hand under the handguard behind the ramp, palm up
+against it, thumb forward along the left side, fingers round the right (a C-clamp); bipod — the hand cupping the forend
+from below just behind the clamp, palm up (the legs folded ahead of it); `tommy_grip` — the Thompson clips' own hold
+(tommy_rig's rest solve), so the default Thompson looks exactly as authored. Every frame, after the clips, locomotion
+and the dead blend (§31.4): the clip's left hand in mount space keeps its deviation from the idle's first frame (a
+clench on a shot, a drift) on top of the hold; the arm reaches it by two-bone IK in the plane of the clip's elbow (the
+forearm takes the palm's twist, as `armrig.solve_side`), the shoulder coming forward along the reach when the hold is
+past 0.985 × the arm's length (at most 0.15 m: the body leans in); the fingers take the hold's curls plus the clip's
+deviation from its idle curls where it opens them (a clench meets the part). The weight is the clip's own: 1 while the
+clip's hand is within 25 mm of its idle hold relative to the mount (idle, walk, shots, aiming, inspect presentations),
+0 beyond 70 mm (smoothstep between), so reloads, draws, bolt and pump work and a sprint's pumping fist play as authored
+and the hand slides onto the hold as a clip brings it back. Local rotations (and the shoulder's translation) are
+slerped from the clip's by the weight, so nothing pops. First person only.
+
+**A rail for one** (`excludes`, a slot field): a slot may name slots it takes over while it holds anything but its
+default — they fall back to theirs (`CraftCatalog.complete`, so the server's stats and every renderer agree), and in
+the 工匠 the newest choice wins (choosing either clears the other). (The pistols' underbarrel slot used it to exclude
+`laser`; with that slot gone no weapon uses it now.)
 Checks (`check_attach.py`): the mount where a weapon offers the slot, the builds `rect_full`, `angled_full`,
-`bipod_full` ≥ 0.06 from the eye in every clip, and in the holding clips (idle, fire, fire_last, walk) no underbarrel
-attachment within 4 mm of the support hand's skin (arms.glb hand and finger meshes); other clips are reported.
+`bipod_full` ≥ 0.06 from the eye in every clip, and for every attachment a weapon's slot offers: its `grip` equals
+`grip_holds()`, and in the holding clips (idle, walk; shots reported) with the hold applied the hand reaches it within
+2 mm and sinks no more than 2.5 mm into the attachment (generalised winding number of the hand's skin points against
+its triangles); `tommy_grip`'s hold is the clips' own and is reported only.
 
 **`stock_none`** (无枪托, slot `stock`, no model): removes a built-in stock — the stock slot's `hides` take the stock
 node away whenever the slot holds anything but its default. recoil × 1.25, ADS × 0.88, hip spread × 1.08. A stock slot
@@ -1493,6 +1617,16 @@ the code: `client/viewmodel/SkinEffects` plays any skin's data, every weapon vie
 * `glow` — a light at `node` whose intensity is `intensity × surge` (it lights the weapon, the hands and the world).
 * `fx.kill` — a cue set off on the shooter's weapon when the server confirms a kill; `fx.hitColor` — the colour of the
   hit marker's kill marks while the skin is held (the player's own colours otherwise).
+* `fx.killIcon` — the skin's own kill icon on the shooter's HUD at a confirmed kill (`client/hud/KillIcon`, above the
+  kill medals): `texture` (base under `assets/blockland/`), `size` (GUI px, default 64), `seconds` (on screen, default
+  2.2), `color` (glow and embers), `embers` (thrown off as it burns in and away; half as many per second rise off it
+  while it glows). It burns in from its heart outwards in 0.45 s while it spins into place with an overshoot behind a
+  flash, glows (a flickering, breathing halo) and sheds embers, then burns away the way it came in its last 0.5 s. The
+  three textures come from an artwork with transparency in `tools/assets/source/kill_icons/<id>.(webp|png)`:
+  `python -I tools/assets/build_all.py kill_icons` (`gen_kill_icons.py`, list `ICONS`) writes `<base>.png` (256 px),
+  `<base>_glow.png` (128 px, white with the blurred bright parts as alpha, tinted by `color`) and `<base>_burn.png` (4 × 4
+  frames of 256 px, the burn-in; played backwards to burn away), each with a `.mcmeta` for linear filtering. 地狱犬
+  (`usp_dual` skin `cerberus`): `textures/gui/kill_icon/cerberus`, size 68, 2.3 s.
 
 **Particles** (`assets/blockland/viewmodel/particles.json`, preset id → emitter; resource packs may override it, F3+T
 reloads): `count` (≤ 128), `life` / `lifeJitter`, `spawn` (births spread over these seconds; a looping stream spreads
@@ -1590,3 +1724,234 @@ the left hand by the bomb, crosshair, eye distance, budget).
 - 倍镜旋钮使用轴向凹槽、倒角和刻度，替代多层完整环带；不移动 `aim`、`lens_ocular`、`lens_objective`，不修改内壁黑色材质、透镜或准星。刻度在已有 `steel_dark` 批次内。
 - P9 弹匣观察孔为穿过 1 mm 背板的倒角孔，背后黄铜退后 2.75 mm；不得用贴在实体表面上的黄铜圆片替代。保持弹匣轮廓、弹药位置、标准/扩容动画绑定。
 - 非视觉回归：`python -I tools/assets/check_surface_quality.py --baseline ORIGINAL_PROJECT_COPY`，以及 `check_model_quality.py`、`pbr_check.py`、`check_glb.py`。表面检查约束尺寸、批次、总三角形不增长、绑定一致，并对观察孔做射线深度测试。COD 接近程度、镜面稳定性和帧时间仍需用户实机验收。
+
+## 40. Nine more guns (UZI, P90, MP5, STEN Mk II, SSG 08, Calico M950, SCAR-H, M4A1, Jackhammer)
+
+Original procedural models at real scale, each built like the RPD (§33): its own `<gun>_model.py`, `<gun>_rig.py`,
+`<gun>_clips.py`, `gen_<gun>.py`, texture sets (`pbr_sets_<gun>.py`), material table (`pbr_models_<gun>.py`), fire
+sounds (`gen_<gun>_sounds.py`), checker (`check_<gun>.py`, claims `<gun>.glb`) and build step module (`build_<gun>.py`:
+steps `<gun>`, `<gun>_sounds`); items through `<gun>_items` / `gun_items` (`gen_gun_items.py`: icons rendered from the
+GLB, lifted when a gun is dark overall and rimmed along its top so a black gun reads at 32 px; the held model from the
+bounding boxes of its parts). The UZI, P90, Calico and Jackhammer are matched to reference photographs
+(`tools/assets/source/references/`). The first, crude versions of these nine (a shared parametric generator) are kept in
+`tools/assets/source/section40_artist_v1/` for reference only. Each gun's gold skin tints all of its metal materials
+(`steel*`, `barrel*`).
+
+| id | Category · ammo | Magazine nodes (`mag` pivot) | Slots (mount nodes needed) | Slot hides | Notes |
+|---|---|---|---|---|---|
+| `uzi` | smg · smg | `mag_standard` 32, `mag_extended` 50 (in the grip) | optic, barrel, laser, stock, underbarrel, charm | optic: `sight_rear`, `sight_iron` · barrel: `muzzle_brake` · stock: `stock` | open bolt: `bolt` node (slide lock) |
+| `p90` | smg · smg | `mag_standard` 50 (top, along the receiver) | optic, barrel, laser, underbarrel, charm (no stock: bullpup) | optic: `sight_rear`, `sight_iron` · barrel: `muzzle_brake` | `bolt` node |
+| `mp5` | smg · smg | `mag_standard` 30, `mag_extended` 40 | optic, barrel, laser, stock, underbarrel, charm | as uzi | `bolt` (cocking handle) node |
+| `sten` | smg · smg | `mag_standard` 32 (side well, left) | optic, barrel, laser, stock, charm (no underbarrel) | as uzi | `bolt` node |
+| `ssg08` | sniper · sniper | `mag_standard` 10 | optic (default `scope_sniper`), barrel, underbarrel (bipod), charm — no laser | barrel: `muzzle_brake` | bolt action (`boltAction`, like §23): `bolt` node, fire clip with the clip event `bolt_back` (ejects the case; sounds `gun.bolt_back` / `gun.bolt_forward` on the events of those names) |
+| `calico` | pistol · pistol | `mag_standard` 50, `mag_extended` 100 (helical, on top) | optic, barrel, laser, stock (pistol stocks: tactical / heavy / wire, like the P9 — `mount_stock` turned and scaled as the P9's), underbarrel, charm | optic: `sight_rear`, `sight_iron` · barrel: `muzzle_brake` | `bolt` node |
+| `scar` | rifle · rifle | `mag_standard` 20, `mag_extended` 30 | optic, barrel, laser, stock, underbarrel, charm | as uzi | `bolt` (charging handle) node |
+| `m4a1` | rifle · rifle | `mag_standard` 30, `mag_extended` 45 | optic, barrel, laser, stock, underbarrel, charm | as uzi | `bolt` node |
+| `jackhammer` | shotgun · shotgun (8 pellets) | `mag_standard` 10 (the rotary drum, swapped whole) | optic, barrel, laser, underbarrel, charm (no stock: bullpup) | optic: `sight_rear`, `sight_iron` · barrel: `muzzle_brake` | full auto, magazine reloads (not shell by shell); `bolt` node (the forend's cocking stroke may drive it) |
+
+* Nodes: `viewmodel` → `gun` with the meshes, `mag` → the magazine meshes named as above, `muzzle`, `ejection`,
+  `aim_iron` (§5; not needed on the SSG 08, whose default optic is a scope), the `slideLock` node (`bolt`), the mounts
+  `mount_optic`, `mount_barrel`, `mount_laser` (not the SSG 08), `mount_stock` (where the table lists the stock),
+  `mount_underbarrel` (ahead of the support hand, §35), `mount_charm`; arm joints; root `fx_shell` (the case:
+  9 mm for uzi / mp5 / sten / calico, 5.7 mm for the P90, 5.56 / 7.62 for M4A1 / SCAR, .308 for the SSG 08, a 12-gauge
+  hull for the Jackhammer). Parts a slot hides need those exact names (`sight_rear`, `sight_iron`, `muzzle_brake`,
+  `stock`); a gun without such a part simply has nothing to hide.
+* Clips (§4): `idle`, `draw`, `fire`, `fire_last`, `reload`, `reload_empty`, `inspect`, `walk`, `sprint` (optional),
+  `tac_sprint` (optional); events `mag_release`, `mag_out`, `mag_in`, `slide_back` / `slide_forward` (or `bolt_back` /
+  `bolt_forward`), `inspect_move`, `equip`; the reload's length should match the data (`reload.tactical` /
+  `reload.empty` in guns.json) or the data be set to the clip's.
+* Materials and regions (§20, §21): every material carries `extras.region` (`body`, `barrel`, `magazine`, `stock`,
+  `grip`, `handguard`, `detail`) and preferably `extras.pbr` (a LabPBR set `<set>.png`, `_n`, `_s` under
+  `textures/pbr/<gun>/`). The camo skins re-texture the regions `body`, `stock`, `handguard`, `grip` (as the gun has
+  them); the 鎏金 skin tints the materials named `steel`, `steel_dark` and `barrel` — name the gun's metal parts so.
+* Sounds: `sounds/gun/<id>_fire_1.ogg` … `_3.ogg` and `<id>_fire_far.ogg` (events `gun.<id>.fire`, `gun.<id>.fire_far`),
+  synthesised per gun by `gen_<id>_sounds.py`.
+* Build: `python -I tools/assets/build_all.py <id> <id>_sounds <id>_items`; check: `python -I tools/assets/check_glb.py`.
+
+
+### Section 40 source assets / first integrated pass
+
+The nine GLBs are generated from `arsenal_data.json` (art parameters, not gameplay statistics),
+`arsenal_models.py` (distinct silhouettes/feed systems), `arsenal_rig.py` (IK and feed-axis-aware clips),
+and `gen_arsenal.py`. Timings and slots are read from guns.json; this pipeline does not rewrite that file.
+Models are original procedural game-art assets, not scanned/artist-approved COD assets; in-game visual approval
+and further silhouette/material polish remain with the user. Existing copied gunshot sounds are intentionally retained.
+
+Rebuild: generate the nine prefixes with `pbr_textures.py uzi/ p90/ mp5/ sten/ ssg08/ calico/ scar/ m4a1/ jackhammer/`,
+then `build_all.py arsenal gun_items`. The source-dependent PBR registration is in `pbr_sets_arsenal.py` and
+`pbr_models_arsenal.py`; each weapon has three 512px sets and one 256px set, plus shared cartridge brass.
+Each GLB includes both magazine variants only where configured; its whole-file budget is 12,000 triangles and
+44 material primitives (including spare magazine and shell, not an actual frame draw-call measurement).
+
+Checks: `check_arsenal_rig.py` samples wrist reach at 60 Hz; `check_glb.py` dispatches to `check_arsenal.py`,
+checking the exact nodes, slot hides, region/tint contracts, PBR paths, reload duration, SSG bolt events,
+magazine withdrawal, loop seams, winding, eye distance, optic obstruction and underbarrel/hand clearance.
+Do not relax these limits to accommodate a bad mount: move the mount or correct the actual mesh/rig.
+
+**As built.**
+
+* **UZI** (15.9k triangles; matched to a left-side photo): stamped receiver with the pressed ribs, top cover with the
+  knurled, notched cocking knob (`bolt`, 90 mm stroke; still in the shots — the Uzi's knob does not reciprocate —
+  hauled back in `reload_empty`), front post on its drum between ears, flip aperture (`aim_iron` 0.085 behind), knurled
+  barrel nut and thread protector (`muzzle_brake`), ribbed handguard, grip with the grip safety and heel catch, magazine
+  through the grip (`mag_extended` 72 mm longer), folding stock (`stock`), a riser rail on the cover for optics.
+  Reload 2.10 s (heel catch, straight down, driven home), empty 2.60 s (+ knob pull). Sets `uzi/parkerized`, `barrel`,
+  `knurl`, `polymer`, `mag`.
+* **P90** (17.4k; matched to a photo): organic body traced off the photo, TR housing over the magazine with its rails
+  and the integral irons on its top edges (static), folding backup irons on the top rail on the bore's centreline
+  (`sight_rear`: ghost ring at the rail's rear end, `sight_iron`: post between ears at its front; sight line 14 mm over
+  the rail, `aim_iron` 0.175 behind the ring, the housing below the sight picture), ambidextrous cocking handles
+  (`bolt`, 68 mm, still when firing), selector disc, downward ejection out of the butt (`ejection` +X down), the 50-round
+  magazine: a translucent `mag_window` shell (BLEND, region `magazine`) over two staggered rows of rounds, three turning
+  on the feed ramp. Reload 2.7 s (rear lifted and drawn back from under the housing, new one front-first into the latch,
+  rear pressed down), empty 3.2 s (+ left handle). No stock mount. Sets `p90/polymer`, `grip`, `mag`, `barrel`.
+* **MP5A3** (16.6k): stamped receiver with the A3 rail channels, a real ejection port down to the carrier (`carrier`
+  cycles 64 mm when firing), cocking tube with slot and notch (`bolt` → `charging_handle` → `handle_lever`), hooded front
+  sight (`sight_iron` → `front_sight_hood`, hidden with the post), rotary drum with a real aperture (`sight_rear`), claw
+  mount under the iron sight line, slim handguard, polymer trigger group with the paddle, curved 30 / 40-round
+  magazines, A3 stock. Reload 2.2 s; empty 2.7 s is the HK slap (handle locked in the notch, magazine changed, slapped
+  down). Sets `mp5/receiver`, `barrel`, `polymer`, `handguard`, `mag`.
+* **STEN Mk II** (17.6k): tube receiver with its openings cut through the wall (magazine opening left, ejection port
+  right, L-shaped cocking slot), drilled barrel sleeve, rotating housing collar and the left side magazine housing
+  (32 rounds horizontal, leaving along −X), peep rear sight with ears, front blade, T tube stock, a short top rail, the
+  wooden pistol grip of the late pattern (Mk V; material `wood`, region `grip`, set `sten/wood`) on a steel bracket
+  behind the guard — the shooting hand holds it, index on the trigger. No underbarrel slot. Open
+  bolt: at rest `bolt` is held back on the sear; `fire` runs it forward and back onto the sear, `fire_last` leaves it
+  forward (slide-lock offset (0, 0, −0.09)). Support hand on the housing, never the magazine. Reload 2.4 s, empty 2.9 s
+  (the right hand racks the right-side handle). Sets `sten/body`, `blued`, `mag`.
+* **SSG 08** (17.2k): flat-sided upper with a through port, milled chassis lower, full-length top rail, octagonal
+  fore-end with through vents and short side / bottom rails, fluted 508 mm barrel, three-port brake, skeletal folding
+  stock with cheek piece, near-vertical grip, `bolt` (shroud) → `bolt_handle` (lifts 60°, 88 mm stroke). `fire` 1.02 s
+  cycles the bolt (`bolt_back` 0.43 ejects the case, `bolt_forward` 0.56). No irons, no `aim_iron`, no laser or stock
+  mount. Reload 2.7 s, empty 3.3 s. Sets `ssg08/chassis`, `foreend`, `stock`, `barrel`, `grip`, `cheek`, `mag`.
+* **Calico M950** (9.7k, pistol budget; matched to a photo): aluminium receiver cradling the helical magazine, front
+  sight tower, a rear sight bridge with a 7-slot rail over the rear of the receiver (our addition: the real rear sight
+  sits on the magazine), ribbed forend with vent holes and top / bottom rails, raked grip, left cocking handle (`bolt`,
+  32 mm, cycles in `fire`), the polymer lower's guard web (26 mm across, narrower than the grip's front strap) running
+  back into the grip. `mag_standard` 50 (0.185 m) / `mag_extended` 100 (0.308 m) along the top, hooked at the
+  tower. Reload 2.6 s (nose lever, nose lifted about the bridge, drawn forwards out, the new one fed tail-first),
+  empty 3.1 s (+ handle). Stock mount at the grip bottom turned −20°, scale 0.70. Sets `calico/receiver`, `polymer`,
+  `mag`.
+* **SCAR-H** (17.8k): extruded upper with the continuous top rail, side and bottom rails, a real port with the
+  deflector, polymer lower with the flared well, side-folding telescoping stock, ghost-ring rear and flip-up front sight
+  on the gas block, `bolt` (carrier + left charging handle, 108 mm, held open at 0.099 = slide-lock offset), `bolt_catch`.
+  20-round straight / 30-round curved magazines. Reload 2.5 s, empty 3.0 s (thumb on the bolt catch). FDE / black
+  two-tone: sets `scar/anodized`, `polymer`, `grip`, `barrel`, `mag`.
+* **M4A1** (17.0k): flat-top upper with a real port (carrier, lugs, forward-assist notches), forward assist, deflector,
+  open dust cover; lower with the flared well, bolt catch, magazine catch, selector; A2 grip; oval handguard with heat
+  shields and two clamp-on rail sections (laser right, underbarrel below); A2 front sight base; birdcage; six-position
+  stock on its buffer tube; `bolt` (carrier, 82 mm, held open at 0.076 = slide-lock offset), `charging_handle`,
+  `mag_catch`, `bolt_catch`. 30 / 45-round magazines. Reload 2.2 s, empty 2.7 s (palm heel on the bolt catch). Sets
+  `m4a1/receiver`, `polymer`, `grip`, `mag`, `phosphate`, `small_parts`.
+* **Jackhammer** (16.6k; matched to a photo): vented receiver (2 × 9 holes through to the barrel), carrying handle with
+  the oval and three round cut-outs and a rail section, the forend operating sleeve (`bolt`, 32 mm cocking stroke; it
+  carries the laser and underbarrel mounts), open-frame grip, duckbill flash hider, square butt, the 10-round
+  Ammo-Cassette (`mag_standard`) with its zig-zag cam groove and loaded chamber mouths, `latch`. `fire` 0.22 s indexes
+  the cassette 36° on a STEP channel (ten-fold symmetric, so the return at the clip's end is invisible); the gun keeps
+  its hulls (`ejectEvent` "none": no cases thrown). Reload 3.2 s (latch, cassette down and out, a full one seated),
+  empty 3.8 s (+ forend rack). Sets `jackhammer/receiver`, `polymer`, `grip`, `barrel`, `cassette`.
+
+---
+
+## 41. Crowbar (`models/knife/crowbar.glb`, weapon id `crowbar`, 撬棍)
+
+An original procedural steel wrecking bar on the knife contract (§11–§13), after a common 600 mm gooseneck bar: a hex
+bar 19 mm across the flats (two flats facing the claw side), swept along its centre line (`crowbar_model.py`) — the
+goose-neck bends it round a 40 mm centre-line radius through 172° so the claw points back above the shaft; the claw is
+flattened to a 25 mm wide, 6.4 mm slab, bevelled on its inner face to a 0.9 mm edge and split by a 30 mm V nail slot;
+the other end is bent 12° towards the claw side and flattened into a 23 mm chisel ground to a 1.4 mm edge. 0.60 m from
+the chisel to the goose-neck's nose, ≈ 1.5 kg of steel. Red enamel worn and chipped through to primer and steel (a used
+bar), the claw and chisel ground bare, a friction-tape wrap (with the raised helical seam of its overlapping turns)
+from just above the chisel bend, where the right hand holds it.
+
+```
+viewmodel
+├─ knife                  root at the right-hand grip (the middle of the tape wrap)
+│  ├─ bar (mesh)          shaft, goose-neck, claw, chisel: materials bar, ends
+│  ├─ grip (mesh)         tape wrap: material grip
+│  ├─ tip                 empty at the goose-neck's nose (the bar's furthest point, the striking point)
+│  └─ mount_charm         a lanyard below the tape's lower end (§19)
+├─ camera, arm joints (§16)
+```
+
+Rig (`crowbar_rig.py`): a hammer grip round the tape, the thumb wrapped towards the head, the shaft a little diagonal
+across the palm (30°); the knife follows the IK hand and the wrist limits turn the bar with it (as §27), the bar can
+`roll` in the fingers about its own axis, and the left hand can take the shaft 0.10 m above the right (`support`,
+mirrored grip) for the two-handed smash. A hammer grip only lets the bar point 52°–110° from the forearm, so the
+swings key the elbow too: every key carries an elbow pole (`crowbar_clips.feasible`), raised for the chops, drawn across
+for the backhand. Ready stance: held like a bat low on the right, the fist and tape in the bottom right corner, the bar
+leaning up and forward, the neck curling right with its outer curve (the striking face) towards the left.
+
+Clips (knives.json `crowbar`; the weight leads every motion — long loading wind-ups, the head lagging the hand and
+overtaking it into the contact, a follow-through the weight carries on, slow recoveries settling with an overshoot):
+`idle` (2.0 s, breathing with the weight), `draw` (0.80 s: pulled up from below, the head lagging, swung up past the
+guard and checked by the wrist at 0.38 s), `light_1` (0.62 s forehand chop: cocked back over the right shoulder, driven
+down and across, the head over the screen centre at 0.24 s, follow-through low to the left), `light_2` (0.62 s
+backhand: coiled to the left shoulder, driven out to the right with the claw's back leading, contact 0.24 s), `heavy`
+(1.15 s: the left hand joins, both lift the bar high over the head, a beat at the top, the smash lands on the screen
+centre at 0.50 s and stops dead, a shudder and rebound, lowered, the left hand lets go), `inspect` (3.8 s: the goose-
+neck held up in profile, turned to show the claw's slot, laid across into the open left palm for two weighty taps at
+1.42 / 1.82 s, a full roll in the loosened fingers, back to the guard), `walk`, `sprint` (the bar low, swinging with the
+arm), `tac_sprint` (raised upright beside the face). Events `crowbar_equip`, `crowbar_swing`, `crowbar_swing_heavy`,
+`crowbar_tap` (sounds `blockland:knife.crowbar_*`, the event-name rule of §12, `gen_crowbar_sounds.py`: the ring of a
+held free steel bar — modes 1 : 2.76 : 5.40 : 8.93 over ≈ 240 Hz). Materials `bar` (region `blade`, set
+`crowbar/paint_red`), `ends` (region `hardware`, `crowbar/ends`), `grip` (region `handle`, `crowbar/tape`): the shared
+knife skins of `craft/skins.json` re-texture them by region. Skins `default`, `black` (`crowbar/paint_black`), `rust`
+(`crowbar/rust`), `gold` (legendary: polished steel tinted gold, the tape kept). Impacts: profiles `blunt` /
+`blunt_heavy` (`impacts.json`: chips, dust and sparks thrown back off the struck face, no cut), decals `blunt_dent`
+(blocks: a crushed hollow with cracks) and `bruise` (bodies). Item assets as §11; the held model is built at 25 units
+per metre (the bar would not fit the model box at 50) with the balisong's display scales × 1.8.
+Files: `crowbar_model.py`, `crowbar_rig.py`, `crowbar_clips.py`, `gen_crowbar.py`, `gen_crowbar_items.py`,
+`gen_crowbar_sounds.py`, `build_crowbar.py` (steps `crowbar`, `crowbar_items`, `crowbar_sounds`), `pbr_models_crowbar.py`,
+`pbr_sets_crowbar.py`; checks `check_crowbar.py` (claims `crowbar.glb`: nodes, the tip at the nose and the bar's
+length, materials, clips and their events' sound events, contact times at the data's fractions — the head's line over
+the screen centre for the swings, the head landing on it for the smash —, the right hand fixed on the tape and the left
+on the shaft while it holds it, crosshair clear but for the head, eye distance, budget). 7.1k triangles.
+
+## 42. Knuckles (`models/knife/knuckles.glb`, weapon id `knuckles`, 拳套)
+
+A pair of original procedural brass knuckle-dusters on the knife contract (§11–§13), one on each hand: a flat cast plate
+(9.2 mm) lying between the palm face and the curled middle finger segments, four oval finger rings (13 × 15.6 mm, at
+the hand's 15.4 mm finger pitch, 2.4 mm webs) round the first segments of a closed fist, a scalloped striking edge in
+front of them with four raised knuckle bosses (polished), an open window under the rings and a palm bar below it, held
+between the palm and the finger tips and wound with paracord (13 turns), its ends reaching past the hand, a lanyard
+hole in its little-finger end. 80 × 46 mm. Built in the right hand's frame (`knuckles_model.py`); the left duster is
+its mirror image (the left hand's frame mirrors the right's).
+
+```
+viewmodel
+├─ knife                  the right duster, at the middle of its ring row, rigid to the right hand
+│  ├─ duster (mesh)       materials frame, face, wrap
+│  ├─ tip                 empty at the middle of the striking face
+│  └─ mount_charm         in the lanyard hole of the palm bar's little-finger end (§19)
+├─ knife_L                the left duster (the `_L` twin of §26 / §37), rigid to the left hand
+│  ├─ duster_L (mesh)     the mirrored duster, same materials
+│  └─ tip_L
+├─ camera, arm joints (§16); both arms always shown (no arm scale channels)
+```
+
+Rig (`knuckles_rig.py`): the clips author each FIST — the duster's centre and the hand's palm frame (`fist_q(fwd,
+palm)`: -Y along the punch, +Z the palm) — the arms solve to the wrists behind them (two-bone IK, the wrist kept in its
+anatomical range) and each duster node is the hand as solved times the fixed offset, so the fingers sit in the rings
+in every frame whatever the IK did (checked: every finger's first segment through its ring's centre within 1.5 mm and
+10°; the fist curl `DUSTER_FIST` runs the four first segments straight through the plate). Shoulder offsets carry the
+body's turn into each punch. Guard: orthodox, the left fist a little ahead, both fists low on screen, palms in.
+
+Clips (knives.json `knuckles`): `idle` (2.0 s, the guard breathing), `draw` (0.55 s: the fists come up from below and
+knock knuckles at 0.34 s), `light_1` (0.30 s left jab: a small load, the fist turning palm-down on the way, the
+striking face at full extension 3° off the screen centre at 0.10 s, the right fist tucked to the chin, the recoil and
+a faster return), `light_2` (0.30 s right cross, more shoulder and body turn, contact at 0.10 s), `heavy` (0.62 s
+right uppercut: the shoulder and fist dip, then drive up through the front of the centre, knuckles up and palm to the
+face, stopping dead at 0.25 s), `inspect` (3.0 s: the back of the right fist turned to the eye, turned over to show the
+palm side and the wrap, then the fists knock twice at 2.12 / 2.34 s), `walk`, `sprint` (the fists low, pumping in
+opposition), `tac_sprint` (higher, harder). Events `knuckles_equip`, `knuckles_swing`, `knuckles_swing_heavy`,
+`knuckles_clink` (sounds `blockland:knife.knuckles_*`, `gen_knuckles_sounds.py`). Materials `frame` (region `blade`,
+set `knuckles/brass`), `face` (region `blade`, `knuckles/face`), `wrap` (region `handle`, `knuckles/wrap`); AO per mesh.
+Skins `default`, `black`, `chrome`, `damascus`. Impacts: profiles `punch` / `punch_heavy`, decals `punch_mark` (blocks:
+four small dents in a row) and `bruise` (bodies). Third person: the right duster only (the left one is drawn there
+only as an off-hand item), its knuckle line along the held model's grip axis (`rotation` [0, −90, 0],
+`third_person.TUNING`). Files: `knuckles_model.py`, `knuckles_rig.py`, `knuckles_clips.py`, `gen_knuckles.py`,
+`gen_knuckles_items.py`, `gen_knuckles_sounds.py`, `build_knuckles.py` (steps `knuckles`, `knuckles_items`,
+`knuckles_sounds`), `pbr_models_knuckles.py`, `pbr_sets_knuckles.py`; checks `check_knuckles.py` (claims
+`knuckles.glb`: nodes, materials, clips, contact times at the data's fractions with the landing fist in front of the
+centre, the fingers in the rings, crosshair, eye distance, budget). 8.8k triangles (4.4k per duster).

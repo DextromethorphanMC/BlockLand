@@ -195,6 +195,11 @@ public final class Viewmodel {
         rig.play(kind, clipName, seconds, blend);
     }
 
+    /** Blends the clip just played with its aimed variant by {@code aim} (0..1), when the model has that clip. */
+    public void playAimed(String clipName, float aim) {
+        rig.playVariant(clipName, aim);
+    }
+
     public void stopAction() {
         rig.stopAction();
     }
@@ -339,6 +344,7 @@ public final class Viewmodel {
             attachments = withTwins(attachments);
         }
         rig.setAttachments(attachments);
+        WeaponLook.fitSupportHold(rig, gun, build);
         GunData.Gun sprayed = gun;
         rig.setSprays(() -> SprayDecals.of(sprayed, build), suffix.isEmpty() ? null : suffix);
         adsResolved = false;

@@ -48,6 +48,23 @@ public final class HitShapes {
             return Math.abs(p.x) <= halfX && Math.abs(p.y) <= halfY && Math.abs(p.z) <= halfZ;
         }
 
+        /** The outward normal of the side of this box nearest to {@code point} (where a hit on its surface struck). */
+        public Vec3 faceNormal(Vec3 point) {
+            Vec3 p = toLocal(point);
+            double ax = Math.abs(p.x) / Math.max(1e-6, halfX), ay = Math.abs(p.y) / Math.max(1e-6, halfY),
+                    az = Math.abs(p.z) / Math.max(1e-6, halfZ);
+            Vec3 local = ax >= ay && ax >= az ? new Vec3(Math.signum(p.x), 0, 0)
+                    : ay >= az ? new Vec3(0, Math.signum(p.y), 0) : new Vec3(0, 0, Math.signum(p.z));
+            double rad = Math.toRadians(yaw), sin = Math.sin(rad), cos = Math.cos(rad);
+            return new Vec3(local.x * cos - local.z * sin, local.y, local.x * sin + local.z * cos);
+        }
+
+        /** Where a line entering this box at {@code entry} along {@code dir} (unit) leaves it again. */
+        public Vec3 exit(Vec3 entry, Vec3 dir) {
+            double span = 2 * (halfX + halfY + halfZ) + 0.1;
+            return clip(entry.add(dir.scale(span)), entry).orElse(entry);
+        }
+
         /** The axis-aligned box around this one. */
         public AABB bounds() {
             double rad = Math.toRadians(yaw), c = Math.abs(Math.cos(rad)), s = Math.abs(Math.sin(rad));
@@ -103,6 +120,33 @@ public final class HitShapes {
             }
         }
         return best;
+    }
+
+    /**
+     * The part of the entity a hit at {@code point} struck: the hit box it lies on (a sliding player's body or head), or
+     * for an upright entity its bounding box — only the head band of it for a head hit. The wound's geometry (the side the
+     * round went in, where it comes out) is that part's.
+     */
+    public static Box part(Entity entity, Vec3 point, boolean head) {
+        List<Box> boxes = of(entity, 0.02);
+        if (boxes.size() > 1) {
+            Box best = boxes.get(0);
+            double nearest = Double.MAX_VALUE;
+            for (Box box : boxes) {
+                if (box.contains(point) && box.head() == head) return box;
+                double d = box.center().distanceToSqr(point);
+                if (d < nearest) {
+                    nearest = d;
+                    best = box;
+                }
+            }
+            return best;
+        }
+        Box body = boxes.get(0);
+        if (!head || Slides.isSliding(entity)) return body;
+        AABB box = entity.getBoundingBox().inflate(0.02);
+        double bottom = entity.getEyeY() - Math.max(0.12, entity.getBbHeight() * 0.12);
+        return Box.of(new AABB(box.minX, Math.min(bottom, box.maxY - 0.1), box.minZ, box.maxX, box.maxY, box.maxZ), true);
     }
 
     /** The axis-aligned box around every hit box of the entity (sweeps, decal points). */

@@ -2,100 +2,106 @@
   "materials": {
     "stone": {
       "debris": {"count": 9, "shapes": ["chip", "chip", "grain", "flake"], "size": [0.018, 0.05], "speed": [2.5, 6.5], "spread": 38,
-                 "life": [1.4, 2.6], "gravity": 1.0, "drag": 0.015, "restitution": 0.32, "friction": 0.55, "spin": 900, "wind": 0.02},
+                 "life": [1.4, 2.6], "gravity": 1.0, "drag": 0.015, "restitution": 0.32, "friction": 0.55, "spin": 900, "wind": 0.02, "density": 2.6},
       "dust": {"count": 0.5, "perDebris": 0.3, "friability": 0.75, "size": [0.16, 0.55], "speed": [0.6, 1.6], "life": [0.7, 1.3], "rise": 0.12, "settle": 0.12, "wind": 0.7, "opacity": 0.55, "trail": 0.35, "landing": 0.25},
       "sparks": {"count": 1.2, "speed": [4, 8], "life": [0.08, 0.22], "ricochet": 0.5, "spread": 45, "gravity": 0.6, "bounce": false, "color": "#FFC890"},
       "color": "#8a8a8a", "sound": "block", "soundVolume": 0.3
     },
     "brick": {
       "debris": {"count": 10, "shapes": ["chip", "chip", "grain"], "size": [0.02, 0.055], "speed": [2.2, 5.5], "spread": 40,
-                 "life": [1.4, 2.6], "restitution": 0.28, "friction": 0.5, "spin": 800, "wind": 0.02},
+                 "life": [1.4, 2.6], "restitution": 0.28, "friction": 0.5, "spin": 800, "wind": 0.02, "density": 1.9},
       "dust": {"count": 0.6, "perDebris": 0.32, "friability": 0.85, "size": [0.17, 0.58], "speed": [0.6, 1.6], "life": [0.8, 1.4], "rise": 0.1, "settle": 0.12, "wind": 0.7, "opacity": 0.6, "trail": 0.4, "landing": 0.3},
       "color": "#9a5a48", "sound": "block", "soundVolume": 0.3
     },
     "concrete": {
       "debris": {"count": 8, "shapes": ["chip", "grain", "grain"], "size": [0.015, 0.04], "speed": [2.5, 6], "spread": 36,
-                 "life": [1.2, 2.2], "restitution": 0.3, "friction": 0.5, "spin": 900},
+                 "life": [1.2, 2.2], "restitution": 0.3, "friction": 0.5, "spin": 900, "density": 2.4},
       "dust": {"count": 0.8, "perDebris": 0.35, "friability": 0.95, "size": [0.18, 0.62], "speed": [0.7, 1.8], "life": [0.9, 1.6], "rise": 0.1, "settle": 0.1, "wind": 0.75, "opacity": 0.62, "trail": 0.45, "landing": 0.35},
       "sparks": {"count": 0.6, "speed": [4, 7], "life": [0.08, 0.2], "ricochet": 0.5, "spread": 45, "bounce": false, "color": "#FFC890"},
       "color": "#9c9c9c", "sound": "block", "soundVolume": 0.3
     },
     "dirt": {
       "debris": {"count": 10, "shapes": ["grain", "grain", "chip"], "size": [0.016, 0.04], "speed": [1.6, 4.5], "spread": 30,
-                 "life": [0.9, 1.8], "gravity": 1.1, "drag": 0.02, "restitution": 0.08, "friction": 0.25, "spin": 500, "wind": 0.04},
+                 "life": [0.9, 1.8], "gravity": 1.1, "drag": 0.02, "restitution": 0.08, "friction": 0.25, "spin": 500, "wind": 0.04, "density": 1.6},
       "dust": {"count": 0.6, "perDebris": 0.3, "friability": 0.7, "size": [0.17, 0.55], "speed": [0.6, 1.6], "life": [0.7, 1.2], "rise": 0.06, "settle": 0.18, "wind": 0.7, "opacity": 0.55, "trail": 0.3, "landing": 0.3},
       "color": "#7a5534", "sound": "block", "soundVolume": 0.3
     },
     "gravel": {
       "debris": {"count": 11, "shapes": ["chip", "grain"], "size": [0.02, 0.045], "speed": [2, 5], "spread": 34,
-                 "life": [1.2, 2.2], "restitution": 0.3, "friction": 0.45, "spin": 900},
+                 "life": [1.2, 2.2], "restitution": 0.3, "friction": 0.45, "spin": 900, "density": 2.6},
       "dust": {"count": 0.3, "perDebris": 0.2, "friability": 0.45, "size": [0.15, 0.5], "speed": [0.6, 1.5], "life": [0.5, 1.0], "rise": 0.05, "settle": 0.2, "wind": 0.65, "opacity": 0.5, "trail": 0.2, "landing": 0.2},
       "color": "#827e7a", "sound": "block", "soundVolume": 0.3
     },
     "sand": {
       "debris": {"count": 14, "shapes": ["grain"], "size": [0.01, 0.022], "speed": [2, 5], "spread": 40,
-                 "life": [0.7, 1.4], "gravity": 1.1, "drag": 0.025, "restitution": 0.05, "friction": 0.2, "spin": 300, "wind": 0.1},
+                 "life": [0.7, 1.4], "gravity": 1.1, "drag": 0.025, "restitution": 0.05, "friction": 0.2, "spin": 300, "wind": 0.1, "density": 2.6},
       "dust": {"count": 0.9, "perDebris": 0.35, "friability": 0.95, "size": [0.18, 0.6], "speed": [0.8, 2.0], "life": [0.7, 1.3], "rise": 0.04, "settle": 0.25, "wind": 0.85, "opacity": 0.6, "trail": 0.5, "landing": 0.45},
       "color": "#d8cb8b", "sound": "block", "soundVolume": 0.3
     },
     "wood": {
       "debris": {"count": 8, "shapes": ["splinter", "splinter", "flake", "chip"], "size": [0.02, 0.05], "speed": [2, 5], "spread": 34,
-                 "life": [1.6, 3.0], "gravity": 0.9, "drag": 0.025, "restitution": 0.25, "friction": 0.5, "spin": 1100, "wind": 0.08},
+                 "life": [1.6, 3.0], "gravity": 0.9, "drag": 0.025, "restitution": 0.25, "friction": 0.5, "spin": 1100, "wind": 0.08, "density": 0.6},
       "dust": {"count": 0.2, "perDebris": 0.15, "friability": 0.4, "size": [0.12, 0.4], "speed": [0.5, 1.2], "life": [0.45, 0.9], "rise": 0.08, "settle": 0.06, "wind": 0.6, "opacity": 0.35, "trail": 0.1, "landing": 0.05},
       "color": "#a2834f", "sound": "block", "soundVolume": 0.35
     },
     "leaves": {
       "debris": {"count": 9, "shapes": ["leaf"], "size": [0.03, 0.06], "speed": [1, 3], "spread": 55,
-                 "life": [2.2, 4.0], "gravity": 0.25, "drag": 0.09, "restitution": 0.05, "friction": 0.3, "spin": 400, "wind": 0.6},
+                 "life": [2.2, 4.0], "gravity": 0.25, "drag": 0.09, "restitution": 0.05, "friction": 0.3, "spin": 400, "wind": 0.6, "density": 0.5},
       "dust": {"count": 0.1, "perDebris": 0.05, "friability": 0.25, "size": [0.1, 0.3], "speed": [0.3, 0.8], "life": [0.35, 0.7], "rise": 0.05, "settle": 0.04, "wind": 0.6, "opacity": 0.2},
       "color": "#4f8a35", "sound": "block", "soundVolume": 0.3
     },
     "plant": {
       "debris": {"count": 6, "shapes": ["leaf", "splinter"], "size": [0.02, 0.045], "speed": [1, 2.6], "spread": 55,
-                 "life": [1.4, 2.6], "gravity": 0.4, "drag": 0.07, "restitution": 0.05, "friction": 0.3, "spin": 500, "wind": 0.5},
+                 "life": [1.4, 2.6], "gravity": 0.4, "drag": 0.07, "restitution": 0.05, "friction": 0.3, "spin": 500, "wind": 0.5, "density": 0.7},
       "dust": {"count": 0},
       "color": "#5a9a3a", "sound": "block", "soundVolume": 0.25
     },
     "metal": {
       "debris": {"count": 2, "shapes": ["flake"], "size": [0.008, 0.016], "speed": [3, 6], "spread": 30,
-                 "life": [0.6, 1.2], "restitution": 0.45, "friction": 0.7, "spin": 1400},
+                 "life": [0.6, 1.2], "restitution": 0.45, "friction": 0.7, "spin": 1400, "density": 7.8},
       "dust": {"count": 0.15, "perDebris": 0.02, "friability": 0.15, "size": [0.08, 0.25], "speed": [0.6, 1.2], "life": [0.25, 0.5], "rise": 0.12, "settle": 0.0, "wind": 0.5, "opacity": 0.25},
       "sparks": {"count": 10, "speed": [6, 13], "life": [0.15, 0.5], "ricochet": 0.75, "spread": 55, "gravity": 0.7, "bounce": true, "color": "#FFB24A"},
       "blockDustColor": false, "color": "#c8c4bc", "sound": "block", "soundVolume": 0.45, "flash": 0.07, "flashColor": "#FFB866"
     },
     "glass": {
       "debris": {"count": 9, "shapes": ["shard", "shard", "flake"], "size": [0.02, 0.05], "speed": [2, 4.5], "spread": 42,
-                 "life": [1.2, 2.2], "gravity": 1.0, "drag": 0.01, "restitution": 0.35, "friction": 0.6, "spin": 1200},
+                 "life": [1.2, 2.2], "gravity": 1.0, "drag": 0.01, "restitution": 0.35, "friction": 0.6, "spin": 1200, "density": 2.5},
       "dust": {"count": 0.1, "perDebris": 0.05, "friability": 0.2, "size": [0.08, 0.25], "speed": [0.4, 1.0], "life": [0.25, 0.5], "rise": 0.05, "settle": 0.05, "wind": 0.4, "opacity": 0.18},
       "blockDustColor": false, "color": "#d8eef5", "sound": "minecraft:block.glass.hit", "soundVolume": 0.5
     },
     "wool": {
       "debris": {"count": 6, "shapes": ["flake", "grain"], "size": [0.015, 0.03], "speed": [0.8, 2.2], "spread": 50,
-                 "life": [1.6, 3.0], "gravity": 0.3, "drag": 0.1, "restitution": 0.05, "friction": 0.3, "spin": 300, "wind": 0.6},
+                 "life": [1.6, 3.0], "gravity": 0.3, "drag": 0.1, "restitution": 0.05, "friction": 0.3, "spin": 300, "wind": 0.6, "density": 0.4},
       "dust": {"count": 0.4, "perDebris": 0.15, "friability": 0.6, "size": [0.14, 0.42], "speed": [0.4, 1.0], "life": [0.6, 1.1], "rise": 0.05, "settle": 0.05, "wind": 0.8, "opacity": 0.35, "trail": 0.1, "landing": 0.05},
       "color": "#eeeeee", "sound": "block", "soundVolume": 0.25
     },
     "snow": {
       "debris": {"count": 10, "shapes": ["grain", "flake"], "size": [0.015, 0.035], "speed": [1.5, 4], "spread": 46,
-                 "life": [0.8, 1.6], "gravity": 0.6, "drag": 0.06, "restitution": 0.05, "friction": 0.2, "spin": 400, "wind": 0.4},
+                 "life": [0.8, 1.6], "gravity": 0.6, "drag": 0.06, "restitution": 0.05, "friction": 0.2, "spin": 400, "wind": 0.4, "density": 0.3},
       "dust": {"count": 1.0, "perDebris": 0.4, "friability": 1.0, "size": [0.2, 0.65], "speed": [0.8, 2.0], "life": [0.8, 1.4], "rise": 0.05, "settle": 0.15, "wind": 0.9, "opacity": 0.7, "trail": 0.5, "landing": 0.5},
       "blockDustColor": false, "color": "#f4f7fa", "sound": "block", "soundVolume": 0.3
     },
     "ice": {
       "debris": {"count": 9, "shapes": ["shard", "chip"], "size": [0.018, 0.045], "speed": [2.5, 5.5], "spread": 40,
-                 "life": [1.2, 2.2], "restitution": 0.4, "friction": 0.85, "spin": 1000},
+                 "life": [1.2, 2.2], "restitution": 0.4, "friction": 0.85, "spin": 1000, "density": 0.92},
       "dust": {"count": 0.3, "perDebris": 0.15, "friability": 0.4, "size": [0.12, 0.4], "speed": [0.6, 1.4], "life": [0.45, 0.9], "rise": 0.05, "settle": 0.08, "wind": 0.7, "opacity": 0.4, "trail": 0.15, "landing": 0.1},
       "blockDustColor": false, "color": "#bcd8f5", "sound": "block", "soundVolume": 0.35
     },
     "flesh": {
       "debris": {"count": 9, "shapes": ["droplet"], "size": [0.012, 0.03], "speed": [1.5, 4.2], "spread": 42,
-                 "life": [3.0, 6.0], "gravity": 1.0, "drag": 0.012, "restitution": 0.0, "friction": 0.0, "spin": 0},
+                 "life": [3.0, 6.0], "gravity": 1.0, "drag": 0.012, "restitution": 0.0, "friction": 0.0, "spin": 0, "density": 1.06},
       "dust": {"count": 0.6, "perDebris": 0.12, "friability": 0.8, "size": [0.1, 0.3], "speed": [1.0, 2.6], "life": [0.3, 0.6], "rise": 0.0, "settle": 0.15, "wind": 0.3, "opacity": 0.55},
+      "blood": {"backDrops": 9, "exitDrops": 16, "backSpeed": [2.5, 6.5], "exitSpeed": [4.5, 11], "backSpread": 65, "exitSpread": 32,
+                "dropSize": [0.01, 0.028], "splatLife": 25,
+                "backMist": 0.9, "exitMist": 2.0, "mistSize": [0.3, 1.1], "mistLife": [0.8, 1.5], "mistOpacity": 0.72, "mistColor": "#9a1414",
+                "fineDrops": 26, "fineSpeed": [8, 16], "fineSize": [0.004, 0.009], "headMultiplier": 1.6, "radial": 0.35,
+                "runs": 0.6, "dryTime": 6, "rainWash": 1.2, "castOff": 12, "castSpeed": [2.2, 5.5], "bleed": 2.5, "bleedRate": 4,
+                "plume": 1.2, "plumeSize": [0.15, 1.6], "plumeLife": [7, 12], "plumeOpacity": 0.9, "plumeColor": "#5a0808", "splashTint": 0.35},
       "blockTexture": false, "sprite": "minecraft:block/white_concrete", "blockDustColor": false, "color": "#7a0d0d", "sound": ""
     },
     "metal_armor": {
       "debris": {"count": 3, "shapes": ["droplet"], "size": [0.01, 0.022], "speed": [1.2, 3], "spread": 40,
-                 "life": [2.0, 4.0], "restitution": 0.0, "friction": 0.0, "spin": 0},
+                 "life": [2.0, 4.0], "restitution": 0.0, "friction": 0.0, "spin": 0, "density": 1.06},
       "dust": {"count": 0.3, "perDebris": 0.05, "friability": 0.4, "size": [0.07, 0.2], "speed": [0.6, 1.4], "life": [0.2, 0.4], "rise": 0.05, "settle": 0.0, "wind": 0.3, "opacity": 0.4},
       "sparks": {"count": 8, "speed": [5, 11], "life": [0.12, 0.4], "ricochet": 0.7, "spread": 60, "gravity": 0.7, "bounce": true, "color": "#FFB24A"},
       "blockTexture": false, "blockDustColor": false, "color": "#7a0d0d", "sound": "minecraft:item.armor.equip_iron", "soundVolume": 0.25,
@@ -103,18 +109,18 @@
     },
     "vehicle_wood": {
       "debris": {"count": 7, "shapes": ["splinter", "flake"], "size": [0.02, 0.045], "speed": [2, 4.5], "spread": 36,
-                 "life": [1.4, 2.6], "gravity": 0.9, "drag": 0.025, "restitution": 0.25, "friction": 0.5, "spin": 1100, "wind": 0.08},
+                 "life": [1.4, 2.6], "gravity": 0.9, "drag": 0.025, "restitution": 0.25, "friction": 0.5, "spin": 1100, "wind": 0.08, "density": 0.6},
       "dust": {"count": 0.2, "perDebris": 0.12, "friability": 0.4, "size": [0.1, 0.32], "speed": [0.5, 1.2], "life": [0.4, 0.8], "rise": 0.08, "settle": 0.06, "wind": 0.6, "opacity": 0.3, "trail": 0.05, "landing": 0.05},
       "blockTexture": false, "sprite": "minecraft:block/oak_planks", "blockDustColor": false, "color": "#b8955c", "sound": "minecraft:block.wood.hit", "soundVolume": 0.4
     },
     "vehicle_metal": {
-      "debris": {"count": 1, "shapes": ["flake"], "size": [0.008, 0.014], "speed": [3, 6], "spread": 30, "life": [0.5, 1.0], "restitution": 0.45, "friction": 0.7},
+      "debris": {"count": 1, "shapes": ["flake"], "size": [0.008, 0.014], "speed": [3, 6], "spread": 30, "life": [0.5, 1.0], "restitution": 0.45, "friction": 0.7, "density": 7.8},
       "sparks": {"count": 9, "speed": [6, 12], "life": [0.15, 0.45], "ricochet": 0.75, "spread": 55, "gravity": 0.7, "bounce": true, "color": "#FFB24A"},
       "blockTexture": false, "sprite": "minecraft:block/iron_block", "blockDustColor": false, "color": "#c8c4bc", "sound": "minecraft:block.metal.hit",
       "soundVolume": 0.45, "flash": 0.07, "flashColor": "#FFB866"
     },
     "inert": {
-      "debris": {"count": 3, "shapes": ["grain"], "size": [0.012, 0.025], "speed": [1.5, 3], "spread": 40, "life": [0.6, 1.2]},
+      "debris": {"count": 3, "shapes": ["grain"], "size": [0.012, 0.025], "speed": [1.5, 3], "spread": 40, "life": [0.6, 1.2], "density": 1.8},
       "dust": {"count": 0.3, "perDebris": 0.1, "friability": 0.5, "size": [0.1, 0.3], "speed": [0.5, 1.2], "life": [0.35, 0.7], "rise": 0.05, "settle": 0.05, "wind": 0.5, "opacity": 0.3},
       "blockTexture": false, "blockDustColor": false, "color": "#9a9a9a", "sound": ""
     },
@@ -221,7 +227,14 @@
     "smg": {"energy": 0.8, "count": 0.7, "size": 0.85, "dust": 0.7},
     "rifle": {"energy": 1.15, "count": 1.0, "size": 1.0, "dust": 1.1},
     "sniper": {"energy": 1.9, "count": 1.9, "size": 1.35, "dust": 2.6},
-    "shotgun": {"energy": 0.7, "count": 0.35, "size": 0.75, "dust": 0.45}
+    "shotgun": {"energy": 0.7, "count": 0.35, "size": 0.75, "dust": 0.45},
+    "slash": {"energy": 0.45, "count": 0.45, "size": 0.8, "dust": 0.25, "sparks": 0.35, "blade": true},
+    "slash_heavy": {"energy": 0.6, "count": 0.6, "size": 0.9, "dust": 0.35, "sparks": 0.5, "blade": true},
+    "stab": {"energy": 0.55, "count": 0.55, "size": 0.85, "dust": 0.3, "sparks": 0.3, "blade": true, "thrust": true},
+    "blunt": {"energy": 0.6, "count": 0.55, "size": 0.95, "dust": 0.6, "sparks": 0.55, "blade": true, "thrust": true},
+    "blunt_heavy": {"energy": 0.85, "count": 0.85, "size": 1.05, "dust": 0.95, "sparks": 0.8, "blade": true, "thrust": true},
+    "punch": {"energy": 0.3, "count": 0.25, "size": 0.7, "dust": 0.3, "sparks": 0.12, "blade": true, "thrust": true},
+    "punch_heavy": {"energy": 0.45, "count": 0.4, "size": 0.8, "dust": 0.45, "sparks": 0.2, "blade": true, "thrust": true}
   },
   "fallbackAmmo": "rifle",
   "environment": {
@@ -233,6 +246,11 @@
     "bubbles": 6,
     "wind": 0.6,
     "rainWind": 1.8,
-    "thunderWind": 2.6
+    "thunderWind": 2.6,
+    "rainSparks": 0.6,
+    "wetBounce": 0.5,
+    "current": 0.5,
+    "bubbleRise": [0.22, 0.45],
+    "trailBubbles": 9
   }
 }

@@ -12,10 +12,12 @@ import functools
 
 import numpy as np
 
+import ads_fire
 import ak_model as am
 import ak_rig as rig
 import armrig
 import hands
+import motion_layer
 from anim import Curve, arc, drift, ring, smoothstep
 from p9_clips import FINGER_LAG, V, Clip, Weights, ease, left_hand, poses
 from vmath import frame_quat, norm, quat_axis_angle, quat_conj, quat_euler, quat_mul, quat_rotate
@@ -173,6 +175,9 @@ def fire_pose(t):
 
 FIRE = Clip("fire", _FIRE_END, fire_pose, fps=120, extra_times=FIRE_KEYS)
 FIRE_LAST = Clip("fire_last", _FIRE_END, fire_pose, fps=120, extra_times=FIRE_KEYS)     # AK: no bolt hold-open
+# aimed (section 31.5): the same shot with the sight picture held - a shove back along the sight line, a trace of roll
+FIRE_ADS = ads_fire.aimed(FIRE, rig, rig.AIM_IRON_T, IDLE)
+FIRE_LAST_ADS = ads_fire.aimed(FIRE_LAST, rig, rig.AIM_IRON_T, IDLE)
 
 # ------------------------------------------------------------------------------- magazine change
 # beats (both reloads): let go 0.06 -> the rifle dips and rolls left (anticipation) -> rolls right into the
@@ -522,6 +527,9 @@ INSPECT = Clip("inspect", 4.00, inspect_pose,
                        (3.05, "inspect_move")],
                extra_times=(I_BACK, I_LET, I_FWD, I_FWD + 0.010))
 
+# section 31.6: the hand-keyed detail layer (overlap, settles, anticipation, hand adjustments, re-grips)
+DRAW, RELOAD, RELOAD_EMPTY, INSPECT = (motion_layer.layered(c, rig, seed) for c, seed in
+                                       ((DRAW, 101), (RELOAD, 102), (RELOAD_EMPTY, 103), (INSPECT, 104)))
 
 # ------------------------------------------------------------------------------------ locomotion
 def step_bounce(t, period, lag=0.12, sharp=1.6):
@@ -639,4 +647,5 @@ TAC_SPRINT = Clip("tac_sprint", TAC_DUR, tac_sprint_pose, loop=True)
 
 
 def all_clips():
-    return [IDLE, DRAW, FIRE, FIRE_LAST, RELOAD, RELOAD_EMPTY, INSPECT, WALK, SPRINT, TAC_SPRINT]
+    return [IDLE, DRAW, FIRE, FIRE_LAST, FIRE_ADS, FIRE_LAST_ADS, RELOAD, RELOAD_EMPTY, INSPECT, WALK, SPRINT,
+            TAC_SPRINT]

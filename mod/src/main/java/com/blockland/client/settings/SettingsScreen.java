@@ -354,6 +354,16 @@ public final class SettingsScreen extends Screen {
         rows.add(custom(new Slider(gfx + "shadow_softness", 0.25, 3, 0.05, () -> g.shadowSoftness, v -> g.shadowSoftness = (float) v,
                 v -> String.format(Locale.ROOT, "%.2f×", v))));
         rows.add(custom(new Slider(gfx + "sun_strength", 0, 2, 0.05, () -> g.sunStrength, v -> g.sunStrength = (float) v, SettingsScreen::percent)));
+        // ---- light colours (with world lighting; the ray tracer and the clouds take them too)
+        rows.add(custom(new Slider(gfx + "sun_temperature", -1, 1, 0.05, () -> g.sunTemperature, v -> g.sunTemperature = (float) v,
+                SettingsScreen::temperature)));
+        rows.add(custom(new Slider(gfx + "moon_temperature", -1, 1, 0.05, () -> g.moonTemperature, v -> g.moonTemperature = (float) v,
+                SettingsScreen::temperature)));
+        rows.add(custom(new Slider(gfx + "block_light_temperature", -1, 1, 0.05, () -> g.blockLightTemperature,
+                v -> g.blockLightTemperature = (float) v, SettingsScreen::temperature)));
+        rows.add(custom(new Slider(gfx + "block_light_strength", 0, 2, 0.05, () -> g.blockLightStrength,
+                v -> g.blockLightStrength = (float) v, SettingsScreen::percent)));
+        rows.add(new Note(() -> tr(gfx + "light_colors.note")));
         rows.add(custom(new Toggle(gfx + "dynamic_lights", () -> g.dynamicLights, v -> g.dynamicLights = v)));
         rows.add(custom(new Toggle(gfx + "held_item_lights", () -> g.heldItemLights, v -> g.heldItemLights = v)));
         rows.add(custom(new Slider(gfx + "emission", 0, 2, 0.05, () -> g.emission, v -> g.emission = (float) v, SettingsScreen::percent)));
@@ -399,6 +409,52 @@ public final class SettingsScreen extends Screen {
             rows.add(new Note(this::rayDenoiserLine));
         }
 
+        // ---- fog and sky
+        rows.add(new Header(gfx + "section.sky"));
+        rows.add(custom(new Toggle(gfx + "fog", () -> g.fog, v -> g.fog = v)).then(this::rebuild));
+        rows.add(new Note(() -> tr(g.fog ? gfx + "fog.note" : gfx + "fog.off_note")));
+        if (g.fog) {
+            rows.add(custom(new Slider(gfx + "fog_density", 0, 2, 0.05, () -> g.fogDensity, v -> g.fogDensity = (float) v,
+                    SettingsScreen::percentOrOff)));
+            rows.add(custom(new Choice(gfx + "fog_quality", () -> g.fogQualityMode().ordinal(),
+                    i -> g.fogQuality = GraphicsSettings.id(GraphicsSettings.FogQuality.values()[i]),
+                    tr(gfx + "quality.low"), tr(gfx + "quality.medium"), tr(gfx + "quality.high"))));
+        }
+        rows.add(custom(new Toggle(gfx + "volumetric_clouds", () -> g.volumetricClouds, v -> g.volumetricClouds = v)).then(this::rebuild));
+        rows.add(new Note(this::cloudsLine));
+        if (g.volumetricClouds) {
+            rows.add(custom(new Choice(gfx + "cloud_quality", () -> g.cloudQualityMode().ordinal(),
+                    i -> g.cloudQuality = GraphicsSettings.id(GraphicsSettings.CloudQuality.values()[i]),
+                    tr(gfx + "quality.low"), tr(gfx + "quality.medium"), tr(gfx + "quality.high"))));
+            rows.add(custom(new Slider(gfx + "cloud_coverage", 0, 1, 0.05, () -> g.cloudCoverage, v -> g.cloudCoverage = (float) v,
+                    SettingsScreen::percent)));
+        }
+
+        // ---- rain and water
+        rows.add(new Header(gfx + "section.water"));
+        rows.add(custom(new Slider(gfx + "rain_wetness", 0, 1, 0.05, () -> g.rainWetness, v -> g.rainWetness = (float) v,
+                SettingsScreen::percentOrOff)));
+        rows.add(new Note(() -> tr(gfx + "rain_wetness.note")));
+        rows.add(custom(new Choice(gfx + "reflections", () -> g.reflectionQualityMode().ordinal(),
+                i -> g.reflections = GraphicsSettings.id(GraphicsSettings.ReflectionQuality.values()[i]),
+                tr(gfx + "quality.off"), tr(gfx + "quality.low"), tr(gfx + "quality.high"))));
+        rows.add(new Note(() -> tr(gfx + "reflections.note")));
+        rows.add(custom(new Toggle(gfx + "water_ripples", () -> g.waterRipples, v -> g.waterRipples = v)));
+        rows.add(new Note(() -> tr(gfx + "water_ripples.note")));
+        rows.add(custom(new Toggle(gfx + "soaking", () -> g.soaking, v -> g.soaking = v)));
+        rows.add(new Note(() -> tr(gfx + "soaking.note")));
+        rows.add(custom(new Toggle(gfx + "fluid_textures", () -> g.fluidTextures, v -> g.fluidTextures = v)));
+        rows.add(new Note(() -> tr(gfx + "fluid_textures.note")));
+
+        // ---- wind
+        rows.add(new Header(gfx + "section.wind"));
+        rows.add(custom(new Toggle(gfx + "wind", () -> g.wind, v -> g.wind = v)).then(this::rebuild));
+        if (g.wind) {
+            rows.add(custom(new Slider(gfx + "wind_strength", 0, 2, 0.05, () -> g.windStrength, v -> g.windStrength = (float) v,
+                    SettingsScreen::percentOrOff)));
+        }
+        rows.add(new Note(() -> tr(gfx + "wind.note")));
+
         rows.add(new Header(gfx + "section.screen_space"));
         rows.add(custom(new Slider(gfx + "ambient_occlusion", 0, 1, 0.05, () -> g.ambientOcclusion, v -> g.ambientOcclusion = (float) v,
                 SettingsScreen::percentOrOff)));
@@ -429,8 +485,7 @@ public final class SettingsScreen extends Screen {
         rows.add(custom(new Slider(gfx + "saturation", 0, 2, 0.05, () -> g.saturation, v -> g.saturation = (float) v, SettingsScreen::percent)));
         rows.add(custom(new Slider(gfx + "contrast", 0.5, 1.5, 0.05, () -> g.contrast, v -> g.contrast = (float) v, SettingsScreen::percent)));
         rows.add(custom(new Slider(gfx + "temperature", -1, 1, 0.05, () -> g.temperature, v -> g.temperature = (float) v,
-                v -> Math.abs(v) < 0.025 ? tr(gfx + "temperature.neutral")
-                        : tr(v < 0 ? gfx + "temperature.cool" : gfx + "temperature.warm", Math.round(Math.abs(v) * 100)))));
+                SettingsScreen::temperature)));
 
         // ---- bullet impacts (their own settings, not part of the presets)
         ImpactSettings fx = ClientSettings.get().impacts;
@@ -443,6 +498,12 @@ public final class SettingsScreen extends Screen {
         rows.add(new Toggle("blockland.settings.impacts.dust", () -> fx.dust, v -> fx.dust = v));
         rows.add(new Toggle("blockland.settings.impacts.second_collisions", () -> fx.secondCollisions, v -> fx.secondCollisions = v));
         rows.add(new Toggle("blockland.settings.impacts.environment", () -> fx.environment, v -> fx.environment = v));
+        rows.add(new Slider("blockland.settings.impacts.blood", 0, 2, 0.05, () -> fx.blood, v -> fx.blood = (float) v,
+                SettingsScreen::percentOrOff));
+        rows.add(new Toggle("blockland.settings.impacts.blood_in_water", () -> fx.bloodInWater, v -> fx.bloodInWater = v));
+        rows.add(new Slider("blockland.settings.impacts.blood_stains", 0, 2, 0.05, () -> fx.bloodStains, v -> fx.bloodStains = (float) v,
+                SettingsScreen::percentOrOff));
+        rows.add(new Toggle("blockland.settings.impacts.fluid_physics", () -> fx.fluidPhysics, v -> fx.fluidPhysics = v));
         rows.add(new Note("blockland.settings.impacts.note"));
 
         // ---- what the pipeline is doing
@@ -541,6 +602,15 @@ public final class SettingsScreen extends Screen {
         return rayReconstructionLine();
     }
 
+    /** What the volumetric clouds are doing (or what they are, while off). */
+    private String cloudsLine() {
+        GraphicsStatus status = Graphics.status();
+        String gfx = "blockland.settings.graphics.";
+        if (!Graphics.settings().volumetricClouds) return tr(gfx + "volumetric_clouds.note");
+        if (status.cloudsReason != null) return tr(status.cloudsReason);
+        return tr(status.cloudsActive ? gfx + "volumetric_clouds.active" : gfx + "volumetric_clouds.waiting");
+    }
+
     private String rayTracingStatus() {
         GraphicsStatus status = Graphics.status();
         String gfx = "blockland.settings.graphics.";
@@ -621,6 +691,13 @@ public final class SettingsScreen extends Screen {
 
     private static String join(String a, String detail) {
         return detail == null || detail.isEmpty() ? a : a + " · " + detail;
+    }
+
+    /** "中性", "偏冷 40%", "偏暖 25%". */
+    private static String temperature(double v) {
+        String gfx = "blockland.settings.graphics.";
+        return Math.abs(v) < 0.025 ? tr(gfx + "temperature.neutral")
+                : tr(v < 0 ? gfx + "temperature.cool" : gfx + "temperature.warm", Math.round(Math.abs(v) * 100));
     }
 
     private static String percent(double v) {

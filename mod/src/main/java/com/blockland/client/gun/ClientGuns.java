@@ -15,9 +15,12 @@ import com.blockland.client.scope.Optics;
 import com.blockland.client.scope.ScopeOptics;
 import com.blockland.client.scope.SightPose;
 import com.blockland.client.viewmodel.Holster;
+import com.blockland.client.viewmodel.SwimPose;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.craft.CraftData;
+import com.blockland.combat.Ballistics;
 import com.blockland.combat.HitShapes;
+import com.blockland.client.hud.KillIcon;
 import com.blockland.effect.ActionLocks;
 import com.blockland.gun.GunContent;
 import com.blockland.gun.GunData;
@@ -181,9 +184,10 @@ public final class ClientGuns {
         // the trigger is read from real press edges, so mining a block cannot turn a semi-automatic gun automatic
         WeaponInput.onAttackPressed(ClientGuns::triggerPressed);
         WeaponInput.onUsePressed(ClientGuns::aimPressed);
-        // no sprinting while aiming, shooting or inspecting (like modern shooters): drop the sprint key from the movement input
+        // no sprinting while aiming, shooting or inspecting (like modern shooters): drop the sprint key from the movement input;
+        // a swim (vanilla's sprint in water) goes on, the gun is used from the swimming pose
         MovementInputUpdateEvent.BUS.addListener(event -> {
-            if (!holdingGun()) return;
+            if (!holdingGun() || event.getEntity().isSwimming()) return;
             Minecraft mc = Minecraft.getInstance();
             boolean busy = aim() > 0.05f || mc.options.keyAttack.isDown() && mc.screen == null
                     || System.nanoTime() - lastShot < 300_000_000L
@@ -194,7 +198,7 @@ public final class ClientGuns {
                 event.getInput().keyPresses = new net.minecraft.world.entity.player.Input(keys.forward(), keys.backward(), keys.left(),
                         keys.right(), keys.jump(), keys.shift(), false);
             }
-            if (event.getEntity().isSprinting()) event.getEntity().setSprinting(false);
+            SwimPose.stopRunning(event.getEntity());
         });
         ViewportEvent.ComputeFov.BUS.addListener(event -> {
             if (event.usedConfiguredFov() && stats != null && holdingGun()) {
@@ -236,6 +240,7 @@ public final class ClientGuns {
                 boolean kill = hit.kind() == GunPackets.HitKind.KILL || hit.kind() == GunPackets.HitKind.HEAD_KILL;
                 GunHud.hit(hit.kind(), skinFx != null && skinFx.hasHitColor() ? skinFx.hitRgb() : -1);
                 if (kill && modelReady) viewmodel.killed();
+                if (kill && skinFx != null && skinFx.killIcon != null) KillIcon.show(skinFx.killIcon);
                 String sound = switch (hit.kind()) {
                     case BODY -> "gun.hitmarker";
                     case HEAD -> "gun.headshot";
@@ -481,11 +486,11 @@ public final class ClientGuns {
         if (modelReady && holdingGun()) ViewmodelRenderer.suppressViewBobbing(player);
         // aim (a bolt-action gun takes the sight down while it works the bolt)
         boolean wantAds = free && stats.gun().canAim() && mc.options.keyUse.isDown() && !reloading && now >= drawEnd
-                && !player.isSprinting()
+                && !SwimPose.running(player)
                 && !ActionLocks.isLocked(player)
                 && viewmodel.sprintAmount() < SPRINT_READY
                 && !cyclingBolt(now);
-        viewmodel.ads.toIfChanged(wantAds ? 1 : 0, stats.adsTime(), Ease.SINE_IN_OUT);
+        viewmodel.ads.toIfChanged(wantAds ? 1 : 0, SwimPose.adsTime(player, stats.adsTime()), Ease.SINE_IN_OUT);
         syncAim(wantAds && holdingGun());
         // dual guns have no sights: the use key fires a volley instead
         Optics.update(holdingGun() && stats.gun().canAim() ? stats.sight() : null, aim(), dt);
@@ -514,7 +519,7 @@ public final class ClientGuns {
             player.setYRot(player.getYRot() + dy);
             player.yRotO += dy;
         }
-        viewmodel.update(dt, player, player.isSprinting());
+        viewmodel.update(dt, player, SwimPose.running(player));
     }
 
     // ---- input ----------------------------------------------------------------------------------------
@@ -545,7 +550,7 @@ public final class ClientGuns {
             if (stats.gun().dual.volley) tryFire(mc.player, true, 2);
             return;
         }
-        if (mc.player.isSprinting()) mc.player.setSprinting(false);
+        SwimPose.stopRunning(mc.player);
     }
 
     /** @param shots 2 = a dual gun's volley (both guns at once), else 1 */
@@ -565,7 +570,7 @@ public final class ClientGuns {
             shellPhase = ShellPhase.NONE;
             viewmodel.stopAction();
         }
-        if (player.isSprinting()) player.setSprinting(false);
+        SwimPose.stopRunning(player);
         if (viewmodel.action() == Viewmodel.Action.INSPECT) viewmodel.stopAction();
         boolean lowering = viewmodel.sprintAmount() >= SPRINT_READY;
         if (lowering || now < nextShotAt) {
@@ -636,12 +641,33 @@ public final class ClientGuns {
         Vector3f sightLine = Optics.shotDirection();
         float yaw = sightLine != null ? ScopeOptics.yaw(sightLine) : player.getYRot();
         float pitch = sightLine != null ? ScopeOptics.pitch(sightLine) : player.getXRot();
-        BLNetwork.sendToServer(new GunPackets.C2SFire(slot, yaw, pitch, aim, seed, shots, hand));
+
+        // predicted tracer and impact, from this client's own trace (the server re-traces with the same seed: shot k's
+        // pellets are numbered after the earlier shots'); shots leave from the camera, which is low while sliding. What
+        // each projectile struck here goes with the shot: the server checks it against where that target stood then
+        Vec3 eye = Slides.eyePosition(player);
+        int pellets = Math.max(1, stats.ammo().pellets);
+        int[] seen = new int[Math.min(GunPackets.C2SFire.MAX_SEEN, shots * pellets)];
+        for (int shot = 0; shot < shots; shot++) {
+            int from = volley ? shot : hand;
+            for (int pellet = 0; pellet < pellets; pellet++) {
+                int index = shot * pellets + pellet;
+                Vec3 dir = GunMath.spreadDirection(yaw, pitch, spread, seed, index);
+                LocalHit hit = localTrace(player, eye, dir, stats.range());
+                if (index < seen.length) seen[index] = hit.entity();
+                pendingTracers.add(new PendingTracer(hit.end(), from));
+            }
+            // a bolt or pump gun keeps the case until its bolt / pump comes back (clipEvent)
+            if (gun.ejectEvent.isEmpty()) pendingShells[from]++;
+        }
+        BLNetwork.sendToServer(new GunPackets.C2SFire(slot, yaw, pitch, aim, seed, shots, hand, seen));
 
         // a fire clip longer than the fire interval plays faster, so its slide / bolt cycle is home before the next shot
         String clip = fireClip(gun, volley, hand);
         float length = viewmodel.clipLength(clip), interval = gun.fireInterval();
         viewmodel.play(Viewmodel.Action.FIRE, clip, length > interval && interval > 0 ? interval * 0.98f : 0);
+        // with the sights up the hands keep the sight picture (spec §31.5): the aimed variant, by how far the gun is up
+        if (!volley) viewmodel.playAimed(clip + gun.anims.aimedSuffix, aim);
         viewmodel.fired(stats.kick() * (volley ? 1.35f : 1), aim, volley ? 3 : 1 << hand);
         float r = (1 + (gun.recoil.ads - 1) * aim) * stats.recoilScale() * (volley ? 1.5f : 1);
         recoilPitch += gun.recoil.vertical * r * (0.85f + random.nextFloat() * 0.3f);
@@ -650,21 +676,7 @@ public final class ClientGuns {
             playUi(stats.fireSound(), 0.96f + random.nextFloat() * 0.08f - i * 0.04f, stats.suppressed() ? 0.7f : 1.0f);
         }
 
-        // predicted tracer and impact, from this client's own trace (the server re-traces with the same seed: shot k's
-        // pellets are numbered after the earlier shots'); shots leave from the camera, which is low while sliding
-        Vec3 eye = Slides.eyePosition(player);
         muzzleLight(eye.add(player.getViewVector(1).scale(0.8)).add(0, -0.15, 0), stats.skinFx(), stats.suppressed(), volley ? 1.4f : 1f);
-        int pellets = Math.max(1, stats.ammo().pellets);
-        for (int shot = 0; shot < shots; shot++) {
-            int from = volley ? shot : hand;
-            for (int pellet = 0; pellet < pellets; pellet++) {
-                Vec3 dir = GunMath.spreadDirection(yaw, pitch, spread, seed, shot * pellets + pellet);
-                Vec3 end = localTrace(player, eye, dir, stats.range());
-                pendingTracers.add(new PendingTracer(end, from));
-            }
-            // a bolt or pump gun keeps the case until its bolt / pump comes back (clipEvent)
-            if (gun.ejectEvent.isEmpty()) pendingShells[from]++;
-        }
     }
 
     /**
@@ -695,18 +707,30 @@ public final class ClientGuns {
         }
     }
 
-    /** Client-side trace for effects only; spawns the impact ({@link Impacts}: debris, dust, sparks, blood, splashes). */
-    private static Vec3 localTrace(LocalPlayer player, Vec3 from, Vec3 dir, double range) {
+    /** Where a predicted projectile ended and the entity it struck ({@link GunPackets.C2SFire#NONE} for none). */
+    private record LocalHit(Vec3 end, int entity) {
+    }
+
+    /**
+     * Client-side trace for effects only, the server's (GunService) as far as the shooter can know it: to the first block
+     * unless water or lava spends the round first or it skips off a water surface ({@link Ballistics}); spawns the impact
+     * ({@link Impacts}: debris, dust, sparks, blood, splashes, the trail under water) with the energy the round has left.
+     */
+    private static LocalHit localTrace(LocalPlayer player, Vec3 from, Vec3 dir, double range) {
         ClientLevel level = (ClientLevel) player.level();
         Vec3 to = from.add(dir.scale(range));
         BlockHitResult block = level.clip(new ClipContext(from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
-        Vec3 end = block.getType() == HitResult.Type.MISS ? to : block.getLocation();
+        boolean hitBlock = block.getType() != HitResult.Type.MISS;
+        Ballistics.Path path = Ballistics.trace(level, from, dir, hitBlock ? from.distanceTo(block.getLocation()) : range,
+                stats == null ? Ballistics.Medium.NONE : stats.ammo().medium());
+        if (path.stoppedInFluid()) hitBlock = false;
+        Vec3 end = hitBlock ? block.getLocation() : path.end();
         // the same hit boxes as the server (a sliding player is low, with the head behind the hips)
         Vec3 point = null;
         Entity struck = null;
         double nearest = from.distanceToSqr(end);
         for (Entity candidate : level.getEntities(player, new AABB(from, end).inflate(1),
-                e -> e.isPickable() && !e.isSpectator() && !player.isAlliedTo(e))) {
+                e -> e.isPickable() && e.isAlive() && !e.isSpectator() && !player.isAlliedTo(e) && e != player.getVehicle())) {
             HitShapes.Hit hit = HitShapes.clip(candidate, from, end, Math.max(0.05, candidate.getPickRadius()));
             if (hit != null && from.distanceToSqr(hit.point()) < nearest) {
                 point = hit.point();
@@ -716,16 +740,19 @@ public final class ClientGuns {
         }
         String ammo = stats == null ? null : stats.ammo().id;
         Vec3 stop = point != null ? point : end;
-        Impacts.fluidOnPath(level, from, stop, player, ammo);
+        Impacts.path(level, path, from.distanceTo(stop), ammo);
         if (point != null) {
-            Impacts.entity(level, point, struck, dir, ammo);
-            return point;
+            float energy = path.energyAt(from.distanceTo(point));
+            Impacts.entity(level, point, struck, dir, ammo, energy);
+            if (stats != null && energy > 0.3f) Decals.onEntity(stats.ammo().bodyDecal, struck, from, point, null);
+            return new LocalHit(point, struck.getId());
         }
-        if (block.getType() != HitResult.Type.MISS) {
-            Impacts.block(level, block.getLocation(), block.getDirection(), block.getBlockPos(), dir, ammo);
-            if (stats != null) Decals.onBlock(stats.ammo().decal, block.getLocation(), block.getDirection(), block.getBlockPos(), null);
+        if (hitBlock) {
+            float energy = path.energyAt(path.length);
+            Impacts.block(level, block.getLocation(), block.getDirection(), block.getBlockPos(), dir, ammo, energy);
+            if (stats != null && energy > 0.3f) Decals.onBlock(stats.ammo().decal, block.getLocation(), block.getDirection(), block.getBlockPos(), null);
         }
-        return end;
+        return new LocalHit(end, GunPackets.C2SFire.NONE);
     }
 
     private static void startReload(LocalPlayer player) {
@@ -812,7 +839,7 @@ public final class ClientGuns {
         if (reloading || stats == null || System.nanoTime() < drawEnd || aim() > 0.05f) return;
         if (viewmodel.action() == Viewmodel.Action.FIRE || viewmodel.action() == Viewmodel.Action.INSPECT) return;
         LocalPlayer player = Minecraft.getInstance().player;
-        if (player != null && player.isSprinting()) player.setSprinting(false);
+        if (player != null) SwimPose.stopRunning(player);
         viewmodel.inspect(stats.gun().anims.inspect);
     }
 
@@ -873,7 +900,7 @@ public final class ClientGuns {
         Vec3[] muzzles = new Vec3[2];
         for (int gun = 0; gun < 2; gun++) {
             Matrix4f at = viewmodel.nodeMatrix("muzzle", gun, base, tmp);
-            muzzles[gun] = gun == 1 && at == null ? muzzles[0] : ViewmodelRenderer.viewToWorld(camera, at, player.getEyePosition());
+            muzzles[gun] = gun == 1 && at == null ? muzzles[0] : ViewmodelRenderer.viewToWorld(camera, at, Slides.eyePosition(player));
         }
         CraftData.SkinFx skinFx = stats == null ? null : stats.skinFx();
         // (no muzzle smoke here: in first person the muzzle is ~0.3 blocks from the eye and smoke would fill the screen)
@@ -948,26 +975,51 @@ public final class ClientGuns {
             }
             mc.particleEngine.add(tracer(level, muzzle, end, skinFx));
         }
-        Vec3 dir = shooter == null ? new Vec3(0, -1, 0) : end.subtract(shooter.getEyePosition()).normalize();
-        String ammo = shooter instanceof Player player ? GunContent.statsOf(player.getMainHandItem()).map(s -> s.ammo().id).orElse(null) : null;
-        if (shooter != null) Impacts.fluidOnPath(level, shooter.getEyePosition(), end, shooter, ammo);
-        if (!shot.hitBlock()) {
-            // a round that stopped short of any block struck someone: the shot does not say whom, the spot does
-            Entity struck = Impacts.entityAt(level, end, shooter);
-            if (struck != null) Impacts.entity(level, end, struck, dir, ammo);
+        // the round left the shooter's eyes (low while it slides), as the server traced it; a shooter out of sight leaves
+        // only the struck face to go by
+        Vec3 eye = shooter == null ? null : Slides.eyePosition(shooter);
+        boolean knownFace = shot.face() >= 0 && shot.face() < Direction.values().length;
+        Vec3 dir = eye != null && end.distanceToSqr(eye) > 1e-6 ? end.subtract(eye).normalize()
+                : knownFace ? faceInto(Direction.values()[shot.face()]) : new Vec3(0, -1, 0);
+        GunStats used = shooter instanceof Player player ? GunContent.statsOf(player.getMainHandItem()).orElse(null) : null;
+        String ammo = used == null ? null : used.ammo().id;
+        // the server's word on how it ended: a round a fluid stopped hit no one; one it did not stop did not skip
+        boolean skipped = shot.face() == GunPackets.S2CShot.SKIPPED, spent = shot.face() == GunPackets.S2CShot.SPENT;
+        // its way through fluids, re-traced from the shooter's eyes for the splashes and the trail
+        Ballistics.Medium medium = used == null ? Ballistics.Medium.NONE : used.ammo().medium();
+        if (!skipped) medium = new Ballistics.Medium(medium.waterRange(), medium.lavaRange(), 0);
+        Ballistics.Path path = eye == null ? null : Ballistics.trace(level, eye, dir, eye.distanceTo(end) + 1e-3, medium);
+        if (path != null) Impacts.path(level, path, eye.distanceTo(end), ammo);
+        float energy = path == null ? 1 : path.energyAt(eye.distanceTo(end));
+        if (skipped || spent) {
+            if (path == null || (skipped ? !path.skipped : !path.spent)) Impacts.stopped(level, end, dir, ammo, skipped);
             return;
         }
-        if (shot.face() < 0 || shot.face() >= Direction.values().length) {
+        if (!shot.hitBlock()) {
+            // a round that stopped short of any block struck someone (or was spent in a fluid): the shot does not say
+            // whom, the spot does
+            Entity struck = Impacts.entityAt(level, end, shooter);
+            if (struck != null) {
+                Impacts.entity(level, end, struck, dir, ammo, energy);
+                if (energy > 0.3f && eye != null) Decals.onEntity(used == null ? "bullet_wound" : used.ammo().bodyDecal, struck, eye, end, null);
+            }
+            return;
+        }
+        if (!knownFace) {
             BlockPos pos = BlockPos.containing(end.add(dir.scale(0.01)));
-            Impacts.block(level, end, Direction.getApproximateNearest(-dir.x, -dir.y, -dir.z), pos, dir, ammo);
+            Impacts.block(level, end, Direction.getApproximateNearest(-dir.x, -dir.y, -dir.z), pos, dir, ammo, energy);
             return;
         }
         Direction face = Direction.values()[shot.face()];
         // the struck block is just behind the face
         BlockPos pos = BlockPos.containing(end.subtract(face.getStepX() * 0.01, face.getStepY() * 0.01, face.getStepZ() * 0.01));
-        Impacts.block(level, end, face, pos, dir, ammo);
-        String decal = shooter instanceof Player player ? GunContent.statsOf(player.getMainHandItem()).map(s -> s.ammo().decal).orElse("bullet_hole") : "bullet_hole";
-        Decals.onBlock(decal, end, face, pos, null);
+        Impacts.block(level, end, face, pos, dir, ammo, energy);
+        if (energy > 0.3f) Decals.onBlock(used == null ? "bullet_hole" : used.ammo().decal, end, face, pos, null);
+    }
+
+    /** Straight into a face (the way a round that struck it head on went). */
+    private static Vec3 faceInto(Direction face) {
+        return new Vec3(-face.getStepX(), -face.getStepY(), -face.getStepZ());
     }
 
     /** Keeps one laser effect alive per player holding a gun with a laser. */

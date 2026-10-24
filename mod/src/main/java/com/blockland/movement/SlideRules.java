@@ -28,6 +28,8 @@ public final class SlideRules {
     public int holdTicks = 3;
     /** Speed kept per tick after that. */
     public float friction = 0.92f;
+    /** …on wet ground (rain falling on it): a film of water under the slide carries it further. */
+    public float wetFriction = 0.945f;
     /** The slide ends below this speed… */
     public float endSpeed = 0.17f;
     /** …or after this many ticks. */
@@ -108,5 +110,13 @@ public final class SlideRules {
     /** Whether a slide that started at {@code start} is over after {@code ticks}. */
     public boolean isOver(float start, int ticks) {
         return ticks >= maxTicks || speedAt(start, ticks) < endSpeed;
+    }
+
+    /**
+     * The next tick's speed of a slide going at {@code speed} after {@code ticks}: held at first, then the friction of the
+     * ground it slides on ({@code wet}: rain falling on it).
+     */
+    public float next(float speed, int ticks, boolean wet) {
+        return ticks <= holdTicks ? speed : speed * (wet ? wetFriction : friction);
     }
 }

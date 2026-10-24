@@ -37,7 +37,10 @@ drawn by one `CUSTOM` particle, layer by layer — `SURFACE` (bullet holes and o
 faces) before `VOLUME` (impact dust and debris, explosion smoke and sparks) — so what floats in front of a face always
 covers what is painted on it, whichever was spawned first. Modules register a drawer once and `wake` the pass when
 something appears in a level; a drawer that fills vanilla's buffer source ends its own batches (`Decals`), or its draws
-would only land at the end of the pass, over everything drawn there.
+would only land at the end of the pass, over everything drawn there. Vanilla's particle engine can drop that particle
+without removing it (a resource reload clears its lists — the 世界光照 switch reloads — and a full layer evicts its
+oldest), so the pass notes when it last drew and is put back, every client tick and on every `wake`, once it has not drawn
+for half a second; only the current pass draws.
 
 A scope's picture in picture (`ScopePicture`) renders the level a second time inside the hand phase: `FrameHooks`
 ignores the Forge pass while it runs, and `SceneLighting.extraWorldView(true/false)` around it lights it like the main
@@ -62,6 +65,12 @@ One std140 uniform block `BlockLandScene` per frame (layout and helpers in
 * Shadows: `BlShadowMatrix[4]`, `BlShadowSplits`, `BlShadowParams` (see §6).
 * Lights: `BlLights[2i]` (camera-relative position, radius), `BlLights[2i+1]` (linear colour × intensity).
 * Materials: `BlMaterials` (sprite rects of the block atlas with emission / kind / reflectivity, §7).
+* Light colours and sky (§14): `BlBlockLight` (rgb block light tint × strength, 1 = vanilla's; `a` 1 = the volumetric
+  clouds replace vanilla's this frame), `BlFog` (haze extinction at the camera's height, height falloff, sun in-scatter,
+  `w` 1 = on). `BlSunColor` already carries the player's sun / moon colour temperature.
+* Wind (§18), last in the block: `BlWind` (heading, steady strength, the setting), `BlWindInfo` (counts), the tunables
+  `BlWindBend`, `BlWindStack`, `BlWindPush`, `BlWindSpring`, `BlWindKinds`, then `BlGusts[]`, `BlPushers[]`, `BlSways[]`;
+  the plant columns are a texture, `BlPlantColumns` on unit 15 (patched like the material map, read by terrain.vsh).
 
 BlockLand's own pipelines declare `withUniform("BlockLandScene", UNIFORM_BUFFER)` and `withSampler("BlShadowMap")`
 and bind `SceneLighting.uniforms()` / `SceneLighting.shadowMap()` on every pass. When nothing provides them (graphics
@@ -84,7 +93,9 @@ pipeline using those shaders are patched (once per program):
 * `uniform int BlRole` → the program's role: **0** unpatched (exactly vanilla), **1** opaque (solid / cutout terrain,
   non-blended entities: lit, emission encoded in alpha), **2** blended (lit, alpha untouched), **3** translucent terrain
   (water and glass shading), **4** the Fabulous transparency composite (water refraction and absorption, emission alpha
-  carried through). The role comes from the pipeline (shader + blend function), never from the shader source.
+  carried through), **5** vanilla's clouds (`minecraft:core/rendertype_clouds`, only the fragment shader is overridden:
+  discarded while `BlBlockLight.a` says the volumetric clouds replace them, §14). The role comes from the pipeline
+  (shader + blend function), never from the shader source.
 
 Programs that do not declare the block (another resource pack's shaders) are left unpatched, and the status says so.
 `BlWater.x` is the wave steepness (1 = default). Sun direction and shadow strength have one source for lit faces and
@@ -128,15 +139,28 @@ keeps encoding on, so held items never fake glow from their texture alpha.
   (the voxel's colour, else the scene's) at the internal resolution; rays at the quality's resolution — cosine-weighted
   DDA marches; a hit face shines with its colour lit by the light of the cell in front of it (Minecraft's brightness curve,
   sky light by the daylight), its own emission, and with sun bounce direct sun if a shadow ray reaches the sun; misses
-  add nothing (the sky's light is in Minecraft's lighting already); occlusion within 3 blocks. Then BlockLand's denoiser
-  (temporal accumulation by reprojection with linear-depth rejection, 32 frames at most, and three edge-avoiding à-trous
-  passes) or none when DLSS Ray Reconstruction denoises; a joint-bilateral resolve to the internal resolution × albedo ×
-  strength. Decode adds the light and multiplies by the traced occlusion, which replaces the screen-space one (that pass
+  add nothing (the sky's light is in Minecraft's lighting already); occlusion within 3 blocks. Ray directions come from
+  the R2 sequence over frames and rays, shifted per pixel by interleaved gradient noise (`rt_sample`: accumulation
+  converges fast and what noise is left is fine-grained, never blotchy); the hit chance of leaves and partial blocks stays
+  random. Then BlockLand's denoiser (SVGF-style: temporal accumulation by reprojection with linear-depth rejection, 32
+  frames at most, carrying the light's first and second luminance moments; four edge-avoiding à-trous passes, 1/2/4/8 px,
+  weighted by depth, normal and luminance against the pixel's variance — boosted while its history is short — the first
+  pass written back as the next frame's history) or none when DLSS Ray Reconstruction denoises; a joint-bilateral resolve
+  to the internal resolution × the plain albedo (the voxel's colour) × strength, faded out (light and occlusion) within
+  0.35 × the ray length of the voxel box's faces, where rays leave the box early. A ray's light is capped at 3 per channel
+  and a sample above the pixel's settled light (mean + 3σ of its moments, after 4 frames) is pulled down to it (fireflies);
+  the history is read from its four nearest texels, each kept only where it saw the same surface (no leaking across
+  silhouettes). When the box follows the camera into new sections, the tiles still holding sections from its far
+  side are emptied at once (whatever the fill budget), so rays never meet phantom blocks there (blinking shadows); the
+  fade is measured from the camera (the reach the box always has around it), not from the box's faces, so it does not
+  jump when the box moves. The traced block light takes the
+  player's block light colour (`RtBlockLight`), the sun bounce the sun's. Decode adds the light and multiplies by the traced occlusion, which replaces the screen-space one (that pass
   is skipped). Verified against a CPU march by `tools/raytrace/check_voxels.py`.
 * DLSS Ray Reconstruction (Streamline feature 1001, `sl.dlss_d` + `nvngx_dlssd`): with ray tracing on, DLSS Super
   Resolution or DLAA chosen and RR as the denoiser, the rays run at the internal resolution without BlockLand's denoiser
   and DLSS evaluates RR instead of SR on the same viewport: the colour carries the noisy traced light, with three more
-  tags — diffuse albedo (the scene's colour floored by the voxel albedo, so its texture detail is never taken for noise),
+  tags — diffuse albedo (its own texture: the scene's colour floored by 0.15 × the voxel albedo, so its texture detail
+  is never taken for noise and dark corners are not divided by almost nothing; the resolve keeps the plain albedo),
   specular albedo 0.04, world normals with roughness 1 packed in alpha — and `DLSSDOptions` (mode, output size, HDR,
   packed roughness, world ↔ view matrices) each frame. `tools/dlss/check_dlss.py --rr` runs it on a noisy input.
 * DLSS 5 3D-guided neural rendering (`upscale/NeuralRenderer` around `upscale/dlss/NeuralRendering`, a `PostChain.Relight`
@@ -185,6 +209,10 @@ keeps encoding on, so held items never fake glow from their texture alpha.
   flush's node matrices, depth-tested against its own depth). The temporal upscalers and DLSS reproject the weapon with
   it, and motion blur (§11) smears the weapon and arms by it with their own shutter (手臂与武器运动模糊); the weapon is
   always in front, so the world never smears into it.
+  Skinned arms (asset spec §7, `client/viewmodel/ArmSkin`) are skinned on the CPU into per-rig vertex buffers and drawn
+  with their anchor joint's model-view (`GpuModel.addMesh` with a vertex buffer of its own; a buffer per mesh and draw
+  until the list flushes), so their motion is the anchor's: only the change of the elbow / wrist bend between two
+  frames is not in the motion vectors.
 
 ## 5. Dynamic lights (`client/render/LightSources`)
 
@@ -206,6 +234,9 @@ frame. `ShadowInfo` hands the atlas and matrices to the uniforms and the volumet
 Entities are captured by running their own renderers into a capturing buffer source; while that runs
 `client/render/ShadowPass.active()` is true, and renderers that would draw with their own pipeline (the third-person
 weapons) take their vanilla-render-type path instead, so they are captured and cast shadows like everything else.
+The local player casts their whole shadow in first person too, head included. The first-person weapon (`gun.fsh`,
+within 1.6 blocks of the eye) looks its shadow up 1 block towards the light, past the player's own body and the head
+round the eye, so they shade the world but not what the player holds in front of their face.
 
 ## 7. Block materials (`assets/blockland/graphics/block_materials.json`)
 
@@ -223,6 +254,9 @@ Data, not code: block texture → material, resolved to sprite rects of the bloc
 `emission` 0..1; `threshold` = the texel's brightest channel from which it glows (only the flame of a torch; the
 brightest channel, not luminance, so saturated reds and blues glow too); `kind` one of
 `plain`, `water`, `glass`, `metal`; `reflectivity` 0..1. At most 96 sprites (`SceneLighting.MAX_MATERIALS`).
+An entry may carry `"wind": {"mode": "bend" | "sway" | "leaves", "flex": 0.5..2, "upper": bool, "water": bool}` (§18);
+an entry with only `wind` sets no material. In the material map's texel, B packs the kind (bits 0–1) and the wind
+(bits 2–3 mode, 4 upper half, 5 water plant, 6–7 flex level: 0.5 / 1 / 1.5 / 2).
 
 ## 8. Weapons
 
@@ -248,7 +282,9 @@ draws (no motion vectors, nothing for the vanilla path).
 
 Presets 低 / 中 / 高 / 极高 / 自定义 fill in the values; any change makes the preset 自定义. Cheap changes apply live
 (`Graphics.settingsChanged`); the world lighting switch reloads resources when the settings screen closes
-(`Graphics.settingsCommitted`).
+(`Graphics.settingsCommitted`). Light colours (阳光色温, 月光色温, 方块光源色温 −1 cool … +1 warm, 方块光源亮度 0..2) are
+temperature tints of luminance 1 (`light/LightColors`) used by the scene uniforms, the ray tracer and the clouds; 迷雾,
+薄雾浓度, 体积云, 云层质量 and 云量 are §14's.
 
 ## 10. The bomb explosion (`client/bomb/fx`)
 
@@ -311,12 +347,19 @@ TAA motion vectors still carry only the camera's and the weapon's motion.
 
 ## 12. Bullet impacts (`client/impact`)
 
-What a round throws out of whatever it strikes, client-only and purely visual (no vanilla particles). Weapons only call
-the facade `Impacts` with the hit and their ammo id (`guns.json` ammo: `pistol`, `smg`, `rifle`, `sniper`, `shotgun`):
-`block(level, at, face, pos, dir, ammo)`, `entity(level, at, entity, dir, ammo)`, `fluid(level, at, fluidState, pos,
-dir, ammo)`, `fluidOnPath(level, from, to, shooter, ammo)` (splashes where a shot first enters a fluid's surface) and
-`entityAt(level, end, shooter)` (for shots reported without their target). The gun module calls them from its local
-trace and for other players' shots; decals stay the weapon's (`Decals.onBlock` with the ammo's decal).
+What a round or a blade throws out of whatever it strikes, client-only and purely visual (no vanilla particles).
+Weapons only call the facade `Impacts` with the hit and their ammo id (`guns.json` ammo: `pistol`, `smg`, `rifle`,
+`sniper`, `shotgun`) or their attack's impact profile (`knives.json` `impactProfile`: `slash`, `stab`):
+`block(level, at, face, pos, dir, ammo[, energy])`, `entity(level, at, entity, dir, ammo[, energy])` (`energy` 0..1: what
+the round has left after water, see *Rounds in fluids*), `fluid(level, at, fluidState, pos, dir, ammo)`,
+`path(level, Ballistics.Path, stop, ammo)` (the round's way through fluids up to where it stopped), `slash(level, at, face,
+pos, motion, profile)` / `slashEntity(level, at, entity, from, motion, profile)` (a blade; `motion` = the cut, a little
+forward), `drip(level, at, motion)` (water falling off something soaked) and `entityAt(level, end, shooter)` (for shots
+reported without their target). The gun module calls them from its local trace and for other players' shots (their
+direction from `Slides.eyePosition` of the shooter, or straight into the struck face when the shooter is out of sight),
+the knife module from its strike and other players' impacts; decals stay the weapon's (`Decals.onBlock` with the ammo's
+decal, `Decals.onEntity` with its `bodyDecal`, `bullet_wound`, for rounds that still had a third of their energy; body
+decals lie on the cube of the drawn model and follow its animation, `client/render/EntityPoses`, asset spec §14).
 
 **Data** (`assets/blockland/impacts.json`, Gson, `client/impact/ImpactData`; speeds blocks/s, sizes blocks, times s):
 
@@ -326,7 +369,7 @@ trace and for other players' shots; decals stay the weapon's (`Decals.onBlock` w
   powder without chunks), `perDebris` (mass per chunk), `friability` 0..1, `size` [radius just after the burst, radius at
   the end] for a mass of 1, `speed`, `life` (s; a puff is short: about a second for stone and concrete), `rise`, `settle` (sinking of the heavy part), `wind`, `opacity` (optical density
   scale), `trail` (share of the chunks shedding dust in flight), `landing` (mass of the poof a chunk raises where it
-  lands)}, `sparks` {`count`, `speed`, `life`, `ricochet` 0..1, `spread`, `gravity`, `bounce`, `color`}, `splash` (fluids)
+  lands)}, `sparks` {`count`, `speed`, `life`, `ricochet` 0..1, `spread`, `gravity`, `bounce`, `color`}, `debris.density` (relative to water: sinks above 1, floats below), `splash` (fluids)
   {`kind` `water` | `lava`, `sheet` / `column` (heights for energy 1), `drops`, `dropSpeed`, `ripple` (ring speed),
   `rippleLife`, `foam` 0..1}, `blockTexture`
   (debris = a random quarter of the struck block's particle sprite, tinted by its block colour) or `sprite` + `color`,
@@ -336,16 +379,23 @@ trace and for other players' shots; decals stay the weapon's (`Decals.onBlock` w
 * `blocks` / `entities` / `fluids`: ordered rules, first match wins. Blocks `id:`, `tag:`, `sound:<SoundType field name>`
   (e.g. `sound:metal`), else `fallbackBlock`; entities `id:`, `vehicle`, `armored` (armour ≥ 10), `living`, `any`, else
   `fallbackEntity`; fluids `id:` / `tag:`. Answers are cached per block state / fluid and dropped on reload and logout.
-* `ammo.<id>` {`energy` (speeds), `count`, `size`, `dust`}, `fallbackAmmo`.
+* `ammo.<id>` {`energy` (speeds), `count`, `size`, `dust`, `sparks`, `blade` (thrown along the cut, no exit wound),
+  `thrust` (a stab: back out along the blade)}, `fallbackAmmo`. Blade profiles: `slash`, `slash_heavy`, `stab`.
 * `environment` {`wetDust`, `wetDarken`, `wetSplash` (rain on the struck surface: less, darker dust and muddy drops),
   `snowDust` (snowing biome: more, whiter powder), `waterDrag` and `bubbles` (under water: debris sinks slowly, bubbles
   rise instead of dust), `wind`, `rainWind`, `thunderWind` (a slowly turning, gusting wind that carries dust and light
-  debris)}.
+  debris), `rainSparks` (wet surface: sparks' count and life ×), `wetBounce` (wet debris' restitution ×), `current`
+  (blocks/s a fluid's flow carries what is in it), `bubbleRise` [smallest, largest] (blocks/s), `trailBubbles` (per block
+  of a round's path under water)}.
 
 **Shaping.** The spray leaves in a cone round `normal·(1 − 0.85·g) + reflection·0.85·g` (`g` = 1 − cos of the angle
 of incidence): square hits burst out round the surface normal, glancing ones streak along the surface towards the
-ricochet; debris speed × (0.55 + 0.45·cos), sparks lean to the ricochet by `ricochet` and get more numerous the more
-glancing the hit. Entity hits spray out of the body towards the shooter. Nothing is ever sent into the surface.
+ricochet; the cone is drawn out downrange — along the round's path over the surface, i.e. the shooter's yaw and pitch —
+by up to 1.2·g (an oblique hit's butterfly-shaped spray), and a share (22 % × cos) of a square hit's chunks is blown
+straight back out of the hole along the round's path, a little faster. Debris speed × (0.55 + 0.45·cos), sparks lean to
+the ricochet by `ricochet` and get more numerous the more glancing the hit. Under water the chunks leave at 0.3× the
+speed with 0.6× the spread, sink and drag (`waterDrag`), and the round's cavity lets out more bubbles the harder it is.
+Nothing is ever sent into the surface.
 
 **Dust is made by the debris.** A hit's powder is one cloud whose mass is `(count + perDebris × debris.count × ammo.count)
 × friability × ammo.dust × (0.6 + 0.4·energy)` (× `wetDust` on wet ground, × `snowDust` in snow; none under water), taken
@@ -367,6 +417,44 @@ becomes a splat on the surface (blood stays for its life). A cloud's centre is t
 few ticks, rises (`rise`, fading with age) or sinks (`settle`, growing with age), drifts with the wind and slides along
 walls and floors. Sparks bounce once. With second collisions off, pieces vanish where they touch a block.
 
+**Wet, snowy, under water.** On a wet surface (rain on it) the dust is `wetDust` of itself and darker, chunks clump
+(restitution × `wetBounce`, no dust trails), muddy drops fly up with them, and sparks are fewer and short-lived
+(`rainSparks`). Under water no sparks fly (a few bubbles hiss off metal instead), no flash, and the hit sounds a dull,
+low knock (also when the listener's ear is under water).
+
+**Rounds in fluids** (`combat/Ballistics`, shared by the server's `GunService` and the shooter's prediction, so both stop
+a round at the same place): air does not slow a round over a gun's range; water and lava do. Along the path the round's
+energy (1 as fired) falls linearly with the fluid it goes through — `1 / waterRange` per block of water, `1 / lavaRange` per
+block of lava (`guns.json` ammo, defaults 2.5 and 0.3; 0 = that fluid does nothing) — and it is spent where it reaches 0;
+a round meeting a level water surface from the air below `skipAngle` (default 7°) to it skips off and goes no further.
+The path walks the voxels (Amanatides–Woo), each fluid block being its fluid's box up to its height, so a round passes
+over a thin sheet of water and through the depth of a pool. The server only looks for targets up to where the round
+stops and scales the damage by the energy left at the hit, and tells the others how a round that hit nothing ended
+(`S2CShot.face`: the struck face, `SKIPPED` -2 or `SPENT` -3): their clients re-trace the path from the shooter's eyes for
+the splashes and the trail, but take the server's word for the stop (`Impacts.stopped` where their own trace comes out a
+hair different) and never look for a body at the end of such a round. The client's `Impacts.path` shows the way: a splash where it
+goes into water from the air (scaled by its energy there), a skip — a low spray thrown forward along its way, rings and a
+slap — where it skips, a torn spray where it goes into falling water from the side, a trail of bubbles from its cavity
+along its path under water (dense at the entry, thinning as it slows), a spout where it leaves water upwards, and a spent
+round's last bubbles and its slug sinking, tumbling, to the bottom. Blocks and bodies struck after water are struck with
+the energy left (weaker pieces, no decal under a third of it). `python -I tools/combat/check_ballistics.py` checks the
+walk against a fine march and the hand-worked cases (spent, energy halfway, skip, entries, under water, lava, shallow).
+
+**Fluid physics** (setting 流体物理): water is ~800 times denser than air, so under water a piece reaches its terminal
+speed within a tick or two — drag `0.35·√(0.03/size)` per tick, at least `waterDrag` — and sinks under its weight less its
+buoyancy (`1 − 1/density`), or rises (lighter than water, at 0.4 of that) and floats at the surface, bobbing; the current
+(vanilla's flow vector × `current`, refreshed every four ticks) carries it, its speed relaxing to the water's. A chunk
+falling into water from the air throws a small splash and rings where it went in (free splash slots only) and loses two
+thirds of its speed; one falling into lava burns up in a wisp of smoke (wood and leaves with a flame). Sparks die in
+water. Bubbles rise at their size's speed (`bubbleRise`), wobbling and carried by the current, and the larger ones leave
+a faint ring where they burst. Spent cases (`GunParticles.Shell`) splash in (none when ejected under water), sink
+slowly, tumbling less, and settle without a tink. With fluid physics off, pieces only fall more slowly in water (the old behaviour).
+
+**Blades** (`slash`, `slashEntity`): no crater — the chips leave along the cut, low over the surface and strung out along
+the gouge (a thrust throws them back out of the hole), a little dust, sparks raked off metal and stone along the cut
+(blade profile `sparks`). A cut into a living target flings blood off the blade along the cut and a little out of the
+body (cast-off, `castOff` drops at `castSpeed`), a stab back out along the blade, a small mist; a plume under water.
+
 **Fluids** are their own thing, shaded like the water (`impact_fluid`). Water: a splash event drawn from its age alone —
 the crown sheet rising round the hole for ~0.3·√E s and falling back (16 × 2 quads, flaring out, its rim ragged and
 breaking up), the column (Worthington jet, 8 × 2 quads) shooting up after 0.09 s for rounds above energy 0.6, three ring
@@ -376,6 +464,57 @@ falling back below the water's surface, make a small secondary splash (crown and
 gone. Energy E = ammo energy × (0.75 + 0.25 × ammo size). Lava: molten spatter (opaque, glowing by its temperature,
 cooling over its life and crusting dark, lying as a splat where it lands, gone back into the pool), a glowing crater
 spreading on the surface, and the material's embers and smoke.
+
+**Blood** (`materials.<id>.blood`: `backDrops`, `exitDrops`, `backSpeed`, `exitSpeed`, `backSpread`, `exitSpread`,
+`dropSize`, `splatLife`, `backMist`, `exitMist`, `mistSize`, `mistLife`, `mistOpacity`, `mistColor`, `plume`,
+`plumeSize`, `plumeLife`, `plumeOpacity`, `plumeColor`, `splashTint`, `fineDrops`, `fineSpeed`, `fineSize`,
+`headMultiplier`, `runs`, `dryTime`, `rainWash`, `castOff`, `castSpeed`, `bleed`, `bleedRate`; settings 血液效果 0..2, 水中血液扩散 and 血迹停留时间
+0..2). The wound's geometry is the struck body part's (`HitShapes.part`: a sliding player's body or head box, an upright
+entity's bounding box — only its head band for a head hit): the entry's side (`faceNormal`) and where the round leaves
+that part along its path (`exit`). A living target's material with `blood` replaces debris and dust with: drops sprayed
+back out of the entry towards the shooter (between the reversed round and the struck side), a larger, faster spray out
+of the exit along the round (× energy), the fine aerosol — `fineDrops` tiny, fast drops (two thirds out of the exit) in
+a narrow cone, braked hard by the air within a few ticks: the red burst of the first tenth of a second — and a mist
+cloud at both (the dust cloud machinery: entry `backMist`, exit `exitMist` × energy of mass, drawn out along their throw,
+hanging about a second and sinking a little). A head hit throws `headMultiplier` times as much and a larger mist. A `radial` share (0.35) of each spray bursts out
+sideways round the round's line instead, 60° to 95° off it — up, down, left, right, the crown a wound throws — and the
+sprays are fast and braked by the air (back 2.5–6.5, exit 4.5–11, fine 8–16 blocks a second), so they reach out round
+the target before gravity takes them.
+Everything moves with the target (its motion over the last tick, at most 0.6 blocks a tick). A blood drop is drawn as a
+small glossy sphere; where it lands — floor, wall or ceiling — it sticks as a stain: an ellipse on that face, wider the
+harder it struck (1.4–3.2 × its radius) and drawn out along the way it was going by 1/sin of the angle (at most 3.2), its
+rim ragged, satellite droplets ahead of it; on a wall the larger ones (`runs`) run down it, ending in a bead; on a
+ceiling a big one may let a drop fall a moment later. A run only goes as far down as the wall does (it stops at the
+top of a doorway, a window, a ledge). A stain lies on the faces as drawn (`client/render/BlockFaces`, from the blocks'
+outline shapes): it moves onto the outermost visible side under where it struck (a snow layer's top over its lower
+collision box, a fence post's top under its raised one; nothing visible there and the drop is gone), and the sides that
+really cover its plane round it — one rectangle per box side, those under a full block left out — cut it and its run
+(Sutherland–Hodgman on the CPU, the pieces drawn as fans), so it never hangs over an edge, a slab's or a step's side, a
+corner or air, and carries on over a neighbouring block that continues the surface; the rectangles are found again every
+half second (blocks broken or placed), and a stain that none hold any more is gone. Stains lie off their face by 0.0025 + 0.00007 × their distance (the depth buffer's
+precision); their occasional checks (rain, the block under them, light) run on the pool's own tick counter, not their
+age, which jumps in the rain. With second collisions off, blood vanishes where it lands. Stains stay `splatLife` × the setting seconds (0 = drops vanish
+where they land), dry matte and darker over `dryTime`, and in the rain thin out — paler, wider, more see-through — and
+age `1 + rainWash` times as fast; they go with the block they lie on. The debris pool passes over live stains a few
+times before reusing one, so a burst of debris does not wipe the walls clean. A blood drop falling into water clouds out
+there (a small plume) instead of sinking. The wound goes on bleeding a moment (`Wounds`): for `bleed` seconds (× the
+blood setting, a head hit's `headMultiplier`, the round's or blade's energy) drops fall from where it went in — kept on
+the body in its own frame, turned with its yaw — at `bleedRate` a second at first, fewer and fewer (× (time left)²),
+moving with the target: a short trail of stains where it runs; under water the wound seeps small plumes instead. At most
+48 wounds bleed at once. In water (the
+wound under the surface): no drops, no mist, a plume at each wound — a cloud in water mode: its burst slows within a
+second, then it drifts in a slow eddy, sinks slightly, spreads to `plumeSize[1] × ∛mass` over `plumeLife`, has no wind
+and no substance above the surface (it flattens against it), drifts with the water's current (fluid physics), and seen
+from above it shows through the water (the
+water's own surface in the depth copy does not clip it; dimmed ×0.8) — the water around a wound turns red. A target
+standing in water hit just above it splashes water tinted by `splashTint` towards the plume colour. The cloud block has
+four vec4 per cloud (the fourth: the water surface's height, camera-relative, and the water flag).
+
+**Disturbances** (`Impacts.disturb`; below energy 1 only into a free splash slot, so wading, cases and drips never push
+out a round's splash; a drop's secondary splash likewise, a tiny one only ringing the surface): fluids stirred without a round — wading, swimming, falling in, swinging at the
+surface, blocks dropped in — make a splash event of energy 0.2 + 0.45·E (E 0..2; no column below 1.2, white water above
+1), drops thrown along the horizontal motion as a bow spray or all round and upwards for a vertical one, and bubbles; no
+sound. Rounds entering water and disturbances also add a ring to `client/render/WaterRipples` (drawn by the water shader).
 
 **Drawing** (`ImpactRenderer`): the world effects pass (§1, layer `VOLUME`, over the bullet holes) draws everything inside the particle pass right away into the
 frame's target (honouring `RenderSystem.output*TextureOverride`) in one render pass, from two vertex buffers per frame —
@@ -391,6 +530,8 @@ the surface, then sheets and columns, then drops), clouds back to front, sparks.
 | molten rock (`pipeline/impact_molten`) | `blockland:core/impact_fluid` modes 4 (drops: sphere impostors) and 5 (splats, the crater) | none; depth test LEQUAL **and write** | temperature in `Color.a`: white-hot → orange → a dark crust breaking up the glow (noise), the crust lit like the world; writes its glow as emission (`bl_emissionAlpha`) so it blooms |
 | water (`pipeline/impact_fluid`) | `blockland:core/impact_fluid` modes 2 rings, 3 white water, 0 sheets / columns, 1 drops | premultiplied; depth test, no write | the lighting pack's water look (terrain.fsh, `BL_KIND_WATER`): the biome-tinted body lit by the lightmap (+ dynamic lights), `BlSkyColor` reflected by Fresnel (f0 0.02, strength `BlWater.z`, less indoors and under water), the sun's glint (shadowed); thin parts more transparent. Rings are only the change of the surface normal (three Gaussian crests' slope) — the reflection and glint move, nothing is painted on the water. White water: noisy aerated foam. Without world lighting the fog colour stands in for the sky (the same look vanilla's water has then), so the splash matches the water around it either way |
 | cloud lobes back to front | `blockland:core/impact_dust` | premultiplied (`ONE, ONE_MINUS_SRC_ALPHA`); depth test, no write | each lobe (a sphere, 1–8 per cloud by mass, fewer past 28 / 56 blocks) intersects the view ray with itself, clips the far end where the ray meets the world (the depth copy, §10), and integrates its cloud's shared density field with four samples: α = 1 − e^−τ. The field: a Gaussian of the cloud's radius, stretched along the throw and sagging below the centre, cut off smoothly inside the lobes; its edge eroded into billows by three octaves of cloud-anchored noise in blocks (the billows grow slower than the cloud, so it rolls outward instead of inflating), the erosion biting deeper with age so a puff breaks into wisps before it is gone. The `ImpactClouds` block per cloud: centre and radius; lobe density, cloud density, seed, age; throw direction × stretch, sag. `Color.a` = the cloud's index. Composited over one another the lobes multiply their transmittances, so they read as one cloud with a dense core thinning outward, thinning where it touches geometry. Lit like the world (`bl_skyShade`: the lightmap's block part as it is, its sky part shaded by the sun's reach), so dust in the sun is as bright as the sunlit wall it came off, never a dark film over it: the reach is the lobe's shadow × the light let through the cloud — the closed-form optical depth of the Gaussian towards the sun (`ρ·e^(−2d⊥²/r²)·√(π/8)·r·erfc(√2·s/r)`, erfc ≈ 1 − tanh(1.2x)) with a multiple-scattering tail (orders of ½ the light at ½ the depth), so its core and far side are shaded, not black — × a mild Henyey–Greenstein lobe (g 0.35, a third of the way from isotropic; above full sun the thin edges glow towards it), skylight dimmed under a thick cloud, dynamic lights; without world lighting the lightmap with the same self-shadowing; fades just in front of the camera |
+| blood stains (`pipeline/impact_fluid`) | `blockland:core/impact_fluid` mode 7, first of the fluid draws | premultiplied; depth test, no write | a quad on the block face (lifted 0.0025), cut to the face rectangles under it (above), in the splat's frame (uv to ±1.35: rim near 1 with lobes and spines from noise round the edge, satellites in cells beyond it, more of them ahead) or a run's (x across, y down to the tip, narrowing, a bead at its end); Normal.x = face × 2 (+1 run) in sixteenths, .y seed, .z wetness; lit like the world (the face's normal), a wet film reflecting the sky by Fresnel and the sun's glint (tighter the wetter), darker where thick and at a dried rim; not drawn past 72 blocks or from behind its face |
+| bubbles, blood drops | `blockland:core/impact_fluid` modes 8 and 6, last of the fluid draws | premultiplied; depth test, no write | camera-facing spheres: a bubble clear in the middle, bright at its rim, a highlight; a blood drop the blood look with full gloss, stretched along its motion |
 | sparks | `blockland:core/impact_spark` | `ONE, ONE` colour, alpha × (1 − a) (at most 0.3 per spark); depth test, no write | additive streaks stretched over about a tick of motion, white-hot core, fogged; lower the target's alpha so they bloom (§3) |
 
 Per-draw parameters ride in `DynamicTransforms` (`impact_fx.glsl`: camera axes, time, soft-depth flag, mode). Programs
@@ -399,7 +540,8 @@ Per-draw parameters ride in `DynamicTransforms` (`impact_fx.glsl`: camera axes, 
 **Settings** (the 画质 tab, section 弹着效果; `config/blockland-settings.json` key `impacts`, `client/impact/ImpactSettings`):
 quality `off` / `low` / `medium` / `high` / `ultra` — count multiplier 0 / 0.35 / 0.65 / 1 / 1.5, pool budget 0 / 500 /
 1200 / 2500 / 5000 per kind, full detail up to 20 / 36 / 56 / 88 blocks fading to 15 % at twice that, nothing past 160
-blocks — plus switches for dust, second collisions and weather / surroundings. At most three impact sounds play per tick.
+blocks — plus switches for dust, second collisions, weather / surroundings and fluid physics (`fluidPhysics`), the blood
+amount, blood in water and how long stains stay (`bloodStains` 0..2). At most three impact sounds play per tick.
 
 ## 13. Wall graffiti (`client/graffiti`)
 
@@ -416,3 +558,216 @@ frame centre, seed, frames).
 
 Neon, hologram and particle pieces attach a `LightSources` light for as long as they are up. Unlit (world lighting
 off) the paint is texture × shade × lightmap, like vanilla terrain; the glow never depends on world lighting.
+
+## 14. Fog and sky (`client/graphics/sky`, the lighting pack)
+
+**Fog switch** (`FogSwitch`, setting 迷雾): with fog off, `ViewportEvent.RenderFog` pushes the open air's
+(`FogType.ATMOSPHERIC`) environmental fog to infinity and narrows the render-distance fade to its last 4 % (chunks
+never end with a hard edge); water, lava, powder snow, blindness and darkness keep their fog. With fog on vanilla's
+numbers are untouched.
+
+**Volumetric fog and light** (`shadow/WorldFx`, `fx_volumetric`, settings 迷雾, 雾的浓度, 雾的质量 16 / 28 / 44 steps,
+体积光): the air as one participating medium, marched at half the internal resolution up to the shadow distance and
+integrated in closed form beyond it (to the scene, or the render distance through the sky), energy-conserving. Medium: the
+haze (`BlFog.x` at the camera's height, `light/Sky`: 0.002 / block × 雾的浓度, thinning by 1/48 per block, ×2.5 at dawn and
+dusk, ×3.5 in rain, eased to the camera's openness to the sky — none in caves), ground mist near sea level (scale height 9
+blocks, dawn, dusk and rain, broken into drifting value-noise patches) and a thin light-only shaft medium (体积光). Light:
+the sun or moon through the shadow map × the clouds' shadow (Henyey-Greenstein g 0.7 with a quarter isotropic; ×(1 + 1.6 ×
+体积光)), the sky and multiply scattered sunlight (isotropic, by the camera's openness) and the dynamic lights. Without a
+shadow map the sun reaches the fog only by the camera's openness. Under water: dense, blue, light only. Output rgb
+in-scatter and a transmittance; the decode pass multiplies by it and adds the light (after the clouds). Whether it runs is
+decided at frame start (`GraphicsStatus.volumetricFogActive`) and then `BlFog.w = 2`: the lit programs keep only the soft
+render-distance edge. A scope's picture (no fog pass) keeps the forward haze (`BlFog.w = 1`).
+
+**Forward haze** (`blockland:bl_fog.glsl`, the lit terrain and entity programs instead of `apply_fog`): with world lighting
+and fog on, `BlFog.w = 1` adds the haze in closed form (its colour vanilla's fog colour plus forward-scattered sun,
+Henyey-Greenstein g 0.6), `BlFog.w` ≥ 1 turns the render-distance fade into a smoothstep over vanilla's band; the
+environmental fog stays linear; the emission alpha is fogged by the combined amount. With `BlFog.w = 0` or without world
+lighting it is exactly vanilla's `apply_fog`.
+
+**Cloud shadows** (`scene.glsl`: `bl_cloudCoverage`, `bl_cloudShadow`, inside `bl_shadow`): the ray from a point towards the
+sun meets the cloud layer's lower third; the coverage there (the clouds' weather map, `BlClouds` / `BlCloudShape`) as an
+optical depth 7·c² × density, mixed by the shadow strength (0.9) and faded out for a low sun. Every lit surface (terrain,
+entities, weapons, dust, graffiti) and the volumetric fog get it, with or without a shadow map; the shadows drift with the
+clouds. Zero while the volumetric clouds do not run.
+
+**Volumetric clouds** (`VolumetricClouds`, a frame stage after the level, registered before the light module; settings
+体积云 + 云层质量 + 云量; needs world lighting): a layer from the dimension's cloud height up 240 blocks (none where the
+dimension has no cloud height), marched per pixel at 1/3 or 1/2 of the internal resolution (32 / 48 / 72 steps, 3 / 4 / 6
+towards the sun) in `gfx_clouds`, stopped by the world depth. Noise, made once on the GPU (`gfx_cloud_noise`): a 128³
+Perlin-Worley shape volume tiling over 1024 blocks, a 32³ Worley detail volume tiling over 128 blocks (both stored as
+slices in 2D atlases, sampled bilinearly in the two nearest slices) and a 1024² weather map of the 4096-block cloud noise
+period (the raw coverage noise of `bl_cloudCoverage`, so the clouds and their shadows agree, and a cloud type). Density
+(Schneider 2015): coverage from 云量 (+ rain and thunder) cuts the Perlin-Worley cells; flat stratocumulus sheets or
+towering cumulus (flat base, rounded top, taller where the coverage is high) by the cloud type; the detail noise, drifting,
+erodes the edges — wispy at the base, billowy above. Light: `BlSunColor` × multiple scattering by octaves (Wrenninge 2013:
+three octaves of half the energy, a quarter of the optical depth, half the anisotropy) of a march towards `BlSunDir`, two
+Henyey-Greenstein lobes (0.8 forward, −0.3 back), the powder darkening of thin edges seen from the sun's side, ambient from
+`BlSkyColor` above and a ground bounce below; energy-conserving, early out at 1 % transmittance; aerial perspective tints
+them towards the sky (9000 blocks) and fades them out (14 000). The layer's numbers (`FrameContext.clouds`: noise position
+of the camera — camera + wind, 6 blocks/s, wrapped at 4096 — layer bottom and top relative to the camera, coverage,
+density, shadow strength, drift time) go into the scene block at `cameraReady`. Then `gfx_clouds_temporal` blends 12 % of
+the new march into last frame's (reprojected by the camera's turn only, clamped to this frame's 3×3 neighbourhood). The
+decode pass multiplies the world and the sky by their transmittance and adds their light, before the volumetric fog.
+Whether they run is decided at frame start (`GraphicsStatus.cloudsActive`) and written into `BlBlockLight.a`, so the
+lighting pack's cloud shader hides vanilla's clouds in exactly those frames; a scope's extra level render gets a copy of
+the world block with the flag off (the clouds are only marched for the main view). Programs `gfx_clouds`, `gfx_clouds_temporal`, `gfx_cloud_noise` and `clouds` (vanilla's, overridden) in
+`tools/shaders/programs.txt`.
+
+## 15. Rain and water (the lighting pack, `client/render/WaterRipples`, `client/fluid`)
+
+**Fluid normals.** Vanilla's `LiquidBlockRenderer` gives every fluid face the normal (0, 1, 0), falling sheets
+included; the lit terrain program takes the face's true normal from the screen derivatives of its position for water and
+for lava (a glowing face whose claimed up normal is not level), so a waterfall is never shaded as a level surface seen
+edge-on.
+
+**Water** (terrain.fsh, role 3, kind water): level surfaces take their slope from `bl_waterSlope` — the travelling waves,
+rain drops (`bl_rainSlope`: two offset grids of cells, each a drop landing at its own moment of a 0.77 s cycle, a ring
+spreading from it; fewer cells in light rain, `BlWeather.y`) and ripples (`bl_rippleSlope`, below); falling sheets streak
+downwards and churn white (foam: aerated water, lit like the world). The environment — the sky above, the horizon's fog
+colour towards it, darker where sky light is low — is reflected by Fresnel (f0 0.02, at most 0.9) against the face's
+true normal; the sun's highlight is GGX with Smith visibility (roughness 0.07, more on foam), shadowed (clouds included)
+and capped. The Fabulous composite bends the world behind by the same slope.
+
+**Ripples** (`client/render/WaterRipples`, a shared contract like `LightSources`): rings at a point of a surface with a
+strength and a heading; the newest 24 live (3.5 s) go into the scene block (`BlRipples[]`, count in `BlWeather.w`) every
+frame. A ring is a wave packet spreading at about a block a second, widening, fading with age and distance, stronger ahead
+of its heading (a bow wave). `client/fluid/WaterInteractions` adds them, with splashes through `Impacts.disturb`, for
+entities within 48 blocks: wading and swimming (rings along the heading, more often the faster, spray when running),
+falling in (by the speed and direction of the fall), a swing whose reach meets the water (along the attacker's yaw and
+pitch), a block placed into water; the impacts module adds them where rounds and splashes meet water. Setting 水面涟漪与水花.
+
+**Soaking** (setting 浸湿与滴水, `GraphicsSettings.soaking`; `client/render/Wetness`, a shared contract like the ripples):
+`WaterInteractions` records every living entity in water within 48 blocks as soaked through (under water) or to the
+square of the depth it wades; out of it, it dries over 45 s (twice as long while rain falls on it, looked at twice a
+second) and drips — `wet⁴ × 2.5` drops a tick, scaled by its width: water streams off at first, then a drop now and then
+— from its sides, mostly low, with its motion (`Impacts.drip`; within 20 blocks, never off the body the camera is in).
+How deep it stands is vanilla's own measure over its box (`getFluidHeight`), so an entity at the edge of a stream is
+only wet to that depth. Running on rain-soaked ground (rain falling there, 60 % of full rain or more, a sturdy top under
+the feet, within 20 blocks; setting 水面涟漪与水花) every stride of about a block kicks up a few small drops of the water
+standing on it, up and back from the foot (`Impacts.kick`). The viewmodel (`ViewmodelRig`, every weapon) asks `Wetness.of(player)` each frame and hands it to its `DrawList.wetness`,
+which packs it into ModelOffset.z's fraction (flags + 0.45 × wetness, so `int(z + 0.5)` is still the flags); gun.fsh
+takes `max(rain wetness, soak)`: a weapon out of the water is wet all over, beads clinging to its sides too, until it dries.
+
+**Rain wetness** (setting 雨天湿润 0..1; `light/Sky` → `BlWeather.x`): rain wets only where the camera's biome rains (not
+snow, not deserts); surfaces soak in about 15 s and dry in about 90 s. `bl_wetness`: the wetness where sky light reaches
+(≥ 14), tops soaked, sides streaked, undersides dry. Blocks (terrain.fsh, not water, not glowing texels): porous ones
+darken (metal and glass hardly), a film of water reflects the environment by Fresnel and the sun (GGX roughness 0.3); flat
+tops of opaque blocks gather puddles in their low spots (`bl_puddle`: world-anchored noise filling as the wetness grows)
+with the rain's rings, mirror-smooth. Entities (entity.fsh, sky light from `UV2`): darker, a sheen of water. Weapons
+(gun.fsh, every draw of the world's frame — viewmodel and third person — by the holder's sky light; needs world
+lighting, which carries the weather): porous parts darker, a water film (roughness towards 0.08, a clear coat up to
+0.6), and water standing on them as many tiny drops, each a shallow cap of water with its own normal for the coat's
+sharp reflection (roughness 0.02) and the sun's glint, a faint dark rim (no lens brightening, no ripple rings). Laid out
+in the weapon's own space on the plane of the surface normal's dominant axis, three cellular layers of beads: 260 cells
+per block (droplets of 1–2 mm, the densest), 150 (2–5 mm) and 75 (5–11 mm, sparse: merged beads, rarer on steep faces);
+radii mostly at the small end; more on the tops, few on the sides, 1.35× and steeper hanging on the undersides. While
+rain falls (`BlWeather.y`) each bead lands suddenly, grows a little and is gone again (merged, run off); the coverage
+follows the rain wetness, so they gather as the weapon soaks. The bigger drops on sloping and upright faces run down
+them (lanes 1.1 cm apart, each drop sliding in fits — sticking, letting go — wandering, a hair-thin wet trail above it;
+the down direction is the world's, carried into the weapon's space through the model-view, so the drops run downhill
+however the weapon is held). Anti-aliasing: a layer fades into the film (more gloss, no drops) where a pixel covers more
+than ~0.12–0.4 of its cells (the footprint taken from `dFdx`/`dFdy` of the position before any branching), and a bead's
+rim is as soft as a pixel, so distant and third-person weapons read as wet without sparkling. Soaked: beads on every
+side. Nothing under water (the camera in it). Dry or wet, every weapon is a little glossier than its material says
+(roughness eased 30 % towards its square; non-metals under a 0.12 clear coat).
+
+## 16. The texture pack (`resourcepacks/blockland_textures`, `client/textures/FluidTextures`)
+
+The built-in client pack "BlockLand 材质" replaces vanilla's water and lava textures with 1024-texel ones made by
+`tools/assets/gen_fluid_textures.py` (spectral noise: every field tiles by construction and animates by whole phase turns
+per loop; flow textures also translate along +v — the direction LiquidBlockRenderer's UVs give the current — by one
+period of their content per loop, so their spectrum keeps only v frequencies that fit that period). Water stays greyscale
+with vanilla's alpha 180 and mean luminance (the biome colour tints it); it is low-contrast on purpose, since the block
+atlas has only ~4 mip levels: a slow swell, a soft caustic-like network, faint capillary ripples; the flow adds long soft
+streaks and foam along the current. Lava: cooled basalt crust, near black and grey-brown with low ropy wrinkles, dull red
+where thin beside a crack, broken into plates of very different sizes (warped jittered cells at three scales: big
+plates, about half split again, fine cooling cracks; crack width varies) — light only in the cracks (white-yellow core,
+orange edge, a few centimetres wide) and in molten channels and pools welling up along the big cracks (orange-yellow,
+hottest in the middle, swirled), about a quarter of the area. The flow draws the plates out along the current. Only the
+hot parts glow: the lava materials' threshold in `block_materials.json` is 0.42 (brightest channel), above the crust.
+16 frames each, not interpolated (vanilla interpolates on the CPU per pixel, far too slow at this size); speeds as
+vanilla's (water flow 1.25 blocks/s, lava flow 0.42). The pack follows 高清流体材质 (`GraphicsSettings.fluidTextures`):
+preselected at startup, added or removed with one resource reload when the settings are committed; an ordinary pack
+otherwise (the player may reorder it).
+
+## 17. Screen-space reflections (`client/graphics/reflect`, `blockland:bl_ssr.glsl`)
+
+Setting 屏幕空间反射 off / low (20 steps) / high (40), with world lighting. After the level of every frame (before the hand
+and the viewmodel, so they are never reflected) `ScreenReflections` keeps the world's colour as drawn and its linear depth
+(`gfx_ssr_capture`, RGBA16F at the internal resolution). The next frame (`Graphics.reflections()`, only when that picture
+was taken in the frame just before) the scene uniforms carry `BlPrevView` (camera-relative world now → last frame's view:
+its rotation and the camera's move since) and `BlPrevProj` (its P00, P11, the step count, on), and the picture is bound on
+texture unit 14 (`BlPrevScene`, patched into the lighting pack's programs like the shadow atlas). The lit terrain
+program's water — and puddles, by how much of a puddle the pixel is (the thin wet film keeps the sky's estimate) — march
+the reflected ray from just above the surface: steps of growing length (from 1.2 % of the distance to the eye, ×1.15
+each), each point carried into last frame's picture; a point just behind what was drawn there (within the step's length,
+at least 0.35 blocks) is a hit, refined by five bisections. Its colour replaces the environment estimate by a confidence
+fading at the picture's border, towards the last steps and for rays turned back towards the eye; rays leaving the
+picture, crossing only sky or finding nothing keep the estimate (`bl_reflection`). The hand block and a scope's copy carry
+no reflections (`BlPrevProj.w = 0`). Volumetric clouds and fog are post effects and are not in the picture.
+
+## 18. Wind (`client/graphics/wind`, the lighting pack's terrain.vsh, `blockland:bl_wind.glsl`)
+
+Setting 风吹植物 + 风力 0..2 (`GraphicsSettings.wind`, `windStrength`); needs world lighting — unpatched (`BlRole` 0), with
+`BlFlags.x = 0` or with `BlWind.w = 0` the vertex shader moves nothing and is vanilla's. Which sprites move is data: the
+`wind` of their `block_materials.json` entry (§7), in the material map; how hard is `assets/blockland/graphics/wind.json`
+(`WindData`: `bend` lean / flutter / exponent / lag, `stack` lean / flutter / pushCap, `push` radiusPad / core / lean° /
+flatten / springPeriod / springDamping / trail / kinds, `columns` up / hang block ids), in `BlWindBend`, `BlWindStack`,
+`BlWindPush`, `BlWindSpring`, `BlWindKinds`. Modes: **bend** (grass, flowers, ferns, saplings, crops, berry bushes,
+seagrass, both halves of two-block plants), **sway** (stacked and hanging plants: sugar cane, bamboo, kelp, vines, cave,
+weeping and twisting vines, hanging roots and moss), **leaves** (a few centimetres of rustle, a smooth field of the
+position, so neighbouring leaf blocks never part). `flex` scales the wind's effect. A `water` plant ignores the wind and
+sways in a slow current (`BlWindInfo.w`).
+
+**Which vertex is where.** A chunk section's vertex buffer holds whole quads from vertex 0 and is drawn with a sequential
+quad index buffer, so `gl_VertexID & 3` is the corner in FaceBakery's order (corner 0 at the face's first u and v, 1 first
+u second v, 2 second u and v, 3 second u first v; on a side face 0 and 3 are the upper edge, 0 and 1 its end along the
+tangent (−n.z, n.x)). The sprite is looked up at the vertex's own uv: FaceBakery shrinks a face's uvs towards the
+sprite's middle (`uvShrinkRatio`), so that uv lies inside its sprite whichever way u and v run (crops and vines run u
+backwards). Never look past the uv: the cell beyond the sprite's edge is a neighbouring sprite, and a still block next to
+a plant in the atlas would wave. The vertex's height in its block comes from the section-local `Position` (bottom edges snap down
+within 0.25, tops within 0.1; crops start 1/16 below their block). The plant's **stem** is the middle of its block: the
+face's midpoint (half a face width — 0.5, or 0.707 on a diagonal cross — back along the tangent) lies in it for all four
+corners, so the whole plant shares one stem, one push and one height.
+
+**Bending.** A bend plant is a cantilever anchored at its bottom: the wind displaces a vertex h blocks over the plant's
+base (the upper half of a two-block plant adds 1, so it bends on from the lower half's top) by `bend × h^exponent`
+(1.75), so taller plants bend much further. `bend` = the wind's lean (`lean × w`, slow and strong; a gust's tail lets it
+swing back by half) plus a smaller, faster flutter (`flutter × (0.6 + 1.4 w)` along, 0.6 of it across, at the fixed
+frequencies 1.4 / 2.1 Hz and 1 / 1.6 Hz — constants, or neighbours' phases would drift apart over time; phases vary
+smoothly over the ground). The top feels the wind from `lag × h` blocks upwind (a gust reaches it later) and flutters
+0.9 rad per block behind its foot. A stem leans, never stretches: the displacement is kept under 0.97 h and the top
+sinks by h − √(h² − d²).
+
+**Columns.** Stacked plants have no height of their own, so `PlantColumns` keeps, for each block column of a 128 × 128
+window round the camera (world x, z modulo 128; texture `BlPlantColumns` on unit 15, RGBA8, `BlWindStack.w` = 1 when
+bound), the longest run of `columns.up` blocks (bottom y and length) and of `columns.hang` blocks (top y and length) within
+64 blocks of the camera's height: RG / BA = (y + 65) | length << 9. Four chunk columns are rescanned a tick, round robin
+(the window about every 0.8 s; sections whose palette holds none of those blocks are skipped), and the texture is uploaded
+when something changed. A sway vertex whose block lies in its column's up run bends as one stem from the run's base
+(h = height over it, `stack.lean`, `stack.flutter`, the same exponent and lag), one in a hanging run from the run's top
+(h = depth under it; the tip rises as it swings); one in no known column falls back to a smooth field of the position.
+Flat sheets (vines) move only across their plane.
+
+**Bodies.** The 16 nearest living entities (40 blocks, not spectators) are pushers: feet, radius = half width +
+`radiusPad` (0.6), velocity, height. A plant whose stem lies within a pusher's radius, between its feet − 0.25 and its head,
+is tipped over about its foot away from the pusher's middle — the whole stem rotated by up to `push.lean` (70°) × the
+mode's `kinds` share, at full strength within `core` (15 %) of the radius, falling smoothly to nothing at its edge (the
+falloff is the arrival: a walker bends a plant over in about 0.15 s) — and pressed towards `flatten` × 90° right under a
+foot (the way the body moves). Where a body has been it leaves a mark (`BlSways`, 48, 1.4 s): one every 0.35 blocks while
+it walks; one that stands keeps its mark fresh. Once the body has gone, the plants round a mark spring back from the lean
+they had: `e^(−ζωτ) cos(ωτ)` (`springPeriod` 0.45 s, `springDamping` ζ 0.35: up in about 0.1 s, an overshoot of a third
+the other way, settled within a second); the marks near a plant count as one release (their average, as strong as the
+nearest), and while a body still holds the plant the spring is held back. A small wobble along the walker's heading
+(`trail`) is left of the old trail sway. Stacked plants are pushed at most `stack.pushCap` (0.35 blocks), leaves 12 % as
+far, each vertex on its own (the canopy stays whole).
+
+**The rest.** The steady wind's heading wanders (faster in thunder) and its strength eases towards 0.22 + 0.42 × rain +
+0.45 × thunder (0.08 without sky light), broken up by turbulence carried along with it; gusts are born 45–70 blocks
+upwind of the camera (0.12 + 0.35 rain + 0.5 thunder a second, at most 6), 5–12 blocks deep and 14–36 wide, travel at
+5–9 blocks/s (+3 in thunder) with a ragged front and fade in and out over 2 s. All of it is world-anchored with periods
+dividing 2048 blocks (`BlCamera` wraps there) and real time (`BlFlags.w`). The fragment shader keeps the undisplaced
+position (`worldPos`) for the sun's shadow and the lights: the shadow map's terrain casters (`shadow_terrain`) hold the
+plants still, so a moved plant takes its own still shadow and casts a still one. Moving plants carry no motion vectors
+(TAA, DLSS and motion blur treat them as still geometry).

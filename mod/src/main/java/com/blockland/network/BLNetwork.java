@@ -1,6 +1,7 @@
 package com.blockland.network;
 
 import com.blockland.BlockLand;
+import com.blockland.network.packet.ActivityPackets;
 import com.blockland.network.packet.BattleRoyalePackets;
 import com.blockland.network.packet.BombPackets;
 import com.blockland.network.packet.GraffitiPackets;
@@ -151,6 +152,8 @@ public final class BLNetwork {
                 msg -> clientListener.onNotice(msg));
         anyToClient(LobbyPackets.S2CAnnouncements.class, LobbyPackets.S2CAnnouncements::encode, LobbyPackets.S2CAnnouncements::decode,
                 msg -> clientListener.onAnnouncements(msg));
+        anyToClient(ActivityPackets.S2CActivities.class, ActivityPackets.S2CActivities::encode, ActivityPackets.S2CActivities::decode,
+                msg -> clientListener.onActivities(msg));
         toClient(GunPackets.S2CHit.class, GunPackets.S2CHit::encode, GunPackets.S2CHit::decode, msg -> gunClientListener.onHit(msg));
         toClient(GunPackets.S2CShot.class, GunPackets.S2CShot::encode, GunPackets.S2CShot::decode, msg -> gunClientListener.onShot(msg));
         toClient(MeleePackets.S2CHit.class, MeleePackets.S2CHit::encode, MeleePackets.S2CHit::decode, msg -> meleeClientListener.onHit(msg));
@@ -205,15 +208,15 @@ public final class BLNetwork {
         toClient(CombatPackets.S2CBoard.class, CombatPackets.S2CBoard::encode, CombatPackets.S2CBoard::decode,
                 msg -> combatClientListener.onBoard(msg));
 
-        // 排位 (ranked): the standing and its changes reach the player in the lobby and in the world
-        anyToClient(RankedPackets.S2CRank.class, RankedPackets.S2CRank::encode, RankedPackets.S2CRank::decode,
-                msg -> rankedClientListener.onRank(msg));
+        // 排位 (ranked): the standings (per mode) and their changes reach the player in the lobby and in the world
+        anyToClient(RankedPackets.S2CRanks.class, RankedPackets.S2CRanks::encode, RankedPackets.S2CRanks::decode,
+                msg -> rankedClientListener.onRanks(msg));
         anyToClient(RankedPackets.S2CRankChange.class, RankedPackets.S2CRankChange::encode, RankedPackets.S2CRankChange::decode,
                 msg -> rankedClientListener.onRankChange(msg));
 
         // 库存 / 个人主页 (inventory, profile, leaderboard): tabs of the lobby, so they work in every phase
         anyToServer(ProfilePackets.C2SRequest.class, ProfilePackets.C2SRequest::encode, ProfilePackets.C2SRequest::decode,
-                (msg, player) -> profileServerListener.onRequest(player, msg.kind()));
+                (msg, player) -> profileServerListener.onRequest(player, msg.kind(), msg.modeId()));
         anyToServer(ProfilePackets.C2SEquip.class, ProfilePackets.C2SEquip::encode, ProfilePackets.C2SEquip::decode,
                 (msg, player) -> profileServerListener.onEquip(player, msg.slot(), msg.key()));
         anyToClient(ProfilePackets.S2CInventory.class, ProfilePackets.S2CInventory::encode, ProfilePackets.S2CInventory::decode,

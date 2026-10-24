@@ -11,6 +11,7 @@ one piece from the drum's mouth to its end (rpd_rig.belt_chain); every shot feed
 reach-under pull of the charging handle."""
 import numpy as np
 
+import ads_fire
 import hands
 import rpd_model as rm
 import rpd_rig as rig
@@ -131,6 +132,10 @@ def fire_pose(t):
 
 FIRE = Clip("fire", F_END, fire_pose, fps=120, extra_times=FIRE_KEYS)
 FIRE_LAST = Clip("fire_last", F_END, fire_pose, fps=120, extra_times=FIRE_KEYS)      # open bolt: no hold-open
+# aimed (section 31.5): the same shot with the sight picture held - a shove back along the sight line, a trace
+# of roll (ads_fire)
+FIRE_ADS = ads_fire.aimed(FIRE, rig, rig.AIM_IRON_T, IDLE)
+FIRE_LAST_ADS = ads_fire.aimed(FIRE_LAST, rig, rig.AIM_IRON_T, IDLE)
 
 # ------------------------------------------------------------------------------------------- reload (belt change)
 T_LIFT, T_OPEN = 0.40, 0.64          # fingertips under the latch / cover snaps up (cover_open)
@@ -500,4 +505,5 @@ TAC_SPRINT = Clip("tac_sprint", TAC_DUR, tac_sprint_pose, loop=True)
 
 
 def all_clips():
-    return [IDLE, DRAW, FIRE, FIRE_LAST, RELOAD, RELOAD_EMPTY, INSPECT, WALK, SPRINT, TAC_SPRINT]
+    return [IDLE, DRAW, FIRE, FIRE_LAST, FIRE_ADS, FIRE_LAST_ADS, RELOAD, RELOAD_EMPTY, INSPECT, WALK, SPRINT,
+            TAC_SPRINT]

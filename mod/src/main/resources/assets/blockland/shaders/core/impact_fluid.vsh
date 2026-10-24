@@ -8,6 +8,10 @@
 //   3 white water            flat quad, UV0 = position in units of the patch's radius, Normal.y = seed
 //   4 molten drop            camera-facing quad, UV0 = corner, Color.a = temperature 0..1
 //   5 molten splat / crater  flat quad, UV0 = corner, Color.a = temperature
+//   6 blood drop             camera-facing quad, UV0 = corner, stretched along its motion
+//   7 blood stain            quad on a block face, UV0 = position in the splat's frame (rim near 1, to 1.35) or along a
+//                            run (x across, y 0..1 down to its tip); Normal.x = face * 2 (+1 run) / 16, .y seed, .z wetness
+//   8 bubble                 camera-facing quad, UV0 = corner
 //   Color rgb = the fluid's colour (water: the biome's), a = coverage (or temperature); UV2 = lightmap coordinates.
 
 #moj_import <minecraft:fog.glsl>

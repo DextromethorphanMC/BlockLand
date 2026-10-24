@@ -17,4 +17,7 @@ def models():
         "attachment/vertical_grip": under(),
         "attachment/angled_grip": under(),
         "attachment/bipod": under(),
+        # the Thompson's wooden foregrip: the gun's walnut set, region underbarrel
+        "attachment/tommy_grip": {"ao": {"mode": "together", "distance": 0.012},
+                                  "materials": {"wood_foregrip": ("tommy/walnut", "underbarrel")}},
     }

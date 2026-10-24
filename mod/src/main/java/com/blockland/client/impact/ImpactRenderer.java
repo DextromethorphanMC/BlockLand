@@ -1,6 +1,7 @@
 package com.blockland.client.impact;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.BlockFaces;
 import com.blockland.client.render.SceneLighting;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
@@ -28,6 +29,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix3f;
@@ -57,8 +59,8 @@ final class ImpactRenderer {
             SourceFactor.ONE, DestFactor.ONE_MINUS_SRC_ALPHA);
     private static final BlendFunction ADD_EMISSION = new BlendFunction(SourceFactor.ONE, DestFactor.ONE,
             SourceFactor.ZERO, DestFactor.ONE_MINUS_SRC_ALPHA);
-    /** Bytes of the cloud block: three vec4 per cloud. */
-    private static final int CLOUD_BYTES = ImpactParticles.CLOUDS * 3 * 16;
+    /** Bytes of the cloud block: four vec4 per cloud. */
+    private static final int CLOUD_BYTES = ImpactParticles.CLOUDS * 4 * 16;
 
     static final RenderPipeline DEBRIS = RenderPipeline.builder(RenderPipelines.MATRICES_FOG_SNIPPET)
             .withLocation(BlockLand.id("pipeline/impact_debris"))
@@ -118,7 +120,11 @@ final class ImpactRenderer {
     static final RenderPipeline MOLTEN = fluid("impact_molten").withDepthWrite(true).withoutBlend().build();
 
     /** Fluid draw modes (impact_fluid.fsh). */
-    private static final int SHEET = 0, DROP = 1, RINGS = 2, FOAM = 3, MOLTEN_DROP = 4, MOLTEN_FLAT = 5;
+    private static final int SHEET = 0, DROP = 1, RINGS = 2, FOAM = 3, MOLTEN_DROP = 4, MOLTEN_FLAT = 5, BLOOD_DROP = 6, BLOOD_STAIN = 7,
+            BUBBLE = 8;
+    private static final Direction[] DIRECTIONS = Direction.values();
+    /** Stains are not drawn beyond this many blocks (they are small; the pool keeps them alive). */
+    private static final float STAIN_DISTANCE = 72;
     private static final int SHEET_SEGMENTS = 16, COLUMN_SEGMENTS = 8;
 
     private static ByteBufferBuilder bytes, fluidBytes;
@@ -161,7 +167,7 @@ final class ImpactRenderer {
         BufferBuilder buffer = new BufferBuilder(bytes, VertexFormat.Mode.QUADS, DefaultVertexFormat.PARTICLE);
         int debris = 0;
         for (ImpactParticles.Debris p : pool.debris) {
-            if (p.alive && p.fluid == 0) debris += debrisQuads(buffer, p, cam, right, up, partialTick);
+            if (p.alive && p.fluid == 0 && !p.bubble) debris += debrisQuads(buffer, p, cam, right, up, partialTick);
         }
         cloudData.clear();
         int lobes = cloudLobes(buffer, pool, cam, right, up, partialTick, cloudData);
@@ -188,7 +194,12 @@ final class ImpactRenderer {
         for (ImpactParticles.Splash s : sortedSplashes) {
             if (s.kind == ImpactParticles.LAVA) moltenFlats += crater(fluids, s, cam, partialTick);
         }
-        int rings = 0, foam = 0, sheets = 0, drops = 0;
+        // blood lying on surfaces first (under the splashes and drops in front of it)
+        int stains = 0;
+        for (ImpactParticles.Debris p : pool.debris) {
+            if (p.alive && p.fluid == ImpactParticles.BLOOD && p.resting && p.face >= 0) stains += bloodStain(fluids, p, cam, partialTick);
+        }
+        int rings = 0, foam = 0, sheets = 0, drops = 0, bubbles = 0, bloodDrops = 0;
         for (ImpactParticles.Splash s : sortedSplashes) {
             if (s.kind == ImpactParticles.WATER) rings += rings(fluids, s, cam, partialTick);
         }
@@ -201,8 +212,15 @@ final class ImpactRenderer {
         for (ImpactParticles.Debris p : pool.debris) {
             if (p.alive && p.fluid == ImpactParticles.WATER) drops += waterDrop(fluids, p, cam, right, up, partialTick);
         }
+        for (ImpactParticles.Debris p : pool.debris) {
+            if (p.alive && p.bubble) bubbles += bubble(fluids, p, cam, right, up, partialTick);
+        }
+        for (ImpactParticles.Debris p : pool.debris) {
+            if (p.alive && p.fluid == ImpactParticles.BLOOD && !p.resting) bloodDrops += bloodDrop(fluids, p, cam, right, up, partialTick);
+        }
 
-        int particleQuads = debris + lobes + sparks, fluidQuads = moltenDrops + moltenFlats + rings + foam + sheets + drops;
+        int particleQuads = debris + lobes + sparks,
+                fluidQuads = moltenDrops + moltenFlats + stains + rings + foam + sheets + drops + bubbles + bloodDrops;
         if (particleQuads + fluidQuads == 0) {
             buffer.build();
             fluids.build();
@@ -219,7 +237,7 @@ final class ImpactRenderer {
             Matrix4f modelView = new Matrix4f(RenderSystem.getModelViewMatrix()).mul(pose);
             GpuBufferSlice solid = transform(modelView, right, up, back, time, false, 0);
             GpuBufferSlice cloudMode = transform(modelView, right, up, back, time, worldDepth != null, 0);
-            GpuBufferSlice[] fluidMode = new GpuBufferSlice[6];
+            GpuBufferSlice[] fluidMode = new GpuBufferSlice[9];
             for (int i = 0; i < fluidMode.length; i++) fluidMode[i] = transform(modelView, right, up, back, time, false, i);
             GpuTextureView atlas = mc.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getTextureView();
             GpuTextureView dustDepth = worldDepth != null ? worldDepth : farDepth();
@@ -255,10 +273,13 @@ final class ImpactRenderer {
                     quad = draw(pass, fluidMode[MOLTEN_DROP], quad, moltenDrops);
                     quad = draw(pass, fluidMode[MOLTEN_FLAT], quad, moltenFlats);
                     pass.setPipeline(FLUID);
+                    quad = draw(pass, fluidMode[BLOOD_STAIN], quad, stains);
                     quad = draw(pass, fluidMode[RINGS], quad, rings);
                     quad = draw(pass, fluidMode[FOAM], quad, foam);
                     quad = draw(pass, fluidMode[SHEET], quad, sheets);
-                    draw(pass, fluidMode[DROP], quad, drops);
+                    quad = draw(pass, fluidMode[DROP], quad, drops);
+                    quad = draw(pass, fluidMode[BUBBLE], quad, bubbles);
+                    draw(pass, fluidMode[BLOOD_DROP], quad, bloodDrops);
                 }
                 if (vertices != null && lobes + sparks > 0) {
                     pass.setVertexBuffer(0, vertices);
@@ -308,17 +329,13 @@ final class ImpactRenderer {
         switch (p.shape) {
             case ImpactSpawner.DROPLET -> {
                 if (p.resting) {
-                    // landed: a splat lying on the surface
+                    // landed (muddy water): a splat lying on the surface
                     float r = s * 1.7f, h = y - p.size * 0.25f + 0.003f;
                     quad(buf, x - r, h, z - r, x + r, h, z - r, x + r, h, z + r, x - r, h, z + r, p, color);
                     return 1;
                 }
                 // flying: a drop stretched along its motion, facing the camera
                 return streak(buf, x, y, z, p.vx, p.vy, p.vz, s, right, up, p, color);
-            }
-            case ImpactSpawner.BUBBLE -> {
-                billboard(buf, x, y, z, s, right, up, p, color);
-                return 1;
             }
             default -> {
                 turn.rotationXYZ(Mth.lerp(pt, p.pa, p.a), Mth.lerp(pt, p.pb, p.b), Mth.lerp(pt, p.pc, p.c));
@@ -439,7 +456,8 @@ final class ImpactRenderer {
             // overlapping lobes count the overlap twice: their shared density is scaled down for it
             float weight = 1 / (1 + 0.14f * (n - 1));
             std.putVec4(x, y, z, r).putVec4(rho * weight, rho, cl.seed, age)
-                    .putVec4(cl.ax * stretch, cl.ay * stretch, cl.az * stretch, sag);
+                    .putVec4(cl.ax * stretch, cl.ay * stretch, cl.az * stretch, sag)
+                    .putVec4(cl.water ? (float) (cl.surface - cam.y) : 0, cl.water ? 1 : 0, 0, 0);
             int color = (index & 0xFF) << 24 | cl.rgb;
             for (int i = 0; i < n; i++) {
                 float ox = 0, oy = 0, oz = 0, lr = r * 0.74f;
@@ -614,6 +632,143 @@ final class ImpactRenderer {
         fluidVertex(buf, x - half, y, z + half, argb, -uvScale, uvScale, s.light, nx, ny, 0);
         fluidVertex(buf, x + half, y, z + half, argb, uvScale, uvScale, s.light, nx, ny, 0);
         fluidVertex(buf, x + half, y, z - half, argb, uvScale, -uvScale, s.light, nx, ny, 0);
+    }
+
+    /** A bubble of air under water: a camera-facing sphere, bright at its rim. */
+    private static int bubble(BufferBuilder buf, ImpactParticles.Debris p, Vec3 cam, Vector3f right, Vector3f up, float pt) {
+        float fade = ImpactParticles.fade(p.age, p.life, pt, 0.15f);
+        if (fade <= 0.01f) return 0;
+        return sphere(buf, p, cam, right, up, pt, Math.round(fade * 255) << 24 | p.rgb, 0);
+    }
+
+    /** A flying drop of blood: a glossy sphere, drawn longer along its motion. */
+    private static int bloodDrop(BufferBuilder buf, ImpactParticles.Debris p, Vec3 cam, Vector3f right, Vector3f up, float pt) {
+        float fade = ImpactParticles.fade(p.age, p.life, pt, 0.2f);
+        if (fade <= 0.01f) return 0;
+        return sphere(buf, p, cam, right, up, pt, Math.round(fade * 255) << 24 | p.rgb, 0.9f);
+    }
+
+    /**
+     * Blood lying on the side of a block (rendering spec §12, blood): the splat, an ellipse drawn out along the way the
+     * drop struck, its rim and satellites made by the shader, and, on a wall, its run down the wall. The face, the part
+     * (splat or run), a seed and how wet it still is ride in the normal; it darkens as it dries and pales as rain washes
+     * it out.
+     */
+    private static int bloodStain(BufferBuilder buf, ImpactParticles.Debris p, Vec3 cam, float pt) {
+        float fade = ImpactParticles.fade(p.age, p.life, pt, 0.2f);
+        if (fade <= 0.01f) return 0;
+        Direction face = DIRECTIONS[p.face];
+        float nx = face.getStepX(), ny = face.getStepY(), nz = face.getStepZ();
+        float x = (float) (p.x - cam.x), y = (float) (p.y - cam.y), z = (float) (p.z - cam.z);
+        // far away, or seen from behind the face it lies on
+        float distanceSqr = x * x + y * y + z * z;
+        if (distanceSqr > STAIN_DISTANCE * STAIN_DISTANCE || x * nx + y * ny + z * nz > 0) return 0;
+        // off the face by more the farther it is (the depth buffer's precision falls with distance)
+        float lift = 0.0025f + 0.00007f * Mth.sqrt(distanceSqr);
+        x += nx * lift;
+        y += ny * lift;
+        z += nz * lift;
+        float wet = 1 - Mth.clamp((p.age - p.landed + pt) / Math.max(1, p.dry), 0, 1);
+        int rgb = ImpactSpawner.mix(ImpactSpawner.darken(p.rgb, 0.55f), p.rgb, wet);
+        float alpha = fade;
+        float r = p.splat;
+        if (p.washed) {
+            // rain thins it out: paler, a little wider, more see-through
+            rgb = ImpactSpawner.mix(rgb, 0xB85A5A, 0.3f);
+            alpha *= 0.75f;
+            r *= 1.2f;
+        }
+        int argb = Math.round(alpha * 255) << 24 | rgb;
+        float seed = (p.size * 977 + p.landed * 0.137f) % 1;
+        float code = p.face * 2 * 0.0625f, gloss = Math.max(wet, p.washed ? 0.6f : 0);
+        // the long axis on the face, and the one across it
+        float ux = p.sx, uy = p.sy, uz = p.sz;
+        float vx = ny * uz - nz * uy, vy = nz * ux - nx * uz, vz = nx * uy - ny * ux;
+        // the quad reaches past the splat's rim for its satellites (the shader's uv runs to 1.35)
+        float along = r * p.stretch * 1.35f, across = r * 1.35f;
+        int sa = BlockFaces.sAxis(face), ta = BlockFaces.tAxis(face);
+        corner(0, -ux * along - vx * across, -uy * along - vy * across, -uz * along - vz * across, sa, ta, -1.35f, -1.35f);
+        corner(1, ux * along - vx * across, uy * along - vy * across, uz * along - vz * across, sa, ta, 1.35f, -1.35f);
+        corner(2, ux * along + vx * across, uy * along + vy * across, uz * along + vz * across, sa, ta, 1.35f, 1.35f);
+        corner(3, -ux * along + vx * across, -uy * along + vy * across, -uz * along + vz * across, sa, ta, -1.35f, 1.35f);
+        int quads = clipped(buf, p, x, y, z, sa, ta, argb, code, seed, gloss);
+        if (p.run < 0.004f || ny != 0) return quads;
+        // its run down the wall: from the splat's middle to the tip, narrowing
+        float run = p.run + (p.run < p.runMax ? (p.runMax - p.run) * 0.05f * pt : 0);
+        float w = Math.max(0.006f, r * 0.45f);
+        // across the run: along the wall, level
+        float ax = -nz, az = nx;
+        corner(0, -ax * w, 0, -az * w, sa, ta, -1, 0);
+        corner(1, ax * w, 0, az * w, sa, ta, 1, 0);
+        corner(2, ax * w, -run, az * w, sa, ta, 1, 1);
+        corner(3, -ax * w, -run, -az * w, sa, ta, -1, 1);
+        return quads + clipped(buf, p, x, y, z, sa, ta, argb, code + 0.0625f, seed, gloss);
+    }
+
+    /** A stain's quad and the pieces of it being cut: per corner s, t on its face (from the stain) and its uv. */
+    private static final float[] stainQuad = new float[16], cut = new float[4 * 12], cutSwap = new float[4 * 12];
+
+    private static void corner(int i, float dx, float dy, float dz, int sa, int ta, float u, float v) {
+        stainQuad[i * 4] = sa == 0 ? dx : sa == 1 ? dy : dz;
+        stainQuad[i * 4 + 1] = ta == 1 ? dy : dz;
+        stainQuad[i * 4 + 2] = u;
+        stainQuad[i * 4 + 3] = v;
+    }
+
+    /**
+     * Draws {@link #stainQuad} cut to each face rectangle the stain lies on (its {@code clip}: the faces' real extent, so it
+     * never hangs over an edge into the air, and goes on over a neighbouring block that continues the surface), each
+     * piece a fan of quads; returns how many.
+     */
+    private static int clipped(BufferBuilder buf, ImpactParticles.Debris p, float x, float y, float z, int sa, int ta, int argb, float code,
+                               float seed, float gloss) {
+        int quads = 0;
+        for (int r = 0; r < p.clips; r++) {
+            float[] in = cut, out = cutSwap;
+            System.arraycopy(stainQuad, 0, in, 0, 16);
+            int n = 4;
+            for (int edge = 0; edge < 4 && n >= 3; edge++) {
+                // keep s ≥ s0, t ≥ t0, s ≤ s1, t ≤ t1
+                int k = edge & 1;
+                float limit = p.clip[r * 4 + edge], sign = edge < 2 ? 1 : -1;
+                int m = 0;
+                for (int i = 0; i < n; i++) {
+                    int j = (i + 1) % n;
+                    float di = (in[i * 4 + k] - limit) * sign, dj = (in[j * 4 + k] - limit) * sign;
+                    if (di >= 0) {
+                        System.arraycopy(in, i * 4, out, m * 4, 4);
+                        m++;
+                    }
+                    if (di >= 0 != dj >= 0 && m < 12) {
+                        float f = di / (di - dj);
+                        for (int c = 0; c < 4; c++) out[m * 4 + c] = in[i * 4 + c] + (in[j * 4 + c] - in[i * 4 + c]) * f;
+                        m++;
+                    }
+                    if (m >= 12) break;
+                }
+                float[] swap = in;
+                in = out;
+                out = swap;
+                n = m;
+            }
+            if (n < 3) continue;
+            // a fan from the first corner, two triangles a quad (the last one may be half empty)
+            for (int i = 1; i + 1 < n; i += 2) {
+                stainVertex(buf, in, 0, x, y, z, sa, ta, argb, p.light, code, seed, gloss);
+                stainVertex(buf, in, i, x, y, z, sa, ta, argb, p.light, code, seed, gloss);
+                stainVertex(buf, in, i + 1, x, y, z, sa, ta, argb, p.light, code, seed, gloss);
+                stainVertex(buf, in, Math.min(i + 2, n - 1), x, y, z, sa, ta, argb, p.light, code, seed, gloss);
+                quads++;
+            }
+        }
+        return quads;
+    }
+
+    private static void stainVertex(BufferBuilder buf, float[] poly, int i, float x, float y, float z, int sa, int ta, int argb, int light,
+                                    float code, float seed, float gloss) {
+        float s = poly[i * 4], t = poly[i * 4 + 1];
+        fluidVertex(buf, x + (sa == 0 ? s : 0), y + (sa == 1 ? s : ta == 1 ? t : 0), z + (ta == 2 ? t : 0), argb, poly[i * 4 + 2], poly[i * 4 + 3],
+                light, code, seed, gloss);
     }
 
     /** A drop of water: a camera-facing sphere, drawn longer along its motion. */

@@ -65,12 +65,13 @@ public final class RankBadge {
     }
 
     /**
-     * The player's own standing ("[钢铁] 1150 · #12", or 「定级中」 before a ranked match), right-aligned at {@code right}.
+     * The player's own standing in a mode ("[钢铁] 1150 · #12", or 「定级中」 before a ranked match in it), right-aligned at
+     * {@code right}.
      *
      * @return its width
      */
-    public static float standing(GuiGraphics g, float right, float y, float alpha) {
-        RankedPackets.S2CRank rank = ClientRank.standing();
+    public static float standing(GuiGraphics g, String modeId, float right, float y, float alpha) {
+        RankedPackets.Standing rank = ClientRank.standing(modeId);
         if (rank == null) return 0;
         RankTier tier = RankTier.of(rank.tier());
         String text = rank.matches() <= 0 ? tr("blockland.rank.unplaced", rank.score())

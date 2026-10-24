@@ -31,6 +31,7 @@ terrain_tripwire     | minecraft:core/terrain | minecraft:core/terrain | Positio
 entity_outline_less  | minecraft:core/entity  | minecraft:core/entity  | Position,Color,UV0,UV1,UV2,Normal | NO_OVERLAY
 entity_eyes          | minecraft:core/entity  | minecraft:core/entity  | Position,Color,UV0,UV1,UV2,Normal | EMISSIVE NO_CARDINAL_LIGHTING NO_OVERLAY
 entity_breeze_wind   | minecraft:core/entity  | minecraft:core/entity  | Position,Color,UV0,UV1,UV2,Normal | ALPHA_CUTOUT=0.1 APPLY_TEXTURE_MATRIX NO_CARDINAL_LIGHTING NO_OVERLAY
+clouds               | minecraft:core/rendertype_clouds | minecraft:core/rendertype_clouds | |
 # Sun shadow map and world effects (client/graphics/shadow)
 shadow_terrain_solid | blockland:core/shadow_terrain | blockland:core/shadow_solid  | Position,Color,UV0,UV2,Normal |
 shadow_terrain_cut   | blockland:core/shadow_terrain | blockland:core/shadow_cutout | Position,Color,UV0,UV2,Normal |
@@ -61,6 +62,12 @@ rt_temporal          | blockland:core/gfx_screen | blockland:core/rt_temporal | 
 rt_filter            | blockland:core/gfx_screen | blockland:core/rt_filter | Position |
 rt_resolve           | blockland:core/gfx_screen | blockland:core/rt_resolve | Position |
 rt_guides            | blockland:core/gfx_screen | blockland:core/rt_guides | Position |
+# Fog and sky (client/graphics/sky)
+gfx_clouds           | blockland:core/gfx_screen | blockland:core/gfx_clouds | Position |
+gfx_clouds_temporal  | blockland:core/gfx_screen | blockland:core/gfx_clouds_temporal | Position |
+gfx_cloud_noise      | blockland:core/gfx_screen | blockland:core/gfx_cloud_noise | Position |
+# Screen-space reflections (client/graphics/reflect)
+gfx_ssr_capture      | blockland:core/gfx_screen | blockland:core/gfx_ssr_capture | Position |
 gun_velocity         | blockland:core/gun_velocity | blockland:core/gun_velocity | Position,UV0,Normal |
 # Bomb explosion (client/bomb/fx)
 bomb_smoke           | blockland:core/bomb_smoke | blockland:core/bomb_smoke | Position,UV0,Color,UV2 |

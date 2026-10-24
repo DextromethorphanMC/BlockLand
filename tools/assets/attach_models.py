@@ -562,6 +562,8 @@ MATERIALS = {
     "stock_pad": ((0.030, 0.030, 0.032, 1), 0.0, 0.92, {"texture": "stipple"}),
     "charm_metal": ((0.70, 0.70, 0.72, 1), 1.0, 0.30, {}),
     "charm_block": ((1.0, 1.0, 1.0, 1), 0.0, 0.85, {"texture": "grass"}),
+    # the Thompson's wooden foregrip (section 35 `tommy_grip`): oiled walnut as on the gun (gen_tommy "wood")
+    "wood_foregrip": ((0.30, 0.14, 0.065, 1), 0.0, 0.50, {"texture": "wood"}),
     # scopes (section 22): matte anodised body, rubber eyecups, the eyepiece (picture in picture) and objective glass
     "scope": ((0.034, 0.034, 0.037, 1), 0.45, 0.46, {"texture": "brushed"}),
     "scope_rubber": ((0.018, 0.018, 0.019, 1), 0.0, 0.90, {}),
@@ -572,7 +574,7 @@ MATERIALS = {
 MATERIAL_REGIONS = {"scope": "optic", "scope_rubber": "optic", "lens": "none", "lens_front": "none",
                     "interior": "none"}
 TEXTURES = {"dot": lambda: tx.dot(32), "brushed": lambda: tx.brushed(256), "stipple": lambda: tx.stipple(256),
-            "grass": grass_texture}
+            "grass": grass_texture, "wood": lambda: tx.wood(256)}
 
 # model -> builder (section 19 file names)
 MODELS = {"mini_reddot": mini_reddot, "reddot": reddot, "laser": laser, "suppressor": suppressor,

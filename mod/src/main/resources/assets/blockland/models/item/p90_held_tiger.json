@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/p90_held",
+  "textures": {
+    "0": "blockland:item/p90_held_tiger",
+    "particle": "blockland:item/p90_held_tiger"
+  }
+}

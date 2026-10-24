@@ -2,30 +2,65 @@ package com.blockland.network.packet;
 
 import net.minecraft.network.FriendlyByteBuf;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * 排位 messages, server to client in any phase (the lobby and the world): the player's own standing, and what their
- * last ranked match did to it. Registry-free: tiers travel as their {@code RankTier} id.
+ * 排位 messages, server to client in any phase (the lobby and the world): the player's own standing in every ranked mode
+ * (each mode has a ladder of its own), and what their last ranked match did to it. Registry-free: tiers travel as their
+ * {@code RankTier} id.
  */
 public final class RankedPackets {
     private RankedPackets() {
     }
 
     /**
-     * The player's standing on the ranked ladder.
+     * A standing on one mode's ladder.
      *
-     * @param position place on the server's ladder (1 = best), 0 = not placed yet
+     * @param position place on the mode's ladder (1 = best), 0 = not placed yet
      */
-    public record S2CRank(int score, String tier, int position, int matches, int wins) {
-        public static void encode(S2CRank msg, FriendlyByteBuf buf) {
-            buf.writeVarInt(msg.score);
-            buf.writeUtf(msg.tier, 16);
-            buf.writeVarInt(msg.position);
-            buf.writeVarInt(msg.matches);
-            buf.writeVarInt(msg.wins);
+    public record Standing(String modeId, int score, String tier, int position, int matches, int wins) {
+        /** The same standing for another mode (the start standing of a mode not played yet). */
+        public Standing in(String mode) {
+            return new Standing(mode, score, tier, position, matches, wins);
         }
 
-        public static S2CRank decode(FriendlyByteBuf buf) {
-            return new S2CRank(buf.readVarInt(), buf.readUtf(16), buf.readVarInt(), buf.readVarInt(), buf.readVarInt());
+        static void write(FriendlyByteBuf buf, Standing s) {
+            buf.writeUtf(s.modeId, 64);
+            buf.writeVarInt(s.score);
+            buf.writeUtf(s.tier, 16);
+            buf.writeVarInt(s.position);
+            buf.writeVarInt(s.matches);
+            buf.writeVarInt(s.wins);
+        }
+
+        static Standing read(FriendlyByteBuf buf) {
+            return new Standing(buf.readUtf(64), buf.readVarInt(), buf.readUtf(16), buf.readVarInt(), buf.readVarInt(), buf.readVarInt());
+        }
+    }
+
+    /**
+     * The player's standings: one per mode they played ranked, and the start standing of every other mode.
+     *
+     * @param fresh the standing in a mode not played yet ({@code modeId} empty)
+     */
+    public record S2CRanks(Standing fresh, List<Standing> modes) {
+        public S2CRanks {
+            modes = List.copyOf(modes);
+        }
+
+        public static void encode(S2CRanks msg, FriendlyByteBuf buf) {
+            Standing.write(buf, msg.fresh);
+            buf.writeVarInt(msg.modes.size());
+            for (Standing s : msg.modes) Standing.write(buf, s);
+        }
+
+        public static S2CRanks decode(FriendlyByteBuf buf) {
+            Standing fresh = Standing.read(buf);
+            int count = Math.min(buf.readVarInt(), 256);
+            List<Standing> modes = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) modes.add(Standing.read(buf));
+            return new S2CRanks(fresh, modes);
         }
     }
 

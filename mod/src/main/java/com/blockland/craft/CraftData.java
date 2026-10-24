@@ -64,6 +64,13 @@ public final class CraftData {
         /** Quiet shots without a muzzle flash (others see no flash, the shot carries less far). */
         public boolean suppressed = false;
 
+        // underbarrel
+        /**
+         * How the first-person support hand holds this attachment (asset spec §35); null = the weapon's clips keep the
+         * hand where they put it.
+         */
+        public Grip grip;
+
         // stat multipliers (1 = no change)
         public float damageScale = 1;
         public float rangeScale = 1;
@@ -111,6 +118,19 @@ public final class CraftData {
      * The optics of a magnified scope (asset spec §22). Purely visual: the server never reads it, the fire rate and
      * spread stay with the gun's data.
      */
+    /**
+     * The support hand's hold on an underbarrel attachment, in the attachment's frame (origin = the mount point, +Y up,
+     * -Z down the bore; asset spec §35). Authored with the arm rigs' hand helpers ({@code underbarrel_models.py grips}).
+     */
+    public static final class Grip {
+        /** Wrist position (metres). */
+        public float[] wrist = {0, 0, 0};
+        /** Palm orientation (quaternion x, y, z, w; the hand joint frame of spec §16). */
+        public float[] palm = {0, 0, 0, 1};
+        /** Finger → curls of its first and second segment in degrees (negative closes); missing = the clip's. */
+        public Map<String, float[]> fingers = new LinkedHashMap<>();
+    }
+
     public static final class Scope {
         /** The picture in the eyepiece is this many times the unzoomed view (the default power of a variable scope). */
         public float magnification = 2;
@@ -255,6 +275,11 @@ public final class CraftData {
         public List<String> hides = List.of();
         /** Display name of "none" in this slot (e.g. 木质枪托 for the AK's built-in stock); empty = 无. */
         public String noneName = "";
+        /**
+         * Slots this one takes over while it holds anything but its default: they fall back to theirs (a pistol's one
+         * short rail holds a grip or a laser, not both). The last one chosen in the 工匠 wins.
+         */
+        public List<String> excludes = List.of();
     }
 
     /**
@@ -359,6 +384,9 @@ public final class CraftData {
         /** What a confirmed kill sets off on the shooter's weapon (asset spec §38); null = nothing of the skin's own. */
         @Nullable
         public SkinCue kill;
+        /** The skin's own kill icon on the shooter's HUD at a confirmed kill (asset spec §38); null = none. */
+        @Nullable
+        public SkinKillIcon killIcon;
 
         public boolean hasHitColor() {
             return hitColor != null && !hitColor.isBlank();
@@ -442,6 +470,27 @@ public final class CraftData {
         public String impulse = "";
         /** A punch of the field of view, percent (negative = narrower). */
         public float fov;
+    }
+
+    /**
+     * A special skin's kill icon (asset spec §38): an artwork that burns in on the shooter's HUD at a confirmed kill,
+     * glows and sheds embers, and burns away. Its textures come from {@code tools/assets/gen_kill_icons.py}.
+     */
+    public static final class SkinKillIcon {
+        /** Texture base under {@code assets/blockland/}: {@code <base>.png}, {@code <base>_glow.png}, {@code <base>_burn.png}. */
+        public String texture = "";
+        /** Size on screen, GUI pixels. */
+        public float size = 64;
+        /** Seconds on screen, the burn-in and the burn-away included. */
+        public float seconds = 2.2f;
+        /** Colour of the glow and the embers {@code #RRGGBB}. */
+        public String color = "#FF3A14";
+        /** Embers thrown off as it burns in and away (and a trickle while it glows). */
+        public int embers = 24;
+
+        public int rgb() {
+            return Scope.rgb(color, 0xFF3A14);
+        }
     }
 
     /** A particle stream of a special skin's inspect: a preset at a node between two times of the clip. */

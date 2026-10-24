@@ -4,7 +4,11 @@ import com.blockland.client.graphics.frame.FrameHooks;
 import com.blockland.client.graphics.frame.FrameStage;
 import com.blockland.client.graphics.light.WorldLighting;
 import com.blockland.client.graphics.raytrace.RayTracing;
+import com.blockland.client.graphics.reflect.ScreenReflections;
 import com.blockland.client.graphics.shadow.Shadows;
+import com.blockland.client.graphics.sky.FogSwitch;
+import com.blockland.client.graphics.sky.VolumetricClouds;
+import com.blockland.client.graphics.wind.Wind;
 import com.blockland.client.settings.ClientSettings;
 import net.minecraftforge.eventbus.api.bus.BusGroup;
 
@@ -27,7 +31,9 @@ import java.util.function.Supplier;
  *   light) — a stage registered before the lighting, so this frame's cascades are ready when the uniforms are written;</li>
  *   <li>{@code raytrace}: ray traced global illumination and ambient occlusion from a voxel copy of the blocks around the
  *   camera (after the level, like the screen-space effects);</li>
- *   <li>{@code light}: the scene uniforms, the lighting pack (vanilla shader overrides) and the dynamic lights.</li>
+ *   <li>{@code light}: the scene uniforms, the lighting pack (vanilla shader overrides) and the dynamic lights;</li>
+ *   <li>{@code sky}: the fog switch and the volumetric clouds (after the level, folded in by the post chain);</li>
+ *   <li>{@code wind}: gusts and the entities pushing plants, written into the scene uniforms for the terrain's wind.</li>
  * </ul>
  */
 public final class Graphics {
@@ -36,8 +42,10 @@ public final class Graphics {
     private static final List<Runnable> commitListeners = new ArrayList<>();
     private static final GraphicsStatus status = new GraphicsStatus();
     private static Supplier<ShadowInfo> shadows = () -> null;
+    private static Supplier<ReflectionInfo> reflections = () -> null;
     private static WorldEffects worldEffects = WorldEffects.NONE;
     private static WorldEffects rayTracing = WorldEffects.NONE;
+    private static WorldEffects clouds = WorldEffects.NONE;
     /** The screen-space effects and the ray traced lighting as one (the decode pass asks for each kind). */
     private static final WorldEffects combined = new WorldEffects() {
         @Nullable
@@ -57,6 +65,12 @@ public final class Graphics {
         public GpuTextureView rayTraced() {
             return rayTracing.rayTraced();
         }
+
+        @Nullable
+        @Override
+        public GpuTextureView clouds() {
+            return clouds.clouds();
+        }
     };
 
     private Graphics() {
@@ -66,7 +80,12 @@ public final class Graphics {
         FrameHooks.init(modBus);
         Shadows.init(modBus);
         RayTracing.init(modBus);
+        // before the light module: the cloud layer is in the frame when the scene uniforms are written
+        VolumetricClouds.init();
+        ScreenReflections.init();
         WorldLighting.init(modBus);
+        FogSwitch.init();
+        Wind.init(modBus);
     }
 
     public static GraphicsSettings settings() {
@@ -103,6 +122,16 @@ public final class Graphics {
         return shadows.get();
     }
 
+    public static void setReflections(Supplier<ReflectionInfo> source) {
+        reflections = source;
+    }
+
+    /** Last frame's world for screen-space reflections, or null when this frame has none (off, first frame, resized). */
+    @Nullable
+    public static ReflectionInfo reflections() {
+        return reflections.get();
+    }
+
     public static void setWorldEffects(WorldEffects effects) {
         worldEffects = effects;
     }
@@ -111,7 +140,14 @@ public final class Graphics {
         rayTracing = effects;
     }
 
-    /** The world effects the post chain folds in: screen-space ambient occlusion and volumetric light, ray traced light. */
+    public static void setClouds(WorldEffects effects) {
+        clouds = effects;
+    }
+
+    /**
+     * The world effects the post chain folds in: screen-space ambient occlusion and volumetric light, ray traced light,
+     * volumetric clouds.
+     */
     public static WorldEffects worldEffects() {
         return combined;
     }

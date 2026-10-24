@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/calico_held",
+  "textures": {
+    "0": "blockland:item/calico_held_gold_beads",
+    "particle": "blockland:item/calico_held_gold_beads"
+  }
+}

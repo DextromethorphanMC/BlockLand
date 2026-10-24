@@ -6,6 +6,7 @@ import com.blockland.client.camera.CameraRig;
 import com.blockland.client.craft.WeaponLook;
 import com.blockland.client.render.GpuModel;
 import com.blockland.client.spray.SprayDecals;
+import com.blockland.client.viewmodel.SwimPose;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.client.viewmodel.ViewmodelRig;
 import com.blockland.craft.Build;
@@ -69,7 +70,10 @@ final class KnifeViewmodel {
     private boolean load(ResourceLocation location) {
         loaded = location;
         ready = rig.load(location, knife.anims.idle, knife.anims.walk, knife.anims.sprint, knife.anims.tacSprint);
-        if (ready) rig.motion().setHandling(knife.handling);
+        if (ready) {
+            rig.motion().setHandling(knife.handling);
+            rig.motion().swim().setStyle(SwimPose.Style.KNIFE);
+        }
         return ready;
     }
 

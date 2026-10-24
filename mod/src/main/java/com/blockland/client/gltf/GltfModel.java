@@ -9,7 +9,8 @@ import java.util.Map;
  * A parsed glTF 2.0 model: plain arrays, no GPU objects. Supports what the gun asset contract needs
  * (tools/assets/VIEWMODEL_SPEC.md): node hierarchy with TRS, triangle meshes (position/normal/uv/indices, baked AO in
  * COLOR_0), metallic-roughness materials with embedded PNGs and the texture set / region extras of spec §20–21, TRS
- * animations (STEP, LINEAR and CUBICSPLINE) with event extras, and string-valued node extras.
+ * animations (STEP, LINEAR and CUBICSPLINE) with event extras, string-valued node extras, and the skinned arms meshes of
+ * spec §7 (JOINTS_0 / WEIGHTS_0 with the node's {@code skin} / {@code bind} extras; no glTF skins).
  */
 public final class GltfModel {
     public final List<Node> nodes = new ArrayList<>();
@@ -33,6 +34,13 @@ public final class GltfModel {
         public final float[] scale = {1, 1, 1};
         /** String-valued {@code extras} of the node (e.g. which rig joint an arm mesh belongs to). */
         public final Map<String, String> extras = new HashMap<>();
+        /**
+         * A skinned mesh's joints ({@code extras.skin}, asset spec §7: indexed by its vertices' JOINTS_0; a name ending in
+         * {@code :untwisted} is that joint without its twist about its own Y), or null when the mesh is rigid.
+         */
+        public String[] skin;
+        /** Per skin joint, its translation in the anchor joint's space in the bind pose ({@code extras.bind}, 3 floats each). */
+        public float[] bind;
     }
 
     public static final class Mesh {
@@ -46,6 +54,9 @@ public final class GltfModel {
         public float[] uvs;
         /** Baked ambient occlusion per vertex (COLOR_0 red, 1 = open), or null when the mesh has none. */
         public float[] ao;
+        /** Four skin joint indices and weights per vertex (JOINTS_0 / WEIGHTS_0), or null when the mesh is rigid. */
+        public int[] joints;
+        public float[] weights;
         public int[] indices;
         public int material = -1;
 

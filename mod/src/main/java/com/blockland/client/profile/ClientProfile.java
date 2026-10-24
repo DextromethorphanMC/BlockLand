@@ -20,6 +20,8 @@ public final class ClientProfile {
     @Nullable
     private static ProfilePackets.S2CProfile profile;
     private static List<ProfilePackets.Line> leaderboard = List.of();
+    /** The mode the ladder above belongs to; the one last asked for. */
+    private static String leaderboardMode = "", requestedMode = "";
     private static boolean leaderboardLoaded;
     /** Bumped on every update, so screens can tell new data from old. */
     private static int version;
@@ -45,7 +47,10 @@ public final class ClientProfile {
 
             @Override
             public void onLeaderboard(ProfilePackets.S2CLeaderboard received) {
+                // an answer for a mode the player already left is dropped
+                if (!received.modeId().equals(requestedMode)) return;
                 leaderboard = received.lines();
+                leaderboardMode = received.modeId();
                 leaderboardLoaded = true;
                 version++;
             }
@@ -58,12 +63,26 @@ public final class ClientProfile {
         inventoryLoaded = false;
         profile = null;
         leaderboard = List.of();
+        leaderboardMode = "";
+        requestedMode = "";
         leaderboardLoaded = false;
         version++;
     }
 
+    /** Asks for the inventory or the profile (a ladder: {@link #requestLeaderboard}). */
     public static void request(ProfilePackets.Kind kind) {
-        BLNetwork.sendToServer(new ProfilePackets.C2SRequest(kind));
+        BLNetwork.sendToServer(new ProfilePackets.C2SRequest(kind, ""));
+    }
+
+    /** Asks for one mode's ladder; until it arrives the old one is not shown. */
+    public static void requestLeaderboard(String modeId) {
+        requestedMode = modeId;
+        if (!modeId.equals(leaderboardMode)) {
+            leaderboard = List.of();
+            leaderboardLoaded = false;
+            version++;
+        }
+        BLNetwork.sendToServer(new ProfilePackets.C2SRequest(ProfilePackets.Kind.LEADERBOARD, modeId));
     }
 
     /** Puts an owned item into a slot ({@code key} empty = takes the slot's item off); the server answers with the new state. */
@@ -84,8 +103,13 @@ public final class ClientProfile {
         return profile;
     }
 
+    /** The ladder of {@link #leaderboardMode}. */
     public static List<ProfilePackets.Line> leaderboard() {
         return leaderboard;
+    }
+
+    public static String leaderboardMode() {
+        return leaderboardMode;
     }
 
     public static boolean leaderboardLoaded() {

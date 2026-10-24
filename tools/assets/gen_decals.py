@@ -142,8 +142,119 @@ def knife_cut(seed):
     return _finish(rgb, a)
 
 
+def bullet_wound(seed):
+    """An entry wound on a body: a dark hole, a ring of bruised, torn skin, blood smeared round it (no run: body decals
+    lie at any rotation)."""
+    rng = np.random.default_rng(seed)
+    x, y = _grid(64, 64)
+    cx, cy = 32 + rng.uniform(-1.5, 1.5), 32 + rng.uniform(-1.5, 1.5)
+    ang = np.arctan2(y - cy, x - cx)
+    tilt = rng.uniform(0, np.pi)
+    u, v = (x - cx) * np.cos(tilt) + (y - cy) * np.sin(tilt), -(x - cx) * np.sin(tilt) + (y - cy) * np.cos(tilt)
+    r = np.hypot(u, v / 0.85) / 32
+    coarse, fine = tx.tile_noise(64, 6.0, rng), tx.tile_noise(64, 1.5, rng)
+    edge = r * (1 + 0.1 * np.sin(5 * ang + rng.uniform(0, 6))) + (coarse - 0.5) * 0.25 + (fine - 0.5) * 0.08
+    hole = np.clip((0.16 - edge) / 0.04, 0, 1)
+    ring = np.clip((0.42 - edge) / 0.08, 0, 1)
+    smear = np.clip((0.62 - edge) / 0.2, 0, 1) * (0.35 + 0.65 * fine)
+    rgb = np.zeros((64, 64, 3))
+    rgb[:] = (0.50, 0.04, 0.04)
+    rgb *= (0.8 + 0.25 * fine)[..., None]
+    rgb = rgb * (1 - ring[..., None]) + np.array([0.36, 0.05, 0.05]) * ring[..., None]
+    rgb = rgb * (1 - hole[..., None]) + np.array([0.10, 0.015, 0.015]) * hole[..., None]
+    a = np.maximum.reduce([hole, ring * 0.95, smear * 0.6])
+    return _finish(rgb, a)
+
+
+def blunt_dent(seed):
+    """A blunt blow on a block (crowbar, VIEWMODEL_SPEC section 41): a crushed, darker hollow, a pale ring of powdered
+    surface round it, cracks running out of the rim and a few chips knocked off."""
+    rng = np.random.default_rng(seed)
+    x, y = _grid(64, 64)
+    cx, cy = 32 + rng.uniform(-1.5, 1.5), 32 + rng.uniform(-1.5, 1.5)
+    r = np.hypot((x - cx) / 1.25, y - cy)                                 # the head lands a little elongated
+    ang = np.arctan2(y - cy, x - cx)
+    noise = tx.tile_noise(64, 3.0, rng)
+    fine = tx.tile_noise(64, 1.2, rng)
+    jag = 1 + 0.12 * np.sin(4 * ang + rng.uniform(0, 6)) + 0.08 * (noise - 0.5)
+    rgb = np.zeros((64, 64, 3))
+    a = np.zeros((64, 64))
+    rgb[:] = (0.62, 0.60, 0.56)                                           # powdered surface
+    ring_t = np.clip(1 - np.abs(r - 11.0 * jag) / 6.0, 0, 1)
+    a += 0.55 * ring_t * (0.5 + 0.5 * fine)
+    hollow = np.clip((9.0 * jag - r) / 3.0, 0, 1)
+    shade = 0.16 + 0.10 * noise + 0.05 * fine + 0.08 * np.clip((x - cx) / 12, -1, 1)   # one wall lit, one shaded
+    rgb = rgb * (1 - hollow[..., None]) + np.stack([shade, shade * 0.96, shade * 0.9], -1) * hollow[..., None]
+    a = np.maximum(a, 0.92 * hollow)
+    for _ in range(int(rng.integers(5, 9))):                              # cracks out of the rim
+        th = rng.uniform(0, 2 * np.pi)
+        r0, length = 8.0, rng.uniform(8.0, 20.0)
+        wob = rng.uniform(-0.25, 0.25)
+        u = (x - cx) * np.cos(th) + (y - cy) * np.sin(th)
+        v = -(x - cx) * np.sin(th) + (y - cy) * np.cos(th) - wob * np.clip(u - r0, 0, None) ** 1.3 * 0.15
+        w = 0.7 * (1 - np.clip((u - r0) / length, 0, 1))
+        crack = (u > r0) & (u < r0 + length) & (np.abs(v) < w + 0.15)
+        rgb[crack] = (0.08, 0.075, 0.07)
+        a[crack] = np.maximum(a[crack], 0.9)
+    for _ in range(int(rng.integers(3, 6))):                              # chips knocked out at the rim
+        th, rr = rng.uniform(0, 2 * np.pi), rng.uniform(9.0, 13.0)
+        px, py = cx + 1.25 * rr * np.cos(th), cy + rr * np.sin(th)
+        chip = np.hypot(x - px, y - py) < rng.uniform(1.0, 2.2)
+        rgb[chip] = (0.22, 0.21, 0.20)
+        a[chip] = np.maximum(a[chip], 0.95)
+    return _finish(rgb, a)
+
+
+def punch_mark(seed):
+    """A knuckle-duster blow on a block (VIEWMODEL_SPEC section 42): four small scuffed dents in a row (the four
+    knuckle bosses; the frame's X axis runs along the row) in a faint dusty print."""
+    rng = np.random.default_rng(seed)
+    x, y = _grid(32, 32)
+    rgb = np.zeros((32, 32, 3))
+    a = np.zeros((32, 32))
+    rgb[:] = (0.55, 0.53, 0.50)
+    print_ = np.hypot((x - 16) / 13.0, (y - 16) / 6.5)
+    a += 0.30 * np.clip(1 - print_, 0, 1)
+    cy = 16 + rng.uniform(-0.6, 0.6)
+    for k in range(4):
+        px = 16 + (k - 1.5) * 6.2 + rng.uniform(-0.5, 0.5)
+        py = cy + 0.9 * np.sin(np.pi * k / 3) + rng.uniform(-0.4, 0.4)    # the knuckle line is slightly arched
+        e = np.hypot((x - px) / 2.4, (y - py) / 2.0) * rng.uniform(0.9, 1.1)
+        dent = e < 1.0
+        rim = (e >= 1.0) & (e < 1.4)
+        rgb[rim] = (0.70, 0.68, 0.64)
+        a[rim] = np.maximum(a[rim], 0.75)
+        rgb[dent] = (0.20, 0.19, 0.18)
+        a[dent] = 0.95
+    return _finish(rgb, a)
+
+
+def bruise(seed):
+    """A blunt hit on a body (crowbar, knuckles): a purple-red blotch, darker and redder in the middle, mottled, with a
+    graze of broken skin in the centre (no cut, little blood)."""
+    rng = np.random.default_rng(seed)
+    x, y = _grid(64, 64)
+    cx, cy = 32 + rng.uniform(-2, 2), 32 + rng.uniform(-2, 2)
+    tilt = rng.uniform(0, np.pi)
+    u, v = (x - cx) * np.cos(tilt) + (y - cy) * np.sin(tilt), -(x - cx) * np.sin(tilt) + (y - cy) * np.cos(tilt)
+    coarse, fine = tx.tile_noise(64, 6.0, rng), tx.tile_noise(64, 1.5, rng)
+    r = np.hypot(u / 1.2, v) / 28 + (coarse - 0.5) * 0.3
+    body = np.clip((1.0 - r) / 0.45, 0, 1)
+    core = np.clip((0.45 - r) / 0.25, 0, 1)
+    rgb = np.zeros((64, 64, 3))
+    rgb[:] = (0.30, 0.10, 0.22)                                           # blue-purple outer bruise
+    rgb = rgb * (1 - core[..., None]) + np.array([0.42, 0.06, 0.08]) * core[..., None]
+    rgb *= (0.85 + 0.25 * fine)[..., None]
+    graze = (np.hypot(u / 1.6, v) < 5.5 + 2.0 * (fine - 0.5)) & (fine > 0.45)
+    rgb[graze] = (0.55, 0.08, 0.07)
+    a = 0.55 * body * (0.6 + 0.4 * fine)
+    a[graze] = 0.9
+    return _finish(rgb, a)
+
+
 DECALS = {"bullet_hole": (bullet_hole, 4), "knife_slash": (knife_slash, 2), "knife_stab": (knife_stab, 2),
-          "knife_cut": (knife_cut, 2)}
+          "knife_cut": (knife_cut, 2), "bullet_wound": (bullet_wound, 4), "blunt_dent": (blunt_dent, 2),
+          "punch_mark": (punch_mark, 2), "bruise": (bruise, 2)}
 
 
 def build(path):

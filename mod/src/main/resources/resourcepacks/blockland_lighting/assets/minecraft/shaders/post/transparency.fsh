@@ -68,7 +68,7 @@ vec3 bl_throughWater(vec3 mainColor, float mainDepth, vec4 translucent, float tr
         return mainColor;
     }
     vec3 world = bl_worldFromView(surface);
-    vec2 slope = bl_waveSlope(world.xz + BlCamera.xz, bl_time());
+    vec2 slope = bl_waterSlope(world, bl_time());
     vec3 bent = mat3(BlViewRotation) * vec3(slope.x, 0.0, slope.y);
     float thickness = length(bl_viewPosition(texCoord, mainDepth) - surface);
     vec2 uv = texCoord + bent.xy * BlWater.w * 0.35 * clamp(thickness, 0.0, 1.5) / max(-surface.z, 1.0);

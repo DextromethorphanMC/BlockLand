@@ -6,7 +6,8 @@
 // Ray tracing albedo (internal resolution, linear): the colour of the block under each pixel from the voxels, or the
 // scene's own colour where no voxel is (entities, items, beyond the box). Multiplies the traced light in the resolve.
 // Params[0].x = 1: Ray Reconstruction's diffuse albedo guide instead (the scene's colour with Minecraft's light in it,
-// so its texture detail is never mistaken for noise).
+// so its texture detail is never mistaken for noise; floored by the voxel's colour so dark corners, where the traced light
+// matters most, are not divided by almost nothing). The resolve always multiplies by the plain albedo (Params 0).
 
 uniform sampler2D DepthSampler;
 uniform sampler2D GuideSampler;
@@ -30,6 +31,6 @@ void main() {
         vec4 voxel = rt_color(cell);
         if (voxel.a > 0.0) albedo = pow(voxel.rgb, vec3(2.2));
     }
-    if (Params[0].x > 0.5) albedo = max(scene, albedo * 0.05);
+    if (Params[0].x > 0.5) albedo = max(scene, albedo * 0.15);
     fragColor = vec4(albedo, 1.0);
 }

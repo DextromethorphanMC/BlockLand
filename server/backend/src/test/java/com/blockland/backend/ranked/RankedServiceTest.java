@@ -32,20 +32,26 @@ class RankedServiceTest {
         players.login(A, "Alice");
         players.login(B, "Bob");
         return new RankedService(
-                new JsonFileRepository<>(mapper, dir.resolve("ranked-ratings.json"), Rating.class, Rating::uuid, null),
+                new JsonFileRepository<>(mapper, dir.resolve("ranked-ratings.json"), Rating.class, Rating::key, null),
                 new JsonFileRepository<>(mapper, dir.resolve("ranked-matches.json"), RankedMatch.class, RankedMatch::matchId, null),
                 new RankedConfigStore(mapper, properties), players);
     }
 
+    private static final String DUEL = "bomb_1v1";
+
     private static RankedService.ResultRequest duel(String id, String winner, String loser) {
-        return new RankedService.ResultRequest(id, "bomb_1v1", List.of(
+        return duel(id, DUEL, winner, loser);
+    }
+
+    private static RankedService.ResultRequest duel(String id, String mode, String winner, String loser) {
+        return new RankedService.ResultRequest(id, mode, List.of(
                 new RankedService.ResultTeam(List.of(winner), "VICTORY", 1),
                 new RankedService.ResultTeam(List.of(loser), "DEFEAT", 2)));
     }
 
     @Test
     void unplacedPlayersStartAtTheStartScore(@TempDir Path dir) {
-        Map<String, RankedService.Standing> standings = service(dir).standings(List.of(A, "not-a-uuid"));
+        Map<String, RankedService.Standing> standings = service(dir).standings(DUEL, List.of(A, "not-a-uuid"));
         assertThat(standings).containsOnlyKeys(A);
         assertThat(standings.get(A)).isEqualTo(new RankedService.Standing(1000, "coal", 0, 0, 0));
     }
@@ -60,25 +66,25 @@ class RankedServiceTest {
                 .containsExactlyInAnyOrder(org.assertj.core.groups.Tuple.tuple(A, 32, 1), org.assertj.core.groups.Tuple.tuple(B, -32, 2));
         // the same match again: the same answer, no second change
         assertThat(ranked.report(duel("m1", A, B))).isEqualTo(changes);
-        assertThat(ranked.standings(List.of(A)).get(A).score()).isEqualTo(1032);
-        assertThat(ranked.standings(List.of(A)).get(A).wins()).isEqualTo(1);
-        assertThat(ranked.leaderboard(10)).extracting(RankedService.LeaderEntry::name).containsExactly("Alice", "Bob");
+        assertThat(ranked.standings(DUEL, List.of(A)).get(A).score()).isEqualTo(1032);
+        assertThat(ranked.standings(DUEL, List.of(A)).get(A).wins()).isEqualTo(1);
+        assertThat(ranked.leaderboard(DUEL, 10)).extracting(RankedService.LeaderEntry::name).containsExactly("Alice", "Bob");
     }
 
     @Test
     void afterThePlacementMatchesTheNormalKApplies(@TempDir Path dir) {
         RankedService ranked = service(dir);
         for (int i = 0; i < 5; i++) ranked.report(duel("p" + i, A, B));
-        int before = ranked.standings(List.of(A)).get(A).score();
+        int before = ranked.standings(DUEL, List.of(A)).get(A).score();
         int delta = ranked.report(duel("after", A, B)).stream().filter(c -> c.uuid().equals(A)).findFirst().orElseThrow().delta();
         assertThat(delta).isBetween(1, 32);
-        assertThat(ranked.standings(List.of(A)).get(A).score()).isEqualTo(before + delta);
+        assertThat(ranked.standings(DUEL, List.of(A)).get(A).score()).isEqualTo(before + delta);
     }
 
     @Test
     void teamsPlayAsTheirAverageAndDrawsMoveTheStrongerSideDown(@TempDir Path dir) {
         RankedService ranked = service(dir);
-        ranked.report(duel("warm", A, B)); // A 1032, B 968
+        ranked.report(duel("warm", "fastpvp", A, B)); // A 1032, B 968 in the mode of the draw
         List<RankedService.Change> draw = ranked.report(new RankedService.ResultRequest("d", "fastpvp", List.of(
                 new RankedService.ResultTeam(List.of(A, C), "DRAW", 0),
                 new RankedService.ResultTeam(List.of(B, D), "DRAW", 0))));
@@ -92,7 +98,29 @@ class RankedServiceTest {
         List<RankedService.Change> changes = ranked.report(new RankedService.ResultRequest("solo", "x",
                 List.of(new RankedService.ResultTeam(List.of(A), "VICTORY", 1))));
         assertThat(changes).singleElement().extracting(RankedService.Change::delta).isEqualTo(0);
-        assertThat(ranked.leaderboard(10)).isEmpty();
+        assertThat(ranked.leaderboard(DUEL, 10)).isEmpty();
+    }
+
+    @Test
+    void everyModeHasItsOwnLadder(@TempDir Path dir) {
+        RankedService ranked = service(dir);
+        ranked.report(duel("d1", A, B));
+        ranked.report(duel("f1", "fastpvp", B, A));
+        ranked.report(duel("f2", "fastpvp", B, A));
+
+        // the duel ladder: A won its only match there; the fastpvp ladder: B won both
+        assertThat(ranked.standings(DUEL, List.of(A, B))).extractingFromEntries(e -> e.getValue().score())
+                .containsExactly(1032, 968);
+        assertThat(ranked.leaderboard(DUEL, 10)).extracting(RankedService.LeaderEntry::name).containsExactly("Alice", "Bob");
+        assertThat(ranked.leaderboard("fastpvp", 10)).extracting(RankedService.LeaderEntry::name).containsExactly("Bob", "Alice");
+        assertThat(ranked.standings("fastpvp", List.of(A)).get(A).matches()).isEqualTo(2);
+        // a mode nobody played: everyone at the start
+        assertThat(ranked.standings("ctf", List.of(A)).get(A)).isEqualTo(new RankedService.Standing(1000, "coal", 0, 0, 0));
+        assertThat(ranked.allStandings(List.of(A)).get(A)).containsOnlyKeys(DUEL, "fastpvp");
+        assertThat(ranked.modes()).containsExactly(DUEL, "fastpvp");
+        assertThat(ranked.player(A).modes()).extracting(RankedService.ModeView::modeId).containsExactly(DUEL, "fastpvp");
+        assertThatThrownBy(() -> ranked.leaderboard(" bad mode", 10)).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> ranked.report(duel("nomode", null, A, B))).isInstanceOf(ApiException.class);
     }
 
     @Test
@@ -114,8 +142,9 @@ class RankedServiceTest {
         RankedConfig next = ranked.resetSeason();
 
         assertThat(next.season()).isEqualTo(2);
-        assertThat(ranked.standings(List.of(A)).get(A)).isEqualTo(new RankedService.Standing(1000, "coal", 0, 0, 0));
-        assertThat(ranked.player(A).seasons()).singleElement().satisfies(end -> {
+        assertThat(ranked.standings(DUEL, List.of(A)).get(A)).isEqualTo(new RankedService.Standing(1000, "coal", 0, 0, 0));
+        assertThat(ranked.player(A).modes()).singleElement().extracting(RankedService.ModeView::seasons).asInstanceOf(
+                org.assertj.core.api.InstanceOfAssertFactories.list(Rating.SeasonEnd.class)).singleElement().satisfies(end -> {
             assertThat(end.season()).isEqualTo(1);
             assertThat(end.score()).isEqualTo(1032);
             assertThat(end.position()).isEqualTo(1);

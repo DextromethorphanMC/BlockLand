@@ -54,6 +54,8 @@ MOUNTS = {
     # laser on the clamp's side rail, right of the barrel in front of the forend: the module hangs along -Y -> +X
     "mount_laser": ("gun", G((km.BARREL_R + 0.0062, 0.0, km.LASER_Z)), quat_axis_angle((0, 0, 1), 90.0), None),
     "mount_barrel": ("gun", G((0.0, 0.0, km.MUZZLE_Z)), None, None),
+    # section 35: under the front of the forend, riding the pump's stroke, ahead of the support hand (pump space)
+    "mount_underbarrel": ("pump", np.array([0.0, -0.0390, -0.1350]), None, None),
     "mount_stock": ("gun", G((0.0, -0.0220, km.REC_Z1 - 0.0005)), None, None),            # replaces the stock
     # sling loop low on the left of the receiver's rear; -Y hangs straight down in the hip pose
     "mount_charm": ("gun", G(km.CHARM_POINT), quat_conj(GUN_Q), None),

@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/sten_held",
+  "textures": {
+    "0": "blockland:item/sten_held_woodland",
+    "particle": "blockland:item/sten_held_woodland"
+  }
+}

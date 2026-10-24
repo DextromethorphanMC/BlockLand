@@ -130,6 +130,7 @@ class DualRig:
         # attachment mounts (section 19): name -> (parent, translation, rotation); no optic or stock on dual guns
         self.mounts = {
             "mount_laser": ("gun", G(L.laser_origin), None),
+            "mount_underbarrel": ("gun", G(L.laser_origin), None),               # section 35: the laser's rail
             "mount_barrel": ("gun", G((0.0, 0.0, L.slide_front - 0.0010)), None),
             "mount_charm": ("gun", G(L.charm_pos), quat_conj(GUN_Q)),             # right gun only
         }

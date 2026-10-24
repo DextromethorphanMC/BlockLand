@@ -39,5 +39,18 @@
     "fade": 2,
     "max": 48
   },
+  "bullet_wound": {
+    "texture": "textures/decal/bullet_wound.png",
+    "variants": 4,
+    "size": [0.16, 0.16],
+    "sizeJitter": 0.2,
+    "lifetime": 14,
+    "lifetimeJitter": 3,
+    "fade": 2,
+    "max": 64
+  },
+  "blunt_dent": {"texture": "textures/decal/blunt_dent.png", "variants": 2, "size": [0.2, 0.2], "sizeJitter": 0.15, "lifetime": 24, "lifetimeJitter": 4, "fade": 3, "max": 64},
+  "punch_mark": {"texture": "textures/decal/punch_mark.png", "variants": 2, "size": [0.11, 0.11], "sizeJitter": 0.15, "lifetime": 14, "lifetimeJitter": 3, "fade": 2, "max": 64},
+  "bruise": {"texture": "textures/decal/bruise.png", "variants": 2, "size": [0.15, 0.15], "sizeJitter": 0.2, "lifetime": 12, "lifetimeJitter": 3, "fade": 2, "max": 48},
   "scorch": {"texture": "textures/decal/scorch.png", "variants": 1, "size": [2.6, 2.6], "sizeJitter": 0.15, "lifetime": 45, "lifetimeJitter": 8, "fade": 5, "max": 24}
 }

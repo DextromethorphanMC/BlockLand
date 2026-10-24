@@ -129,6 +129,15 @@ public final class GlbReader {
                 }
                 if (primitive.normals == null) primitive.normals = flatNormals(primitive);
                 if (attributes.has("COLOR_0")) primitive.ao = occlusion(attributes.get("COLOR_0").getAsInt(), vertices);
+                if (attributes.has("JOINTS_0") && attributes.has("WEIGHTS_0")) {
+                    float[] joints = floatAccessor(attributes.get("JOINTS_0").getAsInt());
+                    float[] weights = floatAccessor(attributes.get("WEIGHTS_0").getAsInt());
+                    if (joints.length == vertices * 4 && weights.length == vertices * 4) {
+                        primitive.joints = new int[joints.length];
+                        for (int i = 0; i < joints.length; i++) primitive.joints[i] = (int) joints[i];
+                        primitive.weights = weights;
+                    }
+                }
                 primitive.material = p.has("material") ? p.get("material").getAsInt() : -1;
                 mesh.primitives.add(primitive);
             }
@@ -147,8 +156,23 @@ public final class GlbReader {
             floats(n, "rotation", node.rotation);
             floats(n, "scale", node.scale);
             if (n.has("extras") && n.get("extras").isJsonObject()) {
-                for (var entry : n.getAsJsonObject("extras").entrySet()) {
+                JsonObject extras = n.getAsJsonObject("extras");
+                for (var entry : extras.entrySet()) {
                     if (entry.getValue().isJsonPrimitive()) node.extras.put(entry.getKey(), entry.getValue().getAsString());
+                }
+                // a skinned arms mesh (asset spec §7): its joints and their bind translations in the anchor's space
+                if (extras.has("skin") && extras.get("skin").isJsonArray()) {
+                    JsonArray skin = extras.getAsJsonArray("skin");
+                    JsonArray bind = array(extras, "bind");
+                    node.skin = new String[skin.size()];
+                    node.bind = new float[skin.size() * 3];
+                    for (int i = 0; i < skin.size(); i++) {
+                        node.skin[i] = skin.get(i).getAsString();
+                        if (i < bind.size() && bind.get(i).isJsonArray()) {
+                            JsonArray b = bind.get(i).getAsJsonArray();
+                            for (int c = 0; c < 3 && c < b.size(); c++) node.bind[i * 3 + c] = b.get(c).getAsFloat();
+                        }
+                    }
                 }
             }
             JsonArray children = array(n, "children");

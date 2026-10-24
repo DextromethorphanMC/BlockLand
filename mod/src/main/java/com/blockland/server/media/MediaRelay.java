@@ -14,7 +14,8 @@ import java.util.regex.Pattern;
 
 /** Relays images from the backend media store to game clients, caching each version once per server. */
 public final class MediaRelay {
-    private static final Set<String> NAMESPACES = Set.of(MediaPackets.SHOP, MediaPackets.MODE, MediaPackets.GROUP, MediaPackets.MAP);
+    private static final Set<String> NAMESPACES = Set.of(MediaPackets.SHOP, MediaPackets.MODE, MediaPackets.GROUP, MediaPackets.MAP,
+            MediaPackets.ACTIVITY);
     private static final Pattern SAFE = Pattern.compile("^[a-z0-9_\\-]{1,64}$");
 
     private final MinecraftServer server;

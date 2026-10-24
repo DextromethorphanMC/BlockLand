@@ -176,7 +176,9 @@ STEPS = {"pbr_textures": build_pbr_textures,
 # {step name: function()}, appended after the steps above in this order. Missing modules are skipped.
 STEP_MODULES = ("build_tommy", "build_ks3", "build_usp", "build_dagger", "build_stocks", "build_sprays",
                 "build_fx_special", "build_rpd", "build_karambit", "build_equipment",
-                "build_bomb", "build_battleroyale", "build_parachute", "build_graffiti")
+                "build_bomb", "build_battleroyale", "build_parachute", "build_graffiti", "build_new_guns",
+                "gen_kill_icons", "build_uzi", "build_p90", "build_mp5", "build_sten", "build_ssg08", "build_calico", "build_scar", "build_m4a1", "build_jackhammer",
+                "build_crowbar", "build_knuckles")
 
 
 def _load_step_modules():

@@ -35,6 +35,7 @@ const vec3 AMBIENT_DOWN = vec3(0.13, 0.13, 0.14);
 const vec3 SKY = vec3(0.50, 0.58, 0.72);
 const vec3 GROUND = vec3(0.045, 0.045, 0.05);
 const float PI = 3.14159265;
+const float SELF_CLEAR = 1.0;        // blocks: the eye-to-weapon reach plus the player head's half diagonal
 // LabPBR predefined metals (G 230..237): iron, gold, aluminium, chrome, copper, lead, platinum, silver
 const vec3 METALS[8] = vec3[8](
     vec3(0.531, 0.512, 0.496), vec3(1.000, 0.782, 0.344), vec3(0.913, 0.922, 0.924), vec3(0.549, 0.556, 0.554),
@@ -280,6 +281,69 @@ vec3 starLayer(vec2 p, float t) {
     return tint * star * twinkle;
 }
 
+// ---- water on the weapon (rain, soaking; rendering spec §15) ---------------------------------------------------------
+// Laid out on the surface in the weapon's own space (so it stays on the gun as it moves): the plane of the dominant axis
+// of the surface's normal, in cells of about a drop. Positions are the model's units (blocks).
+
+// One layer of beads: a 2D cellular layer at p (cell units) whose cells hold a bead with chance coverage, radii between
+// rMin and rMax (cell units), most of them near rMin. Returns x = distance to the nearest bead's centre over its radius
+// (under 1 = on it), y = its radius, z = how far into its life it is; offset = from its centre to p, over its radius.
+// While rain falls (cycle > 0) each bead lands (a sudden small drop), grows a little as more water joins it, and is gone
+// again (merged into a neighbour, run off); dry weather freezes the layer as it is.
+vec3 waterBeads(vec2 p, float coverage, float seed, float cycle, float rMin, float rMax, out vec2 offset) {
+    vec2 i = floor(p);
+    vec2 f = p - i;
+    vec3 best = vec3(8.0, 0.0, 0.0);
+    offset = vec2(0.0);
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 cell = i + vec2(float(x), float(y));
+            if (hash12(cell + seed) > coverage) continue;
+            vec2 centre = vec2(float(x), float(y)) + vec2(hash12(cell + seed + 17.3), hash12(cell + seed + 41.9)) * 0.6 + 0.2;
+            float r = mix(rMin, rMax, pow(hash12(cell + seed + 63.1), 2.2));
+            float phase = fract(cycle * mix(0.03, 0.09, hash12(cell + seed + 7.7)) + hash12(cell + seed + 91.3));
+            float grow = cycle > 0.0
+                    ? smoothstep(0.0, 0.02, phase) * mix(0.75, 1.0, smoothstep(0.02, 0.8, phase)) * (1.0 - smoothstep(0.93, 1.0, phase))
+                    : 1.0;
+            r *= grow;
+            if (r < 0.015) continue;
+            vec2 rel = f - centre;
+            float d = length(rel) / r;
+            if (d < best.x) {
+                best = vec3(d, r, phase);
+                offset = rel / r;
+            }
+        }
+    }
+    return best;
+}
+
+// A drop running down a slope: lanes across it (q.x), a drop sliding down each (q.y grows downhill) in fits and starts
+// (it sticks, gathers, lets go), wandering a little, a hair-thin wet trail behind it. Returns coverage (1 the drop, less
+// its trail); slope = the drop's surface tilt in (across, down).
+float waterRun(vec2 q, float time, float seed, float density, out vec2 slope) {
+    slope = vec2(0.0);
+    float lane = floor(q.x);
+    float h = hash12(vec2(lane, seed));
+    if (h > density) return 0.0;
+    float period = mix(6.0, 13.0, hash12(vec2(lane, seed + 3.1)));
+    float speed = mix(0.8, 2.2, hash12(vec2(lane, seed + 5.9)));
+    float u = time * speed + h * 37.0;
+    float travel = floor(u) + smoothstep(0.35, 1.0, fract(u));
+    float head = fract(travel * 0.9 / period + h * 7.0) * period;
+    float y = q.y - floor(q.y / period) * period;
+    float x = fract(q.x) - 0.5 - (hash12(vec2(lane, seed + 7.7)) - 0.5) * 0.4 + sin(q.y * 1.3 + h * 6.0) * 0.07;
+    float dy = y - head;
+    // the drop at the head: small, a little longer than wide, heavier at its lower end
+    vec2 e = vec2(x / 0.15, dy / (dy > 0.0 ? 0.2 : 0.3));
+    float drop = 1.0 - smoothstep(0.7, 1.0, length(e));
+    // its trail uphill, thinning and drying out behind it
+    float back = clamp(-dy / 2.5, 0.0, 1.0);
+    float trail = dy < 0.0 ? (1.0 - smoothstep(0.015, 0.035, abs(x))) * (1.0 - back) : 0.0;
+    slope = e * drop * 0.6;
+    return max(drop, trail * 0.4);
+}
+
 void main() {
     int flags = int(ModelOffset.z + 0.5);
     // an opaque draw of the world's frame stores its emission in the alpha (rendering spec §3)
@@ -464,6 +528,111 @@ void main() {
         roughness = mix(roughness, 0.8, charred * 0.6);
     }
 
+    // a glossier finish all round: the material's roughness eased towards a polish, non-metals (polymer, paint, oiled
+    // wood) under a faint clear coat
+    roughness = mix(roughness, roughness * roughness, 0.3);
+    coat = max(coat, 0.12 * (1.0 - metallic) * (1.0 - 0.5 * roughness));
+
+    // water (spec §15): a weapon out in the rain gets wet — porous parts (grips, wood, polymer) darken, a film of water
+    // smooths and polishes everything — and water stands on it as many tiny drops: three layers of beads (a dense mist
+    // of droplets of a millimetre or two, small beads of a few, a sparse few merged ones short of a centimetre) that land
+    // and gather while the rain falls, more on the tops, few clinging to the sides and somewhat bigger, hanging, on the
+    // undersides; the bigger ones on the sloping and upright faces let go and run downhill in fits, a hair-thin wet trail
+    // behind them. Each bead is a shallow cap of water: its own normal for the coat's sharp reflection and the sun's
+    // glint, a faint dark rim. Finer layers fade into the film where a pixel covers several of their cells. Soaked (just
+    // out of the water, in the flags' fraction: DrawList.wetness) it is wet all over, beads on every side, until it dries.
+    float soak = clamp((ModelOffset.z - float(flags)) / 0.45, 0.0, 1.0);
+    vec3 coatN = geometric;
+    // how much surface a pixel covers (blocks), taken here in uniform control flow for the drops' anti-aliasing
+    float footprint = max(length(dFdx(objectPos)), length(dFdy(objectPos)));
+    if ((flags & 16) != 0 && (BlWeather.x > 0.0 || soak > 0.0) && BlCamera.w < 0.5) {
+        float open = smoothstep(0.7, 1.0, clamp((ModelOffset.y - 6.0) / 9.0, 0.0, 1.0));
+        vec3 upView = mat3(BlViewRotation) * vec3(0.0, 1.0, 0.0);
+        float facing = dot(n, upView);
+        float up = clamp(facing * 0.5 + 0.5, 0.0, 1.0);
+        float rain = BlWeather.x * open;
+        float falling = BlWeather.y * open;
+        float wet = max(rain * mix(0.45, 1.0, up), soak * mix(0.75, 1.0, up));
+        if (wet > 0.01) {
+            // the surface in the weapon's space: its normal, up, and the plane drops are laid out on
+            mat3 toObject = transpose(mat3(ModelViewMat));
+            vec3 nObj = normalize(toObject * geometric);
+            vec3 upObj = normalize(toObject * upView);
+            vec3 an = abs(nObj);
+            bool alongX = an.x > an.y && an.x > an.z, alongZ = !alongX && an.z > an.y;
+            vec3 ax1 = alongX ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+            vec3 ax2 = alongZ ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0);
+            vec2 plane = vec2(dot(objectPos, ax1), dot(objectPos, ax2));
+            float seed = alongX ? 3.7 : alongZ ? 23.9 : 11.3;
+            float steep = 1.0 - abs(facing);
+            float under = smoothstep(0.2, 0.7, -facing);
+            float water = 0.0;
+            float rim = 0.0;
+            float film = 0.0;
+            vec3 tilt = vec3(0.0);
+
+            // beads: on the tops while it rains, everywhere soaked; few and small on the sides, bigger on the undersides
+            float coverage = max(rain * mix(0.2, 0.8, up), soak * 0.7) * (1.0 - 0.6 * steep * (1.0 - soak));
+            float sizeK = mix(1.0, 1.35, under);
+            float cycle = falling > 0.02 ? time : 0.0;
+            for (int l = 0; l < 3; l++) {
+                // cells per block, share of the coverage, radius range (cell units)
+                float dens = l == 0 ? 260.0 : l == 1 ? 150.0 : 75.0;
+                float share = l == 0 ? 1.0 : l == 1 ? 0.7 : 0.3 * (1.0 - 0.7 * steep);
+                vec2 radii = (l == 0 ? vec2(0.12, 0.3) : l == 1 ? vec2(0.15, 0.34) : vec2(0.22, 0.42)) * sizeK;
+                float pix = footprint * dens;
+                float fade = 1.0 - smoothstep(0.12, 0.4, pix);
+                float cov = coverage * share;
+                film += (1.0 - fade) * cov * 0.5;
+                if (fade < 0.01 || cov < 0.005) continue;
+                vec2 off;
+                vec3 bead = waterBeads(plane * dens + float(l) * 37.0, cov, seed + float(l) * 13.1, cycle, radii.x, radii.y, off);
+                if (bead.x >= 1.0) continue;
+                float edge = clamp(pix / max(bead.y, 1e-3), 0.06, 0.6);
+                float on = (1.0 - smoothstep(1.0 - edge, 1.0, bead.x)) * fade;
+                if (on <= water) continue;
+                // a shallow cap (small drops sit flat, not as half spheres), steeper hanging from an underside
+                float h = sqrt(max(1.0 - bead.x * bead.x, 0.0));
+                float slopeK = min(bead.x / max(h, 0.3), 2.0) * mix(0.55, 0.9, under) * fade;
+                vec3 dirObj = ax1 * off.x + ax2 * off.y;
+                tilt = (mat3(ModelViewMat) * dirObj) * slopeK / max(length(dirObj), 1e-4);
+                water = on;
+                rim = smoothstep(0.55, 1.0, bead.x);
+            }
+
+            // the bigger drops on the sloping and upright faces let go and run down them (downhill: the world's down
+            // carried into the weapon's space, so they run downhill however the weapon is held)
+            if (steep > 0.25) {
+                vec3 downObj = -upObj + nObj * dot(upObj, nObj);
+                float dl = length(downObj);
+                float runFade = 1.0 - smoothstep(0.12, 0.4, footprint * 90.0);
+                if (dl > 1e-3 && runFade > 0.01) {
+                    vec3 along = downObj / dl;
+                    vec3 across = cross(nObj, along);
+                    vec2 q = vec2(dot(objectPos, across), dot(objectPos, along)) * 90.0;
+                    vec2 slope;
+                    float runs = waterRun(q, time, seed, clamp(max(falling, soak * 0.5) * 0.6 * smoothstep(0.25, 0.7, steep), 0.0, 0.7), slope) * runFade;
+                    if (runs > water) {
+                        tilt = mat3(ModelViewMat) * (across * slope.x + along * slope.y) * runFade;
+                        water = runs;
+                        rim = 0.0;
+                    }
+                }
+            }
+
+            // the film everywhere, the drops on it
+            diffuse *= (1.0 - 0.4 * wet * (1.0 - metallic)) * mix(1.0, 0.8, rim * water);
+            roughness = mix(roughness, 0.08, min(wet * 0.75 + film * 0.2, 1.0));
+            roughness = mix(roughness, 0.02, water);
+            coat = max(coat, min(wet * 0.6 + film * 0.15 + water * 0.4, 1.0));
+            if (dot(tilt, tilt) > 1e-6) {
+                vec3 t2 = tilt - geometric * dot(tilt, geometric);
+                coatN = normalize(geometric + t2);
+                n = normalize(mix(n, coatN, water));
+            }
+        }
+    }
+
     // geometric specular anti-aliasing: curved and bumpy surfaces widen their highlights instead of sparkling
     vec3 dndx = dFdx(n), dndy = dFdy(n);
     float variance = 0.25 * (dot(dndx, dndx) + dot(dndy, dndy));
@@ -484,8 +653,11 @@ void main() {
         vec3 light = toLinear(lightColor.rgb);
         vec3 blockShare = toLinear(blockLightColor.rgb);
         vec3 skyShare = max(light - blockShare, vec3(0.0));
-        // the sun (the moon at night) reaches the weapon where the sky does and its shadow does not fall
-        float shadow = bl_shadow(worldPos, toWorld * geometric, gl_FragCoord.xy);
+        // the sun (the moon at night) reaches the weapon where the sky does and its shadow does not fall. Next to the eye
+        // (the first-person weapon) the shadow is looked up SELF_CLEAR towards the light: the local player's own body,
+        // head round the eye included, casts on the world but not on what they hold in front of their face
+        float selfClear = SELF_CLEAR * (1.0 - smoothstep(1.2, 1.6, length(worldPos)));
+        float shadow = bl_shadow(worldPos + BlSunDir.xyz * selfClear, toWorld * geometric, gl_FragCoord.xy);
         float skyAccess = clamp((ModelOffset.y - 6.0) / 9.0, 0.0, 1.0);
         vec3 sunView = mat3(BlViewRotation) * BlSunDir.xyz;
         vec3 sun = BlSunColor.rgb * (0.85 * skyAccess * shadow);
@@ -501,10 +673,10 @@ void main() {
                 + (diffuse + f0 * 0.35) * points * directAo
                 + env * environmentBrdf(f0, sqrt(alpha), nov) * ao;
         if (coat > 0.0) {
-            float coatNov = max(dot(geometric, v), 1e-4);
-            vec3 coatEnv = worldEnvironment(toWorld * reflect(-v, geometric), 0.06, skyShare * shade, blockShare);
+            float coatNov = max(dot(coatN, v), 1e-4);
+            vec3 coatEnv = worldEnvironment(toWorld * reflect(-v, coatN), 0.06, skyShare * shade, blockShare);
             color += coat * (coatEnv * environmentBrdf(vec3(0.04), 0.06, coatNov) * ao
-                    + directLight(geometric, v, sunView, vec3(0.0), vec3(0.04), 0.03, 1.0, 0.0) * sun * directAo);
+                    + directLight(coatN, v, sunView, vec3(0.0), vec3(0.04), 0.03, 1.0, 0.0) * sun * directAo);
         }
         display = toDisplay(color);
     } else {
@@ -512,9 +684,9 @@ void main() {
         vec3 color = diffuse * ambient * ao + studio
                 + environment(reflect(-v, n), sqrt(alpha)) * environmentBrdf(f0, sqrt(alpha), nov) * ao;
         if (coat > 0.0) {
-            float coatNov = max(dot(geometric, v), 1e-4);
-            color += coat * (environment(reflect(-v, geometric), 0.06) * environmentBrdf(vec3(0.04), 0.06, coatNov) * ao
-                    + directLight(geometric, v, KEY, vec3(0.0), vec3(0.04), 0.03, KEY_LIGHT, 0.0) * directAo);
+            float coatNov = max(dot(coatN, v), 1e-4);
+            color += coat * (environment(reflect(-v, coatN), 0.06) * environmentBrdf(vec3(0.04), 0.06, coatNov) * ao
+                    + directLight(coatN, v, KEY, vec3(0.0), vec3(0.04), 0.03, KEY_LIGHT, 0.0) * directAo);
         }
         display = toDisplay(color) * lightColor.rgb;
     }

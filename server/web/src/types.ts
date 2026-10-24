@@ -235,11 +235,18 @@ export interface RankedSeasonEnd {
   wins: number
 }
 
-export interface RankedPlayer {
-  uuid: string
-  name: string | null
+/** A player's record in one mode's ladder. */
+export interface RankedPlayerMode {
+  modeId: string
   standing: RankedStanding
   losses: number
   draws: number
   seasons: RankedSeasonEnd[]
+}
+
+/** Every mode the player has a rating in (empty = never played ranked). */
+export interface RankedPlayer {
+  uuid: string
+  name: string | null
+  modes: RankedPlayerMode[]
 }
