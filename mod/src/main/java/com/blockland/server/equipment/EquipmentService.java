@@ -1,5 +1,7 @@
 package com.blockland.server.equipment;
 
+import com.blockland.server.spectate.Watchers;
+import com.blockland.network.packet.ViewmodelPackets;
 import com.blockland.effect.ActionLocks;
 import com.blockland.entity.BLEntities;
 import com.blockland.equipment.EquipmentContent;
@@ -94,6 +96,7 @@ public final class EquipmentService implements EquipmentPacketListeners.Server {
                 Prep prep = hand.prep;
                 if (prep == null || !prep.item.held() || prep.releaseTick >= 0) return;
                 prep.releaseTick = Math.max(now, prep.pinTick) + ticks(prep.item.throwing.releaseAt);
+                Watchers.action(player, ViewmodelPackets.Kind.EQUIPMENT, 1, prep.lob ? 1 : 0);
             }
             case CANCEL -> cancel(player, hand, now);
         }
@@ -107,12 +110,15 @@ public final class EquipmentService implements EquipmentPacketListeners.Server {
         Prep prep = new Prep(action.slot(), item, action.lob() && item.throwing.lob != null, now, now + ticks(item.pullTime));
         if (!item.held()) prep.releaseTick = now + ticks(item.thrown() ? item.throwing.releaseAt : item.injectAt);
         hand.prep = prep;
+        // spectators in this player's eyes see the pin come out (the knife thrown, the injector used)
+        Watchers.action(player, ViewmodelPackets.Kind.EQUIPMENT, 0, prep.lob ? 1 : 0);
     }
 
     private void cancel(ServerPlayer player, Hand hand, int now) {
         Prep prep = hand.prep;
         if (prep == null) return;
         hand.prep = null;
+        Watchers.action(player, ViewmodelPackets.Kind.EQUIPMENT, 2, 0);
         // a live grenade (pin out, rag burning) cannot be put back: it drops at the feet
         if (prep.pinOut(now)) {
             launch(player, prep, now, player.position().add(0, 0.4, 0), Vec3.ZERO);

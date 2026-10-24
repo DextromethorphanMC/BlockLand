@@ -35,9 +35,10 @@ final class GunHud {
     private GunHud() {
     }
 
-    static void hit(GunPackets.HitKind kind) {
+    /** @param killRgb the kill marks' colour of a special skin (asset spec §38), -1 = the player's own */
+    static void hit(GunPackets.HitKind kind, int killRgb) {
         HitMarker.show(kind == GunPackets.HitKind.HEAD || kind == GunPackets.HitKind.HEAD_KILL,
-                kind == GunPackets.HitKind.KILL || kind == GunPackets.HitKind.HEAD_KILL);
+                kind == GunPackets.HitKind.KILL || kind == GunPackets.HitKind.HEAD_KILL, killRgb);
     }
 
     static void flashHint(String text) {
@@ -48,6 +49,11 @@ final class GunHud {
 
     static void render(GuiGraphics g, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
+        GunStats watched = WatchedGun.stats();
+        if (watched != null && !mc.options.hideGui) {
+            watchedAmmo(g, watched, g.guiWidth(), g.guiHeight());
+            return;
+        }
         GunStats stats = ClientGuns.stats();
         if (mc.player == null || stats == null || !ClientGuns.holdingGun() || mc.options.hideGui) return;
         int w = g.guiWidth(), h = g.guiHeight();
@@ -68,6 +74,22 @@ final class GunHud {
         // gap = where the spread cone meets the screen edge of the crosshair; the player's style decides the rest
         float gap = (float) (Math.tan(Math.toRadians(ClientGuns.currentSpread())) / Math.tan(Math.toRadians(fov) / 2) * (h / 2f));
         Crosshair.render(g, w / 2f, h / 2f, gap, a);
+    }
+
+    /**
+     * Spectating through someone's eyes: their gun and the rounds in it (its synced state); what they carry in reserve
+     * is theirs alone and not shown.
+     */
+    private static void watchedAmmo(GuiGraphics g, GunStats stats, int w, int h) {
+        int ammo = WatchedGun.ammo(), capacity = stats.capacity();
+        int ammoColor = ammo == 0 ? EMPTY : ammo <= Math.max(1, capacity / 4) ? LOW : TEXT;
+        int right = w - 14, bottom = h - 14;
+        Draw.glow(g, right - 30, bottom - 22, 70, 36, 0x66000000);
+        String count = String.valueOf(ammo);
+        float scale = 2.2f;
+        Draw.text(g, count, right - UiFont.width(count) * scale, bottom - 9 - UiFont.LINE_HEIGHT * scale, scale, ammoColor, true);
+        String name = stats.gun().displayName().getString();
+        Draw.text(g, name, right - UiFont.width(name), bottom - 50, 1f, TEXT, true);
     }
 
     private static void ammo(GuiGraphics g, GunStats stats, int w, int h) {

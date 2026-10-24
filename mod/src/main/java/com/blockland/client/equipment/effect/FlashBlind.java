@@ -1,7 +1,6 @@
 package com.blockland.client.equipment.effect;
 
 import com.blockland.BlockLand;
-import com.blockland.client.render.ShaderPacks;
 import com.blockland.network.packet.EffectPackets;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -26,7 +25,7 @@ import javax.annotation.Nullable;
  * Being flashed: the view whites out (held at full white for the first part of the flash, then clearing), the frame
  * seen at that instant stays burnt in as a pale afterimage that fades more slowly, and hearing turns to a ringing
  * tone — every other sound that starts meanwhile is muffled. Strength and times come from the server per player.
- * Without a shader pack the white-out is a screen pass with the afterimage; under one it is a plain white overlay.
+ * The white-out is a screen pass with the afterimage.
  */
 final class FlashBlind {
     /** Share of the flash's time spent at full white (scaled by its strength). */
@@ -102,7 +101,7 @@ final class FlashBlind {
         return Mth.clamp(1 - t / deafen, 0, 1);
     }
 
-    /** The HUD's first layer: the screen pass, or the overlay under a shader pack. */
+    /** The HUD's first layer: the screen pass. */
     static void render(GuiGraphics g) {
         if (strength <= 0) return;
         float t = elapsed();
@@ -111,10 +110,6 @@ final class FlashBlind {
             return;
         }
         float white = white(t);
-        if (ShaderPacks.active() || ShaderPacks.shadowPass()) {
-            if (white > 0.004f) g.fill(0, 0, g.guiWidth(), g.guiHeight(), ARGB.color(Math.round(255 * white), 255, 255, 255));
-            return;
-        }
         GpuTextureView main = ScreenPasses.mainColor();
         if (main == null) return;
         if (capturePending) {

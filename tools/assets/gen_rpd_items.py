@@ -9,6 +9,7 @@ import textures as tx
 from gen_items import patch_colours, render_items_icon, write_json
 from glbread import GLTF
 from preview import GUN_DIR, hidden_set, load_materials
+import third_person
 
 GUN = "rpd"
 SKIN_DATA = {k: v for k, v in skin_looks.weapon_skins(GUN, "gun").items() if k != "default"}
@@ -143,9 +144,7 @@ def skin_select(x):
 
 
 def item_definition():
-    return {"model": {"type": "minecraft:select", "property": "minecraft:display_context",
-                      "cases": [{"when": ["gui", "ground", "fixed"], "model": skin_select(GUN)}],
-                      "fallback": skin_select(f"{GUN}_held")}}
+    return third_person.weapon_definition(skin_select(GUN), skin_select(f"{GUN}_held"))
 
 
 def build(path):

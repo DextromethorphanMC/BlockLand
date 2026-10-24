@@ -9,6 +9,7 @@ import { Login } from './pages/Login'
 import { allTypePages } from './gametypes'
 import { MapEditor } from './pages/MapEditor'
 import { Maps } from './pages/Maps'
+import { Ranked } from './pages/Ranked'
 import { Shop } from './pages/Shop'
 import { Users } from './pages/Users'
 
@@ -38,6 +39,7 @@ export function App() {
                 <NavLink to="/maps">地图管理</NavLink>
                 <NavLink to="/announcements">公告</NavLink>
                 <NavLink to="/users">用户</NavLink>
+                <NavLink to="/ranked">排位</NavLink>
                 <NavLink to="/shop">商店</NavLink>
                 {allTypePages().map((p) => (
                   <NavLink key={p.path} to={p.path}>
@@ -57,6 +59,7 @@ export function App() {
                 <Route path="/maps/:id" element={<MapEditor />} />
                 <Route path="/announcements" element={<Announcements />} />
                 <Route path="/users" element={<Users />} />
+                <Route path="/ranked" element={<Ranked />} />
                 <Route path="/shop" element={<Shop />} />
                 {allTypePages().map((p) => (
                   <Route key={p.path} path={p.path} element={p.element} />

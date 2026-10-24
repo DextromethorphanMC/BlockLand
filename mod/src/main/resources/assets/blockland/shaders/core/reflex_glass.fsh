@@ -44,6 +44,15 @@ void main() {
         mark = max(mark, ring * grain * 0.95);
     }
     mark *= step(0.0, ahead);
+#ifdef RETICLE_DEPTH
+    // depth-only pass: the reticle's own pixels join the viewmodel's, so the post chain neither smears them with the
+    // camera's motion nor reprojects the world's history under them (the glass around it stays "world")
+    if (mark < 0.35) {
+        discard;
+    }
+    fragColor = vec4(0.0);
+    return;
+#endif
     vec3 light = Color.rgb * Color.a * mark;
 
     // the glass: a fresnel reflection of the surroundings, faintly coloured by the coating towards the frame, and a

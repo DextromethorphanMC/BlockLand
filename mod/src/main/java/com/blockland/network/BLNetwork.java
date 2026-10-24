@@ -1,7 +1,15 @@
 package com.blockland.network;
 
 import com.blockland.BlockLand;
+import com.blockland.network.packet.BattleRoyalePackets;
+import com.blockland.network.packet.BombPackets;
+import com.blockland.network.packet.GraffitiPackets;
+import com.blockland.network.packet.SpectatePackets;
+import com.blockland.network.packet.ViewmodelPackets;
+import com.blockland.network.packet.ProfilePackets;
 import com.blockland.network.packet.C2SJoinQueue;
+import com.blockland.network.packet.RankedPackets;
+import com.blockland.network.packet.ParachutePackets;
 import com.blockland.network.packet.C2SLeaveQueue;
 import com.blockland.network.packet.C2SLobbyRequest;
 import com.blockland.network.packet.C2SPostMatch;
@@ -45,7 +53,7 @@ import java.util.function.Function;
  * never references server or client logic directly.
  */
 public final class BLNetwork {
-    private static final int PROTOCOL_VERSION = 12;
+    private static final int PROTOCOL_VERSION = 16;
 
     public static final SimpleChannel CHANNEL = ChannelBuilder.named(BlockLand.id("main"))
             .networkProtocolVersion(PROTOCOL_VERSION)
@@ -69,6 +77,20 @@ public final class BLNetwork {
     private static volatile EquipmentPacketListeners.Client equipmentClientListener = EquipmentPacketListeners.Client.NOOP;
     private static volatile CombatPacketListeners.Server combatServerListener = CombatPacketListeners.Server.NOOP;
     private static volatile CombatPacketListeners.Client combatClientListener = CombatPacketListeners.Client.NOOP;
+    private static volatile RankedPacketListeners.Client rankedClientListener = RankedPacketListeners.Client.NOOP;
+    private static volatile BombPacketListeners.Server bombServerListener = BombPacketListeners.Server.NOOP;
+    private static volatile BombPacketListeners.Client bombClientListener = BombPacketListeners.Client.NOOP;
+    private static volatile GraffitiPacketListeners.Server graffitiServerListener = GraffitiPacketListeners.Server.NOOP;
+    private static volatile GraffitiPacketListeners.Client graffitiClientListener = GraffitiPacketListeners.Client.NOOP;
+    private static volatile SpectatePacketListeners.Server spectateServerListener = SpectatePacketListeners.Server.NOOP;
+    private static volatile SpectatePacketListeners.Client spectateClientListener = SpectatePacketListeners.Client.NOOP;
+    private static volatile ViewmodelPacketListeners.Client viewmodelClientListener = ViewmodelPacketListeners.Client.NOOP;
+    private static volatile ProfilePacketListeners.Server profileServerListener = ProfilePacketListeners.Server.NOOP;
+    private static volatile ProfilePacketListeners.Client profileClientListener = ProfilePacketListeners.Client.NOOP;
+    private static volatile BattleRoyalePacketListeners.Server battleRoyaleServerListener = BattleRoyalePacketListeners.Server.NOOP;
+    private static volatile BattleRoyalePacketListeners.Client battleRoyaleClientListener = BattleRoyalePacketListeners.Client.NOOP;
+    private static volatile ParachutePacketListeners.Server parachuteServerListener = ParachutePacketListeners.Server.NOOP;
+    private static volatile ParachutePacketListeners.Client parachuteClientListener = ParachutePacketListeners.Client.NOOP;
     private static volatile Function<Connection, UUID> senderResolver = connection -> null;
     private static volatile Function<UUID, Connection> connectionResolver = id -> null;
     @Nullable
@@ -182,6 +204,66 @@ public final class BLNetwork {
                 msg -> combatClientListener.onKillFeed(msg));
         toClient(CombatPackets.S2CBoard.class, CombatPackets.S2CBoard::encode, CombatPackets.S2CBoard::decode,
                 msg -> combatClientListener.onBoard(msg));
+
+        // 排位 (ranked): the standing and its changes reach the player in the lobby and in the world
+        anyToClient(RankedPackets.S2CRank.class, RankedPackets.S2CRank::encode, RankedPackets.S2CRank::decode,
+                msg -> rankedClientListener.onRank(msg));
+        anyToClient(RankedPackets.S2CRankChange.class, RankedPackets.S2CRankChange::encode, RankedPackets.S2CRankChange::decode,
+                msg -> rankedClientListener.onRankChange(msg));
+
+        // 库存 / 个人主页 (inventory, profile, leaderboard): tabs of the lobby, so they work in every phase
+        anyToServer(ProfilePackets.C2SRequest.class, ProfilePackets.C2SRequest::encode, ProfilePackets.C2SRequest::decode,
+                (msg, player) -> profileServerListener.onRequest(player, msg.kind()));
+        anyToServer(ProfilePackets.C2SEquip.class, ProfilePackets.C2SEquip::encode, ProfilePackets.C2SEquip::decode,
+                (msg, player) -> profileServerListener.onEquip(player, msg.slot(), msg.key()));
+        anyToClient(ProfilePackets.S2CInventory.class, ProfilePackets.S2CInventory::encode, ProfilePackets.S2CInventory::decode,
+                msg -> profileClientListener.onInventory(msg));
+        anyToClient(ProfilePackets.S2CProfile.class, ProfilePackets.S2CProfile::encode, ProfilePackets.S2CProfile::decode,
+                msg -> profileClientListener.onProfile(msg));
+        anyToClient(ProfilePackets.S2CLeaderboard.class, ProfilePackets.S2CLeaderboard::encode, ProfilePackets.S2CLeaderboard::decode,
+                msg -> profileClientListener.onLeaderboard(msg));
+
+        // 枪战爆破 (bomb defusal): only in the world
+        toServer(BombPackets.C2SPlant.class, BombPackets.C2SPlant::encode, BombPackets.C2SPlant::decode,
+                (msg, player) -> bombServerListener.onPlant(player, msg.holding()));
+        toServer(BombPackets.C2SDefuse.class, BombPackets.C2SDefuse::encode, BombPackets.C2SDefuse::decode,
+                (msg, player) -> bombServerListener.onDefuse(player, msg.holding()));
+        toClient(BombPackets.S2CState.class, BombPackets.S2CState::encode, BombPackets.S2CState::decode,
+                msg -> bombClientListener.onState(msg));
+        toClient(BombPackets.S2CDetonate.class, BombPackets.S2CDetonate::encode, BombPackets.S2CDetonate::decode,
+                msg -> bombClientListener.onDetonate(msg));
+
+        // wall graffiti (喷漆): only in the world
+        // spectating after death: only in the world
+        toServer(SpectatePackets.C2SControl.class, SpectatePackets.C2SControl::encode, SpectatePackets.C2SControl::decode,
+                (msg, player) -> spectateServerListener.onControl(player, msg.action()));
+        toClient(SpectatePackets.S2CState.class, SpectatePackets.S2CState::encode, SpectatePackets.S2CState::decode,
+                msg -> spectateClientListener.onState(msg));
+        // the watched player's hand actions, for a spectator seeing through their eyes
+        toClient(ViewmodelPackets.S2CAction.class, ViewmodelPackets.S2CAction::encode, ViewmodelPackets.S2CAction::decode,
+                msg -> viewmodelClientListener.onAction(msg));
+        toServer(GraffitiPackets.C2SSpray.class, GraffitiPackets.C2SSpray::encode, GraffitiPackets.C2SSpray::decode,
+                (msg, player) -> graffitiServerListener.onSpray(player, msg.slot()));
+        toClient(GraffitiPackets.S2CPlace.class, GraffitiPackets.S2CPlace::encode, GraffitiPackets.S2CPlace::decode,
+                msg -> graffitiClientListener.onPlace(msg));
+        toClient(GraffitiPackets.S2CRemove.class, GraffitiPackets.S2CRemove::encode, GraffitiPackets.S2CRemove::decode,
+                msg -> graffitiClientListener.onRemove(msg));
+        toClient(GraffitiPackets.S2CSync.class, GraffitiPackets.S2CSync::encode, GraffitiPackets.S2CSync::decode,
+                msg -> graffitiClientListener.onSync(msg));
+        toClient(GraffitiPackets.S2CSlots.class, GraffitiPackets.S2CSlots::encode, GraffitiPackets.S2CSlots::decode,
+                msg -> graffitiClientListener.onSlots(msg));
+
+        // 大逃杀 (battle royale): only in the world
+        toServer(BattleRoyalePackets.C2SJump.class, BattleRoyalePackets.C2SJump::encode, BattleRoyalePackets.C2SJump::decode,
+                (msg, player) -> battleRoyaleServerListener.onJump(player));
+        toClient(BattleRoyalePackets.S2CState.class, BattleRoyalePackets.S2CState::encode, BattleRoyalePackets.S2CState::decode,
+                msg -> battleRoyaleClientListener.onState(msg));
+
+        // parachute (降落伞): only in the world
+        toServer(ParachutePackets.C2SToggle.class, ParachutePackets.C2SToggle::encode, ParachutePackets.C2SToggle::decode,
+                (msg, player) -> parachuteServerListener.onToggle(player, msg));
+        toClient(ParachutePackets.S2CState.class, ParachutePackets.S2CState::encode, ParachutePackets.S2CState::decode,
+                msg -> parachuteClientListener.onState(msg));
     }
 
     private static <M> void toServer(Class<M> type, BiConsumer<M, FriendlyByteBuf> encoder, Function<FriendlyByteBuf, M> decoder,
@@ -344,6 +426,62 @@ public final class BLNetwork {
 
     public static void setCombatClientListener(CombatPacketListeners.Client listener) {
         combatClientListener = listener == null ? CombatPacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setRankedClientListener(RankedPacketListeners.Client listener) {
+        rankedClientListener = listener == null ? RankedPacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setBombServerListener(BombPacketListeners.Server listener) {
+        bombServerListener = listener == null ? BombPacketListeners.Server.NOOP : listener;
+    }
+
+    public static void setBombClientListener(BombPacketListeners.Client listener) {
+        bombClientListener = listener == null ? BombPacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setProfileServerListener(ProfilePacketListeners.Server listener) {
+        profileServerListener = listener == null ? ProfilePacketListeners.Server.NOOP : listener;
+    }
+
+    public static void setProfileClientListener(ProfilePacketListeners.Client listener) {
+        profileClientListener = listener == null ? ProfilePacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setBattleRoyaleServerListener(BattleRoyalePacketListeners.Server listener) {
+        battleRoyaleServerListener = listener == null ? BattleRoyalePacketListeners.Server.NOOP : listener;
+    }
+
+    public static void setBattleRoyaleClientListener(BattleRoyalePacketListeners.Client listener) {
+        battleRoyaleClientListener = listener == null ? BattleRoyalePacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setParachuteServerListener(ParachutePacketListeners.Server listener) {
+        parachuteServerListener = listener == null ? ParachutePacketListeners.Server.NOOP : listener;
+    }
+
+    public static void setParachuteClientListener(ParachutePacketListeners.Client listener) {
+        parachuteClientListener = listener == null ? ParachutePacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setSpectateServerListener(SpectatePacketListeners.Server listener) {
+        spectateServerListener = listener == null ? SpectatePacketListeners.Server.NOOP : listener;
+    }
+
+    public static void setSpectateClientListener(SpectatePacketListeners.Client listener) {
+        spectateClientListener = listener == null ? SpectatePacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setViewmodelClientListener(ViewmodelPacketListeners.Client listener) {
+        viewmodelClientListener = listener == null ? ViewmodelPacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setGraffitiServerListener(GraffitiPacketListeners.Server listener) {
+        graffitiServerListener = listener == null ? GraffitiPacketListeners.Server.NOOP : listener;
+    }
+
+    public static void setGraffitiClientListener(GraffitiPacketListeners.Client listener) {
+        graffitiClientListener = listener == null ? GraffitiPacketListeners.Client.NOOP : listener;
     }
 
     /** Everyone who can see {@code entity}, not the entity itself. */

@@ -1,18 +1,15 @@
 package com.blockland.client.viewmodel;
 
-import com.blockland.client.render.ShaderPacks;
+import com.blockland.client.render.FrameJitter;
 import com.mojang.blaze3d.ProjectionType;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTextureView;
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.CachedPerspectiveProjectionMatrixBuffer;
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.PerspectiveProjectionMatrixBuffer;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.client.event.RenderHandEvent;
-import net.minecraftforge.eventbus.api.listener.Priority;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
@@ -20,62 +17,54 @@ import javax.annotation.Nullable;
 
 /**
  * Puts a {@link ViewmodelRig} on screen: its own narrower projection (like modern shooters, so the weapon reads
- * larger and less distorted), the main colour/depth targets and Minecraft's lightmap — or, under an OptiFine shader
- * pack, vanilla render types in the hand pass. Also converts viewmodel positions to world space for effects that leave
+ * larger and less distorted), the main colour/depth targets and Minecraft's lightmap. Also converts viewmodel positions to world space for effects that leave
  * the weapon (shells, tracers, sparks).
  */
 public final class ViewmodelRenderer {
     /** Vertical FOV of the viewmodel projection (asset spec §2). */
     public static final float FOV = 54f;
-    /** Vertical FOV vanilla projects the hand pass with (the shader-pack path draws in it). */
-    private static final float HAND_FOV = 70f;
-    /** Created on the render thread at first use (it owns a GPU buffer). */
+    /** Created on the render thread at first use (it owns a GPU buffer); rewritten every frame (the jitter moves). */
     @Nullable
-    private static CachedPerspectiveProjectionMatrixBuffer projection;
-    @Nullable
-    private static PoseStack handPose;
-    @Nullable
-    private static MultiBufferSource handBuffers;
+    private static PerspectiveProjectionMatrixBuffer projection;
+    private static final Matrix4f projectionMatrix = new Matrix4f();
+    /** The same projection without the frame's jitter (what motion is measured in). */
+    private static final Matrix4f unjittered = new Matrix4f();
 
     private ViewmodelRenderer() {
     }
 
-    /** Remembers the pose and buffers of the hand pass (before any weapon takes the event over). */
-    public static void init() {
-        RenderHandEvent.BUS.addListener(Priority.HIGHEST, event -> {
-            handPose = event.getPoseStack();
-            handBuffers = event.getMultiBufferSource();
-        });
-    }
-
-    /**
-     * Draws the rig's queued frame over the world. Under an OptiFine shader pack the pack owns the hand pass (its
-     * buffers, its programs, its compositing), so the frame goes through vanilla render types into the hand pass's
-     * buffers instead, scaled to look the same under the hand projection's wider field of view.
-     */
+    /** Draws the rig's queued frame over the world. */
     public static void submit(ViewmodelRig<?> rig, String label) {
-        if (ShaderPacks.active()) {
-            if (handPose != null && handBuffers != null && !ShaderPacks.shadowPass()) {
-                float scale = (float) (Math.tan(Math.toRadians(HAND_FOV) / 2) / Math.tan(Math.toRadians(FOV) / 2));
-                rig.draws().flushVanilla(handPose, handBuffers, scale);
-            } else {
-                rig.draws().clear();
-            }
-            return;
-        }
         Minecraft mc = Minecraft.getInstance();
         var target = mc.getMainRenderTarget();
         GpuTextureView color = RenderSystem.outputColorTextureOverride != null ? RenderSystem.outputColorTextureOverride : target.getColorTextureView();
         GpuTextureView depth = RenderSystem.outputDepthTextureOverride != null ? RenderSystem.outputDepthTextureOverride : target.getDepthTextureView();
         RenderSystem.backupProjectionMatrix();
-        if (projection == null) projection = new CachedPerspectiveProjectionMatrixBuffer("BlockLand viewmodel", 0.02f, 128f);
-        RenderSystem.setProjectionMatrix(projection.getBuffer(mc.getWindow().getWidth(), mc.getWindow().getHeight(), FOV), ProjectionType.PERSPECTIVE);
+        RenderSystem.setProjectionMatrix(projectionBuffer(), ProjectionType.PERSPECTIVE);
+        // its parts' own motion (sway, recoil, reloads) for motion blur and the temporal upscalers
+        rig.draws().motion(unjittered);
         rig.flush(color, depth, mc.gameRenderer.lightTexture().getTextureView(), label);
         RenderSystem.restoreProjectionMatrix();
     }
 
-    /** The viewmodel brings its own walk motion: Minecraft's view bobbing would shake weapon and camera violently. */
-    public static void suppressViewBobbing(LocalPlayer player) {
+    /**
+     * The viewmodel projection for this frame, shifted by the frame's sub-pixel jitter ({@link FrameJitter}) like the
+     * world and the hand, so temporal anti-aliasing sees the weapon where it sees everything else. Passes drawn in the
+     * viewmodel's space (a scope's eyepiece, a reflex reticle) should use it too.
+     */
+    public static GpuBufferSlice projectionBuffer() {
+        Minecraft mc = Minecraft.getInstance();
+        if (projection == null) projection = new PerspectiveProjectionMatrixBuffer("BlockLand viewmodel");
+        float aspect = (float) mc.getWindow().getWidth() / Math.max(1, mc.getWindow().getHeight());
+        unjittered.setPerspective((float) Math.toRadians(FOV), aspect, 0.02f, 128f);
+        return projection.getBuffer(FrameJitter.apply(projectionMatrix.set(unjittered)));
+    }
+
+    /**
+     * The viewmodel brings its own walk motion: Minecraft's view bobbing would shake weapon and camera violently. Vanilla
+     * bobs by the camera's entity — the local player, or the player a spectator sees through.
+     */
+    public static void suppressViewBobbing(Player player) {
         player.bob = 0;
         player.oBob = 0;
     }

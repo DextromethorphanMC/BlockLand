@@ -9,13 +9,17 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 /**
  * Sends a finished match's {@link MatchResult} to its participants as their results panel: each player gets their
- * own outcome and has their own row marked. Games only describe the result; they never build packets.
+ * own outcome and has their own row marked. Games only describe the result; they never build packets. Other modules
+ * (the ranked ladder) hear about every published result through {@link #addListener}.
  */
 public final class MatchResultPublisher {
     private final MinecraftServer server;
+    private final List<Consumer<MatchResult>> listeners = new CopyOnWriteArrayList<>();
 
     public MatchResultPublisher(MinecraftServer server) {
         this.server = server;
@@ -25,7 +29,13 @@ public final class MatchResultPublisher {
      * @param endingSeconds how long the match keeps running after its result: the panel's countdown ends exactly when
      *                      the player is sent back to the lobby
      */
+    /** Called on the server thread with every result, before the panels go out. */
+    public void addListener(Consumer<MatchResult> listener) {
+        listeners.add(listener);
+    }
+
     public void publish(MatchResult result, int endingSeconds) {
+        for (Consumer<MatchResult> listener : listeners) listener.accept(result);
         int show = Math.max(1, endingSeconds);
         for (MatchResult.Row recipient : result.rows()) {
             ServerPlayer player = server.getPlayerList().getPlayer(recipient.player());

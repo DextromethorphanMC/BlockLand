@@ -1,0 +1,86 @@
+{
+  "cards": {
+    "default": {
+      "name": "默认",
+      "description": "每位玩家都有的基础名片。",
+      "rarity": "common",
+      "texture": "textures/card/default.png",
+      "free": true,
+      "text": "#FFE8ECF2"
+    },
+    "forest": {
+      "name": "林间晨雾",
+      "description": "层层山峦与薄雾。",
+      "rarity": "common",
+      "texture": "textures/card/forest.png",
+      "free": true,
+      "text": "#FFFFFFFF"
+    },
+    "ocean": {
+      "name": "深海",
+      "description": "波光在深蓝里流动。",
+      "rarity": "rare",
+      "texture": "textures/card/ocean.png",
+      "text": "#FFE6F6FF"
+    },
+    "sunset": {
+      "name": "落日",
+      "description": "海面上的最后一抹余晖。",
+      "rarity": "rare",
+      "texture": "textures/card/sunset.png",
+      "text": "#FFFFF4E8"
+    },
+    "pulse": {
+      "name": "心跳",
+      "description": "动态名片：心电线一次次掠过。",
+      "rarity": "rare",
+      "texture": "textures/card/pulse.png",
+      "frames": 8,
+      "fps": 10,
+      "text": "#FFFFE0EA"
+    },
+    "circuit": {
+      "name": "电路",
+      "description": "动态名片：电流沿着线路奔跑。",
+      "rarity": "epic",
+      "texture": "textures/card/circuit.png",
+      "frames": 12,
+      "fps": 12,
+      "text": "#FFD8FFF2"
+    },
+    "aurora": {
+      "name": "极光",
+      "description": "动态名片：夜空中流动的极光。",
+      "rarity": "epic",
+      "texture": "textures/card/aurora.png",
+      "effect": "aurora",
+      "text": "#FFEFFFFB"
+    },
+    "holo": {
+      "name": "全息",
+      "description": "动态名片：随光线变幻的全息镭射。",
+      "rarity": "epic",
+      "texture": "textures/card/holo.png",
+      "effect": "holo",
+      "text": "#FF1C2230"
+    },
+    "neon": {
+      "name": "霓虹都市",
+      "description": "动态名片：扫过夜城的霓虹灯光。",
+      "rarity": "epic",
+      "texture": "textures/card/neon.png",
+      "effect": "neon",
+      "text": "#FFFFE6FF"
+    },
+    "inferno": {
+      "name": "炼狱",
+      "description": "传说动态名片：翻腾的火焰与升腾的余烬。",
+      "rarity": "legendary",
+      "texture": "textures/card/inferno.png",
+      "frames": 8,
+      "fps": 10,
+      "effect": "inferno",
+      "text": "#FFFFF0D0"
+    }
+  }
+}

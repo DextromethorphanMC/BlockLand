@@ -13,7 +13,7 @@ The runtime only relies on what is written here.
 | `models/gun/arms.glb` | Shared arm meshes (player-skin UVs), attached to the rig joints by name |
 | `textures/item/<gun>.png`, `textures/item/<gun>_<skin>.png` | 32x32 inventory icons (one per skin) |
 | `models/item/<gun>.json`, `models/item/<gun>_<skin>.json` | Icon item models (`item/generated`) |
-| `models/item/<gun>_held.json`, `models/item/<gun>_held_<skin>.json` | Low-poly cuboid model used in third person / dropped (LOD) |
+| `models/item/<gun>_held.json`, `models/item/<gun>_held_<skin>.json` | Low-poly cuboid model: its display transforms and box place the 3D weapon in third person / dropped / in frames (§37); drawn itself only in first person (under the viewmodel) |
 | `textures/item/<gun>_held.png`, `textures/item/<gun>_held_<skin>.png` | 16x16 palette texture for the held model |
 | `items/<gun>.json` | Item model definition (see §8) |
 | `textures/item/<ammo>.png` | 16x16 ammo icons: `pistol_ammo`, `smg_ammo`, `shotgun_ammo`, `sniper_ammo` |
@@ -172,13 +172,17 @@ the overlay layer, inflated by 0.003 per side, material `skin_overlay` (MASK, cu
 
 ## 8. Item model definition (`items/<gun>.json`)
 
-Icons in GUI / on the ground / in frames, the low-poly held model everywhere else, per skin via the first
-`custom_model_data` string (`""`/missing = default skin):
+The icon in the GUI, the low-poly held model in first person (the viewmodel draws over the hand pass there), the full
+3D weapon everywhere else (§37); icons and held models per skin via the first `custom_model_data` string
+(`""`/missing = default skin). Written by `tools/assets/third_person.py` (`weapon_definition`), which every item
+generator uses:
 
 ```json
 { "model": { "type": "minecraft:select", "property": "minecraft:display_context",
-  "cases": [ { "when": ["gui", "ground", "fixed"], "model": SKIN_SELECT(icon models) } ],
-  "fallback": SKIN_SELECT(held models) } }
+  "cases": [ { "when": ["gui"], "model": SKIN_SELECT(icon models) },
+             { "when": ["firstperson_righthand", "firstperson_lefthand"], "model": SKIN_SELECT(held models) } ],
+  "fallback": { "type": "minecraft:special", "base": "blockland:item/<gun>_held",
+                "model": { "type": "blockland:weapon", "fit": "blockland:item/<gun>_held" } } } }
 SKIN_SELECT(x) = { "type": "minecraft:select", "property": "minecraft:custom_model_data", "index": 0,
   "cases": [ { "when": "<skin>", "model": { "type": "minecraft:model", "model": "blockland:item/<x>_<skin>" } } ],
   "fallback": { "type": "minecraft:model", "model": "blockland:item/<x>" } }
@@ -213,8 +217,8 @@ applies; the differences are listed here. Gameplay numbers live in `data/blockla
 |---|---|
 | `models/knife/<knife>.glb` | First-person viewmodel: knife meshes, arm rig joints, animations |
 | `textures/item/<knife>.png` + `models/item/<knife>.json` | 32x32 inventory icon (`item/generated`) |
-| `models/item/<knife>_held.json` + `textures/item/<knife>_held.png` | Low-poly cuboid model (third person, dropped), knife open |
-| `items/<knife>.json` | Icon in `gui` / `ground` / `fixed`, held model otherwise (like §8, without the skin select) |
+| `models/item/<knife>_held.json` + `textures/item/<knife>_held.png` | Low-poly cuboid model, knife open: places the 3D knife (§37), drawn itself only in first person |
+| `items/<knife>.json` | Icon in `gui`, held model in first person, the 3D knife otherwise (like §8, without the skin select) |
 | `sounds/knife/*.ogg`, entries in `sounds.json` | Knife sounds (§13) |
 
 The first knife is `butterfly` (蝴蝶刀, a balisong: blade with two handles on pivot pins at the tang).
@@ -450,11 +454,10 @@ AK wood, 512 px for small parts and skins):
 |---|---|
 | `<set>.png` | albedo, sRGB RGBA (alpha = cut-out / blend like `alphaMode`); multiplied by `baseColorFactor` |
 | `<set>_n.png` | LabPBR normal: **R** = X (0 left … 255 right), **G** = Y in the **DirectX convention** (0 up … 255 down), **B** = material AO (linear, 255 = none), **A** = height (255 = top, ≥ 1); Z is rebuilt as √(1 − x² − y²) |
-| `<set>_s.png` | LabPBR specular: **R** = perceptual smoothness (roughness = (1 − R)²), **G** = F0 0–229 linear (dielectrics ≈ 10 = 4 %), 230–237 predefined metals (iron, gold, aluminium, chrome, copper, lead, platinum, silver), 255 = metal with the albedo as F0, **B** = porosity / SSS (ignored by our shader, kept for shader packs), **A** = emission 0–254 (255 = none) |
+| `<set>_s.png` | LabPBR specular: **R** = perceptual smoothness (roughness = (1 − R)²), **G** = F0 0–229 linear (dielectrics ≈ 10 = 4 %), 230–237 predefined metals (iron, gold, aluminium, chrome, copper, lead, platinum, silver), 255 = metal with the albedo as F0, **B** = porosity / SSS (ignored by our shader), **A** = emission 0–254 (255 = none) |
 
 A missing `_n` means a flat normal and no texture AO, a missing `_s` falls back to `metallicFactor` /
-`roughnessFactor`. The same files serve OptiFine shader packs (they read `_n` / `_s` next to a texture), so a weapon
-looks right with and without a pack. Texture sets tile (REPEAT, mipmapped) over the box-projected UVs (§6:
+`roughnessFactor`. Texture sets tile (REPEAT, mipmapped) over the box-projected UVs (§6:
 1 UV = 0.05 m); `uvScale` multiplies a material's UVs (0.25 = one texture repeat every 0.2 m). Materials without
 `pbr` keep the glTF look (factors and `baseColorTexture`).
 
@@ -463,10 +466,8 @@ weighted by alpha, `_s` keeping metal ids and "no emission" intact) and remember
 `blockland:core/gun` lights it with GGX / Smith / Schlick under the studio light rig and the lightmap: the tangent
 frame comes from screen-space derivatives (no tangents in the vertex), so `_n` G is the +v component (down the
 image) and the normal is T·x + B·y + N·z; AO = `COLOR_0` × `_n` blue. The vertex packs the normal and the baked AO
-into four bytes. **Under an OptiFine shader pack** (`ShaderPacks.active()`) the first-person meshes go through vanilla
-entity render types in the hand pass instead (CPU-transformed, AO in the vertex colour): a texture set is bound by
-its albedo's id, so the pack's own LabPBR support reads `_n` / `_s`; GLB-embedded images have no maps there, and
-skin effects show as their static textures.
+into four bytes. BlockLand does not support OptiFine shader packs or other rendering mods (Minecraft is the engine);
+vanilla entity render types only carry third-person weapons into the sun shadow map (`ShadowPass`, §37).
 
 **Baked ambient occlusion:** `COLOR_0` (R channel, 1 = open) on a mesh carries per-vertex AO (cavities, contact
 shadows between parts); it multiplies the texture set's AO. Glass, reticles and emissive parts carry none.
@@ -486,6 +487,14 @@ colour white, drops the embedded textures and bakes `COLOR_0` by ray casting in 
 place in clips — magazines, bolts, the P9 barrel — and the knife's swinging handles only occlude themselves). Every
 model step of `build_all.py` re-applies it (`pbr` re-applies all, `pbr_textures` regenerates the sets);
 `pbr_preview.py` renders sets and turntables with the maps, `pbr_check.py` checks this section and the next.
+
+**Visible detail:** the first-person weapon gets about 0.2 mm per screen pixel at 4K (0.4 mm at DLSS Performance), so
+true-to-scale marks finer than that average away in the mip chain. The packer lifts the band from 0.25 mm to 4 mm —
+grain, blast, orange peel, grinding marks, scratches, wear — in the normal map (relief ×6, slopes eased into ~50°), the
+albedo (contrast ×2.2 as a ratio in linear light, softly capped so camo, Damascus and other two-tone patterns keep their
+look) and the roughness (×2.4, softly capped); the height channel and AO stay true, glowing sets keep their colours.
+`SetDef.detail` scales the lift per set (0 = none). Finer relief is not lost at runtime: each `_s` mip level is
+roughened by the normal detail it averages (Toksvig, `client/render/Mipmaps.roughen`).
 
 ## 21. Regions and skins
 
@@ -545,15 +554,14 @@ an `effect`, an `effectColor` (`#RRGGBB`) and `params` (four numbers; missing on
 older per-material `tints` are display colours: on a material with a texture set they recolour its albedo around
 that colour (albedo × tint / mean albedo) and keep its detail; per-material `textures` replace the albedo (tiled at
 1 UV = 0.05 m, without the set's maps). A material's own entries win over a region layer. Skins with an effect are
-listed in the 工匠's 特效皮肤 tab, and the craft preview keeps animating them. **Shader effects** run in our pipeline;
-under an OptiFine shader pack the layer's textures are drawn without the effect (the pack decides about `_s`
-emission):
+listed in the 工匠's 特效皮肤 tab, and the craft preview keeps animating them. **Shader effects** run in our pipeline:
 
 | `effect` | Look | `params` |
 |---|---|---|
 | `iridescent` | thin-film coating: the hue shifts with the viewing angle and across the surface | strength 0–1, film thickness scale (≈ 1), animation speed (cycles/s, 0 = still), pattern scale (repeats per metre); defaults 0.8, 1, 0.05, 6 |
 | `flow` | the `_s` alpha mask glows in `effectColor`, a pulse runs along the weapon (−Z, towards the muzzle) | speed (m/s), pulse length (m), base glow 0–1, pulse strength; defaults 0.35, 0.06, 0.25, 1 |
 | `galaxy` | a starfield and nebula deep "inside" the surface (parallax); albedo = nebula colours, `effectColor` = stars | depth (m), star density, twinkle speed, nebula strength; defaults 0.02, 1, 1, 0.6 |
+| `inferno` | molten veins in a cellular crack network with energy running through them, glyphs burnt into the flanks; a smoulder at rest, ablaze with the skin's surge (§38) | vein density (cells per metre), flow speed (m/s), resting smoulder 0–1, char 0–1 (how dark the steel goes at full surge); defaults 70, 0.12, 0.15, 0.7 |
 
 Effects run in each model's rest-pose space (a mesh's vertices plus its node's rest origin). `flow`: pulses repeat
 every 6 pulse lengths (at least 5 cm) and glow = mask × (base + strength × pulse). `galaxy`: four star layers between
@@ -634,9 +642,8 @@ stays the normal one, blurred (and with the setting darkened) around the eyepiec
 weapon stays sharp. The second render must stay isolated from the main view: its culling frustum has no corners
 (vanilla draws a captured frustum as coloured debug planes — that was the teal veil and red flashes), it uses fog
 uniforms of its own (GPU buffers are written unsynchronised), and name tags are left out of it. Other players see a
-raised scope as a glint (`S2CAim` from the server, the optic from their held item), hidden by blocks. Under an OptiFine
-shader pack, or with picture in picture switched off in the settings, the whole view zooms instead and the scope's
-outline masks the screen.
+raised scope as a glint (`S2CAim` from the server, the optic from their held item), hidden by blocks. With picture in
+picture switched off in the settings, the whole view zooms instead and the scope's outline masks the screen.
 
 What the runtime reads from the model (`client/scope/ScopeLens`, measured once in the rest pose): the glass disc
 must lie in `lens_ocular`'s own XY plane (its normal is the node's +Z, towards the eye) — the centre is the mean of
@@ -893,8 +900,8 @@ pistols turned over and twirled), `walk`, `sprint`, `tac_sprint`. Events as the 
 Gameplay (`guns.json`, `GunData.Dual`): the attack key fires the guns alternately (right first), the use key fires a
 **volley** (both guns, two rounds, spread × `volleySpread`, costs `volleyCost` fire-rate credits); rounds are counted
 for the pair (the magazine's capacity is both magazines); the server stays the authority (`C2SFire` carries `shots`
-and `hand`, `S2CShot` the `hand` so other players see the flash at the right gun). Third person: the held model is
-drawn in both hands.
+and `hand`, `S2CShot` the `hand` so other players see the flash at the right gun). Third person: a 3D gun in each
+hand, the right `gun`, the left `gun_L` (§37).
 
 **Special skin model `models/gun/usp_dual_cerberus.glb`** (skin `cerberus` 地狱犬 of `usp_dual`, §30): the same rig,
 nodes and clips as `usp_dual.glb` (generated by the same rig and clip code) with different gun meshes: two large
@@ -920,7 +927,7 @@ canted in; the reload rolls both guns in to show their wells, flicks the magazin
 the guns out of view for ≈ 0.35 s and slams them onto fresh magazines there (`mag_in` at 0.72 s), brings them back up
 muzzles first and ends on a look at the magazines; the empty reload releases the slides one after the other (right at
 1.555 s, left at 1.675 s); the inspect turns both flanks up, flicks each pistol once round the trigger finger and catches
-it (the right at 1.86 s, the left 0.16 s later) and ends on a muzzles-up look. The Cerberus pistol keeps the source's raked grip (25.4°, its own `PistolLayout`: the rig fits the
+it (the right at 1.86 s, the left 0.16 s later) and ends on a muzzles-up look. The Cerberus file adds the skin's own inspect `inspect_cerberus` and its effect nodes (§38). The Cerberus pistol keeps the source's raked grip (25.4°, its own `PistolLayout`: the rig fits the
 hands, thumb presses and magazine pivot to it), is 0.26 m long and ≈ 4.5k triangles drawn; the converted source parts
 are cached in `tools/assets/data/cerberus_parts.npz`, so it rebuilds without the source file.
 
@@ -984,13 +991,12 @@ first, else a 5 × 5 grid) fixes `d`; only triangles inside the slab `d − 4 mm
 (normal · −direction > 0.25, fading in to 0.5) receive it; nothing is drawn when no ray hits. The decal is built once
 per build in rest-pose space and split per weapon node, so it rides with its part in every animation (a spray on a
 magazine leaves with it). Drawn after the opaque meshes, alpha-blended, lit like paint (dielectric, rough), a hair
-above the surface; later sprays on top. The same geometry draws in the 工匠 preview and in the vanilla (shader pack)
-path. Third-person held models do not show sprays.
+above the surface; later sprays on top. The same geometry draws in the 工匠 preview. Third-person held models do not show sprays.
 
 ## 30. Special skins and the neon shader skin
 
-A skin is **special** when it has a `model` or an `fx` object (`craft/CraftData.Skin`): the 工匠 lists it in the 特殊皮肤 tab
-(rarity `special`).
+A skin is **special** when it has a `model`, an `fx` or an `inspect` object (`craft/CraftData.Skin`): the 工匠 lists it in
+the 特殊皮肤 tab (rarity `special`).
 
 * `model` — a GLB with the weapon's node contract (the same nodes, mounts, clips and events; magazines and helper
   nodes by the same names), drawn instead of the weapon's own in first person and in the preview; the item icon and
@@ -998,7 +1004,8 @@ A skin is **special** when it has a `model` or an `fx` object (`craft/CraftData.
 * `fx` — the shots: `flashColor` (tints the muzzle flash), `flashTexture` / `flashSideTexture` (replace the §9 flash
   sprites), `flashScale`, `tracerColor`, `tracerWidth`, `fireSound` (a suppressor still wins). The shooter's viewmodel
   and everyone else's view of the shots follow it (other clients read the skin from the shooter's held item); the
-  server only uses `fireSound`.
+  server only uses `fireSound`. Also `hitColor` and `kill` (§38: the kill marks' colour and the weapon's answer to a kill).
+* `inspect` — an inspect of the skin's own (§38).
 
 Examples: Thompson `chicago` (gold metal, golden flash and tracer), KS-3 `dragon` (magma skin, big orange flame and
 burning tracers), AWP `thunder` (pale blue flash and tracer), dual USP `cerberus` (its own model, crimson flame,
@@ -1009,7 +1016,7 @@ glowing in `effectColor`, with light pulses running along them and the hue drift
 trace density (cells per metre), glow 0–1, hue drift (cycles/s); defaults 0.25, 40, 0.8, 0.05. The shared skin `neon`
 (霓虹回路, `for` gun and knife) puts it on every region through `*` — body, barrel, magazine, stock, grip, handguard,
 detail and every fitted attachment (optic, laser, barrel, stock) — over the texture set `skin/neon/base` (a dark
-glossy lacquer; its `_s` emission carries a static trace pattern for shader packs). So the pattern runs on across the
+glossy lacquer; its `_s` emission carries a static trace pattern). So the pattern runs on across the
 weapon and its attachments without a seam, attachments are drawn in the weapon's effect space: their effect origin
 is the mount's rest position plus their own node origin.
 
@@ -1270,7 +1277,7 @@ right, the LED emitter at the rear) and a thin frame round the window. The windo
 with 2 mm corner radii, centred 0.0242 over the mount point at z −0.012 (the frame's rear face), facing +Z, UV 0..1
 across it (u along +X, v down); the frame's inner walls (`interior`) open forward (13 % sideways, 11 % up and down) more
 steeply than the sight lines from `aim` to the window's edges, and the base housing stays under the sight lines to its
-bottom edge, so from the eye only the window shows. A `reticle` quad (the dot under a shader pack) sits on the sight
+bottom edge, so from the eye only the window shows. A `reticle` quad (the dot when picture in picture is off) sits on the sight
 line just behind the glass, `aim` 0.14 behind it. Region `optic`; materials `attachment`, `steel_dark`, `glass`,
 `interior`, `reticle`.
 
@@ -1383,7 +1390,7 @@ keeps them in sync on every build and `check_equipment` checks them):
 blinded player), `smoke_pop`, `smoke_hiss` (loops seamlessly, 4.0 s), `molotov_shatter`, `fire_loop` (loops, 4.0 s),
 `knife_hit_flesh` (2), `knife_hit_block` (2), `heartbeat` (one lub-dub, 0.75 s: repeat it while the drug runs).
 Subtitles `subtitles.blockland.equipment.*`. Item assets: `textures/item/<id>.png` icons, `models/item/<id>.json`,
-`<id>_held.json` (cuboids + palette), `items/<id>.json` (icon in gui / ground / fixed, held model otherwise).
+`<id>_held.json` (cuboids + palette), `items/<id>.json` (icon in gui, held model in first person, the 3D item otherwise, §37).
 
 Camera within the §4 limits in every clip (throw ±2.4° pitch / 3.4° roll at most, injector stab −2.4° pitch). Files:
 `equip_model.py` (geometry, SDFs), `equip_rig.py` (grip fit, `EquipPose`: held frame, `fly`, `spin`, `parts`,
@@ -1393,3 +1400,167 @@ Camera within the §4 limits in every clip (throw ±2.4° pitch / 3.4° roll at 
 `check_equipment.py` (claims files with an `equipment` node: nodes, materials / regions, clips, STEP scales, events,
 the data timing, the item in the hand until its release and gone after it, the pin on the left index finger once
 pulled, pin and cooked spoon gone in the hold, the lighter flame at the rag, crosshair, eye distance, budget 4000).
+
+## 37. Third person, dropped and framed weapons (the `blockland:weapon` item model)
+
+Outside the GUI and first person every weapon item — guns, knives, equipment — is drawn as its full 3D model by the
+special item model `blockland:weapon` (`client/thirdperson`): the stack's build (`blockland:gun` / `knife` /
+`equipment` component) decides the model (a special skin's own, §30), the hidden nodes, the attachments at their
+mounts (§19), the skin (§21) and the sprays (§29). The pose is the idle clip's first frame of the weapon root's
+subtree (`gun` / `knife` / `equipment`, never the arms), taken in the root's **own space**: square to its axes, pivot at
+the origin — the viewmodel's hip placement and cant do not carry over.
+
+**Placement.** The weapon is fitted into the box of its held model (`fit`, default `blockland:item/<id>_held`; the
+elements' `from` / `to`, rotations ignored, a skin variant's parent followed): the default build is scaled uniformly so
+its extent along the box's longest axis matches the box, and centred in it. The held model is the special model's
+`base`, so its `display` transforms (`thirdperson_*`, `ground`, `fixed`, `head`) place the weapon exactly where they
+placed the cuboids, and its texture gives the break particles; the item's ground and GUI extents are the box. Both
+spaces share their axes (§2 and the held models: muzzle / point / plunger towards −Z, up +Y, right +X), so no further
+transform is needed unless a weapon's root frame is turned against its held model. Optional tuning on the `model`
+object: `rotation` (degrees XYZ, applied to the weapon first: the karambit's root has the claw curling sideways,
+`[0, 0, 90]` turns it down like its held model), `offset` (held-model pixels) and `scale` (a multiplier on the fit). A
+special skin's model uses its weapon's fit (it keeps its own size against the original).
+
+**Dual guns** (§26): the left hand (the off-hand copy `DualHold` puts there) draws the `gun_L` subtree with the
+attachments at the mounts' `_L` twins, the right hand `gun`.
+
+**Drawing.** The weapon is drawn right away with the weapon pipeline into the target the item is
+drawn into (the world's frame, or a GUI picture such as the inventory's player), with the item's light, lit by the
+world like the viewmodel (rendering spec §8) and storing emission in alpha. While BlockLand's sun shadow map is being captured (`ShadowPass`) its triangles go through vanilla entity render
+types into the given buffers instead, so it casts a shadow. Detail: attachments within 48 blocks, sprays within 16. Assemblies are cached per
+weapon, build and root (48), fits per weapon, root and tuning; both are dropped on a resource reload.
+
+**Item definition** (§8; written by `tools/assets/third_person.py`, which also rewrites the existing files):
+`"fallback": {"type": "minecraft:special", "base": "<held model>", "model": {"type": "blockland:weapon", "fit":
+"<held model>"}}`, the icon for `gui`, the held model for `firstperson_righthand` / `firstperson_lefthand`.
+
+---
+
+## 38. Special skin inspects, dynamic skins and kill feedback
+
+A special skin (§30) can bring an **inspect of its own** — its clip, events, sounds, particles, lights, camera feedback
+and a change of look over the inspect — and an answer to a **kill**, all as data. Nothing about a skin is written into
+the code: `client/viewmodel/SkinEffects` plays any skin's data, every weapon viewmodel can use it (the guns do).
+
+**Data** (a skin in guns.json / knives.json / skins.json, read into `craft/CraftData.SkinInspect`, `SkinCue`,
+`SkinEmitter`, `SkinLight`):
+
+```json
+"inspect": {
+  "clip": "inspect_cerberus",
+  "surge": [[0, 0], [1.28, 0], [1.34, 0.22], [1.9, 0.7], [3.6, 1.0], [4.9, 0.25], [5.45, 0]],
+  "cues": {
+    "cerberus.touch": {"particles": ["cerberus.touch_sparks"], "node": "fx_touch", "twin": false,
+                       "light": {"color": "#FF5A24", "intensity": 3, "radius": 5, "seconds": 0.6}, "fov": -0.8}
+  },
+  "emitters": [{"particles": "cerberus.embers", "node": "slide", "from": 1.4, "to": 4.9, "fade": 0.4}],
+  "glow": {"node": "gun", "color": "#FF3A14", "intensity": 1.6, "radius": 4.5}
+},
+"fx": {"hitColor": "#FF2A12", "kill": {"particles": ["cerberus.kill_flare"], "node": "muzzle", "sound": "gun.cerberus.kill",
+                                       "surge": 0.85, "surgeFade": 1.6, "impulse": "cerberus.kill", "fov": 0.8}}
+```
+
+* `clip` — a clip of the drawn model (the skin's own model, or the weapon's) played instead of the weapon's inspect;
+  missing or empty = the weapon's inspect clip (the rest of the block still plays over it). Times below are seconds of
+  this clip as authored (inspects are not stretched).
+* `surge` — the **dynamic material**: keys `[seconds, 0..1]`, linear between them, 0 outside them. The surge drives every
+  shader effect of the skin's layers (§21): 0 is the skin at rest (pixel for pixel as without a surge), 1 its effects at
+  full blaze — `flow`, `galaxy`, `circuit` glow brighter, `iridescent` goes to full strength and shines, `inferno` sets
+  the weapon ablaze. Cut off (a shot, aiming), the inspect's surge cools down over 0.35 s instead of snapping back.
+* `cues` — clip event name → what it sets off besides its sound (`gun.<event>`, sounds.json) and the rig's shove
+  (`impulses.json` by the event's name, §31.4): `particles` (presets of `assets/blockland/viewmodel/particles.json`,
+  burst at `node`), `node` (default `gun`; `muzzle` is a fitted suppressor's end), `twin` (default true: a dual weapon
+  also at the node's `_L` twin), `light` (a flash: `color`, `intensity`, `radius`, `seconds`), `sound` (an extra sound
+  event), `surge` / `surgeFade` (a pulse added to the surge, fading over that many seconds), `impulse` (an impulses.json
+  entry to shove the rig with), `fov` (a field-of-view punch, percent; negative narrows).
+* `emitters` — particle streams (looping presets) at `node` between `from` and `to`, fading in and out over `fade`.
+* `glow` — a light at `node` whose intensity is `intensity × surge` (it lights the weapon, the hands and the world).
+* `fx.kill` — a cue set off on the shooter's weapon when the server confirms a kill; `fx.hitColor` — the colour of the
+  hit marker's kill marks while the skin is held (the player's own colours otherwise).
+
+**Particles** (`assets/blockland/viewmodel/particles.json`, preset id → emitter; resource packs may override it, F3+T
+reloads): `count` (≤ 128), `life` / `lifeJitter`, `spawn` (births spread over these seconds; a looping stream spreads
+them over one life and keeps them coming), `speed` / `speedJitter`, `drag` (1/s), `gravity` (m/s² downwards in the
+view; negative rises), `radius` (spawn sphere, or with `ring` a ring about the node's Z axis), `direction` (0 = every
+direction, 1 = along the node's −Z), `orbit` (rad/s about Z), `gather` (0–1 pull into the node over the life),
+`turbulence` (m), `size` ([half-size at birth, at death] m), `stretch` (streaks: seconds of screen speed), `color`
+(particles start hotter, towards white, and cool to it), `intensity`, `loop`, `texture` (a sprite instead of the round
+glow). They are GPU particles (rendering spec §8): nothing is simulated on the CPU, they ride with their node.
+
+**Effect nodes** in a skin's model: extra nodes its clips animate (glTF TRS, `LINEAR` scale allowed for them) with
+additive (`alphaMode` `ADD`, emissive, region `none`) quads — sigils, shockwave rings. They are collapsed (scale 0) at
+rest, so the ordinary clips, third person and the 工匠 never show them; empty helper nodes give the cues a place.
+
+**The Cerberus inspect** (`inspect_cerberus` in `usp_dual_cerberus.glb`, 5.6 s; `cerberus_clips.py`): a dip, the right
+pistol turned to show its inner flank and crest; `cerberus.release` (0.62 s) — the left hand opens and the left pistol
+floats up out of it, rolling slowly about its bore, embers orbiting it; `cerberus.touch` (1.30 s) — the free left hand
+reaches across and its index fingertip presses the crest (within 12 mm of `fx_touch`, checked): a sigil flares open
+round the fingertip (`fx_sigil`, overshoot, spinning, a heartbeat), sparks, a flash, the gun jolts, and the surge
+spreads from there over both guns (the inferno skin: veins open white-hot behind a front, the steel chars, glyphs
+ignite, the silhouette glows, embers rise); the right pistol turns muzzle-up and the fire racks its slide by itself
+(`cerberus.rack` at the slam, 2.12 s, embers from the port); the sigil bursts and is gone by 2.45 s; `cerberus.catch`
+(2.55 s) — the floating pistol sinks into the waiting hand; the pistols are brought together, muzzles crossing, trembling
+as energy gathers into the muzzles; `cerberus.roar` (3.55 s) — both thrust forward and kick apart: flame and sparks from
+both muzzles, shockwave rings (`fx_ring`, `fx_ring_L`), a big flash, a strong camera kick, shake and FOV punch; back to
+the hip with a settle as the fire dies down. Each event has its own sound (`gun.cerberus.*`, `gen_usp_sounds.py`) and
+shove (impulses.json). Kill: both muzzles flare and spit sparks, the guns surge, a howl, crimson kill marks.
+
+Checks: `check_dual.py` (the skin clip's length, events and camera; the effect nodes collapsed at rest, additive, only
+shown by the skin's clips; the fingertip on `fx_touch` at the touch; both hands back on their guns after the catch),
+`pbr_check.py` (the skin's inspect and kill data: clip and events in the model, presets, nodes, sounds, impulses, surge
+keys), `tools/shaders/check_shaders.py` (`gun`, `gun_particle`).
+
+---
+
+## 39. Bomb (C4, `models/bomb/c4.glb`)
+
+The 枪战爆破 bomb (炸药包, item `blockland:c4`; data `data/blockland/bomb/bomb.json`, which carries the clip names,
+`drawTime`, handling, the blast and the beep; the plant / defuse / fuse times are the mode's). One first-person file
+like the equipment's: arm rig, the bomb, its clips, built with the equipment tools (`equip_rig` grip fit, held
+frame, `fly`, free right hand). §2–§4, §6, §7, §15–§17, §20, §21 and §31 apply.
+
+```
+viewmodel
+├─ bomb              the bomb's root (the middle of the bundle; animated). Design frame (bomb_model.py): the sticks
+│  │                 along Z (the far end, with the LCD, towards −Z), the keypad facing +Y, the width along X
+│  ├─ body           three sticks of plastic explosive in film (explosive → body), two bands of duct tape (tape → tape)
+│  ├─ keypad         the timer unit: case and battery pack (housing → keypad), a 3 × 4 keypad (keys → keypad),
+│  │                 the LCD (screen → none, emissive green)
+│  ├─ wires          red, yellow and blue leads from the unit into the charge (wire_* → wires, plain colours, no set)
+│  └─ led            the red status LED (led → none, emissive), origin at its centre, scale 1 (the runtime may blink it)
+├─ camera, arm joints (§16)
+```
+
+Regions `body`, `tape`, `keypad`, `wires` (no skins yet). Texture sets (`pbr_sets_bomb.py`): `bomb/explosive`,
+`bomb/tape`, `bomb/housing`, `bomb/keys`. 1440 triangles (budget 4000). At rest the right palm carries the bundle from
+below (the fingers along the sticks, the thumb up its right side), low on the right with the keypad tilted to the eye;
+the left arm is hidden (scale 0) outside `plant`.
+
+| Clip | Length | Content / events |
+|---|---|---|
+| `idle` (loop) | 2.0 | breathing only |
+| `draw` | 0.60 ✱`drawTime` | up from the bottom right; `draw` at 0.0 |
+| `inspect` | 3.0 | raised and turned: the keypad, the wired side, the other side |
+| `walk` / `sprint` (loops) | 1.0 / 0.66 | the shared equipment carry |
+| `plant` | 3.2 (stretched by the runtime to the mode's plant time) | lifted, lowered and pushed out in front as the view dips (the player kneels; camera −2.1° pitch), set down: `place` 0.62 (it stops dead and stays there — `bomb` keeps its frame to the end); the left hand steadies it by its left side; the right hand lets go and the index finger keys the code in: `key` at 0.98, 1.24, 1.50, 1.76, 2.02, 2.30, 2.58 (the fingertip on a key top at each); both hands hover over it for the last ~0.3 s, the camera back at rest at 3.2 |
+
+The bomb stays drawn on the floor to the end of `plant`: the runtime drops the viewmodel once the server confirms the
+plant (a broken-off plant blends back to `idle`, the bomb back in the hand). Suggested sounds (`blockland:` ids):
+`draw` → `bomb.draw`, `key` → `bomb.key`, `place` → none (the server's `bomb.planted` follows the plant). World
+sounds: `bomb.planted` (armed chirp), `bomb.beep` (one tick), `bomb.beep_final` (1.25 s: the beeps rushing into a
+solid tone), `bomb.defuse_start`, `bomb.defuse` (1.0 s, loops seamlessly), `bomb.defused`, `bomb.explode` (2
+variants, 5.5 s with the tail), `bomb.explode_far` (distant rumble), `bomb.pickup`, `bomb.drop`. Subtitles
+`subtitles.blockland.bomb.*`.
+
+**Item assets.** `textures/item/c4.png` (32 px icon rendered from the GLB), `models/item/c4.json`,
+`models/item/c4_held.json` (cuboids + the `c4_held.png` palette): the bundle lying flat in its own frame — keypad up
+(+Y), the long side along X, 7 × 2.2 × 4.65 units, its **bottom face at y = 8** (the item's centre) — with an identity
+`fixed` transform, so the planted bomb (drawn in the FIXED context at its position) rests on the floor; `items/c4.json`
+shows the icon in the GUI and the held model everywhere else (no `blockland:weapon` special model: the bomb is not a
+Craftable).
+
+Files: `bomb_model.py`, `bomb_rig.py`, `bomb_clips.py`, `gen_bomb.py`, `gen_bomb_items.py`, `gen_bomb_sounds.py`,
+`build_bomb.py` (steps `bomb`, `bomb_items`, `bomb_sounds`), `pbr_sets_bomb.py`, `pbr_models_bomb.py`; checks
+`check_bomb.py` (nodes and parents, materials / regions / sets, clips, lengths, loops, camera limits, events, the
+data's `drawTime`, the bomb in the hand until `place` and still after it, the fingertip on the keys at every press,
+the left hand by the bomb, crosshair, eye distance, budget).

@@ -3,8 +3,11 @@ package com.blockland.client.result;
 import com.blockland.anim.ColorMath;
 import com.blockland.anim.Ease;
 import com.blockland.client.font.UiFont;
+import com.blockland.client.rank.ClientRank;
+import com.blockland.client.rank.RankBadge;
 import com.blockland.client.ui.Draw;
 import com.blockland.client.ui.Tr;
+import com.blockland.network.packet.RankedPackets;
 import com.blockland.network.packet.S2CMatchResult;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.util.Mth;
@@ -87,7 +90,11 @@ final class MatchResultCard {
         String meta = Tr.text(r.gameName()) + " · " + tr("blockland.result.duration", time(r.durationSeconds()));
         Draw.text(g, meta, x + w - 10 - UiFont.width(meta), y + 22, 1f, ColorMath.fade(MUTED, alpha), true);
         String headline = Tr.text(r.headline()) + (r.reason().isEmpty() ? "" : " · " + Tr.text(r.reason()));
-        Draw.text(g, Draw.fit(headline, w - 24), x + 12, y + 38, 1f, ColorMath.fade(ColorMath.lighten(accent, 0.12f), alpha), true);
+        // a ranked match: the score change that arrived with (or just after) this result, on the headline's right
+        RankedPackets.S2CRankChange rank = ClientRank.changeSince(System.nanoTime() - (long) ((age + 5) * 1e9));
+        float rankW = rank == null ? 0 : RankBadge.changeWidth(rank) + 8;
+        Draw.text(g, Draw.fit(headline, w - 24 - rankW), x + 12, y + 38, 1f, ColorMath.fade(ColorMath.lighten(accent, 0.12f), alpha), true);
+        if (rank != null) RankBadge.change(g, rank, x + w - 10, y + 36, alpha);
 
         // table
         int tableY = y + 54;

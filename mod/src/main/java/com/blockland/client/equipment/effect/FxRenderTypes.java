@@ -1,7 +1,6 @@
 package com.blockland.client.equipment.effect;
 
 import com.blockland.BlockLand;
-import com.blockland.client.render.ShaderPacks;
 import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import net.minecraft.client.renderer.RenderPipelines;
@@ -16,7 +15,7 @@ import java.util.Map;
  * How effect sprites are drawn in the particle pass: <i>soft</i> (alpha blended: smoke, flames, fireballs, dust) and
  * <i>glow</i> (additive: the flash of a blast, the glow under flames). Both are Minecraft's particle shader (texture ×
  * colour × lightmap, fog) without its hard alpha cut, depth tested against the world but not writing depth, sorted
- * back to front. Under a shader pack the vanilla particle shader is used, so the pack can take it over.
+ * back to front.
  */
 final class FxRenderTypes {
     static final ResourceLocation SMOKE = BlockLand.id("textures/effect/equipment/smoke_puff.png");
@@ -25,29 +24,22 @@ final class FxRenderTypes {
     static final ResourceLocation RING = BlockLand.id("textures/effect/equipment/dust_ring.png");
     static final ResourceLocation GLOW = BlockLand.id("textures/effect/glow.png");
 
-    private static final RenderPipeline SOFT = soft(false), SOFT_PACK = soft(true), ADD = additive(false), ADD_PACK = additive(true);
-    /** By texture, for [soft, glow] × [own shader, shader pack] (looked up for every sprite, so no string keys). */
+    private static final RenderPipeline SOFT = base("fx_soft").withBlend(BlendFunction.TRANSLUCENT).build();
+    private static final RenderPipeline ADD = base("fx_glow").withBlend(BlendFunction.LIGHTNING).build();
+    /** By texture, for [soft, glow] (looked up for every sprite, so no string keys). */
     @SuppressWarnings("unchecked")
-    private static final Map<ResourceLocation, RenderType>[] types = new Map[]{new HashMap<>(), new HashMap<>(), new HashMap<>(), new HashMap<>()};
+    private static final Map<ResourceLocation, RenderType>[] types = new Map[]{new HashMap<>(), new HashMap<>()};
 
     private FxRenderTypes() {
     }
 
-    private static RenderPipeline.Builder base(boolean pack, String name) {
-        RenderPipeline.Builder builder = RenderPipeline.builder(RenderPipelines.PARTICLE_SNIPPET)
-                .withLocation(BlockLand.id("pipeline/" + name + (pack ? "_pack" : "")))
+    private static RenderPipeline.Builder base(String name) {
+        return RenderPipeline.builder(RenderPipelines.PARTICLE_SNIPPET)
+                .withLocation(BlockLand.id("pipeline/" + name))
                 .withDepthWrite(false)
-                .withCull(false);
-        if (!pack) builder.withVertexShader(BlockLand.id("core/fx_particle")).withFragmentShader(BlockLand.id("core/fx_particle"));
-        return builder;
-    }
-
-    private static RenderPipeline soft(boolean pack) {
-        return base(pack, "fx_soft").withBlend(BlendFunction.TRANSLUCENT).build();
-    }
-
-    private static RenderPipeline additive(boolean pack) {
-        return base(pack, "fx_glow").withBlend(BlendFunction.LIGHTNING).build();
+                .withCull(false)
+                .withVertexShader(BlockLand.id("core/fx_particle"))
+                .withFragmentShader(BlockLand.id("core/fx_particle"));
     }
 
     static RenderType soft(ResourceLocation texture) {
@@ -59,10 +51,8 @@ final class FxRenderTypes {
     }
 
     private static RenderType of(ResourceLocation texture, boolean additive) {
-        boolean pack = ShaderPacks.active();
-        return types[(additive ? 2 : 0) + (pack ? 1 : 0)].computeIfAbsent(texture, t -> RenderType.create(
-                "blockland_fx_" + (additive ? "glow_" : "soft_") + (pack ? "pack_" : "") + t.getPath(), 4096, false, true,
-                additive ? (pack ? ADD_PACK : ADD) : (pack ? SOFT_PACK : SOFT),
+        return types[additive ? 1 : 0].computeIfAbsent(texture, t -> RenderType.create(
+                "blockland_fx_" + (additive ? "glow_" : "soft_") + t.getPath(), 4096, false, true, additive ? ADD : SOFT,
                 RenderType.CompositeState.builder()
                         .setTextureState(new RenderStateShard.TextureStateShard(texture, false))
                         .setLightmapState(RenderStateShard.LIGHTMAP)

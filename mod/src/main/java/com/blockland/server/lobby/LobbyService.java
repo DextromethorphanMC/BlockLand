@@ -150,8 +150,9 @@ public final class LobbyService {
             MatchFormat format;
             String typeName;
             int color;
-            boolean hasKit = type.isPresent() && type.get().usesKit() && !mode.kitOrEmpty().isEmpty();
+            boolean hasKit = type.isPresent() && type.get().usesKit() && kits.hasEntries(mode);
             List<LobbyModeEntry.MapOption> maps = List.of();
+            boolean dropIn = type.isPresent() && type.get().dropIn();
             if (type.isPresent()) {
                 format = type.get().format(mode);
                 Component unavailable = type.get().checkAvailable(mode, snapshot);
@@ -170,7 +171,7 @@ public final class LobbyService {
             entries.add(new LobbyModeEntry(mode.id, nullToEmpty(mode.title), typeName, nullToEmpty(mode.description),
                     TextJson.write(format.label()), format.requiredPlayers(), mode.timeLimitOrZero(),
                     matchmaking.queued(mode.id), games.playingCount(mode.id), color, reason, hasKit, nullToEmpty(mode.coverVersion),
-                    mode.availableUntilMillis(), maps));
+                    mode.availableUntilMillis(), maps, dropIn, !dropIn && mode.flag("ranked", false)));
         }
         MatchmakingService.Ticket ticket = matchmaking.ticketOf(id);
         return new S2CLobbyState(entries, groups(snapshot, entries),
@@ -338,7 +339,7 @@ public final class LobbyService {
     }
 
     private boolean hasKit(GameModeDef mode) {
-        return mode.isOpen() && types.get(mode.type).map(GameType::usesKit).orElse(false) && !mode.kitOrEmpty().isEmpty();
+        return mode.isOpen() && types.get(mode.type).map(GameType::usesKit).orElse(false) && kits.hasEntries(mode);
     }
 
     private static String nullToEmpty(String value) {

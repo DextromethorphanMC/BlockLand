@@ -1,0 +1,82 @@
+{
+  "rules": {
+    "range": 4.5,
+    "cooldownSeconds": 3.0,
+    "maxPerPlayer": 3,
+    "maxPerLevel": 96,
+    "renderDistance": 96.0,
+    "sound": "blockland:graffiti.spray"
+  },
+  "graffiti": {
+    "smile": {
+      "name": "笑脸", "rarity": "common", "kind": "normal", "free": true,
+      "texture": "textures/graffiti/smile.png", "size": 1.4
+    },
+    "bl_tag": {
+      "name": "BL 涂鸦字", "rarity": "common", "kind": "normal", "free": true,
+      "texture": "textures/graffiti/bl_tag.png", "size": 1.7
+    },
+    "gg": {
+      "name": "GG", "rarity": "common", "kind": "normal", "free": true,
+      "texture": "textures/graffiti/gg.png", "size": 1.5
+    },
+    "heart": {
+      "name": "滴漆爱心", "rarity": "common", "kind": "normal", "free": true,
+      "texture": "textures/graffiti/heart.png", "size": 1.2
+    },
+    "paw": {
+      "name": "爪印", "rarity": "common", "kind": "normal",
+      "texture": "textures/graffiti/paw.png", "size": 1.1
+    },
+    "skull": {
+      "name": "骷髅", "rarity": "rare", "kind": "normal",
+      "texture": "textures/graffiti/skull.png", "size": 1.4
+    },
+    "crown": {
+      "name": "王冠", "rarity": "rare", "kind": "normal",
+      "texture": "textures/graffiti/crown.png", "size": 1.4
+    },
+    "bolt": {
+      "name": "闪电", "rarity": "rare", "kind": "normal",
+      "texture": "textures/graffiti/bolt.png", "size": 1.4
+    },
+    "eye": {
+      "name": "注视之眼", "rarity": "epic", "kind": "normal",
+      "texture": "textures/graffiti/eye.png", "size": 1.5
+    },
+    "neon_wave": {
+      "name": "霓虹浪潮", "rarity": "epic", "kind": "special", "effect": "neon",
+      "texture": "textures/graffiti/neon_wave.png", "icon": "textures/graffiti/icon/neon_wave.png", "size": 1.8,
+      "color": "#36E8FF", "light": 1.6, "lightRadius": 6.0, "flicker": 0.25,
+      "sound": "blockland:graffiti.neon_hum"
+    },
+    "neon_heart": {
+      "name": "霓虹之心", "rarity": "legendary", "kind": "special", "effect": "neon",
+      "texture": "textures/graffiti/neon_heart.png", "icon": "textures/graffiti/icon/neon_heart.png", "size": 1.4,
+      "color": "#FF3C9A", "light": 1.8, "lightRadius": 6.0, "flicker": 0.4,
+      "sound": "blockland:graffiti.neon_hum"
+    },
+    "hologram_cube": {
+      "name": "全息方块", "rarity": "legendary", "kind": "special", "effect": "hologram", "floating": true,
+      "texture": "textures/graffiti/hologram_cube.png", "icon": "textures/graffiti/icon/hologram_cube.png", "size": 1.6,
+      "color": "#5CF2FF", "light": 1.0, "lightRadius": 4.5, "lift": 0.35,
+      "sound": "blockland:graffiti.hologram"
+    },
+    "particles_phoenix": {
+      "name": "星火凤凰", "rarity": "legendary", "kind": "special", "effect": "particles", "floating": true,
+      "texture": "textures/graffiti/particles_phoenix.png", "icon": "textures/graffiti/icon/particles_phoenix.png", "size": 2.0,
+      "points": 360, "pointSize": 0.034, "light": 0.9, "lightRadius": 4.0, "color": "#FFB347", "lift": 0.45,
+      "sound": "blockland:graffiti.sparkle"
+    },
+    "layered_bubble": {
+      "name": "立体泡泡字", "rarity": "epic", "kind": "special", "effect": "layered", "free": true,
+      "layers": ["textures/graffiti/layered_bubble_0.png", "textures/graffiti/layered_bubble_1.png", "textures/graffiti/layered_bubble_2.png"],
+      "icon": "textures/graffiti/icon/layered_bubble.png", "size": 1.6, "depth": 0.07
+    },
+    "animated_smile": {
+      "name": "眨眼笑脸", "rarity": "epic", "kind": "special", "effect": "animated",
+      "texture": "textures/graffiti/animated_smile.png", "icon": "textures/graffiti/icon/animated_smile.png", "size": 1.5,
+      "frames": 8, "fps": 8.0
+    }
+  }
+}

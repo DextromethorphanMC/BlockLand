@@ -1,14 +1,14 @@
 package com.blockland.client.decal;
 
+import com.blockland.client.render.WorldFx;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.particle.Particle;
-import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
@@ -53,8 +53,6 @@ public final class Decals {
     private static final Map<DecalTypes.Type, List<Decal>> decals = new LinkedHashMap<>();
     @Nullable
     private static ClientLevel level;
-    @Nullable
-    private static Batch batch;
     private static final Random random = new Random();
     private static int tickCount;
 
@@ -109,6 +107,8 @@ public final class Decals {
                 }));
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> tick());
         ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(event -> clear());
+        // on the faces: under the dust, smoke and debris in front of them
+        WorldFx.register(WorldFx.Layer.SURFACE, Decals::render);
         CustomizeGuiOverlayEvent.DebugText.BUS.addListener(event -> {
             if (event.getSide() == CustomizeGuiOverlayEvent.DebugText.Side.Left && !decals.isEmpty()) {
                 event.getText().add("[BlockLand] decals: " + count());
@@ -275,7 +275,7 @@ public final class Decals {
             alive--;
         }
         while (list.size() > decal.type.max + 32) list.remove(0);
-        ensureBatch(world);
+        WorldFx.wake(world);
     }
 
     // ---- ticking ------------------------------------------------------------------------------------
@@ -305,20 +305,11 @@ public final class Decals {
             });
             if (list.isEmpty()) lists.remove();
         }
-        if (!decals.isEmpty()) ensureBatch(world);
-    }
-
-    private static void ensureBatch(ClientLevel world) {
-        if (batch == null || !batch.isAlive()) {
-            batch = new Batch(world);
-            Minecraft.getInstance().particleEngine.add(batch);
-        }
+        if (!decals.isEmpty()) WorldFx.wake(world);
     }
 
     public static void clear() {
         decals.clear();
-        if (batch != null) batch.remove();
-        batch = null;
         level = null;
     }
 
@@ -334,14 +325,19 @@ public final class Decals {
     private static final Matrix4f partMatrix = new Matrix4f();
     private static final Vector3f corner = new Vector3f();
 
+    /**
+     * Draws all decals from inside the particle pass (world matrices, depth of the solid world), right away: left in the
+     * buffer source they would only be drawn at the end of the pass, over the dust and smoke in front of them.
+     */
     private static void render(PoseStack pose, MultiBufferSource buffers, Camera camera, float partialTick) {
         ClientLevel world = level;
-        if (world == null) return;
+        if (world == null || decals.isEmpty()) return;
         Vec3 cam = camera.getPosition();
         double ticks = world.getGameTime() + partialTick;
         Matrix4f m = pose.last().pose();
         Minecraft mc = Minecraft.getInstance();
         for (Map.Entry<DecalTypes.Type, List<Decal>> entry : decals.entrySet()) {
+            RenderType type = DecalRenderTypes.of(entry.getKey().textureLocation);
             VertexConsumer out = null;
             for (Decal d : entry.getValue()) {
                 float alpha = d.alpha(ticks);
@@ -366,9 +362,10 @@ public final class Decals {
                     color |= 0xE6E6E6;
                     light = mc.getEntityRenderDispatcher().getPackedLightCoords(entity, partialTick);
                 }
-                if (out == null) out = buffers.getBuffer(DecalRenderTypes.of(entry.getKey().textureLocation));
+                if (out == null) out = buffers.getBuffer(type);
                 emit(out, m, d.polygon, color, light);
             }
+            if (out != null && buffers instanceof MultiBufferSource.BufferSource source) source.endBatch(type);
         }
     }
 
@@ -387,39 +384,5 @@ public final class Decals {
         float[] xyz = p.xyz(), uv = p.uv();
         partMatrix.transformPosition(xyz[i * 3], xyz[i * 3 + 1], xyz[i * 3 + 2], corner);
         out.addVertex(m, corner.x, corner.y, corner.z).setUv(uv[i * 2], uv[i * 2 + 1]).setColor(color).setLight(light);
-    }
-
-    /** Draws all decals from inside the particle pass (world matrices, depth of the solid world). */
-    private static final class Batch extends Particle {
-        Batch(ClientLevel level) {
-            super(level, 0, 0, 0);
-            this.lifetime = Integer.MAX_VALUE;
-            this.hasPhysics = false;
-            this.gravity = 0;
-        }
-
-        @Override
-        public void tick() {
-            if (decals.isEmpty() || level != Decals.level) remove();
-        }
-
-        @Override
-        public void render(VertexConsumer consumer, Camera camera, float partialTick) {
-        }
-
-        @Override
-        public void renderCustom(PoseStack pose, MultiBufferSource buffers, Camera camera, float partialTick) {
-            Decals.render(pose, buffers, camera, partialTick);
-        }
-
-        @Override
-        public ParticleRenderType getRenderType() {
-            return ParticleRenderType.CUSTOM;
-        }
-
-        @Override
-        public boolean shouldCull() {
-            return false;
-        }
     }
 }

@@ -173,7 +173,8 @@ STEPS = {"pbr_textures": build_pbr_textures,
 # Steps of later weapons live in modules of their own (parallel work): each module has `steps(path, apply_pbr)` ->
 # {step name: function()}, appended after the steps above in this order. Missing modules are skipped.
 STEP_MODULES = ("build_tommy", "build_ks3", "build_usp", "build_dagger", "build_stocks", "build_sprays",
-                "build_fx_special", "build_rpd", "build_karambit", "build_equipment")
+                "build_fx_special", "build_rpd", "build_karambit", "build_equipment",
+                "build_bomb", "build_battleroyale", "build_parachute", "build_graffiti")
 
 
 def _load_step_modules():

@@ -326,7 +326,10 @@ def gunset(src=None):
         "mag_standard": up.mag_mesh(False).transformed(MAG_SCALE),
         "mag_extended": up.mag_mesh(True).transformed(MAG_SCALE),
     }
-    return {"meshes": meshes, "shell": up.shell_mesh(1.25), "materials": MATERIALS, "layout": lay}
+    import cerberus_clips
+    # the skin's own inspect and its effect nodes (VIEWMODEL_SPEC section 38)
+    return {"meshes": meshes, "shell": up.shell_mesh(1.25), "materials": MATERIALS, "layout": lay,
+            "extra_clips": cerberus_clips.make, "fx": cerberus_clips.fx_set(lay)}
 
 
 if __name__ == "__main__":

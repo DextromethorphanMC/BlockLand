@@ -5,9 +5,7 @@
     "cases": [
       {
         "when": [
-          "gui",
-          "ground",
-          "fixed"
+          "gui"
         ],
         "model": {
           "type": "minecraft:select",
@@ -69,66 +67,80 @@
             "model": "blockland:item/p9"
           }
         }
+      },
+      {
+        "when": [
+          "firstperson_righthand",
+          "firstperson_lefthand"
+        ],
+        "model": {
+          "type": "minecraft:select",
+          "property": "minecraft:custom_model_data",
+          "index": 0,
+          "cases": [
+            {
+              "when": "desert",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/p9_held_desert"
+              }
+            },
+            {
+              "when": "arctic",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/p9_held_arctic"
+              }
+            },
+            {
+              "when": "camo",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/p9_held_camo"
+              }
+            },
+            {
+              "when": "gold",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/p9_held_gold"
+              }
+            },
+            {
+              "when": "aurora",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/p9_held_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/p9_held_magma"
+              }
+            },
+            {
+              "when": "neon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/p9_held_neon"
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "blockland:item/p9_held"
+          }
+        }
       }
     ],
     "fallback": {
-      "type": "minecraft:select",
-      "property": "minecraft:custom_model_data",
-      "index": 0,
-      "cases": [
-        {
-          "when": "desert",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/p9_held_desert"
-          }
-        },
-        {
-          "when": "arctic",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/p9_held_arctic"
-          }
-        },
-        {
-          "when": "camo",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/p9_held_camo"
-          }
-        },
-        {
-          "when": "gold",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/p9_held_gold"
-          }
-        },
-        {
-          "when": "aurora",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/p9_held_aurora"
-          }
-        },
-        {
-          "when": "magma",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/p9_held_magma"
-          }
-        },
-        {
-          "when": "neon",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/p9_held_neon"
-          }
-        }
-      ],
-      "fallback": {
-        "type": "minecraft:model",
-        "model": "blockland:item/p9_held"
+      "type": "minecraft:special",
+      "base": "blockland:item/p9_held",
+      "model": {
+        "type": "blockland:weapon",
+        "fit": "blockland:item/p9_held"
       }
     }
   }

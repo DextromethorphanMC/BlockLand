@@ -5,9 +5,7 @@
     "cases": [
       {
         "when": [
-          "gui",
-          "ground",
-          "fixed"
+          "gui"
         ],
         "model": {
           "type": "minecraft:select",
@@ -62,59 +60,73 @@
             "model": "blockland:item/awp"
           }
         }
+      },
+      {
+        "when": [
+          "firstperson_righthand",
+          "firstperson_lefthand"
+        ],
+        "model": {
+          "type": "minecraft:select",
+          "property": "minecraft:custom_model_data",
+          "index": 0,
+          "cases": [
+            {
+              "when": "black",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/awp_held_black"
+              }
+            },
+            {
+              "when": "desert",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/awp_held_desert"
+              }
+            },
+            {
+              "when": "thunder",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/awp_held_thunder"
+              }
+            },
+            {
+              "when": "aurora",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/awp_held_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/awp_held_magma"
+              }
+            },
+            {
+              "when": "neon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/awp_held_neon"
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "blockland:item/awp_held"
+          }
+        }
       }
     ],
     "fallback": {
-      "type": "minecraft:select",
-      "property": "minecraft:custom_model_data",
-      "index": 0,
-      "cases": [
-        {
-          "when": "black",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/awp_held_black"
-          }
-        },
-        {
-          "when": "desert",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/awp_held_desert"
-          }
-        },
-        {
-          "when": "thunder",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/awp_held_thunder"
-          }
-        },
-        {
-          "when": "aurora",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/awp_held_aurora"
-          }
-        },
-        {
-          "when": "magma",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/awp_held_magma"
-          }
-        },
-        {
-          "when": "neon",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/awp_held_neon"
-          }
-        }
-      ],
-      "fallback": {
-        "type": "minecraft:model",
-        "model": "blockland:item/awp_held"
+      "type": "minecraft:special",
+      "base": "blockland:item/awp_held",
+      "model": {
+        "type": "blockland:weapon",
+        "fit": "blockland:item/awp_held"
       }
     }
   }

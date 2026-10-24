@@ -1,12 +1,13 @@
 package com.blockland.client;
 
 import com.blockland.client.craft.ClientCraft;
-import com.blockland.client.craft.CraftScreen;
+import com.blockland.client.craft.CraftPanel;
 import com.blockland.client.creature.CreatureRenderers;
 import com.blockland.client.practice.PracticeTargetRenderer;
 import com.blockland.client.decal.Decals;
 import com.blockland.client.effect.ClientActionLock;
 import com.blockland.client.font.UiFont;
+import com.blockland.client.graphics.Graphics;
 import com.blockland.client.gun.ClientGuns;
 import com.blockland.client.infection.ClientInfection;
 import com.blockland.client.input.WeaponInput;
@@ -23,7 +24,9 @@ import com.blockland.client.screen.LobbyScreen;
 import com.blockland.client.settings.AimSensitivity;
 import com.blockland.client.settings.ClientSettings;
 import com.blockland.client.settings.SettingsAccess;
+import com.blockland.client.thirdperson.ThirdPersonWeapons;
 import com.blockland.client.viewmodel.Holster;
+import com.blockland.client.viewmodel.ParticlePresets;
 import com.blockland.client.viewmodel.ViewmodelImpulses;
 import com.blockland.client.viewmodel.ViewmodelMotion;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
@@ -94,6 +97,7 @@ public final class BlockLandClient {
             ClientShopState.clear();
             ClientMedia.resetRequests();
             ClientAnnouncements.clear();
+            com.blockland.client.render.LightSources.clear();
             BLNetwork.forgetClientConnection();
         });
         BLNetwork.setClientListener(new Handler());
@@ -107,24 +111,36 @@ public final class BlockLandClient {
         UiFont.init(modBus);
         WeaponInput.init(modBus);
         Decals.init(modBus);
-        // remembers the hand pass for the shader-pack fallback of the viewmodels (before the weapons take it over)
-        ViewmodelRenderer.init();
+        com.blockland.client.impact.Impacts.init(modBus);
+        // the render pipeline (render scale, upscaling, anti-aliasing, HDR post, sun and shadows, dynamic lights): first,
+        // so its frame hooks and HUD composite layer come before every feature's own
+        Graphics.init(modBus);
         Holster.init();
         ViewmodelImpulses.init(modBus);
+        ParticlePresets.init(modBus);
         ClientGuns.init(modBus);
         Optics.init(modBus);
         ClientKnives.init(modBus);
         com.blockland.client.equipment.ClientEquipment.init(modBus);
+        // weapons in third person, dropped and in frames as their 3D models
+        ThirdPersonWeapons.init(modBus);
         ClientCraft.init(modBus);
         com.blockland.client.screen.lobby.FigureRenderer.init();
-        LobbyScreen.setCraftScreen(CraftScreen::new);
+        LobbyScreen.setCraftTab(CraftPanel::lobby);
         AimSensitivity.init();
         SettingsAccess.init(modBus);
         com.blockland.client.screen.pause.PauseMenus.init();
         MatchResults.init(modBus);
+        com.blockland.client.loading.MatchLoading.init();
         com.blockland.client.combat.KillFeedback.init(modBus);
         ClientMorphs.init();
         ClientInfection.init(modBus);
+        com.blockland.client.rank.ClientRank.init();
+        com.blockland.client.bomb.ClientBomb.init(modBus);
+        com.blockland.client.graffiti.ClientGraffiti.init(modBus);
+        com.blockland.client.spectate.ClientSpectate.init(modBus);
+        com.blockland.client.profile.ClientProfile.init(modBus);
+        com.blockland.client.battleroyale.ClientBattleRoyale.init(modBus);
         CreatureRenderers.init(modBus);
         PracticeTargetRenderer.init(modBus);
         ClientActionLock.init(modBus);
@@ -133,6 +149,7 @@ public final class BlockLandClient {
         // the slide: prediction and camera, third-person pose, and the weapon's tilt (shared viewmodel motion)
         ClientSlide.init(modBus);
         SlidePose.init();
+        com.blockland.client.parachute.ClientParachute.init(modBus);
         ViewmodelMotion.setBodyMotion(ClientSlide::amount);
         com.blockland.client.dev.DevAutomation.init();
     }
@@ -206,10 +223,8 @@ public final class BlockLandClient {
 
         @Override
         public void onMatchFound(S2CMatchFound match) {
-            // the lobby stays up until the map is ready and the client loads straight into it
-            Minecraft mc = Minecraft.getInstance();
-            SystemToast.addOrUpdate(mc.getToastManager(), SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
-                    Component.translatable("blockland.lobby.match_found"), Component.literal(match.modeTitle()));
+            // the loading screen stays up while the map is prepared and the client loads straight into it
+            com.blockland.client.loading.MatchLoading.start(match);
         }
 
         @Override

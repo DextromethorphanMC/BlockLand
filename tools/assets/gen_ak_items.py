@@ -10,6 +10,7 @@ import textures as tx
 from gen_items import _outline, _put, patch_colours, render_items_icon, side_view_items, write_json
 from glbread import GLTF
 from preview import GUN_DIR, load_materials
+import third_person
 
 GUN = "ak47"
 # fallback skin data (display sRGB replacement colours / retextures); the gameplay data in guns.json wins when present
@@ -143,9 +144,7 @@ def skin_select(x):
 
 
 def item_definition():
-    return {"model": {"type": "minecraft:select", "property": "minecraft:display_context",
-                      "cases": [{"when": ["gui", "ground", "fixed"], "model": skin_select(GUN)}],
-                      "fallback": skin_select(f"{GUN}_held")}}
+    return third_person.weapon_definition(skin_select(GUN), skin_select(f"{GUN}_held"))
 
 
 # ------------------------------------------------------------------------------------------- ammo

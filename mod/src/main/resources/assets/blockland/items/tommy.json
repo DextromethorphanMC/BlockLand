@@ -5,9 +5,7 @@
     "cases": [
       {
         "when": [
-          "gui",
-          "ground",
-          "fixed"
+          "gui"
         ],
         "model": {
           "type": "minecraft:select",
@@ -55,52 +53,66 @@
             "model": "blockland:item/tommy"
           }
         }
+      },
+      {
+        "when": [
+          "firstperson_righthand",
+          "firstperson_lefthand"
+        ],
+        "model": {
+          "type": "minecraft:select",
+          "property": "minecraft:custom_model_data",
+          "index": 0,
+          "cases": [
+            {
+              "when": "black",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/tommy_held_black"
+              }
+            },
+            {
+              "when": "chicago",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/tommy_held_chicago"
+              }
+            },
+            {
+              "when": "aurora",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/tommy_held_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/tommy_held_magma"
+              }
+            },
+            {
+              "when": "neon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/tommy_held_neon"
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "blockland:item/tommy_held"
+          }
+        }
       }
     ],
     "fallback": {
-      "type": "minecraft:select",
-      "property": "minecraft:custom_model_data",
-      "index": 0,
-      "cases": [
-        {
-          "when": "black",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/tommy_held_black"
-          }
-        },
-        {
-          "when": "chicago",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/tommy_held_chicago"
-          }
-        },
-        {
-          "when": "aurora",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/tommy_held_aurora"
-          }
-        },
-        {
-          "when": "magma",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/tommy_held_magma"
-          }
-        },
-        {
-          "when": "neon",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/tommy_held_neon"
-          }
-        }
-      ],
-      "fallback": {
-        "type": "minecraft:model",
-        "model": "blockland:item/tommy_held"
+      "type": "minecraft:special",
+      "base": "blockland:item/tommy_held",
+      "model": {
+        "type": "blockland:weapon",
+        "fit": "blockland:item/tommy_held"
       }
     }
   }

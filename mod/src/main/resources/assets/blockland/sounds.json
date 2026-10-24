@@ -472,5 +472,197 @@
       "blockland:equipment/heartbeat"
     ],
     "subtitle": "subtitles.blockland.equipment.heartbeat"
+  },
+  "gun.cerberus.release": {
+    "sounds": [
+      "blockland:gun/cerberus_release"
+    ],
+    "subtitle": "subtitles.blockland.gun.cerberus.release"
+  },
+  "gun.cerberus.touch": {
+    "sounds": [
+      "blockland:gun/cerberus_touch"
+    ],
+    "subtitle": "subtitles.blockland.gun.cerberus.touch"
+  },
+  "gun.cerberus.rack": {
+    "sounds": [
+      "blockland:gun/cerberus_rack"
+    ],
+    "subtitle": "subtitles.blockland.gun.cerberus.rack"
+  },
+  "gun.cerberus.catch": {
+    "sounds": [
+      "blockland:gun/cerberus_catch"
+    ],
+    "subtitle": "subtitles.blockland.gun.cerberus.catch"
+  },
+  "gun.cerberus.roar": {
+    "sounds": [
+      "blockland:gun/cerberus_roar"
+    ],
+    "subtitle": "subtitles.blockland.gun.cerberus.roar"
+  },
+  "gun.cerberus.kill": {
+    "sounds": [
+      "blockland:gun/cerberus_kill"
+    ],
+    "subtitle": "subtitles.blockland.gun.cerberus.kill"
+  },
+  "bomb.draw": {
+    "sounds": [
+      "blockland:bomb/draw_1",
+      "blockland:bomb/draw_2"
+    ],
+    "subtitle": "subtitles.blockland.bomb.draw"
+  },
+  "bomb.key": {
+    "sounds": [
+      "blockland:bomb/key_1",
+      "blockland:bomb/key_2",
+      "blockland:bomb/key_3"
+    ],
+    "subtitle": "subtitles.blockland.bomb.key"
+  },
+  "bomb.planted": {
+    "sounds": [
+      "blockland:bomb/planted"
+    ],
+    "subtitle": "subtitles.blockland.bomb.planted"
+  },
+  "bomb.beep": {
+    "sounds": [
+      "blockland:bomb/beep"
+    ],
+    "subtitle": "subtitles.blockland.bomb.beep"
+  },
+  "bomb.beep_final": {
+    "sounds": [
+      "blockland:bomb/beep_final"
+    ],
+    "subtitle": "subtitles.blockland.bomb.beep_final"
+  },
+  "bomb.defuse_start": {
+    "sounds": [
+      "blockland:bomb/defuse_start"
+    ],
+    "subtitle": "subtitles.blockland.bomb.defuse_start"
+  },
+  "bomb.defuse": {
+    "sounds": [
+      "blockland:bomb/defuse"
+    ],
+    "subtitle": "subtitles.blockland.bomb.defuse"
+  },
+  "bomb.defused": {
+    "sounds": [
+      "blockland:bomb/defused"
+    ],
+    "subtitle": "subtitles.blockland.bomb.defused"
+  },
+  "bomb.explode": {
+    "sounds": [
+      "blockland:bomb/explode_1",
+      "blockland:bomb/explode_2"
+    ],
+    "subtitle": "subtitles.blockland.bomb.explode"
+  },
+  "bomb.explode_far": {
+    "sounds": [
+      "blockland:bomb/explode_far"
+    ],
+    "subtitle": "subtitles.blockland.bomb.explode_far"
+  },
+  "bomb.pickup": {
+    "sounds": [
+      "blockland:bomb/pickup"
+    ],
+    "subtitle": "subtitles.blockland.bomb.pickup"
+  },
+  "bomb.drop": {
+    "sounds": [
+      "blockland:bomb/drop"
+    ],
+    "subtitle": "subtitles.blockland.bomb.drop"
+  },
+  "battleroyale.plane_engine": {
+    "sounds": [
+      "blockland:battleroyale/plane_engine"
+    ],
+    "subtitle": "subtitles.blockland.battleroyale.plane_engine"
+  },
+  "battleroyale.jump": {
+    "sounds": [
+      "blockland:battleroyale/jump"
+    ],
+    "subtitle": "subtitles.blockland.battleroyale.jump"
+  },
+  "battleroyale.wind": {
+    "sounds": [
+      "blockland:battleroyale/wind"
+    ],
+    "subtitle": "subtitles.blockland.battleroyale.wind"
+  },
+  "battleroyale.zone_shrink": {
+    "sounds": [
+      "blockland:battleroyale/zone_shrink"
+    ],
+    "subtitle": "subtitles.blockland.battleroyale.zone_shrink"
+  },
+  "parachute.open": {
+    "sounds": [
+      "blockland:parachute/open"
+    ],
+    "subtitle": "subtitles.blockland.parachute.open"
+  },
+  "parachute.close": {
+    "sounds": [
+      "blockland:parachute/close"
+    ],
+    "subtitle": "subtitles.blockland.parachute.close"
+  },
+  "parachute.wind": {
+    "sounds": [
+      "blockland:parachute/wind"
+    ],
+    "subtitle": "subtitles.blockland.parachute.wind"
+  },
+  "parachute.equip": {
+    "sounds": [
+      "blockland:parachute/equip"
+    ],
+    "subtitle": "subtitles.blockland.parachute.equip"
+  },
+  "graffiti.spray": {
+    "sounds": [
+      "blockland:graffiti/spray_1",
+      "blockland:graffiti/spray_2",
+      "blockland:graffiti/spray_3"
+    ],
+    "subtitle": "subtitles.blockland.graffiti.spray"
+  },
+  "graffiti.neon_hum": {
+    "sounds": [
+      "blockland:graffiti/neon_hum"
+    ],
+    "subtitle": "subtitles.blockland.graffiti.neon_hum"
+  },
+  "graffiti.hologram": {
+    "sounds": [
+      "blockland:graffiti/hologram"
+    ],
+    "subtitle": "subtitles.blockland.graffiti.hologram"
+  },
+  "graffiti.sparkle": {
+    "sounds": [
+      "blockland:graffiti/sparkle"
+    ],
+    "subtitle": "subtitles.blockland.graffiti.sparkle"
+  },
+  "graffiti.wheel": {
+    "sounds": [
+      "blockland:graffiti/wheel"
+    ],
+    "subtitle": "subtitles.blockland.graffiti.wheel"
   }
 }

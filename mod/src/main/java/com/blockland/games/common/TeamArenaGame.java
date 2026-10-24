@@ -133,6 +133,62 @@ public abstract class TeamArenaGame implements GameInstance {
         return GameType.SURVIVAL;
     }
 
+    /** Which of the map's {@code groups} usable spawn groups team {@code index} starts at (spread over all by default). */
+    protected int spawnGroupOf(int index, int groups) {
+        int step = Math.max(1, groups / teamSettings.teamCount());
+        return (index * step) % groups;
+    }
+
+    /** Name key of team {@code index} ({@code .short} appended for the scoreboard prefix); null = "队伍N". */
+    @Nullable
+    protected String teamKey(int index) {
+        return index < TEAM_KEYS.length ? "blockland.team." + TEAM_KEYS[index] : null;
+    }
+
+    /**
+     * Elimination is about to decide the match: only the teams in {@code survivors} (indices; none = everyone is down)
+     * are still standing. Return false to play on because an objective is still open (e.g. a planted bomb).
+     */
+    protected boolean eliminationEnds(List<Integer> survivors) {
+        return true;
+    }
+
+    /**
+     * The mode's time limit ran out (asked every second from then on). Return true when the type decides it itself
+     * (with {@link #endMatch}, or by playing on); false = the team with most survivors wins.
+     */
+    protected boolean onTimeUp() {
+        return false;
+    }
+
+    /** The clock while PLAYING, for the action bar and the Tab board: time left, or time played without a limit. */
+    protected Component clockText() {
+        int limit = mode.timeLimitOrZero();
+        return limit > 0
+                ? Component.translatable("blockland.arena.hud.time_left", PlayerUtil.formatTime(Math.max(0, limit - elapsedSeconds)))
+                : Component.translatable("blockland.arena.hud.time_elapsed", PlayerUtil.formatTime(elapsedSeconds));
+    }
+
+    /** The once-a-second action bar of a participant while PLAYING. */
+    protected Component actionBar(ServerPlayer player) {
+        long aliveTeams = teams.stream().filter(this::isAlive).count();
+        PlayerState state = players.get(player.getUUID());
+        return Component.empty()
+                .append(Component.translatable("blockland.arena.hud.alive_teams", aliveTeams).withStyle(ChatFormatting.AQUA))
+                .append(MatchText.SEPARATOR)
+                .append(clockText().copy().withStyle(ChatFormatting.YELLOW))
+                .append(MatchText.SEPARATOR)
+                .append(Component.translatable("blockland.arena.hud.kills", state == null ? 0 : state.kills).withStyle(ChatFormatting.RED));
+    }
+
+    /** A player still fighting is about to be eliminated (inventory still intact), before the win check. */
+    protected void onEliminated(ServerPlayer player) {
+    }
+
+    /** A player still in the fight left the match (disconnect, /bl leave); {@code player} null when already gone. */
+    protected void onPlayerLeft(UUID id, @Nullable ServerPlayer player) {
+    }
+
     // ---- lifecycle -----------------------------------------------------------------------
 
     @Override
@@ -160,9 +216,8 @@ public abstract class TeamArenaGame implements GameInstance {
         onArenaReady();
         setupScoreboardTeams();
         List<MapDef.TeamSpawnDef> groups = map.teamSpawns.stream().filter(t -> t.points != null && !t.points.isEmpty()).toList();
-        int step = Math.max(1, groups.size() / teamSettings.teamCount());
         for (Team team : teams) {
-            MapDef.TeamSpawnDef group = groups.get((team.index * step) % groups.size());
+            MapDef.TeamSpawnDef group = groups.get(spawnGroupOf(team.index, groups.size()));
             int slot = 0;
             for (UUID memberId : team.members) {
                 MapDef.SpawnPointDef point = group.points.get(slot++ % group.points.size());
@@ -237,21 +292,10 @@ public abstract class TeamArenaGame implements GameInstance {
         if (++phaseTicks % 20 != 0) return;
         elapsedSeconds++;
         onSecond();
+        if (phase != Phase.PLAYING) return;
         int limit = mode.timeLimitOrZero();
-        long aliveTeams = teams.stream().filter(this::isAlive).count();
-        forEachOnline(p -> {
-            PlayerState state = players.get(p.getUUID());
-            Component time = limit > 0
-                    ? Component.translatable("blockland.arena.hud.time_left", PlayerUtil.formatTime(limit - elapsedSeconds))
-                    : Component.translatable("blockland.arena.hud.time_elapsed", PlayerUtil.formatTime(elapsedSeconds));
-            PlayerUtil.actionBar(p, Component.empty()
-                    .append(Component.translatable("blockland.arena.hud.alive_teams", aliveTeams).withStyle(ChatFormatting.AQUA))
-                    .append(MatchText.SEPARATOR)
-                    .append(time.copy().withStyle(ChatFormatting.YELLOW))
-                    .append(MatchText.SEPARATOR)
-                    .append(Component.translatable("blockland.arena.hud.kills", state == null ? 0 : state.kills).withStyle(ChatFormatting.RED)));
-        });
-        if (limit > 0 && elapsedSeconds >= limit) endByTimeLimit();
+        forEachOnline(p -> PlayerUtil.actionBar(p, actionBar(p)));
+        if (limit > 0 && elapsedSeconds >= limit && !onTimeUp() && phase == Phase.PLAYING) endByTimeLimit();
     }
 
     @Override
@@ -279,6 +323,11 @@ public abstract class TeamArenaGame implements GameInstance {
     }
 
     // ---- players -------------------------------------------------------------------------
+
+    @Override
+    public MapDef map() {
+        return map;
+    }
 
     @Override
     public UUID id() {
@@ -313,6 +362,7 @@ public abstract class TeamArenaGame implements GameInstance {
         PlayerState state = players.get(id);
         if (state == null) return;
         if (state.alive && phase == Phase.PLAYING) {
+            onPlayerLeft(id, player);
             if (player != null && dropsItemsOnElimination()) player.getInventory().dropAll();
             broadcast(Component.translatable("blockland.arena.player_left", state.coloredName()).withStyle(ChatFormatting.GRAY));
         }
@@ -370,6 +420,7 @@ public abstract class TeamArenaGame implements GameInstance {
         if (state == null || !state.alive) return;
         state.alive = false;
 
+        onEliminated(player);
         if (!fellIntoVoid && dropsItemsOnElimination()) player.getInventory().dropAll();
         Component message;
         if (killer != null && killer != player && players.containsKey(killer.getUUID())) {
@@ -408,6 +459,8 @@ public abstract class TeamArenaGame implements GameInstance {
     private void checkWin() {
         if (phase != Phase.PLAYING && phase != Phase.COUNTDOWN) return;
         List<Team> alive = teams.stream().filter(this::isAlive).toList();
+        boolean decided = alive.isEmpty() || (competitive && alive.size() == 1);
+        if (decided && !eliminationEnds(alive.stream().map(t -> t.index).toList())) return;
         if (alive.isEmpty()) {
             end(null, Component.translatable("blockland.arena.reason.all_dead"));
         } else if (competitive && alive.size() == 1) {
@@ -545,12 +598,9 @@ public abstract class TeamArenaGame implements GameInstance {
     /** Teams with their players (alive first, then by kills), the time and how many of each team are still standing. */
     @Override
     public MatchBoard board(MatchBoard.Stats stats) {
-        int limit = mode.timeLimitOrZero();
         Component status = switch (phase) {
             case LOADING, COUNTDOWN -> Component.translatable("blockland.board.status.starting");
-            case PLAYING -> limit > 0
-                    ? Component.translatable("blockland.arena.hud.time_left", PlayerUtil.formatTime(Math.max(0, limit - elapsedSeconds)))
-                    : Component.translatable("blockland.arena.hud.time_elapsed", PlayerUtil.formatTime(elapsedSeconds));
+            case PLAYING -> clockText();
             case ENDING, FINISHED -> Component.translatable("blockland.board.status.ended");
         };
         List<MatchBoard.Team> boardTeams = new ArrayList<>();
@@ -601,6 +651,68 @@ public abstract class TeamArenaGame implements GameInstance {
         forEachOnline(p -> p.sendSystemMessage(message));
     }
 
+    /** Spectators watch their own team first, then the others. */
+    @Override
+    public List<UUID> spectateTargets(UUID viewer) {
+        PlayerState self = players.get(viewer);
+        List<UUID> targets = new ArrayList<>(players.keySet());
+        targets.remove(viewer);
+        if (self != null) targets.sort(Comparator.comparing(id -> players.get(id).team != self.team));
+        return targets;
+    }
+
+    @Nullable
+    @Override
+    public net.minecraft.world.phys.AABB spectateBounds() {
+        return arena == null ? null : net.minecraft.world.phys.AABB.of(arena.cleanupBox(8));
+    }
+
+    /** Ends the match now: {@code winnerIndex} wins (-1 = nobody), {@code reason} shown with the result. */
+    protected void endMatch(int winnerIndex, @Nullable Component reason) {
+        if (phase != Phase.PLAYING && phase != Phase.COUNTDOWN) return;
+        end(winnerIndex >= 0 && winnerIndex < teams.size() ? teams.get(winnerIndex) : null, reason);
+    }
+
+    /** The team a participant plays for, -1 when they are not (or no longer) in the match. */
+    protected int teamIndexOf(UUID player) {
+        PlayerState state = players.get(player);
+        return state == null ? -1 : state.team.index;
+    }
+
+    /** Still fighting (not eliminated, still in the match). */
+    protected boolean isAlive(UUID player) {
+        PlayerState state = players.get(player);
+        return state != null && state.alive;
+    }
+
+    /** Players of a team still standing and online. */
+    protected int aliveInTeam(int teamIndex) {
+        return teamIndex >= 0 && teamIndex < teams.size() ? aliveCount(teams.get(teamIndex)) : 0;
+    }
+
+    /** Everyone on a team (alive or not) still in the match. */
+    protected List<UUID> teamMembers(int teamIndex) {
+        return teamIndex >= 0 && teamIndex < teams.size() ? List.copyOf(teams.get(teamIndex).members) : List.of();
+    }
+
+    /** The team's name in its colour. */
+    protected Component teamName(int teamIndex) {
+        if (teamIndex < 0 || teamIndex >= teams.size()) return Component.empty();
+        Team team = teams.get(teamIndex);
+        return team.name().copy().withStyle(team.color());
+    }
+
+    /** A participant's name in their team's colour. */
+    protected Component coloredName(UUID player) {
+        PlayerState state = players.get(player);
+        return state == null ? Component.literal("?") : state.coloredName();
+    }
+
+    protected String playerName(UUID player) {
+        PlayerState state = players.get(player);
+        return state == null ? "" : state.name;
+    }
+
     private final class Team {
         final int index;
         final List<UUID> members = new ArrayList<>();
@@ -615,13 +727,13 @@ public abstract class TeamArenaGame implements GameInstance {
         }
 
         Component name() {
-            return index < TEAM_KEYS.length ? Component.translatable("blockland.team." + TEAM_KEYS[index])
-                    : Component.translatable("blockland.team.numbered", index + 1);
+            String key = teamKey(index);
+            return key != null ? Component.translatable(key) : Component.translatable("blockland.team.numbered", index + 1);
         }
 
         Component shortName() {
-            return index < TEAM_KEYS.length ? Component.translatable("blockland.team." + TEAM_KEYS[index] + ".short")
-                    : Component.literal(String.valueOf(index + 1));
+            String key = teamKey(index);
+            return key != null ? Component.translatable(key + ".short") : Component.literal(String.valueOf(index + 1));
         }
 
         /** The team, or its only player in solo modes, without colour. */

@@ -1,13 +1,17 @@
 package com.blockland.server;
 
 import com.blockland.BlockLand;
+import com.blockland.bomb.BombItem;
 import com.blockland.effect.ActionLocks;
+import com.blockland.games.bomb.BombActions;
+import com.blockland.games.bomb.BombGameType;
 import com.blockland.games.fastpvp.FastPvpGameType;
 import com.blockland.games.infection.InfectionActions;
 import com.blockland.games.infection.InfectionGameType;
 import com.blockland.games.practice.aim.AimPracticeGameType;
 import com.blockland.games.practice.bridge.BridgePracticeGameType;
 import com.blockland.games.skywars.SkyWarsGameType;
+import com.blockland.games.world.WorldGameType;
 import com.blockland.movement.Slides;
 import com.blockland.network.BLNetwork;
 import com.blockland.server.arena.ArenaService;
@@ -36,8 +40,19 @@ import com.blockland.server.media.MediaRelay;
 import com.blockland.server.melee.MeleeService;
 import com.blockland.server.equipment.EquipmentService;
 import com.blockland.server.movement.SlideService;
+import com.blockland.server.parachute.ParachuteService;
+import com.blockland.parachute.Parachutes;
 import com.blockland.server.party.PartyService;
 import com.blockland.server.player.PlayerProfiles;
+import com.blockland.server.inventory.InventoryCatalog;
+import com.blockland.server.inventory.InventoryService;
+import com.blockland.server.profile.CardItems;
+import com.blockland.server.profile.Cosmetics;
+import com.blockland.server.profile.CosmeticsService;
+import com.blockland.server.profile.OwnedCosmetics;
+import com.blockland.server.profile.ProfileService;
+import com.blockland.server.ranked.RankedService;
+import com.blockland.server.ranked.Ranks;
 import com.blockland.server.session.PlayerSessions;
 import com.blockland.server.shop.ShopRelay;
 import com.blockland.server.world.WorldJobScheduler;
@@ -54,6 +69,7 @@ import net.minecraftforge.event.ServerChatEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.entity.living.LivingFallEvent;
 import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
@@ -101,7 +117,14 @@ public final class BlockLandServer {
     public final EquipmentService equipmentService;
     public final CraftService craft;
     public final SlideService slides;
+    public final ParachuteService parachutes;
+    public final com.blockland.server.graffiti.GraffitiService graffiti;
     public final KillTracker kills;
+    public final com.blockland.server.spectate.SpectateService spectate;
+    public final CosmeticsService cosmetics;
+    public final InventoryService inventory;
+    public final ProfileService profilePages;
+    public final RankedService ranked;
     private int tickCounter;
 
     private BlockLandServer(MinecraftServer server) {
@@ -112,6 +135,9 @@ public final class BlockLandServer {
                 .register(new SkyWarsGameType())
                 .register(new FastPvpGameType())
                 .register(new InfectionGameType())
+                .register(new BombGameType())
+                .register(new WorldGameType())
+                .register(new com.blockland.games.battleroyale.BattleRoyaleGameType())
                 .register(new BridgePracticeGameType())
                 .register(new AimPracticeGameType());
         this.jobs = new WorldJobScheduler(BlockLandConfig.BLOCK_OPERATIONS_PER_TICK::get);
@@ -122,6 +148,8 @@ public final class BlockLandServer {
         this.sessions = new PlayerSessions(server, lobbyWorld);
         this.kitLayouts = new SessionKitLayouts();
         this.kits = new KitService(server, kitLayouts);
+        // items a type hands to some players only (the bomb) are arranged with the kit
+        this.kits.setRoleItems(mode -> types.get(mode.type).map(type -> type.roleItems(mode)).orElse(List.of()));
         this.services = new GameServices(server, content, maps, arenas, jobs, kits, new MatchResultPublisher(server), sessions);
         this.profiles = new PlayerProfiles(server, backend, sessions);
         this.shop = new ShopRelay(server, backend, profiles, sessions);
@@ -153,8 +181,26 @@ public final class BlockLandServer {
         // in a match the mode decides (and the type, e.g. only infection humans); outside matches a config option
         this.slides = new SlideService(server, player -> games.isPlaying(player) ? games.allowSlide(player)
                 : BlockLandConfig.SLIDE_OUTSIDE_MATCHES.get());
+        this.parachutes = new ParachuteService(server);
+        // wall graffiti: only in a match whose mode allows it; owned = free or an entitlement
+        this.graffiti = new com.blockland.server.graffiti.GraffitiService(server, player -> {
+            GameInstance game = games.gameOf(player);
+            return game != null && game.mode().flag("allowGraffiti", true);
+        }, profiles::hasEntitlement);
+        this.arenas.setReleaseListener(graffiti::clearArea);
         this.craft = new CraftService(server, profiles);
         this.kills = new KillTracker(server, games);
+        this.spectate = new com.blockland.server.spectate.SpectateService(server, games, profiles);
+        // 库存 / 个人主页: what players own (entitlements + free items) and wear (cosmetics slots)
+        this.cosmetics = new CosmeticsService(server, backend);
+        this.inventory = new InventoryService(backend, profiles, cosmetics);
+        this.profilePages = new ProfileService(server, sessions, profiles, cosmetics, inventory);
+        this.cosmetics.setChangeListener(profilePages::refresh);
+        // 排位: one ladder for every ranked mode; matchmaking by score, results (and leavers) reported to the backend
+        this.ranked = new RankedService(server, backend, content, types, games::gameOf);
+        this.matchmaking.setScoreSource(ranked::matchScore);
+        this.games.setAbandonListener(ranked::abandoned);
+        this.services.results().addListener(ranked::published);
         this.kits.setAfterApply(craft::applyBuilds);
         // the login status brings the player's read announcements and builds: show the real ones
         this.profiles.setPreferencesListener(id -> {
@@ -166,11 +212,13 @@ public final class BlockLandServer {
             @Override
             public void joined(UUID id, String name) {
                 profiles.onJoin(id, name);
+                cosmetics.onJoin(id);
             }
 
             @Override
             public void enteredLobby(UUID id) {
                 lobby.enteredLobby(id);
+                ranked.enteredLobby(id);
                 craft.sendBuilds(id);
             }
 
@@ -182,6 +230,8 @@ public final class BlockLandServer {
                 profiles.onLeave(id);
                 kitLayouts.forget(id);
                 craft.forget(id);
+                cosmetics.forget(id);
+                ranked.forget(id);
                 lobby.left(id);
                 lobby.markDirty();
             }
@@ -218,7 +268,10 @@ public final class BlockLandServer {
                 instance.meleeService.forget(player);
                 instance.equipmentService.forget(player);
                 instance.slides.forget(player);
+                instance.parachutes.forget(player);
+                instance.graffiti.forget(player);
                 instance.kills.forget(player);
+                instance.spectate.forget(player);
                 instance.sessions.leftWorld(player);
             }
         });
@@ -226,6 +279,12 @@ public final class BlockLandServer {
         PlayerEvent.StartTracking.BUS.addListener(event -> {
             if (instance != null && event.getEntity() instanceof ServerPlayer viewer) instance.gunService.startTracking(viewer, event.getTarget());
         });
+        PlayerEvent.StartTracking.BUS.addListener(event -> {
+            if (instance != null && event.getEntity() instanceof ServerPlayer viewer) instance.parachutes.startTracking(viewer, event.getTarget());
+        });
+        // an open canopy lands softly
+        LivingFallEvent.BUS.addListener(event -> instance != null && event.getEntity() instanceof ServerPlayer player
+                && instance.parachutes.cancelsFall(player));
 
         ServerChatEvent.BUS.addListener(event -> {
             if (instance == null) return false;
@@ -237,7 +296,10 @@ public final class BlockLandServer {
 
         // kill feedback first: it must see every death, also the ones a minigame cancels below
         LivingDeathEvent.BUS.addListener(event -> {
-            if (instance != null && !event.getEntity().level().isClientSide()) instance.kills.onDeath(event.getEntity(), event.getSource());
+            if (instance != null && !event.getEntity().level().isClientSide()) {
+                instance.kills.onDeath(event.getEntity(), event.getSource());
+                instance.spectate.onDeath(event.getEntity(), event.getSource());
+            }
             return false;
         });
         LivingDeathEvent.BUS.addListener(event -> instance != null
@@ -299,8 +361,23 @@ public final class BlockLandServer {
         BLNetwork.setCraftServerListener(created.craft);
         BLNetwork.setMovementServerListener(created.slides);
         BLNetwork.setCombatServerListener(created.kills);
+        InventoryCatalog.register(new CardItems());
+        InventoryCatalog.register(new com.blockland.server.graffiti.GraffitiItems());
+        BLNetwork.setGraffitiServerListener(created.graffiti);
+        BLNetwork.setSpectateServerListener(created.spectate);
+        BLNetwork.setProfileServerListener(created.profilePages);
+        Cosmetics.setStore(new OwnedCosmetics(created.cosmetics, created.inventory));
+        // after every module registered its item types at start-up
+        server.execute(created.inventory::publishRegistry);
         Slides.setServerView(created.slides);
+        Ranks.setView(created.ranked);
+        BLNetwork.setParachuteServerListener(created.parachutes);
+        Parachutes.setServerView(created.parachutes);
         BLNetwork.setInfectionServerListener(new InfectionActions(created.games::gameOf));
+        BombActions bombActions = new BombActions(created.games::gameOf);
+        BLNetwork.setBombServerListener(bombActions);
+        BombItem.setDropHandler(bombActions);
+        BLNetwork.setBattleRoyaleServerListener(new com.blockland.games.battleroyale.BattleRoyaleActions(created.games::gameOf));
         created.lobbyWorld.prepare();
         created.games.removeStaleTeams();
         created.content.loadCache();
@@ -336,9 +413,24 @@ public final class BlockLandServer {
         BLNetwork.setMovementServerListener(null);
         BLNetwork.setCombatServerListener(null);
         current.kills.clear();
+        BLNetwork.setProfileServerListener(null);
+        Cosmetics.setStore(null);
+        current.cosmetics.clear();
         Slides.setServerView(null);
+        Ranks.setView(null);
+        current.ranked.clear();
         current.slides.clear();
+        BLNetwork.setParachuteServerListener(null);
+        Parachutes.setServerView(null);
+        current.parachutes.clear();
+        BLNetwork.setGraffitiServerListener(null);
+        BLNetwork.setSpectateServerListener(null);
+        current.spectate.clear();
+        current.graffiti.clear();
         BLNetwork.setInfectionServerListener(null);
+        BLNetwork.setBombServerListener(null);
+        BombItem.setDropHandler(null);
+        BLNetwork.setBattleRoyaleServerListener(null);
         current.gunService.clear();
         current.meleeService.clear();
         current.equipmentService.clear();
@@ -355,7 +447,10 @@ public final class BlockLandServer {
         meleeService.tick();
         equipmentService.tick();
         slides.tick();
+        parachutes.tick();
+        graffiti.tick();
         kills.tick();
+        spectate.tick();
         lobby.tick();
         profiles.tick();
         if (++tickCounter % (BlockLandConfig.SYNC_INTERVAL_SECONDS.get() * 20) == 0) content.refresh();

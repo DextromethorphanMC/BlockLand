@@ -50,17 +50,29 @@ def _mirrored(mesh):
 
 
 def build(path, gunset=None, clips=None):
+    """A gunset may add a skin's own clips (`extra_clips`: rig -> clips) and effect nodes (`fx`: materials with their
+    PNGs, meshes, nodes and their rest values; VIEWMODEL_SPEC section 38)."""
     gunset = gunset or usp_gunset()
     rig = dr.DualRig(gunset["layout"])
     clips = dual_clips.make_clips(rig) if clips is None else clips
+    clips = clips + gunset.get("extra_clips", lambda r: [])(rig)
+    fx = gunset.get("fx")
     g = GLB()
     add_materials(g, gunset["materials"])
+    if fx:
+        for name, (base, metal, rough, ex) in fx["materials"].items():
+            g.add_material(name, base, metal, rough, emissive=ex.get("emissive"), alpha_mode=ex.get("alpha_mode", "OPAQUE"),
+                           double_sided=ex.get("double", False), texture_png=fx["textures"][ex["png"]])
     mesh_idx, tri_counts = {}, {}
     for name, m in gunset["meshes"].items():
         for sfx, mesh in (("", m), (dr.SUFFIX, _mirrored(m))):
             prims = mk.build_primitives(mesh)
             tri_counts[name + sfx] = mk.triangle_count(prims)
             mesh_idx[name + sfx] = g.add_mesh(name + sfx, prims)
+    for name, mesh in (fx or {}).get("meshes", {}).items():
+        prims = mk.build_primitives(mesh)
+        tri_counts[name] = mk.triangle_count(prims)
+        mesh_idx[name] = g.add_mesh(name, prims)
     shell = mk.build_primitives(gunset["shell"])
     tri_counts["fx_shell"] = mk.triangle_count(shell)
     mesh_idx["fx_shell"] = g.add_mesh("fx_shell", shell)
@@ -89,6 +101,8 @@ def build(path, gunset=None, clips=None):
             if left and name == "mount_charm":
                 continue
             g.add_node(name + sfx, parent + sfx, mt(t), mq(rot) if rot is not None else None)
+    for name, parent, t, rot, scale, mesh in (fx or {}).get("nodes", ()):       # effect nodes (collapsed at rest)
+        g.add_node(name, parent, t, rot, scale=scale, mesh=mesh_idx.get(mesh) if mesh else None)
     for side, shoulder in (("R", dr.SHOULDER_R), ("L", dr.SHOULDER_L)):
         g.add_node(f"arm_{side}", "viewmodel", shoulder, rest[f"arm_{side}"]["rotation"])
         g.add_node(f"arm_{side}_fore", f"arm_{side}", dr.ARM_FORE_T, rest[f"arm_{side}_fore"]["rotation"])
@@ -110,6 +124,8 @@ def build(path, gunset=None, clips=None):
         rest_vals[f"arm_{side}"] = {"rotation": rest[f"arm_{side}"]["rotation"]}
         rest_vals[f"arm_{side}_fore"] = {"rotation": rest[f"arm_{side}_fore"]["rotation"]}
         rest_vals.update(armrig.rest_values(rest, side))
+    if fx:
+        rest_vals.update(fx["rest"])
     info = {clip.name: bake_clip(g, clip, rest_vals) for clip in clips}
     g.save(path)
     return tri_counts, info

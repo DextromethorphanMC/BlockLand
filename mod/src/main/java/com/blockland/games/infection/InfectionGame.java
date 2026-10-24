@@ -648,6 +648,34 @@ final class InfectionGame implements GameInstance {
     // ---- players ----------------------------------------------------------------------------------
 
     @Override
+    public MapDef map() {
+        return map;
+    }
+
+    /** A downed monster watches its own side first (the humans' moves are no secret to it either way). */
+    @Override
+    public List<UUID> spectateTargets(UUID viewer) {
+        Fighter self = players.get(viewer);
+        List<UUID> targets = new ArrayList<>(players.keySet());
+        targets.remove(viewer);
+        if (self != null) targets.sort(java.util.Comparator.comparing(id -> players.get(id).side != self.side));
+        return targets;
+    }
+
+    /** A monster waiting to come back: its respawn countdown. */
+    @Override
+    public int respawnTicks(UUID viewer) {
+        Fighter fighter = players.get(viewer);
+        return fighter == null || fighter.respawnAt < 0 ? -1 : Math.max(0, fighter.respawnAt - services.server().getTickCount());
+    }
+
+    @Nullable
+    @Override
+    public net.minecraft.world.phys.AABB spectateBounds() {
+        return arena == null ? null : net.minecraft.world.phys.AABB.of(arena.cleanupBox(8));
+    }
+
+    @Override
     public UUID id() {
         return id;
     }

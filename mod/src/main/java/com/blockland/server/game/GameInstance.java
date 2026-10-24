@@ -1,10 +1,12 @@
 package com.blockland.server.game;
 
 import com.blockland.server.content.model.GameModeDef;
+import com.blockland.server.content.model.MapDef;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.phys.AABB;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
@@ -27,11 +29,27 @@ public interface GameInstance {
 
     void start();
 
+    /**
+     * Drop-in matches ({@code GameType#dropIn}) take more players while they run; they are brought into the world by
+     * the match itself. Others are full once created.
+     *
+     * @return false when they cannot join (full, or this match takes nobody new)
+     */
+    default boolean addPlayers(List<MatchRoster.Member> members) {
+        return false;
+    }
+
     void tick();
 
     boolean isFinished();
 
     /** The result is in and the match only waits before sending everyone back (the results panel is showing). */
+    /** The map the match is played on (for the loading screen), null when the game has none (an open world). */
+    @Nullable
+    default MapDef map() {
+        return null;
+    }
+
     default boolean isEnding() {
         return false;
     }
@@ -83,6 +101,27 @@ public interface GameInstance {
     /** Whether a participant's equipment (grenades, throwing knives, injectors) is not used up (practice modes). */
     default boolean infiniteEquipment(ServerPlayer player) {
         return false;
+    }
+
+    // ---- spectating (server/spectate: participants in spectator mode watch the match) ------------------
+
+    /**
+     * Whom a spectating participant may watch, in the order it cycles through them (the spectate service keeps only
+     * those still fighting in the spectator's world). By default every other participant; team types put teammates first.
+     */
+    default List<UUID> spectateTargets(UUID viewer) {
+        return participants().stream().filter(id -> !id.equals(viewer)).toList();
+    }
+
+    /** Ticks until this spectating participant comes back into the fight, -1 = they do not (out until the match ends). */
+    default int respawnTicks(UUID viewer) {
+        return -1;
+    }
+
+    /** The space the free camera may fly in (the arena and a margin), null = no free camera in this match. */
+    @Nullable
+    default AABB spectateBounds() {
+        return null;
     }
 
     /**

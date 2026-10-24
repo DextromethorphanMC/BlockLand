@@ -5,19 +5,36 @@
     "cases": [
       {
         "when": [
-          "gui",
-          "ground",
-          "fixed"
+          "gui"
         ],
         "model": {
           "type": "minecraft:model",
           "model": "blockland:item/karambit"
         }
+      },
+      {
+        "when": [
+          "firstperson_righthand",
+          "firstperson_lefthand"
+        ],
+        "model": {
+          "type": "minecraft:model",
+          "model": "blockland:item/karambit_held"
+        }
       }
     ],
     "fallback": {
-      "type": "minecraft:model",
-      "model": "blockland:item/karambit_held"
+      "type": "minecraft:special",
+      "base": "blockland:item/karambit_held",
+      "model": {
+        "type": "blockland:weapon",
+        "fit": "blockland:item/karambit_held",
+        "rotation": [
+          0,
+          0,
+          90
+        ]
+      }
     }
   }
 }

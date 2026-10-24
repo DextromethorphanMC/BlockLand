@@ -1,0 +1,167 @@
+#version 150
+
+// Bullet impacts into fluids (see impact_fluid.vsh). Water is shaded the way the lighting pack shades the water surface
+// itself (terrain.fsh, BL_KIND_WATER): the biome-tinted body lit like the world, the sky reflected by Fresnel (f0 0.02,
+// strength BlWater.z) towards grazing angles, the sun's glint off the surface normal — so the splash belongs to the
+// water around it. Without world lighting the fog colour stands in for the sky and a soft highlight for the sun, the
+// same look vanilla's water has then. Thin parts (the sheet's ragged rim, small drops) are more transparent; rings on
+// the surface are only the change they make to its reflection and glint; white water is aerated foam. Premultiplied
+// alpha, no emission. Lava (modes 4, 5, drawn opaque): molten rock glowing by its temperature, crusting dark as it
+// cools, writing its glow as emission.
+
+#moj_import <minecraft:fog.glsl>
+#moj_import <minecraft:dynamictransforms.glsl>
+#moj_import <minecraft:projection.glsl>
+#moj_import <blockland:scene.glsl>
+#moj_import <blockland:impact_fx.glsl>
+
+in vec3 position;
+in vec4 tint;
+in vec2 uv;
+in vec3 normal;
+in vec3 ambient;
+in float skyLight;
+in float sunShadow;
+in float sphericalVertexDistance;
+in float cylindricalVertexDistance;
+
+out vec4 fragColor;
+
+vec3 fogged(vec3 color) {
+    return apply_fog(vec4(color, 1.0), sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart,
+            FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd, FogColor).rgb;
+}
+
+// The water's own look at a point with normal n: body, reflected sky, glint. Returns the colour and (w) its Fresnel term.
+vec4 water(vec3 n, float thinness) {
+    vec3 v = normalize(-position);
+    if (dot(n, v) < 0.0) {
+        n = -n;
+    }
+    float cosv = clamp(dot(n, v), 0.0, 1.0);
+    float outdoors = smoothstep(0.35, 0.9, skyLight) * (1.0 - BlCamera.w);
+    float fres = bl_fresnel(cosv, 0.02);
+    // the body: the biome's tint over the light at the spot, a thin sheet lets more of what is behind through
+    vec3 body = tint.rgb * ambient * mix(0.82, 0.62, thinness);
+    vec3 sky;
+    float strength;
+    vec3 sunColor;
+    vec3 sunDir;
+    if (bl_worldLit()) {
+        sky = bl_display(BlSkyColor.rgb);
+        strength = BlWater.z;
+        sunColor = BlSunColor.rgb * sunShadow * step(0.0, BlSunDir.y);
+        sunDir = BlSunDir.xyz;
+        body += tint.rgb * bl_display(bl_pointLights(position, n)) * 0.35;
+    } else {
+        sky = FogColor.rgb;
+        strength = 0.6;
+        // daylight read from the lightmap's sky row
+        sunColor = vec3(0.9) * outdoors * smoothstep(0.2, 0.8, ambient.g);
+        sunDir = normalize(vec3(0.3, 1.0, 0.2));
+    }
+    vec3 color = mix(body, sky, clamp(fres * strength * mix(0.3, 1.0, outdoors), 0.0, 1.0));
+    vec3 r = reflect(-v, n);
+    float glint = pow(max(dot(r, sunDir), 0.0), 120.0) * (bl_worldLit() ? 2.5 : 0.9);
+    color += sunColor * glint;
+    return vec4(color, clamp(fres + glint * 0.5, 0.0, 1.0));
+}
+
+// Molten rock at temperature t (1 white-hot … 0 cold crust); returns colour and (w) emission.
+vec4 molten(float t, float n, vec3 normal) {
+    float crust = smoothstep(t * 1.2 - 0.12, t * 1.2 + 0.08, n);
+    vec3 hot = mix(vec3(0.95, 0.22, 0.03), vec3(1.0, 0.78, 0.32), smoothstep(0.55, 1.0, t));
+    float glow = (1.0 - crust) * smoothstep(0.04, 0.5, t);
+    vec3 rockLight = ambient;
+    if (bl_worldLit()) {
+        rockLight = ambient * 0.62 + bl_display(BlSunColor.rgb) * sunShadow * max(dot(normal, BlSunDir.xyz), 0.0) * 0.7;
+    }
+    vec3 rock = vec3(0.13, 0.085, 0.07) * rockLight;
+    return vec4(mix(rock, hot * (1.2 + t), glow), glow);
+}
+
+void main() {
+    int mode = int(impact_mode() + 0.5);
+    float seed = normal.y * 97.0;
+    if (mode == 0) {
+        // crown sheet / column: a ragged, thinning rim breaking into drops
+        float rim = impact_fbm(vec3(uv.x * 18.0, uv.y * 3.0, impact_time() * 2.0));
+        float coverage = tint.a * (1.0 - smoothstep(0.62, 1.0, uv.y + (rim - 0.5) * 0.5));
+        if (coverage < 0.04) {
+            discard;
+        }
+        vec4 w = water(normalize(normal), uv.y);
+        float alpha = clamp(mix(0.32, 0.92, w.w) * coverage + uv.y * 0.08, 0.0, 1.0);
+        fragColor = vec4(fogged(w.rgb) * alpha, alpha);
+        return;
+    }
+    if (mode == 1) {
+        // a drop: a small sphere of water
+        float d2 = dot(uv, uv);
+        if (d2 >= 1.0) {
+            discard;
+        }
+        vec3 n = normalize(impact_right() * uv.x + impact_up() * uv.y + impact_back() * sqrt(1.0 - d2));
+        vec4 w = water(n, 0.6);
+        float alpha = mix(0.5, 0.95, w.w) * tint.a;
+        fragColor = vec4(fogged(w.rgb) * alpha, alpha);
+        return;
+    }
+    if (mode == 2) {
+        // rings spreading on the surface: three crests (the leading one strongest), shown as the change of the
+        // surface's normal — its reflection and glint move, nothing is painted on the water
+        float rho = length(uv);
+        float width = max(normal.x, 0.02);
+        if (rho > 1.0 + width * 3.0) {
+            discard;
+        }
+        float slope = 0.0;
+        const vec3 RINGS = vec3(1.0, 0.7, 0.45);
+        const vec3 AMPS = vec3(1.0, 0.55, 0.3);
+        for (int i = 0; i < 3; i++) {
+            float x = (rho - RINGS[i]) / width;
+            slope += AMPS[i] * -2.0 * x * exp(-x * x);
+        }
+        slope *= tint.a * 0.35;
+        vec2 radial = rho > 1e-4 ? uv / rho : vec2(0.0);
+        vec3 n = normalize(vec3(-slope * radial.x, 1.0, -slope * radial.y));
+        vec4 w = water(n, 0.0);
+        float alpha = clamp(abs(slope) * 2.4, 0.0, 0.85) * clamp(1.4 - rho * 0.5, 0.0, 1.0);
+        if (alpha < 0.004) {
+            discard;
+        }
+        fragColor = vec4(fogged(w.rgb) * alpha, alpha);
+        return;
+    }
+    if (mode == 3) {
+        // white water: aerated foam, bubbly and breaking up as it fades
+        float rho = length(uv);
+        if (rho >= 1.0) {
+            discard;
+        }
+        float f = impact_fbm(vec3(uv * 5.0, seed + impact_time() * 0.6));
+        float cells = impact_noise(vec3(uv * 14.0, seed * 0.7));
+        float coverage = smoothstep(0.42, 0.62, f * (1.0 - rho * rho) * tint.a * 2.0 + cells * 0.15);
+        if (coverage < 0.02) {
+            discard;
+        }
+        vec3 light = ambient;
+        if (bl_worldLit()) {
+            light = ambient * 0.62 + bl_display(BlSunColor.rgb) * sunShadow * max(BlSunDir.y, 0.0) * 0.7;
+        }
+        float alpha = coverage * 0.9;
+        fragColor = vec4(fogged(vec3(0.92, 0.95, 0.97) * light) * alpha, alpha);
+        return;
+    }
+    // molten rock: drops (4) and splats on the ground or the crater on the pool (5)
+    float d2 = dot(uv, uv);
+    float rim = mode == 5 ? impact_noise(vec3(uv * 4.0, seed)) * 0.35 : 0.0;
+    if (d2 >= 1.0 - rim) {
+        discard;
+    }
+    vec3 n = mode == 4 ? normalize(impact_right() * uv.x + impact_up() * uv.y + impact_back() * sqrt(max(0.0, 1.0 - d2)))
+            : vec3(0.0, 1.0, 0.0);
+    float crustNoise = impact_fbm(vec3(uv * 3.0, seed + 3.1));
+    vec4 m = molten(tint.a * (mode == 5 ? 1.0 - d2 * 0.4 : 1.0), crustNoise, n);
+    fragColor = vec4(fogged(m.rgb), bl_encodeEmission() ? bl_emissionAlpha(m.w) : 1.0);
+}

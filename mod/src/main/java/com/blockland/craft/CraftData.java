@@ -288,10 +288,16 @@ public final class CraftData {
         /** Special skins: what the shots look and sound like (muzzle flash, tracer, fire sound); null = the weapon's. */
         @Nullable
         public SkinFx fx;
+        /**
+         * Special skins: an inspect of their own (asset spec §38) — its clip, what its events set off (particles, light,
+         * a surge of the skin's shader effects) and how the skin's look changes over it; null = the weapon's inspect.
+         */
+        @Nullable
+        public SkinInspect inspect;
 
-        /** A special skin: it changes the model or the shots, not only the materials (the craft list says so). */
+        /** A special skin: it changes the model, the shots or the inspect, not only the materials (the craft list says so). */
         public boolean isSpecial() {
-            return fx != null || model != null && !model.isBlank();
+            return fx != null || inspect != null || model != null && !model.isBlank();
         }
 
         public boolean hasModel() {
@@ -348,6 +354,19 @@ public final class CraftData {
         public float tracerWidth = 1;
         /** Replaces the gun's fire sound ({@code blockland:} sound path); empty = keep it. A suppressor still wins. */
         public String fireSound = "";
+        /** Colour of the hit marker's kill marks {@code #RRGGBB} while the skin is held (asset spec §38); empty = the player's. */
+        public String hitColor = "";
+        /** What a confirmed kill sets off on the shooter's weapon (asset spec §38); null = nothing of the skin's own. */
+        @Nullable
+        public SkinCue kill;
+
+        public boolean hasHitColor() {
+            return hitColor != null && !hitColor.isBlank();
+        }
+
+        public int hitRgb() {
+            return Scope.rgb(hitColor, 0xFF3B3B);
+        }
 
         public int flashRgb() {
             return Scope.rgb(flashColor, 0xFFE2A0);
@@ -366,6 +385,93 @@ public final class CraftData {
         }
     }
 
+    /**
+     * A special skin's own inspect (asset spec §38). Times are seconds of the clip as authored. The skin's model (or the
+     * weapon's) carries the clip and its events; the data says what the events set off and how the skin's look changes.
+     */
+    public static final class SkinInspect {
+        /** Clip of the drawn model played instead of the weapon's inspect; empty or missing = the weapon's inspect. */
+        public String clip = "";
+        /**
+         * The surge of the skin's shader effects over the clip, keys {@code [seconds, 0..1]} (linear between keys, 0
+         * before the first and after the last): 0 is the skin at rest, 1 its effects at full blaze. The dynamic material.
+         */
+        public float[][] surge = new float[0][];
+        /** Clip event name → what it sets off (besides its sound and the rig's shove, which every event has). */
+        public Map<String, SkinCue> cues = new LinkedHashMap<>();
+        /** Particle streams that run during part of the clip. */
+        public List<SkinEmitter> emitters = List.of();
+        /** A light that follows the surge (its intensity × the surge), or null. */
+        @Nullable
+        public SkinLight glow;
+
+        /** The surge at a time of the clip. */
+        public float surgeAt(float seconds) {
+            if (surge == null || surge.length == 0) return 0;
+            float[] first = surge[0];
+            if (first == null || first.length < 2 || seconds <= first[0]) return 0;
+            for (int i = 1; i < surge.length; i++) {
+                float[] a = surge[i - 1], b = surge[i];
+                if (b == null || b.length < 2 || a == null || a.length < 2) return 0;
+                if (seconds <= b[0]) {
+                    float u = b[0] > a[0] ? (seconds - a[0]) / (b[0] - a[0]) : 1;
+                    return Math.max(0, Math.min(1, a[1] + (b[1] - a[1]) * u));
+                }
+            }
+            return 0;
+        }
+    }
+
+    /** What a clip event (or a kill) of a special skin sets off on the first-person weapon (asset spec §38). */
+    public static final class SkinCue {
+        /** Particle presets ({@code assets/blockland/viewmodel/particles.json}) burst at {@link #node}. */
+        public List<String> particles = List.of();
+        /** Node of the drawn model the particles and the light start from. */
+        public String node = "gun";
+        /** A dual weapon: also at the node's left-gun twin. */
+        public boolean twin = true;
+        /** A flash of light there, or null. */
+        @Nullable
+        public SkinLight light;
+        /** A sound ({@code blockland:} sound event) besides the event's own; empty = none. */
+        public String sound = "";
+        /** A surge pulse added to the skin's effects (0..1), fading over {@link #surgeFade} seconds. */
+        public float surge;
+        public float surgeFade = 1;
+        /** A shove of the rig and camera by an {@code impulses.json} entry (kills: clip events shove by their own name). */
+        public String impulse = "";
+        /** A punch of the field of view, percent (negative = narrower). */
+        public float fov;
+    }
+
+    /** A particle stream of a special skin's inspect: a preset at a node between two times of the clip. */
+    public static final class SkinEmitter {
+        public String particles = "";
+        public String node = "gun";
+        public boolean twin = true;
+        public float from;
+        public float to;
+        /** Seconds the stream fades in and out over. */
+        public float fade = 0.2f;
+    }
+
+    /** A light of a special skin's effects (rendering spec §5). */
+    public static final class SkinLight {
+        public String color = "#FFFFFF";
+        /** Brightness (1 ≈ a torch at its own block). */
+        public float intensity = 1;
+        /** Reach in blocks. */
+        public float radius = 4;
+        /** How long a flash lasts (cues); a glow lasts as long as the surge. */
+        public float seconds = 0.3f;
+        /** A glow's node (the light sits there). */
+        public String node = "gun";
+
+        public int rgb() {
+            return Scope.rgb(color, 0xFFFFFF);
+        }
+    }
+
     /** How a skin re-textures one region (asset spec §21). */
     public static final class Layer {
         /** LabPBR texture set under {@code assets/blockland/} without {@code .png} (§20); empty keeps the material's. */
@@ -374,7 +480,7 @@ public final class CraftData {
         public float uvScale = 0;
         /** RGB multiplier on the albedo, or null. */
         public float[] tint;
-        /** {@code iridescent}, {@code flow}, {@code galaxy}, {@code circuit}, or empty. */
+        /** {@code iridescent}, {@code flow}, {@code galaxy}, {@code circuit}, {@code inferno}, or empty. */
         public String effect = "";
         /** Colour of the effect's light {@code #RRGGBB}, or empty for white. */
         public String effectColor = "";

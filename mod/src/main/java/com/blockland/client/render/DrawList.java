@@ -3,6 +3,7 @@ package com.blockland.client.render;
 import com.blockland.client.gltf.GltfModel;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.blaze3d.buffers.Std140Builder;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -18,8 +19,11 @@ import org.joml.Vector3fc;
 import org.joml.Vector4f;
 
 import javax.annotation.Nullable;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
@@ -28,13 +32,25 @@ import java.util.OptionalInt;
  * with one {@link DynamicUniforms#writeTransforms} call and everything is drawn in a single render pass,
  * opaque first, then blended. Draw records are pooled, so steady-state frames allocate nothing but the
  * transform array. Each record also keeps its source triangles and a texture id, so the same frame can be handed to
- * vanilla render types instead ({@link VanillaDraws}) when an OptiFine shader pack owns the frame.
+ * vanilla render types instead ({@link VanillaDraws}) when the sun's shadow map captures entities. Every pass binds the
+ * scene lighting ({@link SceneLighting}); a list of the world's frame ({@link #scene}) lets its draws be lit by the world
+ * and store their emission in the target's alpha (rendering spec §3, §8).
  */
 public final class DrawList {
     private static final long START = System.nanoTime();
 
     private final List<Entry> pool = new ArrayList<>();
     private int size;
+    /** Draws of the world's frame (viewmodel, third person), not of a GUI picture. */
+    private boolean scene;
+    /** Unjittered projection of a list that records its motion ({@link #motion}), or null. */
+    @Nullable
+    private Matrix4f motionProjection;
+    /** Last flush's model-view per draw key (see {@link #motionKey}), and this flush's (swapped every flush). */
+    private Map<Long, Matrix4f> previous = new HashMap<>(), current = new HashMap<>();
+    private final Map<Long, Integer> occurrences = new HashMap<>();
+    @Nullable
+    private GpuBuffer motionInfo;
     /** Draw calls and triangles of the last flush (shown on the F3 screen). */
     private int lastDraws, lastTriangles;
 
@@ -77,11 +93,18 @@ public final class DrawList {
      * @param effect      {@link MaterialLayer} effect id
      * @param params      the effect's four numbers
      * @param effectColor RGB of the effect's light (display space)
+     * @param surge       0..1 how far the effect surges this frame (asset spec §38; 0 = at rest)
      */
     public record Material(float metallic, float roughness, float alphaCutoff, float uvScale, boolean fullbright,
-                           int effect, float[] params, float[] effectColor) {
+                           int effect, float[] params, float[] effectColor, float surge) {
         public static final Material MATTE = new Material(0, 0.75f, 0, 1, false, MaterialLayer.NONE, new float[4], new float[]{1, 1, 1});
         public static final Material EMISSIVE = new Material(0, 1, 0, 1, true, MaterialLayer.NONE, new float[4], new float[]{1, 1, 1});
+
+        /** A material whose effect does not surge. */
+        public Material(float metallic, float roughness, float alphaCutoff, float uvScale, boolean fullbright,
+                        int effect, float[] params, float[] effectColor) {
+            this(metallic, roughness, alphaCutoff, uvScale, fullbright, effect, params, effectColor, 0);
+        }
     }
 
     /** Old surface description (Blinn specular / shininess); converted to a {@link Material}. */
@@ -96,7 +119,34 @@ public final class DrawList {
     }
 
     // flags in ModelOffset.z (see gun.fsh)
-    static final int FULLBRIGHT = 1, NORMAL_MAP = 2, SPECULAR_MAP = 4, PREMULTIPLY = 8;
+    static final int FULLBRIGHT = 1, NORMAL_MAP = 2, SPECULAR_MAP = 4, PREMULTIPLY = 8, SCENE = 16, OPAQUE = 32, WORLD_LIT = 64;
+
+    /**
+     * Marks this list's draws as part of the world's frame (the viewmodel, third-person weapons): they store emission in
+     * the target's alpha while the frame encodes it, and are lit by the world's sun, shadows and lights while weapons are
+     * (rendering spec §8). GUI pictures (the 工匠 preview) leave it off and keep their studio lighting.
+     */
+    public DrawList scene(boolean value) {
+        scene = value;
+        return this;
+    }
+
+    /**
+     * Makes this list record its draws' screen motion into the frame's {@link HandMotion} texture (the viewmodel): each
+     * draw's model-view is kept for the next flush, which draws the opaque geometry once more with both matrices.
+     *
+     * @param unjittered the projection the list is drawn with, without this frame's jitter (null = stop recording)
+     */
+    public DrawList motion(@Nullable Matrix4f unjittered) {
+        if (unjittered == null) {
+            motionProjection = null;
+            previous.clear();
+        } else {
+            if (motionProjection == null) motionProjection = new Matrix4f();
+            motionProjection.set(unjittered);
+        }
+        return this;
+    }
 
     public int lastDraws() {
         return lastDraws;
@@ -128,6 +178,39 @@ public final class DrawList {
     }
 
     private static final Vector3fc ZERO = new Vector3f();
+    /** The surge rides in the effect id's fraction (gun.fsh: effect = floor, surge = fraction / SURGE_SCALE). */
+    private static final float SURGE_SCALE = 0.98f;
+
+    /**
+     * Queues a draw of a pipeline with its own per-draw parameters (GPU particles, {@link GpuParticles}): its uniform
+     * block is the model-view, the colour, {@code offset} in ModelOffset and {@code params} in TextureMat, as the
+     * pipeline's shader reads them. It is fullbright and blended (no texture maps, nothing for the vanilla path).
+     */
+    public void addRaw(RenderPipeline pipeline, GpuBuffer vertices, GpuBuffer indices, VertexFormat.IndexType indexType,
+                       int firstIndex, int indexCount, Matrix4f modelView, Vector4f color, Vector3fc offset, Matrix4f params,
+                       GpuTextureView texture) {
+        if (size == pool.size()) pool.add(new Entry());
+        Entry e = pool.get(size++);
+        e.pipeline = pipeline;
+        e.vertices = vertices;
+        e.indices = indices;
+        e.indexType = indexType;
+        e.firstIndex = firstIndex;
+        e.indexCount = indexCount;
+        e.albedo = texture;
+        e.normal = null;
+        e.specular = null;
+        e.modelView.set(modelView);
+        e.color.set(color);
+        e.offset.set(offset);
+        e.params.set(params);
+        e.source = null;
+        e.texture = null;
+        e.managedTexture = false;
+        e.blend = Blend.ADDITIVE;
+        e.blockLight = e.skyLight = 15;
+        e.uvScale = 1;
+    }
 
     /**
      * Queues one draw.
@@ -158,22 +241,25 @@ public final class DrawList {
         e.modelView.set(modelView);
         e.color.set(color);
         boolean additive = pipeline == GunPipelines.ADDITIVE;
+        boolean opaque = GunPipelines.isOpaque(pipeline);
         int flags = (material.fullbright() ? FULLBRIGHT : 0) | (normal != null ? NORMAL_MAP : 0)
-                | (specular != null ? SPECULAR_MAP : 0) | (additive ? PREMULTIPLY : 0);
+                | (specular != null ? SPECULAR_MAP : 0) | (additive ? PREMULTIPLY : 0) | (opaque ? OPAQUE : 0)
+                | (scene ? SCENE : 0) | (scene && SceneLighting.weaponsLit() ? WORLD_LIT : 0);
         e.offset.set(blockLight, skyLight, flags);
-        // TextureMat columns: (metallic, roughness, cutoff, uv scale) (origin, time) (effect params) (effect colour, effect)
+        // TextureMat columns: (metallic, roughness, cutoff, uv scale) (origin, time) (effect params) (effect colour,
+        // effect + its surge: the id's whole part, the surge × SURGE_SCALE its fraction)
         float[] p = material.params();
         float[] c = material.effectColor();
         e.params.set(
                 material.metallic(), material.roughness(), material.alphaCutoff(), material.uvScale(),
                 origin.x(), origin.y(), origin.z(), time(),
                 p[0], p[1], p[2], p[3],
-                c[0], c[1], c[2], material.effect());
+                c[0], c[1], c[2], material.effect() + SURGE_SCALE * Math.max(0, Math.min(1, material.surge())));
         e.source = source;
         e.texture = texture;
         e.managedTexture = managedTexture;
         e.blend = additive ? Blend.ADDITIVE : material.fullbright() ? Blend.EMISSIVE
-                : GunPipelines.isOpaque(pipeline) ? Blend.OPAQUE : Blend.TRANSLUCENT;
+                : opaque ? Blend.OPAQUE : Blend.TRANSLUCENT;
         e.blockLight = blockLight;
         e.skyLight = skyLight;
         e.uvScale = material.uvScale();
@@ -205,12 +291,16 @@ public final class DrawList {
         lastDraws = size;
         lastTriangles = 0;
         for (int i = 0; i < size; i++) lastTriangles += ordered[i].indexCount / 3;
+        // the frame's mip bias (a temporally upscaled frame samples textures at the output's detail)
+        Textures.syncSampling();
         GpuTextureView flatNormal = Textures.flatNormal();
         GpuTextureView noSpecular = Textures.noSpecular();
 
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder()
                 .createRenderPass(() -> label, color, OptionalInt.empty(), depth, OptionalDouble.empty())) {
             RenderSystem.bindDefaultUniforms(pass);
+            pass.setUniform("BlockLandScene", SceneLighting.uniforms());
+            pass.bindSampler("BlShadowMap", SceneLighting.shadowMap());
             pass.bindSampler("Sampler2", lightmap);
             RenderPipeline pipeline = null;
             GpuBuffer vertices = null;
@@ -248,22 +338,82 @@ public final class DrawList {
                 pass.drawIndexed(0, e.firstIndex, e.indexCount, 1);
             }
         }
+        if (motionProjection != null) drawMotion(ordered, depth);
         clear();
     }
 
     /**
-     * Hands everything to vanilla render types (shader-pack path) and clears the list.
-     *
-     * @param hand     the hand pass's pose (view space with vanilla's hand transforms)
-     * @param fovScale x/y scale from our projection's field of view to the one the hand pass uses
+     * The opaque draws again into the frame's motion texture: model-view now and at the last flush (a draw seen for the
+     * first time has not moved). Draws are matched across flushes by their mesh range and the order they come in.
      */
-    public void flushVanilla(PoseStack hand, MultiBufferSource buffers, float fovScale) {
+    private void drawMotion(Entry[] ordered, GpuTextureView depth) {
+        GpuTextureView target = HandMotion.target();
+        Map<Long, Matrix4f> swap = previous;
+        previous = current;
+        current = swap;
+        current.clear();
+        occurrences.clear();
+        List<Entry> opaque = new ArrayList<>(size);
+        List<DynamicUniforms.Transform> transforms = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            Entry e = ordered[i];
+            long key = motionKey(e);
+            Matrix4f before = previous.get(key);
+            current.put(key, new Matrix4f(e.modelView));
+            if (target == null || !GunPipelines.isOpaque(e.pipeline)) continue;
+            opaque.add(e);
+            transforms.add(new DynamicUniforms.Transform(e.modelView, e.color, e.offset, before != null ? before : e.modelView, 1.0F));
+        }
+        if (target == null || opaque.isEmpty()) return;
+        if (motionInfo == null || motionInfo.isClosed()) {
+            motionInfo = RenderSystem.getDevice().createBuffer(() -> "BlockLand hand motion", GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, 64);
+        }
+        try (org.lwjgl.system.MemoryStack stack = org.lwjgl.system.MemoryStack.stackPush()) {
+            ByteBuffer data = Std140Builder.onStack(stack, 64).putMat4f(motionProjection).get();
+            RenderSystem.getDevice().createCommandEncoder().writeToBuffer(motionInfo.slice(), data);
+        }
+        GpuBufferSlice[] slices = RenderSystem.getDynamicUniforms().writeTransforms(transforms.toArray(new DynamicUniforms.Transform[0]));
+        try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder()
+                .createRenderPass(() -> "BlockLand hand motion", target, OptionalInt.empty(), depth, OptionalDouble.empty())) {
+            RenderSystem.bindDefaultUniforms(pass);
+            pass.setUniform("HandMotionInfo", motionInfo.slice());
+            pass.setPipeline(GunPipelines.VELOCITY);
+            GpuBuffer vertices = null, indices = null;
+            for (int i = 0; i < opaque.size(); i++) {
+                Entry e = opaque.get(i);
+                if (e.vertices != vertices) {
+                    pass.setVertexBuffer(0, e.vertices);
+                    vertices = e.vertices;
+                }
+                if (e.indices != indices) {
+                    pass.setIndexBuffer(e.indices, e.indexType);
+                    indices = e.indices;
+                }
+                pass.setUniform("DynamicTransforms", slices[i]);
+                pass.drawIndexed(0, e.firstIndex, e.indexCount, 1);
+            }
+        }
+    }
+
+    /** A draw's identity across flushes: its buffer and index range, and how often that range came before this flush. */
+    private long motionKey(Entry e) {
+        long range = ((long) System.identityHashCode(e.vertices) << 32) ^ ((long) e.firstIndex << 8) ^ e.indexCount;
+        int n = occurrences.merge(range, 1, Integer::sum);
+        return range * 31 + n;
+    }
+
+    /**
+     * Hands everything to vanilla render types (the shadow map's entity capture, {@link ShadowPass}) and clears the list.
+     *
+     * @param pose the pose the draws' matrices are relative to (an item's pose in third person)
+     */
+    public void flushVanilla(PoseStack pose, MultiBufferSource buffers) {
         if (size == 0) return;
         Entry[] ordered = ordered();
         lastDraws = size;
         lastTriangles = 0;
         for (Entry e : ordered) lastTriangles += e.indexCount / 3;
-        VanillaDraws.emit(ordered, hand, buffers, fovScale);
+        VanillaDraws.emit(ordered, pose, buffers);
         clear();
     }
 }

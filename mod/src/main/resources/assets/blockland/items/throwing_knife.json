@@ -5,19 +5,31 @@
     "cases": [
       {
         "when": [
-          "gui",
-          "ground",
-          "fixed"
+          "gui"
         ],
         "model": {
           "type": "minecraft:model",
           "model": "blockland:item/throwing_knife"
         }
+      },
+      {
+        "when": [
+          "firstperson_righthand",
+          "firstperson_lefthand"
+        ],
+        "model": {
+          "type": "minecraft:model",
+          "model": "blockland:item/throwing_knife_held"
+        }
       }
     ],
     "fallback": {
-      "type": "minecraft:model",
-      "model": "blockland:item/throwing_knife_held"
+      "type": "minecraft:special",
+      "base": "blockland:item/throwing_knife_held",
+      "model": {
+        "type": "blockland:weapon",
+        "fit": "blockland:item/throwing_knife_held"
+      }
     }
   }
 }

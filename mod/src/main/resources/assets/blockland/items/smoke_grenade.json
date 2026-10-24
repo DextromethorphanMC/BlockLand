@@ -5,19 +5,31 @@
     "cases": [
       {
         "when": [
-          "gui",
-          "ground",
-          "fixed"
+          "gui"
         ],
         "model": {
           "type": "minecraft:model",
           "model": "blockland:item/smoke_grenade"
         }
+      },
+      {
+        "when": [
+          "firstperson_righthand",
+          "firstperson_lefthand"
+        ],
+        "model": {
+          "type": "minecraft:model",
+          "model": "blockland:item/smoke_grenade_held"
+        }
       }
     ],
     "fallback": {
-      "type": "minecraft:model",
-      "model": "blockland:item/smoke_grenade_held"
+      "type": "minecraft:special",
+      "base": "blockland:item/smoke_grenade_held",
+      "model": {
+        "type": "blockland:weapon",
+        "fit": "blockland:item/smoke_grenade_held"
+      }
     }
   }
 }

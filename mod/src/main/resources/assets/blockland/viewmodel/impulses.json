@@ -32,5 +32,11 @@
   "cap":              {"up": 1.0, "roll": -1.0, "camera": [0.1, 0.0, -0.15]},
   "stab":             {"back": -3.0, "up": -3.5, "pitch": -2.4, "camera": [-0.8, 0.0, 0.3], "shake": 0.2},
   "inject":           {"up": -1.2, "pitch": -0.8, "camera": [-0.35, 0.0, 0.0], "shake": 0.1},
-  "discard":          {"side": 1.5, "roll": 1.2, "camera": [0.0, 0.15, 0.3]}
+  "discard":          {"side": 1.5, "roll": 1.2, "camera": [0.0, 0.15, 0.3]},
+  "cerberus.release": {"up": 1.2, "roll": -0.8, "camera": [0.1, 0.0, -0.15]},
+  "cerberus.touch":   {"back": 1.0, "up": 0.8, "pitch": 0.8, "roll": -1.0, "camera": [0.25, 0.1, -0.35], "shake": 0.10},
+  "cerberus.rack":    {"back": -2.0, "pitch": -1.2, "roll": 0.6, "camera": [-0.35, 0.0, 0.3], "shake": 0.10},
+  "cerberus.catch":   {"up": -2.0, "pitch": -1.2, "roll": 0.8, "camera": [-0.3, 0.0, 0.25], "shake": 0.06},
+  "cerberus.roar":    {"back": 6.0, "up": 2.5, "pitch": 3.0, "camera": [1.6, 0.0, 1.0], "shake": 0.45},
+  "cerberus.kill":    {"up": 1.0, "pitch": 1.0, "roll": 0.8, "camera": [0.25, 0.0, 0.3], "shake": 0.08}
 }

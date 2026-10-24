@@ -73,7 +73,13 @@ public final class HitMarker {
     }
 
     public static void show(boolean critical, boolean killed) {
-        color = 0xFF000000 | (killed ? style.killColor : critical ? style.criticalColor : style.hitColor);
+        show(critical, killed, -1);
+    }
+
+    /** @param killRgb the kill marks' colour instead of the player's (a weapon skin's own), -1 = the player's */
+    public static void show(boolean critical, boolean killed, int killRgb) {
+        int killColor = killRgb >= 0 ? killRgb & 0xFFFFFF : style.killColor;
+        color = 0xFF000000 | (killed ? killColor : critical ? style.criticalColor : style.hitColor);
         kill = killed;
         alpha.snap(1);
         alpha.to(0, (kill ? 0.55 : 0.32) * style.duration, Ease.QUAD_IN).delay(0.08 * style.duration);

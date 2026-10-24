@@ -10,6 +10,7 @@ import com.blockland.anim.Ticker;
 import com.blockland.client.ClientLobbyState;
 import com.blockland.client.ClientMedia;
 import com.blockland.client.font.UiFont;
+import com.blockland.client.rank.RankBadge;
 import com.blockland.client.ui.Draw;
 import com.blockland.client.ui.Tr;
 import com.blockland.network.packet.LobbyModeEntry;
@@ -105,7 +106,7 @@ public final class MatchPanel {
             color = DISABLED;
             enabled = false;
         } else if (selected != null && selected.available()) {
-            newLabel = tr("blockland.match.start");
+            newLabel = tr(selected.dropIn() ? "blockland.match.enter" : "blockland.match.start");
             color = GO;
         } else {
             newLabel = tr("blockland.match.start");
@@ -181,7 +182,9 @@ public final class MatchPanel {
             float tw = UiFont.width(timer) * ts;
             Draw.text(g, timer, x + w - 10 - tw, infoY + 6 - (ts - 1.6f) * 4, ts, ColorMath.fade(TEXT, a), true);
             if (mode != null) {
-                Draw.text(g, Draw.fit(mode.title(), w - 20), tx + shift, infoY + 24, 1f, ColorMath.fade(TEXT, a), false);
+                // a ranked queue: the score it matches by
+                float rankW = mode.ranked() ? RankBadge.standing(g, x + w - 10, infoY + 23, a) + 8 : 0;
+                Draw.text(g, Draw.fit(mode.title(), Math.round(w - 20 - rankW)), tx + shift, infoY + 24, 1f, ColorMath.fade(TEXT, a), false);
                 // queue fill bar
                 float fill = Math.min(1, mode.queued() / (float) Math.max(1, mode.requiredPlayers()));
                 int barW = w - 20;
@@ -199,6 +202,8 @@ public final class MatchPanel {
         }
         int accent = mode.isLimited() ? GOLD : mode.accentColor() | 0xFF000000;
         Draw.text(g, tr("blockland.match.selected"), tx + shift, infoY + 7, 1f, ColorMath.fade(DIM, a), false);
+        // a ranked mode: the player's tier and score next to the label, left of the kit button
+        if (mode.ranked()) RankBadge.standing(g, mode.hasKit() ? kitX() - 6 : x + w - 10, infoY + 5, a);
         Draw.text(g, Draw.fit(mode.title(), (int) ((w - KIT_W - 30) / 1.25f)), tx + shift, infoY + 19, 1.25f,
                 ColorMath.fade(TEXT, a), true);
         String desc = mode.description().isBlank() ? mode.typeName() + " · " + Tr.text(mode.formatLabel()) : mode.description();

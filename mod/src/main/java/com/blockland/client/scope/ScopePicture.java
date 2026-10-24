@@ -1,6 +1,7 @@
 package com.blockland.client.scope;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.SceneLighting;
 import com.mojang.blaze3d.ProjectionType;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -152,7 +153,7 @@ final class ScopePicture {
         OptionInstance<CloudStatus> clouds = mc.options.cloudStatus();
         CloudStatus savedClouds = clouds.get();
         Object savedFrustum = null;
-        boolean ok = false;
+        boolean ok = false, worldView = false;
         // every swap is undone in the finally block, in reverse order
         modelView.pushMatrix();
         modelView.identity();
@@ -181,6 +182,9 @@ final class ScopePicture {
             Vector4f fogColor = fog.setupFog(camera, mc.options.getEffectiveRenderDistance(), foggy, delta,
                     gameRenderer.getDarkenWorldAmount(partial), level);
             rendering = true;
+            // lit like the main view (the frame is in its hand phase, where the world's lighting is switched off)
+            SceneLighting.extraWorldView(true);
+            worldView = true;
             levelRenderer.renderLevel(GraphicsResourceAllocator.UNPOOLED, delta, false, camera, view, proj,
                     fog.getBuffer(FogRenderer.FogMode.WORLD), fogColor, !foggy);
             ok = true;
@@ -189,6 +193,7 @@ final class ScopePicture {
             BlockLand.LOGGER.error("[BlockLand] Scope picture-in-picture failed; scopes zoom the view instead for this session", t);
         } finally {
             rendering = false;
+            if (worldView) SceneLighting.extraWorldView(false);
             if (fog != null) fog.endFrame();
             gameRenderer.setPanoramicMode(panoramic);
             entityDistance.set(savedDistance);

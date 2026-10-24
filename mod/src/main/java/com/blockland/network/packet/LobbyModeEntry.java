@@ -14,6 +14,8 @@ import java.util.List;
  * @param coverVersion      empty when the mode has no cover
  * @param availableUntil    epoch millis when a limited-time mode closes, 0 for permanent modes
  * @param maps              the maps the mode can be played on right now (players may ask for one when queueing)
+ * @param dropIn            no queue: joining enters the running world at once ({@code playing} = who is in it)
+ * @param ranked            排位: matches count for the ranked ladder and are matched by score
  */
 public record LobbyModeEntry(
         String id,
@@ -30,7 +32,9 @@ public record LobbyModeEntry(
         boolean hasKit,
         String coverVersion,
         long availableUntil,
-        List<MapOption> maps
+        List<MapOption> maps,
+        boolean dropIn,
+        boolean ranked
 ) {
     /** @param coverVersion empty when the map has no cover image */
     public record MapOption(String id, String name, String coverVersion) {
@@ -65,6 +69,8 @@ public record LobbyModeEntry(
             buf.writeUtf(map.name, 128);
             buf.writeUtf(map.coverVersion, 64);
         }
+        buf.writeBoolean(dropIn);
+        buf.writeBoolean(ranked);
     }
 
     public static LobbyModeEntry decode(FriendlyByteBuf buf) {
@@ -78,7 +84,9 @@ public record LobbyModeEntry(
         int mapCount = Math.min(buf.readVarInt(), 256);
         List<MapOption> maps = new ArrayList<>(mapCount);
         for (int i = 0; i < mapCount; i++) maps.add(new MapOption(buf.readUtf(64), buf.readUtf(128), buf.readUtf(64)));
+        boolean dropIn = buf.readBoolean();
+        boolean ranked = buf.readBoolean();
         return new LobbyModeEntry(id, title, typeName, description, format, required, timeLimit, queued, playing, color, reason,
-                hasKit, cover, until, maps);
+                hasKit, cover, until, maps, dropIn, ranked);
     }
 }

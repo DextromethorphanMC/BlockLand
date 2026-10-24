@@ -10,7 +10,8 @@ import java.util.Locale;
  * @param pbr         texture set under {@code assets/blockland/} without {@code .png}; null keeps the material's own
  * @param uvScale     tiling of the texture set; 0 keeps the material's
  * @param tint        RGB multiplier on the albedo, or null
- * @param effect      one of {@link #NONE}, {@link #IRIDESCENT}, {@link #FLOW}, {@link #GALAXY}, {@link #CIRCUIT}
+ * @param effect      one of {@link #NONE}, {@link #IRIDESCENT}, {@link #FLOW}, {@link #GALAXY}, {@link #CIRCUIT},
+ *                    {@link #INFERNO}
  * @param effectColor display RGB (0..1) of the effect's light (glow, stars), or null for white
  * @param params      the effect's four numbers (see the spec table)
  */
@@ -33,12 +34,18 @@ public record MaterialLayer(@Nullable String pbr, float uvScale, @Nullable float
      * the shader applies to the alpha instead of shading with it.
      */
     public static final int DECAL = 5;
+    /**
+     * Inferno (asset spec §38): molten veins in a cellular crack network over the rest-pose space with energy running
+     * through them and glyphs burnt into the flanks; mostly asleep at rest, the skin's surge (an inspect, a kill) sets
+     * them ablaze — the surface chars, the veins open white-hot, the glyphs ignite.
+     */
+    public static final int INFERNO = 6;
 
     public MaterialLayer {
         params = params == null ? new float[4] : params;
     }
 
-    /** Effect id of a data name ("iridescent", "flow", "galaxy"); unknown names draw no effect. */
+    /** Effect id of a data name ("iridescent", "flow", "galaxy", "circuit", "inferno"); unknown names draw no effect. */
     public static int effect(@Nullable String name) {
         if (name == null) return NONE;
         return switch (name.trim().toLowerCase(Locale.ROOT)) {
@@ -46,6 +53,7 @@ public record MaterialLayer(@Nullable String pbr, float uvScale, @Nullable float
             case "flow" -> FLOW;
             case "galaxy" -> GALAXY;
             case "circuit" -> CIRCUIT;
+            case "inferno" -> INFERNO;
             default -> NONE;
         };
     }
@@ -57,6 +65,7 @@ public record MaterialLayer(@Nullable String pbr, float uvScale, @Nullable float
             case FLOW -> new float[]{0.35f, 0.06f, 0.25f, 1.0f};
             case GALAXY -> new float[]{0.02f, 1.0f, 1.0f, 0.6f};
             case CIRCUIT -> new float[]{0.25f, 40.0f, 0.8f, 0.05f};
+            case INFERNO -> new float[]{70.0f, 0.12f, 0.15f, 0.7f};
             default -> new float[4];
         };
     }

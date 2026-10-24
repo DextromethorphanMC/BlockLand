@@ -17,7 +17,6 @@ import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.CachedPerspectiveProjectionMatrixBuffer;
 import net.minecraft.client.renderer.MappableRingBuffer;
 import net.minecraft.client.renderer.RenderPipelines;
 import org.joml.Matrix4f;
@@ -61,8 +60,6 @@ final class ScopeEyepiece {
     private GpuBuffer indices;
     @Nullable
     private MappableRingBuffer ubo;
-    @Nullable
-    private CachedPerspectiveProjectionMatrixBuffer projection;
 
     /** Everything the shader needs for one frame. */
     static final class Frame {
@@ -117,8 +114,8 @@ final class ScopeEyepiece {
 
         GpuBufferSlice savedProjection = RenderSystem.getProjectionMatrixBuffer();
         ProjectionType savedType = RenderSystem.getProjectionType();
-        RenderSystem.setProjectionMatrix(projection.getBuffer(mc.getWindow().getWidth(), mc.getWindow().getHeight(), ViewmodelRenderer.FOV),
-                ProjectionType.PERSPECTIVE);
+        // the viewmodel's projection, jittered with the frame like the scope body the disc sits in
+        RenderSystem.setProjectionMatrix(ViewmodelRenderer.projectionBuffer(), ProjectionType.PERSPECTIVE);
         GpuTextureView white = Textures.white();
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder()
                 .createRenderPass(() -> "BlockLand scope eyepiece", color, OptionalInt.empty(), depth, OptionalDouble.empty())) {
@@ -147,7 +144,6 @@ final class ScopeEyepiece {
     /** A unit disc (centre + rim fan) in the XY plane facing +Z, UV (0.5, 0.5) at the centre. Uploaded once. */
     private void ensureBuffers() {
         if (ubo == null) ubo = new MappableRingBuffer(() -> "BlockLand scope UBO", GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_MAP_WRITE, UBO_SIZE);
-        if (projection == null) projection = new CachedPerspectiveProjectionMatrixBuffer("BlockLand scope eyepiece", 0.02f, 128f);
         if (vertices != null) return;
         int stride = DefaultVertexFormat.POSITION_TEX.getVertexSize();
         ByteBuffer vb = ByteBuffer.allocateDirect((SEGMENTS + 1) * stride).order(ByteOrder.nativeOrder());

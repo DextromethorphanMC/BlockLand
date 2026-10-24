@@ -38,6 +38,14 @@ public final class BackendClient {
         return send(request, type);
     }
 
+    public <T> CompletableFuture<T> put(String path, Object body, Type type) {
+        HttpRequest request = request(path)
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(GSON.toJson(body), StandardCharsets.UTF_8))
+                .build();
+        return send(request, type);
+    }
+
     public CompletableFuture<byte[]> getBytes(String path) {
         return http.sendAsync(request(path).GET().build(), HttpResponse.BodyHandlers.ofByteArray())
                 .thenApply(response -> {

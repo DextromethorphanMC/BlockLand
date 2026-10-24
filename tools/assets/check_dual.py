@@ -25,7 +25,18 @@ FORBIDDEN = ("aim_iron", "mount_optic", "mount_stock")         # dual guns do no
 MATERIALS = {
     "usp_dual": {"polymer", "grip", "slide", "barrel", "steel_dark", "sight_dots", "mag", "mag_base", "brass"},
     "usp_dual_cerberus": {"cerberus_body", "cerberus_trim", "cerberus_grip", "barrel", "steel_dark", "mag", "mag_base",
-                          "brass"},
+                          "brass", "cerberus_sigil", "cerberus_ring"},
+}
+# section 38: a special skin's own clips (duration range, events beyond the usual, required events), its effect nodes
+# (name -> parent; collapsed at rest, additive materials only) and the fingertip that must reach a node in a clip
+SKIN_CLIPS = {
+    "usp_dual_cerberus": {
+        "clips": {"inspect_cerberus": ((4.5, 6.5), {"cerberus.release", "cerberus.touch", "cerberus.rack", "cerberus.catch",
+                                                    "cerberus.roar"})},
+        "fx": {"fx_touch": "slide", "fx_sigil": "fx_touch", "fx_ring": "muzzle", "fx_ring_L": "muzzle_L"},
+        "touch": ("inspect_cerberus", "cerberus.touch", "arm_L_index2", "fx_touch", 0.012),
+        "caught": ("inspect_cerberus", "cerberus.catch"),
+    },
 }
 DURATIONS = {"idle": (2.0, 2.0), "draw": (0.5, 0.8), "fire": (0.15, 0.3), "fire_L": (0.15, 0.3),
              "fire_last": (0.15, 0.3), "fire_last_L": (0.15, 0.3), "fire_both": (0.15, 0.3), "reload": (2.0, 2.8),
@@ -154,6 +165,83 @@ def check_animations(g, r, label):
     return anims
 
 
+def check_skin(g, r, label, name):
+    """Section 38: the skin's own clips (length, events, the camera within its limits and at rest at the end), its effect
+    nodes (collapsed at rest, additive, only shown by its clips), the fingertip touching its mark and both hands back on
+    their guns once the left gun is caught."""
+    spec = SKIN_CLIPS.get(name)
+    if spec is None:
+        return
+    cam = g.names["camera"]
+    for clip, ((lo_, hi), required) in spec["clips"].items():
+        a = g.animation(clip)
+        if not r.check(a is not None, f"{label}: skin clip {clip} missing"):
+            continue
+        dur = g.duration(a)
+        r.check(lo_ - 1e-4 <= dur <= hi + 1e-4, f"{label}: {clip} duration {dur:.3f} outside [{lo_}, {hi}]")
+        ev = a.get("extras", {}).get("events", [])
+        for e in ev:
+            r.check((e.get("name") in EVENTS or e.get("name") in required) and 0 <= e.get("time", -1) <= dur + 1e-6,
+                    f"{label}: {clip} bad event {e}")
+        r.check(required <= {e["name"] for e in ev}, f"{label}: {clip} missing events {required - {e['name'] for e in ev}}")
+        for ch in a["channels"]:
+            node, path = ch["target"]["node"], ch["target"]["path"]
+            smp = a["samplers"][ch["sampler"]]
+            if node == cam:
+                vs = g.accessor(smp["output"]).astype(np.float64)
+                eul = np.array([cg.euler_deg(q) for q in vs])
+                r.check(np.all(np.abs(eul[:, :2]) <= CAM_TURN + 1e-3) and np.all(np.abs(eul[:, 2]) <= CAM_ROLL + 1e-3),
+                        f"{label}: {clip} camera rotation exceeds limits")
+                r.check(np.allclose(np.abs(vs[-1]), [0, 0, 0, 1], atol=1e-5), f"{label}: {clip} camera not at rest at end")
+        r.note(f"{clip}: {dur:.3f}s, {len(a['channels'])} channels, events "
+               + ", ".join(f"{e['name']}@{e['time']:.2f}" for e in ev))
+    mats = g.json.get("materials", [])
+    W = _rest_world(g)
+    for fx, parent in spec["fx"].items():
+        if not r.check(fx in g.names, f"{label}: effect node {fx} missing"):
+            continue
+        i = g.names[fx]
+        r.check(g.nodes[g.parent[i]]["name"] == parent, f"{label}: {fx} must hang under {parent}")
+        if "mesh" not in g.nodes[i]:
+            continue
+        r.check(abs(np.linalg.det(W[i][:3, :3])) < 1e-12, f"{label}: {fx} must be collapsed (scale 0) at rest")
+        for p in g.mesh_primitives(g.nodes[i]["mesh"]):
+            m = mats[p["material"]]
+            r.check(m.get("alphaMode") == "ADD" and m.get("extras", {}).get("region") == "none",
+                    f"{label}: {fx} material {m.get('name')} must be additive and of region none")
+        for a in g.json.get("animations", []):                 # only the skin's clips show them
+            if a["name"] in spec["clips"]:
+                continue
+            for t in np.linspace(0, g.duration(a), 9):
+                M = g.world_matrices(g.sample(a, t))[i]
+                if abs(np.linalg.det(M[:3, :3])) > 1e-12:
+                    r.check(False, f"{label}: {fx} shows in {a['name']}")
+                    break
+    clip, event, tip_joint, mark, reach = spec["touch"]
+    a = g.animation(clip)
+    if a is not None and tip_joint in g.names and mark in g.names:
+        t0 = next(e["time"] for e in a["extras"]["events"] if e["name"] == event)
+        import hands
+        tip_len = hands.LENGTHS["index"][1]
+        worst = 0.0
+        for t in np.linspace(t0, t0 + 0.12, 5):
+            W = g.world_matrices(g.sample(a, t))
+            tip = W[g.names[tip_joint]] @ np.array([0.0, -tip_len, 0.0, 1.0])
+            worst = max(worst, float(np.linalg.norm(tip[:3] - W[g.names[mark]][:3, 3])))
+        r.check(worst <= reach, f"{label}: in {clip} the fingertip misses {mark} by {worst:.4f} m at the touch")
+        r.note(f"{clip}: fingertip within {worst * 1000:.1f} mm of {mark} at {event}")
+    clip, event = spec["caught"]
+    a = g.animation(clip)
+    if a is not None:
+        t0 = next(e["time"] for e in a["extras"]["events"] if e["name"] == event)
+        worst = 0.0
+        for t in np.linspace(t0 + 0.05, g.duration(a), 13):
+            W = g.world_matrices(g.sample(a, t))
+            for side, gun in (("R", "gun"), ("L", "gun_L")):
+                worst = max(worst, float(np.linalg.norm(W[g.names[f"arm_{side}_hand"]][:3, 3] - W[g.names[gun]][:3, 3])))
+        r.check(worst <= HAND_REACH, f"{label}: after {event} in {clip} a hand is off its gun ({worst:.3f} m)")
+
+
 def check_slides(g, r, label, anims):
     """Both slides blow back in their shot clips and stay back at the end of fire_last / fire_last_L."""
     for clip, slide in (("fire", "slide"), ("fire_L", "slide_L"), ("fire_last", "slide"), ("fire_last_L", "slide_L")):
@@ -225,6 +313,7 @@ def check(path, arms, r):
     check_nodes(g, r, label)
     check_materials(g, r, label, name)
     anims = check_animations(g, r, label)
+    check_skin(g, r, label, name)
     check_slides(g, r, label, anims)
     check_hands(g, r, label, anims)
     cg.check_hand_joints(g, r, label)

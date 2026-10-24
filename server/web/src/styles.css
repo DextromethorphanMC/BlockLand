@@ -287,4 +287,7 @@ a.stat:hover { border-color: var(--accent); }
 
 /* limited-time modes (限时开放); after .badge so these colours win */
 .badge-limited { background: rgba(245, 166, 35, 0.12); border-color: rgba(245, 166, 35, 0.45); color: var(--accent); }
+.badge-ranked { background: rgba(255, 77, 77, 0.12); border-color: rgba(255, 77, 77, 0.45); color: #ff7a7a; }
+.inventory-list { display: flex; flex-direction: column; gap: 6px; }
+.inventory-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
 .badge-ended { background: var(--bg); border-color: var(--line); color: var(--muted); }

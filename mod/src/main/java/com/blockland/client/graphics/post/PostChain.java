@@ -1,0 +1,193 @@
+package com.blockland.client.graphics.post;
+
+import com.blockland.client.graphics.GraphicsSettings;
+import com.blockland.client.graphics.WorldEffects;
+import com.blockland.client.graphics.frame.FrameContext;
+import com.blockland.client.graphics.gpu.Fullscreen;
+import com.blockland.client.graphics.gpu.RenderTexture;
+import com.blockland.client.graphics.gpu.Ubo;
+import com.blockland.client.graphics.upscale.Upscaler;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.blaze3d.textures.GpuTextureView;
+import org.joml.Matrix4f;
+
+import javax.annotation.Nullable;
+
+/**
+ * The HDR post chain (rendering spec §1, §3, §4), run once per frame between the hand phase and the HUD:
+ * <ol>
+ *   <li>decode — the scene's display colours to linear HDR, emission (main-target alpha) boosted, the world's ambient
+ *   occlusion (or the ray traced light and occlusion) and volumetric light folded in (internal resolution);</li>
+ *   <li>the upscaler — TAA / TAAU to the output resolution (or nothing at native resolution);</li>
+ *   <li>relighting — DLSS 5 neural rendering on the upscaled picture, when it is on ({@link Relight});</li>
+ *   <li>motion blur — a real shutter: the camera's and the entities' motion, the weapon's own ({@link MotionBlur});</li>
+ *   <li>bloom and auto exposure — measured on that picture;</li>
+ *   <li>final — sharpening, chromatic aberration, bloom, exposure, white balance, tone mapping, grading, vignette, grain;
+ *   straight into the window's target, or through FXAA.</li>
+ * </ol>
+ * Every effect set to 0 skips its passes.
+ */
+public final class PostChain implements AutoCloseable {
+    private static final RenderPipeline DECODE = Fullscreen.pipeline("gfx_decode")
+            .withSampler("SceneSampler").withSampler("WorldDepthSampler").withSampler("HandDepthSampler")
+            .withSampler("AoSampler").withSampler("VolumetricSampler").withSampler("RayTracedSampler")
+            .build();
+    private static final RenderPipeline FINAL = Fullscreen.pipeline("gfx_final")
+            .withSampler("ColorSampler").withSampler("BloomSampler").withSampler("ExposureSampler")
+            .build();
+    private static final RenderPipeline FXAA = Fullscreen.pipeline("gfx_fxaa").withSampler("InSampler").build();
+    private static final RenderPipeline COPY = Fullscreen.pipeline("gfx_copy").withSampler("InSampler").build();
+    private static final Matrix4f NONE = new Matrix4f();
+    /** HDR multiplier added at full emission (times the emission setting). */
+    private static final float EMISSION_BOOST = 2.5f;
+    /** Bloom added at the bloom setting's full strength (the chain sums six levels). */
+    private static final float BLOOM_STRENGTH = 0.18f;
+    /**
+     * Auto exposure: how much of the measured difference to correct, its range in EV and the mean (log) luminance it aims
+     * at — that of an ordinary Minecraft day, so daylight stays exactly as vanilla draws it.
+     */
+    private static final float EXPOSURE_STRENGTH = 0.4f, EXPOSURE_MIN = -0.5f, EXPOSURE_MAX = 0.4f, EXPOSURE_KEY = 0.15f;
+
+    private final RenderTexture hdr = new RenderTexture("BlockLand HDR", RenderTexture.Format.RGBA16F, FilterMode.LINEAR);
+    private final RenderTexture ldr = new RenderTexture("BlockLand LDR", RenderTexture.Format.RGBA8, FilterMode.LINEAR);
+    private final RenderTexture black = new RenderTexture("BlockLand black", RenderTexture.Format.RGBA16F, FilterMode.NEAREST);
+    private final Bloom bloom = new Bloom();
+    private final Exposure exposure = new Exposure();
+    private final MotionBlur motionBlur = new MotionBlur();
+    private final Ubo decodeUbo = Ubo.pass("decode");
+    private final Ubo finalUbo = Ubo.pass("final");
+    private final Ubo fxaaUbo = Ubo.pass("FXAA");
+    private int frameSeed;
+
+    /**
+     * Everything one run needs.
+     *
+     * @param scene        the scene target's colour (internal resolution; alpha = emission)
+     * @param handDepth    the scene's depth after the hand phase (&lt; 1 where the hand / viewmodel is)
+     * @param worldDepth   the world's depth from after the level, or null (then the hand depth stands in)
+     * @param reprojection current unjittered NDC → previous clip
+     * @param historyValid the camera did not cut since the last frame
+     * @param emissionEncoded the lighting pack wrote emission into the opaque pixels' alpha this frame (else the alpha
+     *                        is whatever textures had and means nothing)
+     * @param output       the window's colour target
+     * @param seconds      time since the last frame
+     */
+    public record Inputs(FrameContext frame, GpuTextureView scene, GpuTextureView handDepth, @Nullable GpuTextureView worldDepth,
+                         Matrix4f reprojection, boolean historyValid, Upscaler upscaler, boolean fxaa, boolean emissionEncoded,
+                         GraphicsSettings settings, WorldEffects effects, GpuTextureView output, float seconds,
+                         @Nullable Relight relight) {
+    }
+
+    /** A stage on the upscaled linear-HDR picture before motion blur and bloom (DLSS 5 neural rendering). */
+    public interface Relight {
+        /** The relit picture, or {@code color} itself when nothing was done ({@code sceneDepth}: with the hand in it). */
+        GpuTextureView apply(Upscaler.Frame frame, GpuTextureView color, GpuTextureView sceneDepth);
+    }
+
+    public void run(Inputs in) {
+        FrameContext ctx = in.frame();
+        GraphicsSettings s = in.settings();
+        int outW = ctx.outputWidth, outH = ctx.outputHeight;
+        GpuTextureView worldDepth = in.worldDepth() != null ? in.worldDepth() : in.handDepth();
+        GpuTextureView none = black();
+
+        // 1. decode
+        hdr.ensure(ctx.internalWidth, ctx.internalHeight);
+        GpuTextureView ao = s.ambientOcclusion > 0.001f ? in.effects().ambientOcclusion() : null;
+        GpuTextureView volumetric = s.volumetricLight > 0.001f ? in.effects().volumetricLight() : null;
+        GpuTextureView traced = in.effects().rayTraced();
+        decodeUbo.pass(NONE, EMISSION_BOOST * s.emission, s.ambientOcclusion, ao != null ? 1 : 0, volumetric != null ? 1 : 0,
+                in.emissionEncoded() ? 1 : 0, traced != null ? 1 : 0);
+        Fullscreen.pass("BlockLand post: decode", hdr.view(), DECODE)
+                .sampler("SceneSampler", in.scene())
+                .sampler("WorldDepthSampler", worldDepth)
+                .sampler("HandDepthSampler", in.handDepth())
+                .sampler("AoSampler", ao != null ? ao : none)
+                .sampler("VolumetricSampler", volumetric != null ? volumetric : none)
+                .sampler("RayTracedSampler", traced != null ? traced : none)
+                .uniform(decodeUbo)
+                .draw();
+
+        // 2. anti-aliasing / upscaling
+        Upscaler.Frame resolve = new Upscaler.Frame(ctx, hdr.view(), in.worldDepth(), in.reprojection(), in.historyValid());
+        GpuTextureView color = in.upscaler().resolve(resolve);
+        if (in.relight() != null) color = in.relight().apply(resolve, color, in.handDepth());
+
+        // 3. motion blur: the shutter's exposure, the same at any frame rate; the world (camera and entities) and the
+        // first-person weapon and arms each by their own shutter
+        if (in.worldDepth() != null && in.historyValid() && in.seconds() > 0) {
+            color = motionBlur.apply(ctx, s, color, in.worldDepth(), in.seconds(), none);
+        } else {
+            motionBlur.invalidate();
+        }
+
+        // 4. bloom and exposure, measured on that picture
+        GpuTextureView bloomView = s.bloom > 0.001f ? bloom.render(color, outW, outH) : none;
+        GpuTextureView exposureView = none;
+        if (s.autoExposure) exposureView = exposure.render(color, outW, outH, in.seconds());
+        else exposure.invalidate();
+
+        // 5. final
+        frameSeed = (frameSeed + 1) & 1023;
+        finalUbo.pass(NONE,
+                1f / outW, 1f / outH, ("dlss".equals(in.upscaler().id()) ? s.dlssSharpness : s.sharpness), s.chromaticAberration,
+                BLOOM_STRENGTH * s.bloom, s.autoExposure ? 1 : 0, (float) Math.pow(2, s.exposure), s.tonemapMode().ordinal(),
+                s.saturation, s.contrast, s.temperature, s.vignette,
+                s.filmGrain, frameSeed, in.fxaa() ? 1 : 0, outW / (float) Math.max(1, outH),
+                EXPOSURE_STRENGTH, EXPOSURE_MIN, EXPOSURE_MAX, EXPOSURE_KEY);
+        GpuTextureView finalTarget = in.output();
+        if (in.fxaa()) {
+            ldr.ensure(outW, outH);
+            finalTarget = ldr.view();
+        }
+        Fullscreen.pass("BlockLand post: final", finalTarget, FINAL)
+                .sampler("ColorSampler", color)
+                .sampler("BloomSampler", bloomView)
+                .sampler("ExposureSampler", exposureView)
+                .uniform(finalUbo)
+                .draw();
+        if (in.fxaa()) {
+            fxaaUbo.pass(NONE, 1f / outW, 1f / outH);
+            Fullscreen.pass("BlockLand post: FXAA", in.output(), FXAA).sampler("InSampler", ldr.view()).uniform(fxaaUbo).draw();
+        }
+    }
+
+    /**
+     * The last run's decoded linear-HDR colour at the internal resolution (alpha 1 on hand / viewmodel pixels), or null
+     * before the first run; Frame Generation draws its depth and motion inputs from it at the end of the frame.
+     */
+    @Nullable
+    public GpuTextureView decoded() {
+        return hdr.exists() ? hdr.view() : null;
+    }
+
+    /** The scene stretched onto the output as it is (when the chain cannot run this frame). */
+    public static void copy(GpuTextureView from, GpuTextureView to) {
+        Fullscreen.pass("BlockLand post: copy", to, COPY).sampler("InSampler", from).draw();
+    }
+
+    /** Forgets the time-based state (exposure); the upscaler's history is the caller's. */
+    public void invalidate() {
+        exposure.invalidate();
+    }
+
+    private GpuTextureView black() {
+        if (black.ensure(1, 1)) RenderSystem.getDevice().createCommandEncoder().clearColorTexture(black.texture(), 0);
+        return black.view();
+    }
+
+    @Override
+    public void close() {
+        hdr.close();
+        motionBlur.close();
+        ldr.close();
+        black.close();
+        bloom.close();
+        exposure.close();
+        decodeUbo.close();
+        finalUbo.close();
+        fxaaUbo.close();
+    }
+}

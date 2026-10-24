@@ -11,8 +11,6 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -24,7 +22,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A glTF model resident on the GPU: every mesh of the file is packed into ONE vertex buffer and ONE index
@@ -37,7 +34,6 @@ public final class GpuModel implements AutoCloseable {
     private static final float[] WHITE = {1, 1, 1, 1};
     private static final float[] NO_EFFECT_COLOR = {1, 1, 1};
     private static final Vector3fc ZERO = new Vector3f();
-    private static final AtomicInteger SERIAL = new AtomicInteger();
 
     public final GltfModel source;
     private final GpuBuffer vertices;
@@ -46,9 +42,6 @@ public final class GpuModel implements AutoCloseable {
     private final List<List<Part>> meshParts = new ArrayList<>();
     private final GpuTexture[] textures;
     private final GpuTextureView[] views;
-    /** Embedded images registered with the TextureManager for the vanilla (shader-pack) path, on first use. */
-    private final ResourceLocation[] vanillaImages;
-    private final int serial = SERIAL.incrementAndGet();
     /** Rest-pose position of every node's origin in model space (effects run in model space). */
     @Nullable
     private Vector3f[] restOrigins;
@@ -93,6 +86,14 @@ public final class GpuModel implements AutoCloseable {
         /** Whether a material is not drawn at all (another pass draws it in its own way, e.g. a reflex sight's glass). */
         default boolean hidden(String material) {
             return false;
+        }
+
+        /**
+         * How far the skin's shader effects are surging this frame, 0..1 (asset spec §38: a special skin's inspect or
+         * kill sets them ablaze); 0 = the effects at rest. Only layers with an effect read it.
+         */
+        default float surge() {
+            return 0;
         }
     }
 
@@ -139,7 +140,6 @@ public final class GpuModel implements AutoCloseable {
 
         textures = new GpuTexture[source.images.size()];
         views = new GpuTextureView[source.images.size()];
-        vanillaImages = new ResourceLocation[source.images.size()];
         for (int i = 0; i < textures.length; i++) {
             try (NativeImage image = NativeImage.read(source.images.get(i))) {
                 textures[i] = texture(label + " image " + i, image, true);
@@ -288,7 +288,6 @@ public final class GpuModel implements AutoCloseable {
                 id = set.albedoLocation();
             } else if (material != null && material.image >= 0 && material.image < views.length && views[material.image] != null) {
                 albedo = views[material.image];
-                if (ShaderPacks.active()) id = vanillaImage(material.image);
             } else {
                 albedo = Textures.white();
             }
@@ -312,38 +311,26 @@ public final class GpuModel implements AutoCloseable {
             else if (material != null && material.doubleSided) pipeline = GunPipelines.OPAQUE_NO_CULL;
             else pipeline = GunPipelines.OPAQUE;
             list.add(pipeline, vertices, indices, indexType, part.firstIndex, part.indexCount, modelView, color,
-                    blockLight, skyLight, material(material, emissive, uvScale, layer), origin, albedo, normal, specular,
+                    blockLight, skyLight, material(material, emissive, uvScale, layer, style.surge()), origin, albedo, normal, specular,
                     part.primitive, id, managed);
         }
     }
 
-    /** The shader parameters of a material, with a skin layer's effect. */
+    /** The shader parameters of a material, with a skin layer's effect (and how far it surges this frame). */
     private static DrawList.Material material(@Nullable GltfModel.Material material, boolean emissive, float uvScale,
-                                              @Nullable MaterialLayer layer) {
+                                              @Nullable MaterialLayer layer, float surge) {
         float cutoff = material != null && "MASK".equals(material.alphaMode) ? material.alphaCutoff : 0;
         if (material == null) return DrawList.Material.MATTE;
         int effect = layer == null ? MaterialLayer.NONE : layer.effect();
         float[] params = layer == null ? new float[4] : layer.params();
         float[] effectColor = layer != null && layer.effectColor() != null ? layer.effectColor() : NO_EFFECT_COLOR;
         return new DrawList.Material(Math.max(0, Math.min(1, material.metallic)), Math.max(0, Math.min(1, material.roughness)),
-                cutoff, uvScale, emissive, effect, params, effectColor);
+                cutoff, uvScale, emissive, effect, params, effectColor, effect == MaterialLayer.NONE ? 0 : surge);
     }
 
-    /** The embedded image's id in the TextureManager (registered on first use, for the shader-pack path). */
-    @Nullable
-    private ResourceLocation vanillaImage(int image) {
-        if (vanillaImages[image] != null) return vanillaImages[image];
-        try {
-            NativeImage pixels = NativeImage.read(source.images.get(image));
-            ResourceLocation id = BlockLand.id("dynamic/model_" + serial + "/" + image);
-            DynamicTexture texture = new DynamicTexture(id::toString, pixels);
-            texture.setFilter(true, false);
-            Minecraft.getInstance().getTextureManager().register(id, texture);
-            vanillaImages[image] = id;
-            return id;
-        } catch (Exception e) {
-            return null;
-        }
+    /** Freed by {@link #close} (a resource reload clears {@link ModelCache}); holders must not draw it any more. */
+    public boolean isClosed() {
+        return vertices.isClosed();
     }
 
     @Override
@@ -353,7 +340,6 @@ public final class GpuModel implements AutoCloseable {
         for (int i = 0; i < textures.length; i++) {
             if (views[i] != null) views[i].close();
             if (textures[i] != null) textures[i].close();
-            if (vanillaImages[i] != null) Minecraft.getInstance().getTextureManager().release(vanillaImages[i]);
         }
     }
 }

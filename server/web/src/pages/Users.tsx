@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { api } from '../api'
 import { Empty, ErrorBox, Field, Modal, NumberInput, PageHeader, useLoad, useToast } from '../components/ui'
-import type { PlayerAccount } from '../types'
+import { TierBadge, categoryLabel, expiryText } from '../components/Ranks'
+import type { Entitlement, InventoryItem, PlayerAccount, RankedLeaderEntry } from '../types'
 
 export function formatPlaytime(seconds: number) {
   const h = Math.floor(seconds / 3600)
@@ -14,13 +15,22 @@ export function formatTime(iso: string | null | undefined) {
   return new Date(iso).toLocaleString('zh-CN', { hour12: false })
 }
 
-type Action = { kind: 'ban' | 'mute' | 'grant'; user: PlayerAccount }
+type Action = { kind: 'ban' | 'mute' | 'grant' | 'detail'; user: PlayerAccount }
+
+/** An entitlement as the inventory shows it: the registry's name when the game server published the key. */
+function itemName(e: Pick<Entitlement, 'key'>, registry: Map<string, InventoryItem>) {
+  return registry.get(e.key.toLowerCase())?.name ?? e.key
+}
 
 export function Users() {
   const toast = useToast()
   const [query, setQuery] = useState('')
   const [debounced, setDebounced] = useState('')
   const users = useLoad(() => api.users(debounced), [debounced])
+  const registryLoad = useLoad(api.inventoryRegistry)
+  const ladder = useLoad(() => api.rankedLeaderboard(500))
+  const registry = new Map((registryLoad.data ?? []).map((i) => [i.key, i]))
+  const ranks = new Map((ladder.data ?? []).map((e) => [e.uuid, e]))
   const [action, setAction] = useState<Action | null>(null)
 
   useEffect(() => {
@@ -64,7 +74,8 @@ export function Users() {
               <th>总在线时间</th>
               <th>最后在线</th>
               <th>状态</th>
-              <th>权益</th>
+              <th>排位</th>
+              <th>库存 / 权益</th>
               <th />
             </tr>
           </thead>
@@ -100,15 +111,17 @@ export function Users() {
                   )}
                 </td>
                 <td>
+                  <RankCell entry={ranks.get(u.uuid)} />
+                </td>
+                <td>
                   <div className="badges">
-                    {u.entitlements.map((e) => (
-                      <span key={e.key} className="badge" title={`来源: ${e.source}`}>
-                        {e.key} · {e.until ? `至 ${new Date(e.until).toLocaleDateString('zh-CN')}` : '永久'}
-                        <button className="badge-x" aria-label="收回" onClick={() => run(api.revoke(u.uuid, e.key), `已收回 ${e.key}`)}>
-                          ×
-                        </button>
+                    {u.entitlements.slice(0, 4).map((e) => (
+                      <span key={e.key} className="badge" title={`${e.key} · 来源: ${e.source}`}>
+                        {itemName(e, registry)} · {e.until ? `至 ${new Date(e.until).toLocaleDateString('zh-CN')}` : '永久'}
                       </span>
                     ))}
+                    {u.entitlements.length > 4 && <span className="badge">+{u.entitlements.length - 4}</span>}
+                    {u.entitlements.length === 0 && <span className="muted small">无</span>}
                   </div>
                 </td>
                 <td className="row end">
@@ -130,8 +143,11 @@ export function Users() {
                       禁言
                     </button>
                   )}
+                  <button className="btn" onClick={() => setAction({ kind: 'detail', user: u })}>
+                    库存 / 排位
+                  </button>
                   <button className="btn" onClick={() => setAction({ kind: 'grant', user: u })}>
-                    授予权益
+                    授予物品
                   </button>
                 </td>
               </tr>
@@ -140,9 +156,22 @@ export function Users() {
         </table>
       )}
       {action?.kind === 'grant' && (
-        <GrantDialog user={action.user} onClose={() => setAction(null)} onDone={(p) => run(p, '已授予').then(() => setAction(null))} />
+        <GrantDialog
+          user={action.user}
+          items={registryLoad.data ?? []}
+          onClose={() => setAction(null)}
+          onDone={(p) => run(p, '已授予').then(() => setAction(null))}
+        />
       )}
-      {action && action.kind !== 'grant' && (
+      {action?.kind === 'detail' && (
+        <DetailDialog
+          user={users.data?.find((u) => u.uuid === action.user.uuid) ?? action.user}
+          registry={registry}
+          onClose={() => setAction(null)}
+          onRevoke={(key) => run(api.revoke(action.user.uuid, key), `已收回 ${itemName({ key }, registry)}`)}
+        />
+      )}
+      {action && (action.kind === 'ban' || action.kind === 'mute') && (
         <RestrictionDialog
           kind={action.kind}
           user={action.user}
@@ -218,30 +247,187 @@ function RestrictionDialog({
   )
 }
 
-function GrantDialog({ user, onClose, onDone }: { user: PlayerAccount; onClose: () => void; onDone: (p: Promise<unknown>) => void }) {
-  const products = useLoad(api.products)
-  const [key, setKey] = useState('PRIORITY_QUEUE')
-  const [days, setDays] = useState(30)
-  const keys = [...new Set(['PRIORITY_QUEUE', ...(products.data ?? []).map((p) => p.entitlement)])]
+function RankCell({ entry }: { entry: RankedLeaderEntry | undefined }) {
+  if (!entry) return <span className="muted small">未定级</span>
   return (
-    <Modal title={`授予权益 · ${user.name}`} onClose={onClose}>
+    <div className="row">
+      <TierBadge tier={entry.tier} />
+      <span className="small">
+        {entry.score} 分 · 第 {entry.position} 名
+      </span>
+    </div>
+  )
+}
+
+/** The player's inventory (owned items with their end), what they put on, and their ranked record. */
+function DetailDialog({
+  user,
+  registry,
+  onClose,
+  onRevoke,
+}: {
+  user: PlayerAccount
+  registry: Map<string, InventoryItem>
+  onClose: () => void
+  onRevoke: (key: string) => void
+}) {
+  const rank = useLoad(() => api.rankedPlayer(user.uuid), [user.uuid])
+  const groups = new Map<string, Entitlement[]>()
+  for (const e of user.entitlements) {
+    const label = categoryLabel(registry.get(e.key.toLowerCase()) ?? { key: e.key })
+    groups.set(label, [...(groups.get(label) ?? []), e])
+  }
+  const cosmetics = Object.entries(user.preferences?.cosmetics ?? {})
+  const r = rank.data
+  return (
+    <Modal title={`${user.name} · 库存与排位`} onClose={onClose} wide>
+      <div className="grid-2">
+        <section>
+          <h3>库存</h3>
+          {user.entitlements.length === 0 && <p className="muted small">没有拥有的物品或权益（免费物品不在此列出）。</p>}
+          {[...groups.entries()].map(([label, list]) => (
+            <div key={label} className="field">
+              <span className="field-label">{label}</span>
+              <div className="inventory-list">
+                {list.map((e) => (
+                  <div key={e.key} className="inventory-row">
+                    <div>
+                      <strong>{itemName(e, registry)}</strong>
+                      <div className="small muted">
+                        <code>{e.key}</code> · 来源 {e.source} · {expiryText(e.until)}
+                      </div>
+                    </div>
+                    <button className="btn btn-ghost" onClick={() => onRevoke(e.key)}>
+                      收回
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          <h3>已装扮</h3>
+          {cosmetics.length === 0 ? (
+            <p className="muted small">未装扮（使用默认名片与喷漆）。</p>
+          ) : (
+            <div className="badges">
+              {cosmetics.map(([slot, key]) => (
+                <span key={slot} className="badge" title={key}>
+                  {slot} · {registry.get(key)?.name ?? key}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+        <section>
+          <h3>排位</h3>
+          <ErrorBox error={rank.error} />
+          {r && (
+            <>
+              <div className="row">
+                <TierBadge tier={r.standing.tier} />
+                <strong>{r.standing.score} 分</strong>
+                <span className="muted small">{r.standing.position > 0 ? `全服第 ${r.standing.position} 名` : '未定级'}</span>
+              </div>
+              <p className="small">
+                {r.standing.matches} 场 · {r.standing.wins} 胜 {r.losses} 负 {r.draws} 平
+              </p>
+              {r.seasons.length > 0 && (
+                <table className="table table-compact">
+                  <thead>
+                    <tr>
+                      <th>赛季</th>
+                      <th>最终分数</th>
+                      <th>段位</th>
+                      <th>排名</th>
+                      <th>场次</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.seasons.map((end) => (
+                      <tr key={end.season}>
+                        <td>第 {end.season} 赛季</td>
+                        <td>{end.score}</td>
+                        <td>
+                          <TierBadge tier={end.tier} />
+                        </td>
+                        <td>{end.position || '—'}</td>
+                        <td>{end.matches}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          )}
+        </section>
+      </div>
+    </Modal>
+  )
+}
+
+const OTHER = '__other__'
+
+/** Grants an item from the game server's inventory registry (or any other entitlement key) for N days, 0 = permanent. */
+function GrantDialog({
+  user,
+  items,
+  onClose,
+  onDone,
+}: {
+  user: PlayerAccount
+  items: InventoryItem[]
+  onClose: () => void
+  onDone: (p: Promise<unknown>) => void
+}) {
+  const products = useLoad(api.products)
+  const ownable = items.filter((i) => !i.free)
+  const [pick, setPick] = useState(ownable[0]?.key ?? OTHER)
+  const [custom, setCustom] = useState('PRIORITY_QUEUE')
+  const [days, setDays] = useState(0)
+  const otherKeys = [...new Set(['PRIORITY_QUEUE', ...(products.data ?? []).map((p) => p.entitlement)])].filter(
+    (k) => !items.some((i) => i.key === k.toLowerCase()),
+  )
+  const byCategory = new Map<string, InventoryItem[]>()
+  for (const i of ownable) byCategory.set(categoryLabel(i), [...(byCategory.get(categoryLabel(i)) ?? []), i])
+  const key = pick === OTHER ? custom.trim() : pick
+  return (
+    <Modal title={`授予物品 · ${user.name}`} onClose={onClose}>
       <form
         className="form"
         onSubmit={(e) => {
           e.preventDefault()
-          onDone(api.grant(user.uuid, key, days > 0 ? days : null))
+          if (key) onDone(api.grant(user.uuid, key, days > 0 ? days : 0))
         }}
       >
         <datalist id="entitlement-keys">
-          {keys.map((k) => (
+          {otherKeys.map((k) => (
             <option key={k} value={k} />
           ))}
         </datalist>
+        <Field
+          label="物品"
+          hint={items.length === 0 ? '游戏服务器尚未上报可拥有的物品（启动一次游戏服务器后出现）' : '免费物品所有玩家默认拥有，不在此列出'}
+        >
+          <select value={pick} onChange={(e) => setPick(e.target.value)}>
+            {[...byCategory.entries()].map(([label, list]) => (
+              <optgroup key={label} label={label}>
+                {list.map((i) => (
+                  <option key={i.key} value={i.key}>
+                    {i.name}（{i.key}）
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+            <option value={OTHER}>其他权益（手动输入）</option>
+          </select>
+        </Field>
         <div className="grid-2">
-          <Field label="权益标识" hint="如 PRIORITY_QUEUE（优先匹配排队）">
-            <input list="entitlement-keys" value={key} onChange={(e) => setKey(e.target.value.toUpperCase())} />
-          </Field>
-          <Field label="天数" hint="0 = 永久；已有未过期的同名权益会顺延">
+          {pick === OTHER && (
+            <Field label="权益标识" hint="如 PRIORITY_QUEUE（优先匹配排队）">
+              <input list="entitlement-keys" value={custom} onChange={(e) => setCustom(e.target.value)} />
+            </Field>
+          )}
+          <Field label="有效天数" hint="0 = 永久；已有未过期的同一物品会顺延">
             <NumberInput value={days} min={0} onChange={setDays} />
           </Field>
         </div>
@@ -249,7 +435,9 @@ function GrantDialog({ user, onClose, onDone }: { user: PlayerAccount; onClose: 
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             取消
           </button>
-          <button className="btn btn-primary">授予</button>
+          <button className="btn btn-primary" disabled={!key}>
+            授予
+          </button>
         </div>
       </form>
     </Modal>

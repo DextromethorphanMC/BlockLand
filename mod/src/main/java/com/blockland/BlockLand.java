@@ -1,5 +1,6 @@
 package com.blockland;
 
+import com.blockland.bomb.BombContent;
 import com.blockland.client.BlockLandClient;
 import com.blockland.effect.BLEffects;
 import com.blockland.entity.BLEntities;
@@ -7,6 +8,7 @@ import com.blockland.gun.GunContent;
 import com.blockland.melee.MeleeContent;
 import com.blockland.equipment.EquipmentContent;
 import com.blockland.network.BLNetwork;
+import com.blockland.parachute.ParachuteContent;
 import com.blockland.server.BlockLandServer;
 import com.blockland.server.config.BlockLandConfig;
 import com.mojang.logging.LogUtils;
@@ -32,6 +34,9 @@ public final class BlockLand {
         GunContent.register(context.getModBusGroup());
         MeleeContent.register(context.getModBusGroup());
         EquipmentContent.register(context.getModBusGroup());
+        BombContent.register(context.getModBusGroup());
+        ParachuteContent.register(context.getModBusGroup());
+        com.blockland.battleroyale.BattleRoyaleContent.register(context.getModBusGroup());
         BLEffects.register(context.getModBusGroup());
         BLEntities.register(context.getModBusGroup());
         BLNetwork.init();

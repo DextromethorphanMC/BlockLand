@@ -1,4 +1,19 @@
-import type { Announcement, GameMap, GameMode, GameType, ModeGroup, Order, Overview, PlayerAccount, Product, TopView } from './types'
+import type {
+  Announcement,
+  GameMap,
+  GameMode,
+  GameType,
+  InventoryItem,
+  ModeGroup,
+  Order,
+  Overview,
+  PlayerAccount,
+  Product,
+  RankedConfig,
+  RankedLeaderEntry,
+  RankedPlayer,
+  TopView,
+} from './types'
 
 const TOKEN_KEY = 'blockland.adminToken'
 
@@ -83,6 +98,8 @@ export const api = {
   deleteAnnouncement: (id: string) => request<void>(`/api/admin/announcements/${id}`, { method: 'DELETE' }),
 
   itemRegistry: () => request<string[]>('/api/admin/registry/items'),
+  /** Everything players can own, as the game server published it (empty until a server started). */
+  inventoryRegistry: () => request<InventoryItem[]>('/api/admin/registry/inventory'),
   /** What the game server published for a game type (e.g. 枪战感染 monsters); {} until then. */
   gameTypeRegistry: (type: string) => request<Record<string, unknown>>(`/api/admin/registry/game-types/${type}`),
 
@@ -104,6 +121,12 @@ export const api = {
   deleteProduct: (id: string) => request<void>(`/api/admin/shop/products/${id}`, { method: 'DELETE' }),
   uploadProductImage: (id: string, file: File) => upload<Product>(`/api/admin/shop/products/${id}/image`, file),
   orders: () => request<Order[]>('/api/admin/shop/orders'),
+
+  rankedConfig: () => request<RankedConfig>('/api/admin/ranked/config'),
+  saveRankedConfig: (c: RankedConfig) => request<RankedConfig>('/api/admin/ranked/config', { method: 'PUT', body: json(c) }),
+  resetRankedSeason: () => request<RankedConfig>('/api/admin/ranked/reset', { method: 'POST' }),
+  rankedLeaderboard: (limit = 100) => request<RankedLeaderEntry[]>(`/api/admin/ranked/leaderboard?limit=${limit}`),
+  rankedPlayer: (uuid: string) => request<RankedPlayer>(`/api/admin/ranked/players/${uuid}`),
 }
 
 export interface AnnouncementInput {

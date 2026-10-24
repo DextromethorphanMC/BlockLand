@@ -1,10 +1,12 @@
 package com.blockland.backend.player;
 
 import com.blockland.backend.common.ApiException;
+import com.blockland.backend.registry.InventoryRegistryService;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -79,9 +81,11 @@ public final class PlayerControllers {
     @RequestMapping("/api/server/players")
     public static class Server {
         private final PlayerService players;
+        private final InventoryRegistryService registry;
 
-        public Server(PlayerService players) {
+        public Server(PlayerService players, InventoryRegistryService registry) {
             this.players = players;
+            this.registry = registry;
         }
 
         public record LoginRequest(String uuid, String name) {
@@ -118,6 +122,23 @@ public final class PlayerControllers {
         public PlayerService.PlayerStatus settings(@PathVariable String uuid, @RequestBody SettingsRequest request) {
             if (request.allowPartyInvites() == null) throw ApiException.badRequest("缺少 allowPartyInvites");
             return players.setAllowPartyInvites(uuid, request.allowPartyInvites());
+        }
+
+        /** @param key null empties the slot */
+        public record CosmeticRequest(String slot, String key) {
+        }
+
+        /** What the player put on (name card, graffiti), slot → item key. */
+        @GetMapping("/{uuid}/cosmetics")
+        public PlayerService.Cosmetics cosmetics(@PathVariable String uuid) {
+            return players.cosmetics(uuid);
+        }
+
+        /** The player put an item on (or took it off) in the lobby's inventory; it must be owned or published as free. */
+        @PutMapping("/{uuid}/cosmetics")
+        public PlayerService.Cosmetics setCosmetic(@PathVariable String uuid, @RequestBody CosmeticRequest request) {
+            if (request == null) throw ApiException.badRequest("缺少 slot");
+            return players.setCosmetic(uuid, request.slot(), request.key(), request.key() != null && registry.isFree(request.key()));
         }
 
         /** The player saved a weapon build in the 工匠 screen (already validated against the weapon by the game server). */

@@ -102,6 +102,7 @@ function MapEditorBody({ initial }: { initial: GameMap }) {
             view={preview.data}
             map={overlay.hideTeamSpawns ? { ...map, teamSpawns: [] } : map}
             markers={overlay.markers}
+            regions={overlay.regions}
             selected={selected}
             onMarkerClick={toggleMarker}
           />

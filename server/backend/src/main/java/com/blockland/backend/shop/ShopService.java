@@ -28,6 +28,8 @@ public class ShopService {
     /** Images are converted to PNG and scaled down so they can be sent to game clients. */
     private static final int MAX_IMAGE_SIZE = 256;
     private static final Pattern ENTITLEMENT = Pattern.compile("^[A-Z0-9_]{2,40}$");
+    /** An inventory item ({@code graffiti:smile}) is an entitlement too. */
+    private static final Pattern ITEM = Pattern.compile("^[a-z0-9_]{1,32}:[a-z0-9_./-]{1,64}$");
 
     private final Repository<Product> products;
     private final Repository<Order> orders;
@@ -95,7 +97,7 @@ public class ShopService {
         PlayerService.PlayerStatus status = players.status(playerUuid).orElse(null);
         if (status == null) return new PurchaseResult(false, "玩家不存在", null);
         boolean ownsForever = status.entitlements().stream()
-                .anyMatch(e -> e.key().equals(product.entitlement()) && e.until() == null);
+                .anyMatch(e -> e.key().equalsIgnoreCase(product.entitlement()) && e.until() == null);
         if (ownsForever) return new PurchaseResult(false, "你已永久拥有「" + product.name() + "」", null);
 
         String orderId = UUID.randomUUID().toString();
@@ -127,8 +129,10 @@ public class ShopService {
         Ids.check(id, "商品 ID", errors);
         if (request.name() == null || request.name().isBlank()) errors.add("商品名称不能为空");
         if (request.priceCents() < 0) errors.add("价格不能为负数");
-        String entitlement = request.entitlement() == null ? "" : request.entitlement().trim().toUpperCase(Locale.ROOT);
-        if (!ENTITLEMENT.matcher(entitlement).matches()) errors.add("权益标识只能包含大写字母、数字和下划线，例如 PRIORITY_QUEUE");
+        String entitlement = PlayerService.normalizeKey(request.entitlement());
+        if (!ENTITLEMENT.matcher(entitlement).matches() && !ITEM.matcher(entitlement).matches()) {
+            errors.add("权益标识只能是大写字母、数字和下划线（例如 PRIORITY_QUEUE），或库存物品标识（例如 graffiti:smile）");
+        }
         if (request.durationDays() < 0 || request.durationDays() > 3650) errors.add("有效期应在 0-3650 天之间（0 = 永久）");
         if (!errors.isEmpty()) throw ApiException.invalid(errors);
         String category = request.category() == null || request.category().isBlank() ? "其他" : request.category().trim();

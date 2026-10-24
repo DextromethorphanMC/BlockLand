@@ -2,8 +2,11 @@ import { useState, type ComponentType, type ReactElement } from 'react'
 import type { GameMap } from '../types'
 import { fastPvpUi } from './fastpvp'
 import { infectionUi } from './infection'
+import { battleRoyaleUi } from './battleroyale'
+import { bombUi } from './bomb'
 import { aimPracticeUi, bridgePracticeUi } from './practice'
 import { skyWarsUi } from './skywars'
+import { worldUi } from './world'
 
 export interface SettingsFormProps {
   settings: Record<string, unknown>
@@ -19,8 +22,20 @@ export interface MapMarker {
   color: string
 }
 
+/** An area drawn on the map editor's top-down view (e.g. a bomb site); block coordinates, both corners inclusive. */
+export interface MapRegion {
+  id: string
+  x1: number
+  z1: number
+  x2: number
+  z2: number
+  color: string
+  label: string
+}
+
 export interface MapOverlay {
   markers: MapMarker[]
+  regions?: MapRegion[]
   legend: { label: string; color: string }[]
   /** true when the type's own points replace the map's team spawns (they are then not drawn) */
   hideTeamSpawns?: boolean
@@ -59,6 +74,9 @@ const registry: Record<string, GameTypeUi> = {
   INFECTION: infectionUi,
   AIM_PRACTICE: aimPracticeUi,
   BRIDGE_PRACTICE: bridgePracticeUi,
+  BOMB: bombUi,
+  WORLD: worldUi,
+  BATTLE_ROYALE: battleRoyaleUi,
 }
 
 export function uiFor(type: string): GameTypeUi {

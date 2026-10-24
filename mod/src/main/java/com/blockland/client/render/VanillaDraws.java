@@ -18,11 +18,9 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * The shader-pack path of {@link DrawList}: with an OptiFine shader pack the pack renders the hand pass into its own
- * buffers with its own programs, so our pipeline would draw outside its lighting (or be overwritten). Here the frame's
- * triangles go through vanilla entity render types into the hand pass's buffers instead — transformed on the CPU,
- * baked AO in the vertex colour, textures bound by id so the pack finds a texture set's {@code _n} / {@code _s} next to
- * its albedo. Effects become their static textures.
+ * The vanilla-render-type path of {@link DrawList}, for the sun shadow map's entity capture ({@link ShadowPass}): the
+ * frame's triangles go through vanilla entity render types into the given buffers instead of BlockLand's pipeline —
+ * transformed on the CPU, baked AO in the vertex colour, textures bound by id (cutout edges cast the right shadow).
  */
 final class VanillaDraws {
     private static final ResourceLocation WHITE = BlockLand.id("dynamic/white");
@@ -33,7 +31,7 @@ final class VanillaDraws {
     private VanillaDraws() {
     }
 
-    static void emit(DrawList.Entry[] entries, PoseStack hand, MultiBufferSource buffers, float fovScale) {
+    static void emit(DrawList.Entry[] entries, PoseStack base, MultiBufferSource buffers) {
         for (DrawList.Entry e : entries) {
             GltfModel.Primitive source = e.source;
             if (source == null || source.indices == null || source.indices.length < 3) continue;
@@ -46,8 +44,7 @@ final class VanillaDraws {
                 case EMISSIVE -> RenderType.eyes(texture);
             };
             VertexConsumer consumer = buffers.getBuffer(type);
-            PoseStack.Pose pose = hand.last().copy();
-            pose.scale(fovScale, fovScale, 1);
+            PoseStack.Pose pose = base.last().copy();
             pose.mulPose(e.modelView);
             int light = e.blend == DrawList.Blend.OPAQUE || e.blend == DrawList.Blend.TRANSLUCENT
                     ? LightTexture.pack(e.blockLight, e.skyLight) : LightTexture.FULL_BRIGHT;

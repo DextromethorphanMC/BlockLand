@@ -52,26 +52,33 @@ public record PlayerAccount(
      * @param allowPartyInvites privacy: other players may invite this player to a party (隐私 → 允许被邀请组队)
      * @param readAnnouncements ids of the announcements the player marked as read (deleted ones are pruned)
      * @param builds            per weapon id, the 工匠 build (skin + attachments); opaque to the backend
+     * @param cosmetics         what the player put on: slot ({@code card}, {@code graffiti.1} …) → owned item key
      */
-    public record Preferences(Boolean allowPartyInvites, List<String> readAnnouncements, Map<String, WeaponBuild> builds) {
-        public static final Preferences DEFAULT = new Preferences(true, List.of(), Map.of());
+    public record Preferences(Boolean allowPartyInvites, List<String> readAnnouncements, Map<String, WeaponBuild> builds,
+                              Map<String, String> cosmetics) {
+        public static final Preferences DEFAULT = new Preferences(true, List.of(), Map.of(), Map.of());
 
         public Preferences {
             allowPartyInvites = allowPartyInvites == null || allowPartyInvites;
             readAnnouncements = readAnnouncements == null ? List.of() : List.copyOf(readAnnouncements);
             builds = builds == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(builds));
+            cosmetics = cosmetics == null ? Map.of() : Collections.unmodifiableMap(new TreeMap<>(cosmetics));
         }
 
         Preferences withAllowPartyInvites(boolean allow) {
-            return new Preferences(allow, readAnnouncements, builds);
+            return new Preferences(allow, readAnnouncements, builds, cosmetics);
         }
 
         Preferences withReadAnnouncements(List<String> ids) {
-            return new Preferences(allowPartyInvites, ids, builds);
+            return new Preferences(allowPartyInvites, ids, builds, cosmetics);
         }
 
         Preferences withBuilds(Map<String, WeaponBuild> map) {
-            return new Preferences(allowPartyInvites, readAnnouncements, map);
+            return new Preferences(allowPartyInvites, readAnnouncements, map, cosmetics);
+        }
+
+        Preferences withCosmetics(Map<String, String> map) {
+            return new Preferences(allowPartyInvites, readAnnouncements, builds, map);
         }
     }
 

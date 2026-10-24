@@ -19,14 +19,14 @@ import java.util.function.Supplier;
  * player's own profile, the tab list while in a world, otherwise the session service (offline accounts and lookup
  * failures keep the default skin of their id).
  */
-final class Skins {
+public final class Skins {
     private static final Map<UUID, Supplier<PlayerSkin>> fetched = new ConcurrentHashMap<>();
     private static Supplier<PlayerSkin> own;
 
     private Skins() {
     }
 
-    static PlayerSkin of(UUID id) {
+    public static PlayerSkin of(UUID id) {
         Minecraft mc = Minecraft.getInstance();
         if (id.equals(ClientLobbyState.selfId())) {
             if (own == null) own = mc.getSkinManager().lookupInsecure(mc.getGameProfile());

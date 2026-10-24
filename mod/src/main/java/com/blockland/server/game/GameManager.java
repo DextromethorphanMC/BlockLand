@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 /**
  * Owns all running matches and routes player events to the match a player belongs to. A match is created while its
@@ -34,11 +35,17 @@ public final class GameManager {
     private final Runnable onStateChanged;
     private final Map<UUID, GameInstance> games = new LinkedHashMap<>();
     private final Map<UUID, GameInstance> byPlayer = new HashMap<>();
+    /** Told when a player leaves a match before its result (the ranked ladder counts it as a defeat). */
+    private BiConsumer<GameInstance, UUID> onAbandon = (game, player) -> { };
 
     public GameManager(GameServices services, PlayerDirectory players, Runnable onStateChanged) {
         this.services = services;
         this.players = players;
         this.onStateChanged = onStateChanged;
+    }
+
+    public void setAbandonListener(BiConsumer<GameInstance, UUID> listener) {
+        this.onAbandon = listener;
     }
 
     public Optional<GameInstance> start(GameType type, GameModeDef mode, MatchRoster roster) {
@@ -53,6 +60,8 @@ public final class GameManager {
         }
         games.put(game.id(), game);
         for (MatchRoster.Member member : roster.players()) byPlayer.put(member.id(), game);
+        // the loading screen, before the game starts bringing anyone in
+        MatchIntro.send(type, mode, game, roster, roster.players().size(), type.dropIn());
         try {
             game.start();
         } catch (Exception e) {
@@ -62,6 +71,25 @@ public final class GameManager {
         }
         onStateChanged.run();
         return Optional.of(game);
+    }
+
+    /**
+     * A group joins a drop-in mode: into its running instance when there is one that takes them, otherwise a new one is
+     * created for them.
+     *
+     * @return null when they are in, otherwise why not (for the requester)
+     */
+    @Nullable
+    public Component dropIn(GameType type, GameModeDef mode, MatchRoster roster) {
+        for (GameInstance game : games.values()) {
+            if (!game.mode().id.equals(mode.id) || game.isFinished() || game.isEnding()) continue;
+            if (!game.addPlayers(roster.players())) return Component.translatable("blockland.queue.instance_full");
+            for (MatchRoster.Member member : roster.players()) byPlayer.put(member.id(), game);
+            MatchIntro.send(type, mode, game, roster, game.participants().size(), true);
+            onStateChanged.run();
+            return null;
+        }
+        return start(type, mode, roster).isPresent() ? null : Component.translatable("blockland.game.create_failed", mode.id);
     }
 
     public void tick() {
@@ -118,6 +146,7 @@ public final class GameManager {
     public void leave(UUID id, @Nullable ServerPlayer player, boolean disconnected) {
         GameInstance game = byPlayer.remove(id);
         if (game == null) return;
+        if (!game.isEnding() && !game.isFinished()) onAbandon.accept(game, id);
         game.removePlayer(id, player, disconnected);
         if (!disconnected && player != null) services.players().toLobby(player);
         onStateChanged.run();

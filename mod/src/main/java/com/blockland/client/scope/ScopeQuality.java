@@ -5,7 +5,7 @@ import java.util.Locale;
 /**
  * Resolution of a magnified scope's own picture (picture in picture), as a share of the pixels the eyepiece covers
  * on screen, and how much the eyepiece sharpens it back (a lower resolution is stretched further); {@link #OFF} zooms
- * the whole view instead (cheapest, and what an OptiFine shader pack always gets).
+ * the whole view instead (cheapest).
  */
 public enum ScopeQuality {
     OFF(0, 0), LOW(0.6f, 0.45f), MEDIUM(0.85f, 0.3f), HIGH(1.15f, 0.15f);

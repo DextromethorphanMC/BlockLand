@@ -1,7 +1,6 @@
 package com.blockland.client.scope;
 
 import com.blockland.BlockLand;
-import com.blockland.client.render.ShaderPacks;
 import com.blockland.client.settings.ClientSettings;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.craft.CraftData;
@@ -146,12 +145,12 @@ public final class Optics {
     /**
      * After the viewmodel is posed, before it is drawn: the aim focus — a sharp circle around the aim point (a scope's
      * eyepiece), the world beyond it blurring more and more towards the screen's corners. Drawn before the weapon, so
-     * the weapon stays sharp; off under a shader pack, with classic scope zoom and with the setting.
+     * the weapon stays sharp; off with classic scope zoom and with the setting.
      */
     public static void renderBehind(SightPose pose) {
         if (sight == null) return;
         if (sight.isScope()) Scopes.renderBehind(pose);
-        if (ShaderPacks.active() || ShaderPacks.shadowPass() || Scopes.hidesViewmodel()) return;
+        if (Scopes.hidesViewmodel()) return;
         float raised = Scopes.smooth((aim - 0.55f) / 0.45f);
         if (raised <= 0.01f) return;
         float x, y, radius, dim = 0;

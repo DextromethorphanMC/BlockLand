@@ -16,6 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 GUN_DIR = os.path.join(HERE, "..", "..", "mod", "src", "main", "resources", "assets", "blockland", "models", "gun")
 KNIFE_DIR = os.path.join(os.path.dirname(GUN_DIR), "knife")
 EQUIPMENT_DIR = os.path.join(os.path.dirname(GUN_DIR), "equipment")      # section 36
+BOMB_DIR = os.path.join(os.path.dirname(GUN_DIR), "bomb")                # section 39
 FOV_Y = 54.0                       # section 2: viewmodel projection (vertical), used for the on-screen estimate
 CAM_TURN, CAM_ROLL = 2.5, 4.5      # section 31: largest camera pitch / yaw and roll of a clip (degrees)
 PARENTS = {
@@ -427,6 +428,9 @@ def main(argv):
         paths += sorted(
             os.path.join(EQUIPMENT_DIR, f) for f in (os.listdir(EQUIPMENT_DIR) if os.path.isdir(EQUIPMENT_DIR) else [])
             if f.endswith(".glb"))
+        paths += sorted(
+            os.path.join(BOMB_DIR, f) for f in (os.listdir(BOMB_DIR) if os.path.isdir(BOMB_DIR) else [])
+            if f.endswith(".glb"))
     arms = GLTF(arms_path) if os.path.exists(arms_path) else None
     failed = 0
     if arms is not None:
@@ -469,7 +473,8 @@ def main(argv):
 
 # Checkers of later weapons (parallel work): each module has `claims(path, names) -> bool` (names: node name -> index)
 # and `check(path, arms, r)`; the first module that claims a file checks it. Missing modules are skipped.
-CHECK_MODULES = ("check_tommy", "check_shotgun", "check_dual", "check_usp", "check_dagger", "check_rpd", "check_karambit", "check_equipment")
+CHECK_MODULES = ("check_tommy", "check_shotgun", "check_dual", "check_usp", "check_dagger", "check_rpd", "check_karambit", "check_equipment",
+                 "check_bomb")
 
 
 def _claimed_by(path, names):

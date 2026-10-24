@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { api, productImageUrl } from '../api'
 import { confirmAction, Empty, ErrorBox, Field, Modal, NumberInput, PageHeader, useLoad, useToast } from '../components/ui'
+import { categoryLabel } from '../components/Ranks'
 import type { Product } from '../types'
 import { formatTime } from './Users'
 
@@ -141,6 +142,7 @@ function ProductEditor({ initial, isNew, onClose, onSaved }: { initial: Product;
   const [preview, setPreview] = useState<string | null>(productImageUrl(initial))
   const [busy, setBusy] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+  const registry = useLoad(api.inventoryRegistry)
   const set = (patch: Partial<Product>) => setP((v) => ({ ...v, ...patch }))
 
   const save = async (e: FormEvent) => {
@@ -201,8 +203,16 @@ function ProductEditor({ initial, isNew, onClose, onSaved }: { initial: Product;
                   onChange={(e) => set({ priceCents: Math.round(Number(e.target.value || 0) * 100) })}
                 />
               </Field>
-              <Field label="权益标识" hint="购买后授予玩家；PRIORITY_QUEUE = 优先匹配排队">
-                <input list="known-entitlements" value={p.entitlement} onChange={(e) => set({ entitlement: e.target.value.toUpperCase() })} required />
+              <Field label="权益 / 物品" hint="购买后授予玩家：库存物品（如喷漆、名片）或 PRIORITY_QUEUE（优先匹配排队）">
+                <input
+                  list="known-entitlements"
+                  value={p.entitlement}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    set({ entitlement: v.includes(':') ? v.toLowerCase() : v.toUpperCase() })
+                  }}
+                  required
+                />
               </Field>
               <Field label="有效期（天）" hint="0 = 永久；重复购买会顺延">
                 <NumberInput value={p.durationDays} min={0} max={3650} onChange={(v) => set({ durationDays: v })} />
@@ -218,7 +228,14 @@ function ProductEditor({ initial, isNew, onClose, onSaved }: { initial: Product;
               </Field>
             </div>
             <datalist id="known-entitlements">
-              <option value="PRIORITY_QUEUE" />
+              <option value="PRIORITY_QUEUE">优先匹配排队</option>
+              {(registry.data ?? [])
+                .filter((i) => !i.free)
+                .map((i) => (
+                  <option key={i.key} value={i.key}>
+                    {categoryLabel(i)} · {i.name}
+                  </option>
+                ))}
             </datalist>
             <Field label="介绍">
               <textarea rows={3} value={p.description} onChange={(e) => set({ description: e.target.value })} />

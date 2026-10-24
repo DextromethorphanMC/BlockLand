@@ -59,7 +59,8 @@ public final class ViewmodelRig<A> {
     /** Velocities above these are treated as a cut, not motion (m/s, rad/s). */
     private static final float MAX_SPEED = 7f, MAX_SPIN = 60f;
 
-    private final DrawList draws = new DrawList();
+    /** The weapon is part of the world's frame: lit by the world, emission in alpha (rendering spec §8). */
+    private final DrawList draws = new DrawList().scene(true);
     /** The camera's dynamic feedback (spec §32): kicks, shake, FOV punch and head movement from every layer. */
     private final CameraRig cameraRig = new CameraRig();
     private final ViewmodelMotion motion = new ViewmodelMotion(cameraRig);
@@ -179,8 +180,12 @@ public final class ViewmodelRig<A> {
         return restPose().world[end].getTranslation(new Vector3f()).length();
     }
 
+    /**
+     * Loaded and drawable. A resource reload frees the model ({@link ModelCache#clear}) until the weapon module loads
+     * it again, so a rig still holding it (the weapon on screen, one dropping out of view) draws nothing meanwhile.
+     */
     public boolean isReady() {
-        return model != null && pose != null && viewmodelRoot >= 0;
+        return model != null && !model.isClosed() && pose != null && viewmodelRoot >= 0;
     }
 
     @Nullable
@@ -666,6 +671,11 @@ public final class ViewmodelRig<A> {
             @Override
             public boolean hidden(String material) {
                 return hidden.contains(material) || style.hidden(material);
+            }
+
+            @Override
+            public float surge() {
+                return style.surge();
             }
         };
     }

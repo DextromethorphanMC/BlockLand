@@ -2,7 +2,6 @@ package com.blockland.server.matchmaking;
 
 import com.blockland.network.BLNetwork;
 import com.blockland.network.packet.LobbyPackets;
-import com.blockland.network.packet.S2CMatchFound;
 import com.blockland.server.content.ContentRepository;
 import com.blockland.server.content.ContentSnapshot;
 import com.blockland.server.content.model.GameModeDef;
@@ -25,16 +24,22 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Predicate;
+import java.util.function.ToIntFunction;
 
 /**
  * One queue per game mode. A queue entry is a group that plays on the same team (a solo player or a party);
  * a match pops as soon as the waiting groups can fill every team. Groups with priority (any member owns the
  * {@value #PRIORITY_ENTITLEMENT} entitlement) are placed first, otherwise first come first served. A group may ask
- * for one of the mode's maps: it only plays with groups that want the same map or do not mind.
+ * for one of the mode's maps: it only plays with groups that want the same map or do not mind. In a ranked mode (排位,
+ * the mode's {@code ranked} setting) a match only takes groups whose scores are close to the longest-waiting one's —
+ * the window widens the longer it waits — and the teams are balanced by score.
  */
 public final class MatchmakingService {
     /** Entitlement (sold in the shop) that puts a player at the front of every queue. */
     public static final String PRIORITY_ENTITLEMENT = "PRIORITY_QUEUE";
+    /** Ranked: score difference a fresh group accepts, and how much it grows per second waited (any score after ~90 s). */
+    private static final int RANKED_SPREAD = 100;
+    private static final int RANKED_SPREAD_PER_SECOND = 10;
 
     private final PlayerDirectory players;
     private final ContentRepository content;
@@ -42,6 +47,8 @@ public final class MatchmakingService {
     private final GameManager games;
     private final Runnable onStateChanged;
     private final Predicate<UUID> hasPriority;
+    /** Ranked score of a player (the ladder's, a default for players it does not know yet). */
+    private ToIntFunction<UUID> score = id -> 0;
     private final Map<String, List<Entry>> queues = new LinkedHashMap<>();
     private final Map<UUID, Entry> byPlayer = new HashMap<>();
     private int tickCounter;
@@ -54,6 +61,10 @@ public final class MatchmakingService {
         this.games = games;
         this.onStateChanged = onStateChanged;
         this.hasPriority = hasPriority;
+    }
+
+    public void setScoreSource(ToIntFunction<UUID> score) {
+        this.score = score;
     }
 
     /** A group waiting together. */
@@ -106,6 +117,17 @@ public final class MatchmakingService {
         }
 
         for (UUID id : group) cancel(id, null);
+        if (type.get().dropIn()) {
+            // no queue: straight into the running world
+            List<MatchRoster.Member> members = new ArrayList<>();
+            for (UUID id : group) {
+                String name = players.name(id);
+                if (name != null) members.add(new MatchRoster.Member(id, name));
+            }
+            Component error = games.dropIn(type.get(), mode.get(), new MatchRoster(List.of(members), map));
+            onStateChanged.run();
+            return error;
+        }
         Entry entry = new Entry(modeId, map, group);
         queues.computeIfAbsent(modeId, k -> new ArrayList<>()).add(entry);
         for (UUID id : entry.members) byPlayer.put(id, entry);
@@ -158,8 +180,9 @@ public final class MatchmakingService {
                 continue;
             }
             MatchFormat format = type.get().format(mode.get());
+            boolean ranked = mode.get().flag("ranked", false);
             while (true) {
-                Packed packed = pack(queue, format, true);
+                Packed packed = ranked ? packRanked(queue, format) : pack(queue, format, true);
                 if (packed == null) break;
                 startMatch(type.get(), mode.get(), packed);
             }
@@ -220,24 +243,65 @@ public final class MatchmakingService {
      */
     @Nullable
     private Packed pack(List<Entry> queue, MatchFormat format, boolean full) {
+        return pack(queue, ordered(queue), format, full, false);
+    }
+
+    /**
+     * Ranked: tries the waiting groups in queue order as the anchor of a match and packs only groups whose average score
+     * lies within the anchor's window (wider the longer the anchor waited), teams balanced by score.
+     */
+    @Nullable
+    private Packed packRanked(List<Entry> queue, MatchFormat format) {
+        List<Entry> ordered = ordered(queue);
+        for (Entry anchor : ordered) {
+            int centre = averageScore(anchor);
+            long waited = (System.currentTimeMillis() - anchor.since) / 1000L;
+            long spread = RANKED_SPREAD + RANKED_SPREAD_PER_SECOND * waited;
+            List<Entry> pool = new ArrayList<>();
+            pool.add(anchor);
+            for (Entry entry : ordered) {
+                if (entry != anchor && Math.abs(averageScore(entry) - centre) <= spread) pool.add(entry);
+            }
+            Packed packed = pack(queue, pool, format, true, true);
+            if (packed != null) return packed;
+        }
+        return null;
+    }
+
+    private int averageScore(Entry entry) {
+        long sum = 0;
+        for (UUID id : entry.members) sum += score.applyAsInt(id);
+        return entry.members.isEmpty() ? 0 : (int) (sum / entry.members.size());
+    }
+
+    /**
+     * @param pool    the groups that may play, in the order they are placed
+     * @param balance place each group on the team with the lowest score total that has room (ranked), instead of best fit
+     */
+    @Nullable
+    private Packed pack(List<Entry> queue, List<Entry> pool, MatchFormat format, boolean full, boolean balance) {
         List<List<Entry>> teams = new ArrayList<>();
         int[] free = new int[format.teamCount()];
         for (int i = 0; i < format.teamCount(); i++) {
             teams.add(new ArrayList<>());
             free[i] = format.teamSize();
         }
+        long[] totals = new long[format.teamCount()];
         int placed = 0;
         String map = "";
-        for (Entry entry : ordered(queue)) {
+        for (Entry entry : pool) {
             if (!entry.mapId.isEmpty() && !map.isEmpty() && !map.equals(entry.mapId)) continue;
             int best = -1;
             for (int i = 0; i < free.length; i++) {
-                if (free[i] >= entry.members.size() && (best < 0 || free[i] < free[best])) best = i;
+                if (free[i] < entry.members.size()) continue;
+                boolean better = best < 0 || (balance ? totals[i] < totals[best] : free[i] < free[best]);
+                if (better) best = i;
             }
             if (best < 0) continue;
             if (!entry.mapId.isEmpty()) map = entry.mapId;
             teams.get(best).add(entry);
             free[best] -= entry.members.size();
+            if (balance) totals[best] += (long) averageScore(entry) * entry.members.size();
             placed += entry.members.size();
             if (placed == format.requiredPlayers()) break;
         }
@@ -282,7 +346,6 @@ public final class MatchmakingService {
         }
         MatchRoster matchRoster = new MatchRoster(roster, packed.mapId());
         if (matchRoster.isEmpty()) return;
-        for (MatchRoster.Member member : matchRoster.players()) BLNetwork.sendTo(member.id(), new S2CMatchFound(mode.title));
         games.start(type, mode, matchRoster);
         onStateChanged.run();
     }

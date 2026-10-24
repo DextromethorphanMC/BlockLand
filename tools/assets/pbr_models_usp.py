@@ -43,6 +43,8 @@ def models():
                 "mag": ("usp/mag", "magazine"),
                 "mag_base": ("usp/cerberus_trim", "magazine"),
                 "brass": ("common/brass", "none"),
+                "cerberus_sigil": (None, "none"),                  # the inspect's effect quads (section 38)
+                "cerberus_ring": (None, "none"),
             },
         },
     }

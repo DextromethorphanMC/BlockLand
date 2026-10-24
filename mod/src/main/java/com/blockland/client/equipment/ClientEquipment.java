@@ -52,7 +52,8 @@ import java.util.Random;
  * mirrored from equipment.json (pull, hold, the throw clip's release point, recovery), the {@link EquipmentViewmodel}
  * on screen with a {@link TrajectoryArc} while a grenade is held ready, the thrower's hit marker and the renderer and
  * client hooks of the thrown entity. Switching away hands the item on screen to the {@link Holster}. The server stays
- * authoritative for what is thrown, when, and what it hits.
+ * authoritative for what is thrown, when, and what it hits. While the player spectates someone through their eyes,
+ * {@link WatchedEquipment} shows that player's equipment instead.
  */
 public final class ClientEquipment {
     enum State { IDLE, PULLING, HOLDING, THROWING, USING }
@@ -100,6 +101,7 @@ public final class ClientEquipment {
         TickEvent.RenderTickEvent.Pre.BUS.addListener(event -> frame());
         RenderHandEvent.BUS.addListener(ClientEquipment::renderHand);
         InputEvent.InteractionKeyMappingTriggered.BUS.addListener(ClientEquipment::interaction);
+        WatchedEquipment.init();
         WeaponInput.onAttackPressed(() -> pressed(false));
         WeaponInput.onUsePressed(() -> pressed(true));
         // no sprinting with a grenade in the throwing hand
@@ -117,6 +119,13 @@ public final class ClientEquipment {
             event.setYaw(event.getYaw() + viewmodel.cameraYaw());
             event.setRoll(event.getRoll() + viewmodel.cameraRoll());
             viewmodel.camera().moveCamera(event.getCamera());
+        });
+        ViewportEvent.ComputeCameraAngles.BUS.addListener(event -> {
+            if (!WatchedEquipment.active()) return;
+            event.setPitch(event.getPitch() + WatchedEquipment.cameraPitch());
+            event.setYaw(event.getYaw() + WatchedEquipment.cameraYaw());
+            event.setRoll(event.getRoll() + WatchedEquipment.cameraRoll());
+            WatchedEquipment.moveCamera(event.getCamera());
         });
         ViewportEvent.ComputeFov.BUS.addListener(event -> {
             if (event.usedConfiguredFov() && holdingEquipment() && modelReady) event.setFOV(event.getFOV() * viewmodel.camera().fovScale());
@@ -198,6 +207,7 @@ public final class ClientEquipment {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null) return;
+        WatchedEquipment.tick();
         syncEquipped(player);
         if (item != null) viewmodel.setBuild(EquipmentContent.buildOf(player.getMainHandItem()));
         if (WeaponInput.inspectPressed() && item != null && mc.screen == null) inspect(player);
@@ -276,6 +286,7 @@ public final class ClientEquipment {
         long now = System.nanoTime();
         float dt = lastFrame == 0 ? 0 : Math.min(0.1f, (now - lastFrame) / 1e9f);
         lastFrame = now;
+        WatchedEquipment.frame(dt);
         if (player == null || item == null || !holdingEquipment()) return;
         if (modelReady) ViewmodelRenderer.suppressViewBobbing(player);
         EquipmentData.Equipment it = item;
@@ -440,6 +451,7 @@ public final class ClientEquipment {
 
     /** Replaces the vanilla first-person hands with the equipment viewmodel. */
     private static boolean renderHand(RenderHandEvent event) {
+        if (WatchedEquipment.renderHand(event)) return true;
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null || item == null || !modelReady || !holdingEquipment()) return false;

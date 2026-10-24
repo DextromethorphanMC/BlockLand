@@ -1,0 +1,8 @@
+{
+  "pack": {
+    "description": {
+      "translate": "blockland.graphics.pack.description"
+    },
+    "pack_format": 64
+  }
+}

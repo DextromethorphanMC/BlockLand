@@ -3,7 +3,7 @@ package com.blockland.client.dev;
 import com.blockland.BlockLand;
 import com.blockland.client.BlockLandClient;
 import com.blockland.client.craft.ClientCraft;
-import com.blockland.client.craft.CraftScreen;
+import com.blockland.client.craft.HeldCraftScreen;
 import com.blockland.client.gun.ClientGuns;
 import com.blockland.client.input.WeaponInput;
 import com.blockland.client.screen.LobbyScreen;
@@ -196,7 +196,7 @@ public final class DevAutomation {
             case "key" -> key(mc, a[1], a.length > 2 ? a[2] : "tap");
             case "screen" -> mc.setScreen(switch (a[1]) {
                 case "lobby" -> new LobbyScreen();
-                case "gunsmith", "craft" -> CraftScreen.forHeld(player.getMainHandItem(), player.getInventory().getSelectedSlot()).orElse(null);
+                case "gunsmith", "craft" -> HeldCraftScreen.forHeld(player.getMainHandItem(), player.getInventory().getSelectedSlot()).orElse(null);
                 default -> null;
             });
             case "gui" -> {

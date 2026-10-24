@@ -5,9 +5,7 @@
     "cases": [
       {
         "when": [
-          "gui",
-          "ground",
-          "fixed"
+          "gui"
         ],
         "model": {
           "type": "minecraft:select",
@@ -55,52 +53,66 @@
             "model": "blockland:item/ks3"
           }
         }
+      },
+      {
+        "when": [
+          "firstperson_righthand",
+          "firstperson_lefthand"
+        ],
+        "model": {
+          "type": "minecraft:select",
+          "property": "minecraft:custom_model_data",
+          "index": 0,
+          "cases": [
+            {
+              "when": "olive",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/ks3_held_olive"
+              }
+            },
+            {
+              "when": "dragon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/ks3_held_dragon"
+              }
+            },
+            {
+              "when": "aurora",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/ks3_held_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/ks3_held_magma"
+              }
+            },
+            {
+              "when": "neon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/ks3_held_neon"
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "blockland:item/ks3_held"
+          }
+        }
       }
     ],
     "fallback": {
-      "type": "minecraft:select",
-      "property": "minecraft:custom_model_data",
-      "index": 0,
-      "cases": [
-        {
-          "when": "olive",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/ks3_held_olive"
-          }
-        },
-        {
-          "when": "dragon",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/ks3_held_dragon"
-          }
-        },
-        {
-          "when": "aurora",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/ks3_held_aurora"
-          }
-        },
-        {
-          "when": "magma",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/ks3_held_magma"
-          }
-        },
-        {
-          "when": "neon",
-          "model": {
-            "type": "minecraft:model",
-            "model": "blockland:item/ks3_held_neon"
-          }
-        }
-      ],
-      "fallback": {
-        "type": "minecraft:model",
-        "model": "blockland:item/ks3_held"
+      "type": "minecraft:special",
+      "base": "blockland:item/ks3_held",
+      "model": {
+        "type": "blockland:weapon",
+        "fit": "blockland:item/ks3_held"
       }
     }
   }

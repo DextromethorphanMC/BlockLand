@@ -108,6 +108,7 @@ export function GameModes() {
       <div className="mode-card-head">
         <div className="row wrap">
           <span className="tag">{typeName(mode.type)}</span>
+          {mode.settings.ranked === true && <span className="badge badge-ranked">排位</span>}
           {availabilityBadge(mode.availableUntil)}
         </div>
         <label className="switch" title={mode.enabled ? '已启用' : '已停用'}>
@@ -413,6 +414,61 @@ function GameModeEditor({
             </Field>
           )}
         </div>
+
+        <Field label="排位模式" hint="对局结果计入全服排位分（煤炭 → 钢铁 → 黄金 → 钻石 → 猎首），匹配时按分数接近的玩家组局；计分规则见「排位」页">
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={mode.settings.ranked === true}
+              onChange={(e) => set({ settings: { ...mode.settings, ranked: e.target.checked } })}
+            />
+            该模式为排位赛
+          </label>
+        </Field>
+
+        <Field label="喷漆" hint="玩家能否在该模式的对局中用喷漆键在墙上喷漆（普通与特殊喷漆）">
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={mode.settings.allowGraffiti !== false}
+              onChange={(e) => set({ settings: { ...mode.settings, allowGraffiti: e.target.checked } })}
+            />
+            允许喷漆
+          </label>
+        </Field>
+
+        <Field
+          label="阵亡观战"
+          hint="被淘汰的玩家默认观察击杀自己的人，可切换目标与第一/第三人称；会复活的玩家只观战到复活为止"
+        >
+          <div className="row wrap" style={{ gap: 24 }}>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={mode.settings.spectate !== false}
+                onChange={(e) => set({ settings: { ...mode.settings, spectate: e.target.checked } })}
+              />
+              允许观战
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={mode.settings.spectateFreeCam !== false}
+                disabled={mode.settings.spectate === false}
+                onChange={(e) => set({ settings: { ...mode.settings, spectateFreeCam: e.target.checked } })}
+              />
+              允许自由视角
+            </label>
+          </div>
+        </Field>
+        <Field label="观战时限（秒）" hint="0 = 不限时（一直观战到对局结束）；大于 0 时，不能复活的玩家观战这么久后回到大厅（0-600）">
+          <NumberInput
+            value={Number(mode.settings.spectateSeconds ?? 0)}
+            min={0}
+            max={600}
+            onChange={(v) => set({ settings: { ...mode.settings, spectateSeconds: v } })}
+          />
+        </Field>
 
         <SettingsForm settings={mode.settings} maps={maps} onChange={(settings) => set({ settings })} />
 

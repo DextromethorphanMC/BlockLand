@@ -25,7 +25,7 @@ import java.util.OptionalInt;
  * Full-screen passes of the screen effects (the flashbang's white-out, the adrenaline rush): one quad over the main
  * target with a fragment shader, a copy of the frame where a shader needs to read it, and a small uniform block
  * ({@code EffectInfo}: two vec4). Run from the HUD's first layer — after the world and the hand, before any HUD
- * element is drawn — and only without a shader pack (the callers fall back to plain HUD drawing there).
+ * element is drawn.
  */
 final class ScreenPasses {
     static final RenderPipeline COPY = screen("effect_copy").build();

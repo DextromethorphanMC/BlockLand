@@ -4,7 +4,7 @@ import net.minecraft.resources.ResourceLocation;
 
 /**
  * A texture both render paths can use: our pipeline samples its GPU view ({@link Textures#view}), the vanilla
- * render-type path (shader packs) binds it by location.
+ * render-type path (the shadow map's entity capture) binds it by location.
  *
  * @param location the texture's id: a PNG in the resource packs, or a texture the TextureManager owns
  * @param managed  owned by Minecraft's TextureManager (the player skin) rather than a resource-pack PNG that

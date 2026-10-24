@@ -1,6 +1,7 @@
 package com.blockland.client.equipment.effect;
 
 import com.blockland.client.decal.Decals;
+import com.blockland.client.render.LightSources;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -66,6 +67,8 @@ final class Blast implements FxWorld.Fx {
                     (random.nextFloat() - 0.5) * 0.15);
         }
         if (floor != null && at.y - floorY < 1.6) Decals.onBlock("scorch", new Vec3(at.x, floorY, at.z), Direction.UP, floor, null);
+        // the fireball lights everything around it for a moment (rendering spec §5)
+        LightSources.flash(at.x, at.y + 0.6, at.z, 0xFFB45A, 6f, 14f, 0.45f);
         BlastShake.blast(at, 1.0f, 26);
     }
 
@@ -79,6 +82,8 @@ final class Blast implements FxWorld.Fx {
         for (int i = 0; i < 5; i++) {
             level.addParticle(ParticleTypes.CAMPFIRE_COSY_SMOKE, at.x, at.y + 0.1, at.z, (random.nextFloat() - 0.5) * 0.03, 0.04, (random.nextFloat() - 0.5) * 0.03);
         }
+        // a white-hot flash, brighter than anything else in the game and gone almost at once
+        LightSources.flash(at.x, at.y + 0.3, at.z, 0xFFFFFF, 12f, 18f, 0.2f);
         BlastShake.blast(at, 0.3f, 14);
     }
 

@@ -1656,6 +1656,13 @@
           "name": "地狱犬",
           "rarity": "special",
           "model": "models/gun/usp_dual_cerberus.glb",
+          "regions": {
+            "body": {"effect": "inferno", "effectColor": "#FF3A14", "params": [70, 0.12, 0.14, 0.75]},
+            "barrel": {"effect": "inferno", "effectColor": "#FF5A1E", "params": [90, 0.16, 0.10, 0.6]},
+            "detail": {"effect": "inferno", "effectColor": "#FF2A10", "params": [110, 0.12, 0.22, 0.3]},
+            "grip": {"effect": "inferno", "effectColor": "#E8260E", "params": [55, 0.08, 0.06, 0.5]},
+            "magazine": {"effect": "inferno", "effectColor": "#FF3A14", "params": [80, 0.10, 0.08, 0.5]}
+          },
           "fx": {
             "flashColor": "#FF3A2A",
             "flashTexture": "textures/effect/muzzle_flash_cerberus.png",
@@ -1663,7 +1670,40 @@
             "flashScale": 1.25,
             "tracerColor": "#FF3B30",
             "tracerWidth": 1.25,
-            "fireSound": "gun.usp.fire_cerberus"
+            "fireSound": "gun.usp.fire_cerberus",
+            "hitColor": "#FF2A12",
+            "kill": {
+              "particles": ["cerberus.kill_flare", "cerberus.kill_sparks"],
+              "node": "muzzle",
+              "light": {"color": "#FF3A14", "intensity": 2.5, "radius": 5, "seconds": 0.5},
+              "sound": "gun.cerberus.kill",
+              "surge": 0.85,
+              "surgeFade": 1.6,
+              "impulse": "cerberus.kill",
+              "fov": 0.8
+            }
+          },
+          "inspect": {
+            "clip": "inspect_cerberus",
+            "surge": [[0, 0], [1.28, 0], [1.34, 0.22], [1.9, 0.7], [2.3, 0.82], [3.0, 0.86], [3.5, 0.95], [3.6, 1.0],
+                      [4.1, 0.85], [4.9, 0.25], [5.45, 0]],
+            "cues": {
+              "cerberus.release": {"particles": ["cerberus.release_wisps"], "node": "gun_L", "twin": false,
+                                   "light": {"color": "#FF4A1E", "intensity": 1.2, "radius": 3, "seconds": 0.4}},
+              "cerberus.touch": {"particles": ["cerberus.touch_sparks", "cerberus.touch_flare"], "node": "fx_touch", "twin": false,
+                                 "light": {"color": "#FF5A24", "intensity": 3.0, "radius": 5, "seconds": 0.6}, "fov": -0.8},
+              "cerberus.rack": {"particles": ["cerberus.port_burst"], "node": "ejection", "twin": false,
+                                "light": {"color": "#FF5A24", "intensity": 1.6, "radius": 3.5, "seconds": 0.3}},
+              "cerberus.catch": {"particles": ["cerberus.catch_flare"], "node": "gun_L", "twin": false},
+              "cerberus.roar": {"particles": ["cerberus.roar_flame", "cerberus.roar_sparks"], "node": "muzzle",
+                                "light": {"color": "#FF4418", "intensity": 5.0, "radius": 8, "seconds": 0.7}, "fov": 2.2}
+            },
+            "emitters": [
+              {"particles": "cerberus.float_orbit", "node": "gun_L", "twin": false, "from": 0.62, "to": 2.6, "fade": 0.25},
+              {"particles": "cerberus.embers", "node": "slide", "from": 1.4, "to": 4.9, "fade": 0.4},
+              {"particles": "cerberus.gather", "node": "muzzle", "from": 2.95, "to": 3.56, "fade": 0.15}
+            ],
+            "glow": {"node": "gun", "color": "#FF3A14", "intensity": 1.6, "radius": 4.5}
           }
         }
       }

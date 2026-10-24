@@ -5,19 +5,31 @@
     "cases": [
       {
         "when": [
-          "gui",
-          "ground",
-          "fixed"
+          "gui"
         ],
         "model": {
           "type": "minecraft:model",
           "model": "blockland:item/adrenaline"
         }
+      },
+      {
+        "when": [
+          "firstperson_righthand",
+          "firstperson_lefthand"
+        ],
+        "model": {
+          "type": "minecraft:model",
+          "model": "blockland:item/adrenaline_held"
+        }
       }
     ],
     "fallback": {
-      "type": "minecraft:model",
-      "model": "blockland:item/adrenaline_held"
+      "type": "minecraft:special",
+      "base": "blockland:item/adrenaline_held",
+      "model": {
+        "type": "blockland:weapon",
+        "fit": "blockland:item/adrenaline_held"
+      }
     }
   }
 }

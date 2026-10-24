@@ -10,9 +10,11 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 import java.util.BitSet;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
 import java.util.function.IntSupplier;
 
 /**
@@ -28,6 +30,7 @@ public final class ArenaService {
     private final IntSupplier spacing;
     private final IntSupplier baseY;
     private final BitSet usedSlots = new BitSet();
+    private BiConsumer<ServerLevel, BoundingBox> releaseListener = (level, box) -> { };
 
     public ArenaService(MinecraftServer server, WorldJobScheduler jobs, IntSupplier spacing, IntSupplier baseY) {
         this.server = server;
@@ -52,8 +55,14 @@ public final class ArenaService {
         return new Arena(slot, level, origin, size);
     }
 
+    /** Told about every arena area about to be wiped (things kept outside the world's blocks go with it, e.g. graffiti). */
+    public void setReleaseListener(BiConsumer<ServerLevel, BoundingBox> listener) {
+        this.releaseListener = listener == null ? (level, box) -> { } : listener;
+    }
+
     /** Wipes the arena region; the slot becomes available again once the cleanup finished. */
     public CompletableFuture<Void> release(Arena arena) {
+        releaseListener.accept(arena.level(), arena.cleanupBox(CLEANUP_MARGIN));
         return jobs.submit(new ClearJob(arena.level(), arena.cleanupBox(CLEANUP_MARGIN)))
                 .whenComplete((ignored, error) -> usedSlots.clear(arena.slot()));
     }

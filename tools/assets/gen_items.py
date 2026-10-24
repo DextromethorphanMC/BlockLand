@@ -10,6 +10,7 @@ import skin_looks
 import textures as tx
 from glbread import GLTF
 from preview import GUN_DIR, hidden_set, load_materials
+import third_person
 
 GUN = "p9"
 # the gun's skins as the runtime has them (guns.json + the shared craft/skins.json), default first
@@ -212,9 +213,7 @@ def skin_select(x):
 
 
 def item_definition():
-    return {"model": {"type": "minecraft:select", "property": "minecraft:display_context",
-                      "cases": [{"when": ["gui", "ground", "fixed"], "model": skin_select(GUN)}],
-                      "fallback": skin_select(f"{GUN}_held")}}
+    return third_person.weapon_definition(skin_select(GUN), skin_select(f"{GUN}_held"))
 
 
 # ------------------------------------------------------------------------------------------- ammo

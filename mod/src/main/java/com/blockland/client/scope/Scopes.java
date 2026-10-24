@@ -4,8 +4,8 @@ import com.blockland.BlockLand;
 import com.blockland.anim.Ease;
 import com.blockland.client.render.GpuModel;
 import com.blockland.client.render.ModelCache;
-import com.blockland.client.render.ShaderPacks;
 import com.blockland.client.settings.ClientSettings;
+import com.blockland.client.settings.ScopeSensitivity;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.craft.CraftData;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -36,8 +36,7 @@ import java.util.Set;
  * along the optical axis ({@link ScopePicture}) — with the optics of a real scope ({@link ScopeOptics},
  * {@link ScopeEyepiece}), while the view around the scope stays the normal one, out of focus around the eyepiece
  * ({@link AimFocus}, run by {@link Optics}). A variable scope steps its power with the mouse wheel
- * ({@link ScopeZoom}); the rifle breathes and the breath can be held ({@link ScopeSteady}). Under an OptiFine shader pack,
- * with picture in picture switched off, or for a scope model without an eyepiece, the whole view zooms instead and
+ * ({@link ScopeZoom}); the rifle breathes and the breath can be held ({@link ScopeSteady}). With picture in picture switched off, or for a scope model without an eyepiece, the whole view zooms instead and
  * {@link ScopeOverlay} masks the screen with the scope's outline and reticle.
  * <p>
  * Driven by {@link Optics}; nothing here knows guns.
@@ -193,10 +192,13 @@ final class Scopes {
         return mode == Mode.PICTURE ? OCULAR : Set.of();
     }
 
-    /** Multiplier on the look sensitivity while looking through a scope (1 otherwise): turning matches the power. */
+    /**
+     * Multiplier on the look sensitivity while looking through a scope (1 otherwise): turning matches the power, times the
+     * player's multiplier for this magnification (eased powers interpolate between the classes).
+     */
     static float sensitivityScale() {
         if (sight == null || aim < 0.5f) return 1;
-        return ScopeOptics.sensitivity(zoom.magnification(), ClientSettings.get().scopeSensitivity);
+        return ScopeSensitivity.scopeScale(zoom.magnification());
     }
 
     /** The rifle's sway about the support hand this frame (degrees), while the eyepiece shows its picture. */
@@ -265,7 +267,7 @@ final class Scopes {
      */
     static void render(SightPose pose, int blockLight, int skyLight) {
         locate(pose);
-        if (mode != Mode.PICTURE || sight == null || lensView == null || lens == null || ShaderPacks.shadowPass()) return;
+        if (mode != Mode.PICTURE || sight == null || lensView == null || lens == null) return;
         CraftData.Scope data = sight.scope;
         Minecraft mc = Minecraft.getInstance();
         Camera camera = mc.gameRenderer.getMainCamera();
@@ -443,9 +445,9 @@ final class Scopes {
         return picture.target();
     }
 
-    /** Whether the eyepiece can show its own picture: setting, shader pack, a working second render, the model. */
+    /** Whether the eyepiece can show its own picture: setting, a working second render, the model. */
     private static boolean canShowPicture(CraftData.Attachment optic) {
-        if (ScopeQuality.of(ClientSettings.get().scopeQuality) == ScopeQuality.OFF || ShaderPacks.active() || !picture.usable()) return false;
+        if (ScopeQuality.of(ClientSettings.get().scopeQuality) == ScopeQuality.OFF || !picture.usable()) return false;
         return lensOf(optic) != null;
     }
 

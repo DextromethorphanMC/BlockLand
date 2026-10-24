@@ -1,5 +1,7 @@
 package com.blockland.server.gun;
 
+import com.blockland.server.spectate.Watchers;
+import com.blockland.network.packet.ViewmodelPackets;
 import com.blockland.BlockLand;
 import com.blockland.combat.HitRecords;
 import com.blockland.combat.HitShapes;
@@ -313,11 +315,14 @@ public final class GunService implements GunPacketListeners.Server {
             long shell = (long) (Math.max(0.05f, reload.shell) * 1e9);
             shooter.reload = new Reload(slot, stats.gun().id, Integer.MAX_VALUE, true,
                     System.nanoTime() + (long) (Math.max(0, reload.start) * 1e9) + shell, shell);
+            Watchers.action(player, ViewmodelPackets.Kind.RELOAD, 2, 0);
             return;
         }
         boolean empty = state.ammo() == 0;
         int ticks = Math.max(1, Math.round(stats.reloadTime(empty) * 20));
         shooter.reload = new Reload(slot, stats.gun().id, server.getTickCount() + ticks, false, 0, 0);
+        // spectators seeing through this player's eyes play the reload on the watched gun
+        Watchers.action(player, ViewmodelPackets.Kind.RELOAD, empty ? 1 : 0, 0);
     }
 
     public void tick() {

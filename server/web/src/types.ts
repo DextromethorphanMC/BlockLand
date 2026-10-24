@@ -119,6 +119,8 @@ export interface PlayerPreferences {
   allowPartyInvites: boolean
   readAnnouncements: string[]
   builds: Record<string, WeaponBuild>
+  /** what the player put on: slot (card, graffiti.1 …) → owned item key */
+  cosmetics?: Record<string, string>
 }
 
 export interface PlayerAccount {
@@ -176,4 +178,68 @@ export interface Order {
   paymentReference: string
   message: string
   createdAt: string
+}
+
+/** Something players can own (库存), as the game server published it. key = the entitlement key, e.g. graffiti:smile */
+export interface InventoryItem {
+  key: string
+  /** the mod's category translation key, e.g. blockland.inventory.category.graffiti */
+  category: string
+  name: string
+  rarity: string
+  /** every player has it without an entitlement */
+  free: boolean
+}
+
+export type RankTierId = 'coal' | 'iron' | 'gold' | 'diamond' | 'headhunter'
+
+/** Mirrors the backend's RankedConfig. */
+export interface RankedConfig {
+  startScore: number
+  kFactor: number
+  placementMatches: number
+  placementK: number
+  iron: number
+  gold: number
+  diamond: number
+  headhunter: number
+  headhunterTop: number
+  season: number
+}
+
+export interface RankedStanding {
+  score: number
+  tier: RankTierId
+  /** 0 = not placed yet */
+  position: number
+  matches: number
+  wins: number
+}
+
+export interface RankedLeaderEntry {
+  uuid: string
+  name: string | null
+  score: number
+  tier: RankTierId
+  position: number
+  matches: number
+  wins: number
+}
+
+export interface RankedSeasonEnd {
+  season: number
+  score: number
+  tier: RankTierId
+  position: number
+  matches: number
+  wins: number
+}
+
+export interface RankedPlayer {
+  uuid: string
+  name: string | null
+  standing: RankedStanding
+  losses: number
+  draws: number
+  seasons: RankedSeasonEnd[]
 }

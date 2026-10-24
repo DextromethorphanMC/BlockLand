@@ -11,7 +11,10 @@ python -I tools/assets/pbr_check.py        -> exit 1 when something is broken
   region layers name valid regions, existing sets with matching uvScale, known effects with four params;
 * special skins (section 30): rarity `special` only with a `model` or `fx`; fx with known keys, #RRGGBB colours, positive
   scales, existing flash textures and a known fire sound; a skin model exists (once its weapon's model does) and has a
-  PBR table (pbr_apply), so its materials carry regions."""
+  PBR table (pbr_apply), so its materials carry regions;
+* a special skin's own inspect and kill (section 38): the inspect's clip is in the skin's model, its cue events are
+  events of that clip, every cue and stream names particle presets of viewmodel/particles.json, nodes of the model,
+  sounds of sounds.json and impulses of viewmodel/impulses.json; surge keys rise in time and stay in 0..1."""
 import json
 import os
 import sys
@@ -29,16 +32,23 @@ import skin_looks                         # noqa: E402
 REGIONS = {"body", "barrel", "magazine", "stock", "grip", "handguard", "optic", "laser", "underbarrel", "detail",
            "blade", "handle", "hardware", "none",
            # equipment (section 36)
-           "lever", "pin", "label", "glass", "liquid", "rag", "plunger", "cap"}
+           "lever", "pin", "label", "glass", "liquid", "rag", "plunger", "cap",
+           # the bomb (section 39)
+           "tape", "keypad", "wires"}
 EQUIPMENT_JSON = os.path.join(HERE, "..", "..", "mod", "src", "main", "resources", "data", "blockland", "equipment",
                               "equipment.json")
-EFFECTS = {"iridescent", "flow", "galaxy", "circuit"}
+EFFECTS = {"iridescent", "flow", "galaxy", "circuit", "inferno"}
 GLOWING = {"skin/aurora/accent", "skin/magma/rock", "skin/galaxy/blade", "skin/neon/base"}
 RARITIES = {"common", "legendary", "special"}
 FX_COLOURS = ("flashColor", "tracerColor")
 FX_TEXTURES = ("flashTexture", "flashSideTexture")
 FX_SCALES = ("flashScale", "tracerWidth")
-FX_KEYS = set(FX_COLOURS + FX_TEXTURES + FX_SCALES + ("fireSound",))
+FX_KEYS = set(FX_COLOURS + FX_TEXTURES + FX_SCALES + ("fireSound", "hitColor", "kill"))
+CUE_KEYS = {"particles", "node", "twin", "light", "sound", "surge", "surgeFade", "impulse", "fov"}
+INSPECT_KEYS = {"clip", "surge", "cues", "emitters", "glow"}
+EMITTER_KEYS = {"particles", "node", "twin", "from", "to", "fade"}
+LIGHT_KEYS = {"color", "intensity", "radius", "seconds", "node"}
+VIEWMODEL_JSON = os.path.join(pt.ASSETS, "viewmodel")
 
 
 class Report:
@@ -162,6 +172,7 @@ def check_skins(r, model_materials):
                 r.check(region == "*" or region in REGIONS - {"none"}, f"{where}: unknown region {region}")
                 _check_layer(r, f"{where} [{region}]", layer)
             _check_special(r, where, s, model)
+            _check_inspect(r, where, s, model)
     for wid, w in equipment.items():                  # section 36: the equipment's own skins
         model = os.path.splitext(w.get("model", ""))[0].replace("models/", "", 1)
         materials = model_materials.get(model)
@@ -194,7 +205,8 @@ def _check_special(r, where, skin, weapon_model):
     rarity = skin.get("rarity", "common")
     r.check(rarity in RARITIES, f"{where}: unknown rarity {rarity}")
     fx, model = skin.get("fx"), skin.get("model", "")
-    r.check(rarity != "special" or fx is not None or model, f"{where}: rarity special without a model or fx")
+    r.check(rarity != "special" or fx is not None or model or skin.get("inspect") is not None,
+            f"{where}: rarity special without a model, fx or inspect")
     if fx is not None:
         r.check(isinstance(fx, dict), f"{where}: fx must be an object")
         fx = fx if isinstance(fx, dict) else {}
@@ -208,6 +220,10 @@ def _check_special(r, where, skin, weapon_model):
         for key in FX_TEXTURES:
             if fx.get(key):
                 r.check(os.path.exists(os.path.join(pt.ASSETS, *fx[key].split("/"))), f"{where}: missing fx {key} {fx[key]}")
+        if fx.get("hitColor"):
+            r.check(_colour(fx["hitColor"]), f"{where}: fx hitColor {fx['hitColor']!r} is not #RRGGBB")
+        if fx.get("kill") is not None:
+            _check_cue(r, f"{where} fx.kill", fx["kill"], _skin_model_nodes(skin, weapon_model))
         if fx.get("fireSound") and fx["fireSound"] not in _sound_events():
             # like the skin model: required once the weapon itself is built
             if built:
@@ -223,6 +239,92 @@ def _check_special(r, where, skin, weapon_model):
             r.check(False, f"{where}: skin model {model} missing")
         else:
             r.notes.append(f"{where}: skin model {model} not built yet (nor its weapon)")
+
+
+def _json(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _skin_model_nodes(skin, weapon_model):
+    """Node names and clips {name: event names} of the model a skin is drawn with (None when not built yet)."""
+    from glbread import GLTF
+    name = os.path.splitext(skin.get("model", ""))[0].replace("models/", "", 1) if skin.get("model") else weapon_model
+    path = pa.glb_path(name) if name else None
+    if not path or not os.path.exists(path):
+        return None
+    g = GLTF(path)
+    clips = {a["name"]: {e["name"] for e in a.get("extras", {}).get("events", [])} for a in g.json.get("animations", [])}
+    return set(g.names), clips
+
+
+def _check_light(r, where, light, nodes):
+    if not r.check(isinstance(light, dict), f"{where}: light must be an object"):
+        return
+    r.check(set(light) <= LIGHT_KEYS, f"{where}: unknown light keys {sorted(set(light) - LIGHT_KEYS)}")
+    r.check(_colour(light.get("color", "#FFFFFF")), f"{where}: light color {light.get('color')!r}")
+    for key in ("intensity", "radius", "seconds"):
+        if key in light:
+            r.check(isinstance(light[key], (int, float)) and light[key] > 0, f"{where}: light {key} must be > 0")
+    if nodes is not None and "node" in light:
+        r.check(light["node"] in nodes[0], f"{where}: light node {light['node']} not in the model")
+
+
+def _check_cue(r, where, cue, nodes):
+    """Section 38: one cue (an inspect event's, or the kill's)."""
+    if not r.check(isinstance(cue, dict), f"{where}: must be an object"):
+        return
+    r.check(set(cue) <= CUE_KEYS, f"{where}: unknown keys {sorted(set(cue) - CUE_KEYS)}")
+    presets = _json(os.path.join(VIEWMODEL_JSON, "particles.json"))
+    for pid in cue.get("particles", []):
+        r.check(pid in presets, f"{where}: particle preset {pid} not in particles.json")
+    if nodes is not None:
+        r.check(cue.get("node", "gun") in nodes[0], f"{where}: node {cue.get('node')} not in the model")
+    if cue.get("light") is not None:
+        _check_light(r, where, cue["light"], None)
+    if cue.get("sound"):
+        r.check(cue["sound"] in _sound_events(), f"{where}: sound {cue['sound']} not in sounds.json")
+    if cue.get("impulse"):
+        r.check(cue["impulse"] in _json(os.path.join(VIEWMODEL_JSON, "impulses.json")),
+                f"{where}: impulse {cue['impulse']} not in impulses.json")
+    r.check(0 <= float(cue.get("surge", 0)) <= 1 and float(cue.get("surgeFade", 1)) > 0, f"{where}: surge 0..1, surgeFade > 0")
+
+
+def _check_inspect(r, where, skin, weapon_model):
+    """Section 38: a special skin's own inspect."""
+    ins = skin.get("inspect")
+    if ins is None:
+        return
+    if not r.check(isinstance(ins, dict), f"{where}: inspect must be an object"):
+        return
+    r.check(set(ins) <= INSPECT_KEYS, f"{where}: unknown inspect keys {sorted(set(ins) - INSPECT_KEYS)}")
+    nodes = _skin_model_nodes(skin, weapon_model)
+    clip = ins.get("clip", "")
+    events = None
+    if nodes is not None:
+        if clip:
+            r.check(clip in nodes[1], f"{where}: inspect clip {clip} not in the model")
+        events = nodes[1].get(clip) if clip else None
+    else:
+        r.notes.append(f"{where}: inspect model not built yet")
+    keys = ins.get("surge", [])
+    ok = all(isinstance(k, list) and len(k) == 2 and 0 <= k[1] <= 1 for k in keys)
+    r.check(ok and all(a[0] < b[0] for a, b in zip(keys, keys[1:])), f"{where}: surge keys must be [time, 0..1], times rising")
+    for event, cue in ins.get("cues", {}).items():
+        if events is not None:
+            r.check(event in events, f"{where}: cue {event} is not an event of {clip}")
+        _check_cue(r, f"{where} cue {event}", cue, nodes)
+    presets = _json(os.path.join(VIEWMODEL_JSON, "particles.json"))
+    for i, e in enumerate(ins.get("emitters", [])):
+        w = f"{where} emitter {i}"
+        r.check(set(e) <= EMITTER_KEYS, f"{w}: unknown keys {sorted(set(e) - EMITTER_KEYS)}")
+        r.check(e.get("particles") in presets, f"{w}: particle preset {e.get('particles')} not in particles.json")
+        r.check(presets.get(e.get("particles"), {}).get("loop", False), f"{w}: a stream's preset should loop")
+        r.check(float(e.get("from", 0)) < float(e.get("to", 0)), f"{w}: from must be before to")
+        if nodes is not None:
+            r.check(e.get("node", "gun") in nodes[0], f"{w}: node {e.get('node')} not in the model")
+    if ins.get("glow") is not None:
+        _check_light(r, f"{where} glow", ins["glow"], nodes)
 
 
 def main():

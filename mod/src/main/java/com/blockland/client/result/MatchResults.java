@@ -51,6 +51,11 @@ public final class MatchResults {
         mc.setScreen(new MatchResultScreen());
     }
 
+    /** Whether a results panel (or its HUD card) is up right now. */
+    public static boolean visible() {
+        return active();
+    }
+
     static boolean active() {
         return result != null && Minecraft.getInstance().level == level && System.nanoTime() < endsAt;
     }

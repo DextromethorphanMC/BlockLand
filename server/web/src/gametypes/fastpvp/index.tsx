@@ -17,7 +17,18 @@ function FastPvpSettingsForm({ settings, onChange, maps }: SettingsFormProps) {
           <input type="checkbox" checked={flag('allowBlockPlace')} onChange={(e) => onChange({ ...settings, allowBlockPlace: e.target.checked })} />
           允许放置方块
         </label>
+        <label className="check">
+          <input type="checkbox" checked={flag('infiniteBlocks')} onChange={(e) => onChange({ ...settings, infiniteBlocks: e.target.checked })} />
+          方块无限
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={flag('knockbackOnly')} onChange={(e) => onChange({ ...settings, knockbackOnly: e.target.checked })} />
+          只击退不掉血
+        </label>
       </div>
+      <p className="muted small">
+        方块无限：放下的方块立即补回背包（需允许放置方块）。只击退不掉血：攻击只把对手打退、不造成伤害，只有掉进虚空才会淘汰（如 Rush）。
+      </p>
       <MovementFields settings={settings} onChange={onChange} />
       <p className="muted small">开局装备在下方「开局装备」中配置；玩家可以在游戏大厅中调整自己的装备布局。</p>
     </div>

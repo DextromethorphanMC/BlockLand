@@ -2,6 +2,7 @@ package com.blockland.server.game;
 
 import com.blockland.server.content.ContentSnapshot;
 import com.blockland.server.content.model.GameModeDef;
+import com.blockland.server.content.model.KitItemDef;
 import com.blockland.server.content.model.MapDef;
 import com.google.gson.JsonElement;
 import net.minecraft.network.chat.Component;
@@ -41,9 +42,25 @@ public interface GameType {
         return List.of();
     }
 
+    /**
+     * Drop-in types (an open world) have no queue: joining puts the group straight into the mode's running instance
+     * ({@link GameInstance#addPlayers}), which is created on first use and stays up.
+     */
+    default boolean dropIn() {
+        return false;
+    }
+
     /** Whether modes of this type give players a starting kit (enables the client's loadout editor). */
     default boolean usesKit() {
         return false;
+    }
+
+    /**
+     * Items the type hands to some players only (e.g. the bomb to one attacker), after the mode's kit. Players arrange
+     * them in the loadout editor like the kit; the match gives them out through {@code KitService.giveRoleItem}.
+     */
+    default List<KitItemDef> roleItems(GameModeDef mode) {
+        return List.of();
     }
 
     /**

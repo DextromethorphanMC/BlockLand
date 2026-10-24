@@ -304,6 +304,23 @@ public final class PlayerProfiles implements BuildStore {
         return -1;
     }
 
+    /** Every active entitlement of the player: key → epoch millis it ends, 0 = permanent. */
+    public Map<String, Long> entitlements(UUID id) {
+        Profile profile = profiles.get(id);
+        Map<String, Long> active = new LinkedHashMap<>();
+        if (profile == null || profile.status == null || profile.status.entitlements == null) return active;
+        Instant now = Instant.now();
+        for (Entitlement e : profile.status.entitlements) {
+            if (e.key == null) continue;
+            long until = e.until == null ? 0 : Instant.parse(e.until).toEpochMilli();
+            if (until != 0 && until <= now.toEpochMilli()) continue;
+            Long known = active.get(e.key);
+            // the longest grant of a key wins; permanent beats everything
+            if (known == null || (known != 0 && (until == 0 || until > known))) active.put(e.key, until);
+        }
+        return active;
+    }
+
     /** @return the mute message to show, or null when the player may chat */
     @Nullable
     public Component muteMessage(UUID id) {

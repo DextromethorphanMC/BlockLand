@@ -12,6 +12,9 @@ import com.blockland.client.font.UiFont;
 import com.blockland.client.screen.lobby.AnnouncementReminder;
 import com.blockland.client.screen.lobby.AnnouncementsPanel;
 import com.blockland.client.screen.lobby.CharacterStage;
+import com.blockland.client.screen.lobby.InventoryPanel;
+import com.blockland.client.screen.lobby.LobbyTab;
+import com.blockland.client.screen.lobby.ProfilePanel;
 import com.blockland.client.screen.lobby.MatchPanel;
 import com.blockland.client.screen.lobby.ModeBrowser;
 import com.blockland.client.screen.lobby.PartyPanel;
@@ -36,13 +39,13 @@ import net.minecraft.sounds.SoundEvents;
 
 import javax.annotation.Nullable;
 import java.util.List;
-import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static com.blockland.client.screen.lobby.LobbyTheme.*;
 import static com.blockland.client.ui.Tr.tr;
 
 /**
- * Main lobby screen, laid out like the CS2 main menu: tabs on top ("开始游戏" / "工匠" / "公告" / "商店"), the lobby's
+ * Main lobby screen, laid out like the CS2 main menu: tabs on top ("开始游戏" / "工匠" / "公告" / "商店" / "库存" / "个人主页"), the lobby's
  * own buttons top right (settings, leave). The play tab has the mode browser on the left, the player's character in
  * the middle, the party and unread announcements top right and the matchmaking panel bottom right.
  * <p>
@@ -55,7 +58,8 @@ public final class LobbyScreen extends Screen {
     private static final int PAD = 16;
 
     private enum Tab {
-        PLAY("blockland.lobby.tab.play"), CRAFT("blockland.lobby.tab.craft"), NEWS("blockland.lobby.tab.news"), SHOP("blockland.lobby.tab.shop");
+        PLAY("blockland.lobby.tab.play"), CRAFT("blockland.lobby.tab.craft"), NEWS("blockland.lobby.tab.news"), SHOP("blockland.lobby.tab.shop"),
+        INVENTORY("blockland.lobby.tab.inventory"), PROFILE("blockland.lobby.tab.profile");
 
         final String key;
 
@@ -64,13 +68,17 @@ public final class LobbyScreen extends Screen {
         }
     }
 
-    /** Opens the 工匠 (craft) screen over the lobby; provided by the craft module, the lobby does not know it. */
+    /** Makes the 工匠 (craft) tab; provided by the craft module, the lobby does not know it (without it the tab stays on 开始游戏). */
     @Nullable
-    private static Function<Screen, Screen> craftScreen;
+    private static Supplier<LobbyTab> craftTabFactory;
+    @Nullable
+    private LobbyTab craft;
     private static String selectedModeId = "";
     private static Tab tab = Tab.PLAY;
 
     private ShopPanel shop;
+    private InventoryPanel inventory;
+    private ProfilePanel profile;
     private TopBar topBar;
     private ModeBrowser browser;
     private MatchPanel match;
@@ -96,8 +104,8 @@ public final class LobbyScreen extends Screen {
         super(Component.translatable("blockland.lobby.title"));
     }
 
-    public static void setCraftScreen(@Nullable Function<Screen, Screen> factory) {
-        craftScreen = factory;
+    public static void setCraftTab(@Nullable Supplier<LobbyTab> factory) {
+        craftTabFactory = factory;
     }
 
     @Override
@@ -116,7 +124,10 @@ public final class LobbyScreen extends Screen {
         layout();
         if (shop == null) {
             shop = new ShopPanel();
-            topBar = new TopBar(List.of(Tab.PLAY.key, Tab.CRAFT.key, Tab.NEWS.key, Tab.SHOP.key));
+            topBar = new TopBar(List.of(Tab.PLAY.key, Tab.CRAFT.key, Tab.NEWS.key, Tab.SHOP.key, Tab.INVENTORY.key, Tab.PROFILE.key));
+            inventory = new InventoryPanel();
+            profile = new ProfilePanel();
+            craft = craftTabFactory == null ? null : craftTabFactory.get();
             browser = new ModeBrowser();
             match = new MatchPanel();
             stage = new CharacterStage();
@@ -128,7 +139,12 @@ public final class LobbyScreen extends Screen {
             });
         }
         if (tab == Tab.SHOP) shop.open();
-        if (tab == Tab.CRAFT) tab = Tab.PLAY;
+        if (tab == Tab.INVENTORY) inventory.open();
+        if (tab == Tab.PROFILE) profile.open();
+        if (tab == Tab.CRAFT) {
+            if (craft == null) tab = Tab.PLAY;
+            else craft.open();
+        }
         if (!introPlayed) {
             // init() also runs on resize and when returning from the loadout editor: animate the first open only
             introPlayed = true;
@@ -196,14 +212,19 @@ public final class LobbyScreen extends Screen {
         g.pose().translate(0, contentShift.get());
         switch (tab) {
             case SHOP -> shop.render(g, mouseX, mouseY, PAD, TOP_BAR + PAD, width - PAD * 2, height - TOP_BAR - PAD * 2 - 4);
+            case INVENTORY -> inventory.render(g, mouseX, mouseY, PAD + 4, TOP_BAR + PAD, width - PAD * 2 - 8, height - TOP_BAR - PAD * 2 - 4, alpha);
+            case PROFILE -> profile.render(g, mouseX, mouseY, PAD + 4, TOP_BAR + PAD, width - PAD * 2 - 8, height - TOP_BAR - PAD * 2 - 4, alpha);
             case NEWS -> news.render(g, mouseX, mouseY, PAD + 4, TOP_BAR + PAD, width - PAD * 2 - 8, height - TOP_BAR - PAD * 2 - 4, alpha);
+            case CRAFT -> {
+                if (craft != null) craft.render(g, mouseX, mouseY, PAD + 4, TOP_BAR + PAD, width - PAD * 2 - 8, height - TOP_BAR - PAD * 2 - 4, alpha);
+            }
             default -> renderPlay(g, mouseX, mouseY, alpha);
         }
         g.pose().popMatrix();
         if (tab != Tab.PLAY && alpha < 1) g.fill(0, TOP_BAR, width, height, ColorMath.fade(BG_BOTTOM, 1 - alpha));
 
         int unread = ClientAnnouncements.unread().size();
-        topBar.render(g, mouseX, mouseY, width, tab.ordinal(), new int[]{0, 0, unread, 0});
+        topBar.render(g, mouseX, mouseY, width, tab.ordinal(), new int[]{0, 0, unread, 0, 0, 0});
     }
 
     private void renderPlay(GuiGraphics g, int mouseX, int mouseY, float alpha) {
@@ -276,6 +297,15 @@ public final class LobbyScreen extends Screen {
             }
         }
         if (switching) return true;
+        if (tab == Tab.INVENTORY) {
+            return button == 0 && inventory.mouseClicked(mouseX, mouseY) || super.mouseClicked(mouseX, mouseY, button);
+        }
+        if (tab == Tab.CRAFT && craft != null) {
+            return craft.mouseClicked(mouseX, mouseY, button) || super.mouseClicked(mouseX, mouseY, button);
+        }
+        if (tab == Tab.PROFILE) {
+            return button == 0 && profile.mouseClicked(mouseX, mouseY) || super.mouseClicked(mouseX, mouseY, button);
+        }
         if (tab == Tab.SHOP) {
             return button == 0 && shop.mouseClicked(mouseX, mouseY) || super.mouseClicked(mouseX, mouseY, button);
         }
@@ -321,28 +351,31 @@ public final class LobbyScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (tab == Tab.CRAFT && craft != null) craft.mouseReleased(mouseX, mouseY, button);
         browser.mouseReleased();
         match.mouseReleased();
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
     @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (tab == Tab.CRAFT && craft != null && craft.mouseDragged(mouseX, mouseY, button, dragX, dragY)) return true;
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (tab == Tab.SHOP) return shop.mouseScrolled(scrollY);
+        if (tab == Tab.CRAFT) return craft != null && craft.mouseScrolled(mouseX, mouseY, scrollY);
+        if (tab == Tab.INVENTORY) return inventory.mouseScrolled(mouseX, mouseY, scrollY);
+        if (tab == Tab.PROFILE) return profile.mouseScrolled(mouseX, mouseY, scrollY);
         if (tab == Tab.NEWS) return news.mouseScrolled(mouseX, mouseY, scrollY);
         return browser.mouseScrolled(mouseX, mouseY, scrollY);
     }
 
     private void switchTab(Tab next) {
         if (switching) return;
-        if (next == Tab.CRAFT) {
-            // 工匠 is its own full screen over the lobby
-            if (craftScreen != null) {
-                click();
-                minecraft.setScreen(craftScreen.apply(this));
-            }
-            return;
-        }
+        if (next == Tab.CRAFT && craft == null) return;
         switching = true;
         click();
         Anim.timeline()
@@ -351,6 +384,9 @@ public final class LobbyScreen extends Screen {
                 .call(() -> {
                     tab = next;
                     if (next == Tab.SHOP) shop.open();
+                    if (next == Tab.INVENTORY) inventory.open();
+                    if (next == Tab.PROFILE) profile.open();
+                    if (next == Tab.CRAFT && craft != null) craft.open();
                     contentShift.snap(-14);
                 }, ">")
                 .add(Anim.to(contentAlpha, 1, 0.25).ease(Ease.QUAD_OUT), ">")
@@ -400,6 +436,7 @@ public final class LobbyScreen extends Screen {
                 return true;
             }
             if (tab == Tab.PLAY && match.back()) return true;
+            if (tab == Tab.CRAFT && craft != null && craft.back()) return true;
             if (tab == Tab.PLAY && browser.back()) {
                 click();
                 return true;

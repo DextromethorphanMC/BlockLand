@@ -24,8 +24,8 @@ import java.util.Map;
 /**
  * The sprays of one build as GPU geometry (asset spec §29): {@link SprayProjector}'s pieces packed into a small model of
  * their own, one mesh per (spray, node) in the node's space, so the viewmodels draw each at its node's animated matrix
- * and the 工匠 preview at the rest pose. Drawn alpha-blended like paint, later sprays on top; the vanilla (shader pack)
- * path draws the same triangles. Cached per weapon look and sprays; evicted entries free their buffers.
+ * and the 工匠 preview at the rest pose. Drawn alpha-blended like paint, later sprays on top; the vanilla-render-type
+ * path (the shadow map's entity capture) draws the same triangles. Cached per weapon look and sprays; evicted entries free their buffers.
  */
 public final class SprayDecals implements AutoCloseable {
     private static final int CACHE = 8;

@@ -61,7 +61,9 @@ def _parts(g):
 def check_alpha(g, r, label):
     for m in g.json.get("materials", []):
         name = m.get("name", "")
-        if (m.get("alphaMode", "OPAQUE") != "OPAQUE" or m.get("doubleSided")) and name not in SEE_THROUGH:
+        # additive effect quads (VIEWMODEL_SPEC section 38: sigils, shockwaves) are light, not surfaces
+        effect = m.get("alphaMode") == "ADD" and m.get("extras", {}).get("region") == "none"
+        if (m.get("alphaMode", "OPAQUE") != "OPAQUE" or m.get("doubleSided")) and name not in SEE_THROUGH and not effect:
             r.check(False, f"{label}: material {name} is {m.get('alphaMode', 'OPAQUE')}"
                            f"{' double sided' if m.get('doubleSided') else ''} (only {sorted(SEE_THROUGH)} may be)")
 

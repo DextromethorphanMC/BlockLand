@@ -58,7 +58,8 @@ import static com.blockland.client.ui.Tr.tr;
  * inspect), the attack timing (cooldown, combo alternation, buffered presses), instant local effects when the blade
  * connects (cut decals, particles, sounds, camera punch) and the hooks that put the {@link KnifeViewmodel} on
  * screen; switching away hands the knife on screen to the {@link Holster} (two viewmodels take turns). The server
- * stays authoritative for hits and damage.
+ * stays authoritative for hits and damage. While the player spectates someone through their eyes, {@link WatchedKnife}
+ * shows that player's knife instead.
  */
 public final class ClientKnives {
     /** A press this long before the knife is ready still counts (it plays as soon as the cooldown ends). */
@@ -108,6 +109,7 @@ public final class ClientKnives {
         TickEvent.RenderTickEvent.Pre.BUS.addListener(event -> frame());
         RenderHandEvent.BUS.addListener(ClientKnives::renderHand);
         InputEvent.InteractionKeyMappingTriggered.BUS.addListener(ClientKnives::interaction);
+        WatchedKnife.init();
         WeaponInput.onAttackPressed(() -> pressed(false));
         WeaponInput.onUsePressed(() -> pressed(true));
         // no sprinting while attacking or inspecting: the knife needs the hand
@@ -125,6 +127,13 @@ public final class ClientKnives {
             event.setYaw(event.getYaw() + viewmodel.cameraYaw());
             event.setRoll(event.getRoll() + viewmodel.cameraRoll());
             viewmodel.camera().moveCamera(event.getCamera());
+        });
+        ViewportEvent.ComputeCameraAngles.BUS.addListener(event -> {
+            if (!WatchedKnife.active()) return;
+            event.setPitch(event.getPitch() + WatchedKnife.cameraPitch());
+            event.setYaw(event.getYaw() + WatchedKnife.cameraYaw());
+            event.setRoll(event.getRoll() + WatchedKnife.cameraRoll());
+            WatchedKnife.moveCamera(event.getCamera());
         });
         ViewportEvent.ComputeFov.BUS.addListener(event -> {
             if (event.usedConfiguredFov() && holdingKnife() && modelReady) event.setFOV(event.getFOV() * viewmodel.camera().fovScale());
@@ -149,6 +158,7 @@ public final class ClientKnives {
             @Override
             public void onImpact(MeleePackets.S2CImpact impact) {
                 remoteImpact(impact);
+                WatchedKnife.impact(impact.attackerId(), impact.heavy(), impact.combo(), impact.target() != MeleePackets.Target.ENTITY);
             }
         });
     }
@@ -183,6 +193,7 @@ public final class ClientKnives {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null) return;
+        WatchedKnife.tick();
         syncEquipped(player);
         if (knife != null) viewmodel.setBuild(MeleeContent.buildOf(player.getMainHandItem()));
         if (WeaponInput.inspectPressed() && knife != null && mc.screen == null) inspect(player);
@@ -254,6 +265,7 @@ public final class ClientKnives {
         long now = System.nanoTime();
         float dt = lastFrame == 0 ? 0 : Math.min(0.1f, (now - lastFrame) / 1e9f);
         lastFrame = now;
+        WatchedKnife.frame(dt);
         if (player == null || knife == null || !holdingKnife()) return;
         if (modelReady) ViewmodelRenderer.suppressViewBobbing(player);
         boolean free = mc.screen == null && mc.getOverlay() == null;
@@ -428,6 +440,7 @@ public final class ClientKnives {
 
     /** Replaces the vanilla first-person hands with the knife viewmodel. */
     private static boolean renderHand(RenderHandEvent event) {
+        if (WatchedKnife.renderHand(event)) return true;
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null || knife == null || !modelReady || !holdingKnife()) return false;
@@ -438,6 +451,11 @@ public final class ClientKnives {
         viewmodel.submit();
         renderMillis = renderMillis * 0.95 + (System.nanoTime() - start) / 1e6 * 0.05;
         return true;
+    }
+
+    /** A clip event's sound of the watched knife (a spectator hears the hand it sees, a little quieter). */
+    static void playWatched(String sound) {
+        playUi(sound, 0.97f + random.nextFloat() * 0.06f, 0.5f);
     }
 
     private static void playUi(String sound, float pitch, float volume) {

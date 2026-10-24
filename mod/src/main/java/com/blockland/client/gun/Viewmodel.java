@@ -10,6 +10,7 @@ import com.blockland.client.render.Textures;
 import com.blockland.client.scope.Optics;
 import com.blockland.client.scope.SightPose;
 import com.blockland.client.spray.SprayDecals;
+import com.blockland.client.viewmodel.SkinEffects;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.client.viewmodel.ViewmodelRig;
 import com.blockland.craft.Build;
@@ -39,7 +40,8 @@ import java.util.function.Consumer;
  * magazine, the muzzle flash (from a suppressor's end when one is fitted) and the laser beam. The shot recoil is its own
  * component ({@link GunRecoil}). A dual gun (asset spec §26)
  * is a second gun whose nodes repeat the first one's with a suffix: it gets the same magazine, slide lock and
- * attachments, its own flashes and beam. A special skin (§30) may bring its own model and muzzle flash.
+ * attachments, its own flashes and beam. A special skin (§30) may bring its own model and muzzle flash, and (§38) its own
+ * inspect and kill feedback — {@link SkinEffects} plays their cues, particles and lights and surges the skin's shaders.
  * Pure presentation: the controller decides when to fire or reload.
  */
 public final class Viewmodel {
@@ -82,6 +84,23 @@ public final class Viewmodel {
     private final float[] flash = new float[2];
     private final float[] flashRoll = new float[2];
     private final float[] flashScale = new float[2];
+    /** A special skin's inspect and kill feedback (asset spec §38). */
+    private final SkinEffects skinEffects = new SkinEffects();
+    private final SkinEffects.Nodes skinNodes = new SkinEffects.Nodes() {
+        @Override
+        public Matrix4f node(String name, int gun) {
+            if (gun == 1 && suffix.isEmpty()) return null;
+            if (name.equals("muzzle")) return muzzleWorld(gun);
+            int index = gun == 1 ? twin(name) : rig.node(name);
+            if (index < 0 || index < hidden.length && hidden[index] || rig.isCollapsed(index)) return null;
+            return rig.world(index);
+        }
+
+        @Override
+        public boolean dual() {
+            return !suffix.isEmpty();
+        }
+    };
 
     // scratch (no per-frame allocation)
     private final Matrix4f root = new Matrix4f();
@@ -104,6 +123,7 @@ public final class Viewmodel {
         if (!ready) return false;
         ads.snap(0);
         java.util.Arrays.fill(flash, 0);
+        skinEffects.clear();
         play(Action.DRAW, gun.anims.draw, gun.drawTime);
         return true;
     }
@@ -111,6 +131,7 @@ public final class Viewmodel {
     /** Loads a model for the equipped gun (falling back to the gun's own when a skin's model is missing). */
     private boolean load(ResourceLocation model) {
         requestedModel = model;
+        skinEffects.clear();
         visibleBuild = null;
         adsResolved = false;
         hidden = new boolean[0];
@@ -146,8 +167,12 @@ public final class Viewmodel {
         this.stats = stats;
     }
 
-    public void setEventSink(Consumer<String> sink) {
-        rig.setEventSink(sink);
+    /** Clip events go to {@code sink} (sounds) and to the skin's inspect cues; null silences both (a holstered gun). */
+    public void setEventSink(@Nullable Consumer<String> sink) {
+        rig.setEventSink(sink == null ? null : name -> {
+            skinEffects.event(name, rig);
+            sink.accept(name);
+        });
     }
 
     // ---- actions ----------------------------------------------------------------------------------
@@ -172,6 +197,23 @@ public final class Viewmodel {
 
     public void stopAction() {
         rig.stopAction();
+    }
+
+    /**
+     * Inspects the gun: a special skin's own inspect (asset spec §38) — its clip when the model has it, else the gun's —
+     * with the skin's cues, streams and surge; otherwise the gun's inspect clip.
+     */
+    public void inspect(String clip) {
+        CraftData.SkinInspect own = stats == null || stats.skin() == null ? null : stats.skin().inspect;
+        String ownClip = own == null || own.clip == null ? "" : own.clip.trim();
+        play(Action.INSPECT, !ownClip.isEmpty() && rig.hasClip(ownClip) ? ownClip : clip, 0);
+        if (own != null && action() == Action.INSPECT) skinEffects.startInspect(own);
+    }
+
+    /** A confirmed kill: the special skin's kill cue (asset spec §38), when it has one. */
+    public void killed() {
+        CraftData.SkinFx fx = stats == null ? null : stats.skinFx();
+        if (isReady() && fx != null && fx.kill != null) skinEffects.cue(fx.kill, rig);
     }
 
     public boolean hasClip(String name) {
@@ -229,6 +271,8 @@ public final class Viewmodel {
     public void update(float dt, AbstractClientPlayer player, boolean sprinting) {
         if (!isReady()) return;
         rig.update(dt, player, sprinting, Mth.clamp(ads.get(), 0, 1));
+        if (skinEffects.inspecting() && rig.action() != Action.INSPECT) skinEffects.stopInspect();
+        skinEffects.update(dt, rig.actionElapsed());
         recoil.update(dt);
         for (int g = 0; g < 2; g++) if (flash[g] > 0) flash[g] -= dt;
     }
@@ -395,9 +439,10 @@ public final class Viewmodel {
         resolveAds();
         buildRoot();
         rig.pose(root);
-        rig.drawMeshes(base, hidden, WeaponLook.style(stats.skin()), blockLight, skyLight);
+        rig.drawMeshes(base, hidden, skinEffects.style(WeaponLook.style(stats.skin())), blockLight, skyLight);
         rig.drawArms(base, player, hidden, blockLight, skyLight);
         drawEffects(base);
+        if (skinEffects.active()) skinEffects.draw(rig.draws(), base, skinNodes);
     }
 
     /**

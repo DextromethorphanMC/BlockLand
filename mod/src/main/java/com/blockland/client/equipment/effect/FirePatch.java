@@ -1,6 +1,7 @@
 package com.blockland.client.equipment.effect;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.LightSources;
 import com.blockland.common.Sounds;
 import com.blockland.equipment.effect.FireSpread;
 import com.blockland.equipment.effect.Params;
@@ -15,6 +16,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.Vec3;
 
+import javax.annotation.Nullable;
 import java.util.List;
 
 /**
@@ -66,6 +68,7 @@ final class FirePatch implements FxWorld.Fx {
                 FireSpread.Cell c = cells.get(0);
                 loop = new Loop(this, c.centreX(), c.floorY() + 0.3, c.centreZ());
                 Minecraft.getInstance().getSoundManager().play(loop);
+                LightSources.attach(this::light);
             }
         }
         age += 0.05f;
@@ -90,6 +93,16 @@ final class FirePatch implements FxWorld.Fx {
             if (random.nextFloat() < 0.012f * s) level.addParticle(ParticleTypes.LAVA, x, c.floorY() + 0.1, z, 0, 0, 0);
         }
         return strength() > 0.01f && !cells.isEmpty();
+    }
+
+    /** The fire's light while it burns (rendering spec §5): orange, flickering, as strong as the flames; null when out. */
+    @Nullable
+    private LightSources.Light light() {
+        float s = strength();
+        if (s <= 0.01f || cells.isEmpty() || !FxWorld.all().contains(this)) return null;
+        double time = System.nanoTime() / 1e9;
+        float flicker = 0.86f + 0.09f * (float) Math.sin(time * 11.3) + 0.05f * (float) Math.sin(time * 23.7 + 1.3);
+        return new LightSources.Light(impact.x, cells.get(0).floorY() + 0.8, impact.z, 1f, 0.55f, 0.2f, 3.2f * s * flicker, radius + 5);
     }
 
     /** 1 while burning, shrinking to 0 at the end (or when put out). */

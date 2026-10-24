@@ -36,6 +36,10 @@ public class PlayerService {
     /** Sprays one build may carry (the game's wire limit; its data allows at most this). */
     static final int MAX_BUILD_SPRAYS = 8;
     static final int MAX_BUILDS = 64;
+    /** Cosmetic slots ({@code card}, {@code graffiti.1} …) and the item keys put in them ({@code graffiti:smile}). */
+    private static final Pattern COSMETIC_SLOT = Pattern.compile("^[a-z0-9_.]{1,32}$");
+    private static final Pattern ITEM_KEY = Pattern.compile("^[a-z0-9_]{1,32}:[a-z0-9_./-]{1,64}$");
+    static final int MAX_COSMETIC_SLOTS = 32;
 
     private final Repository<PlayerAccount> accounts;
 
@@ -49,12 +53,17 @@ public class PlayerService {
      * @param allowPartyInvites whether other players may invite this player to a party
      * @param readAnnouncements ids of existing announcements the player has read
      * @param builds            per weapon id, the player's 工匠 build
+     * @param cosmetics         slot → item key the player put on (name card, graffiti)
      */
     public record PlayerStatus(String uuid, String name, long totalOnlineSeconds,
                                PlayerAccount.Restriction ban, PlayerAccount.Restriction mute,
                                List<PlayerAccount.Entitlement> entitlements,
                                boolean allowPartyInvites, List<String> readAnnouncements,
-                               Map<String, PlayerAccount.WeaponBuild> builds) {
+                               Map<String, PlayerAccount.WeaponBuild> builds, Map<String, String> cosmetics) {
+    }
+
+    /** What a player has put on, slot → item key. */
+    public record Cosmetics(Map<String, String> slots) {
     }
 
     /** @param seconds online time since the previous report for this player */
@@ -146,6 +155,34 @@ public class PlayerService {
         return saveStatus(account.withPreferences(account.preferences().withBuilds(builds)));
     }
 
+    public Cosmetics cosmetics(String uuid) {
+        return new Cosmetics(require(uuid).preferences().cosmetics());
+    }
+
+    /**
+     * Puts an item in a cosmetic slot, or empties the slot when {@code key} is null or blank. The player must own the
+     * item — an active entitlement — unless it is {@code free} (published as such by the game server).
+     */
+    public synchronized Cosmetics setCosmetic(String uuid, String slot, String key, boolean free) {
+        PlayerAccount account = require(uuid);
+        String s = slot == null ? "" : slot.trim().toLowerCase(Locale.ROOT);
+        if (!COSMETIC_SLOT.matcher(s).matches()) throw ApiException.badRequest("无效的装扮槽位: " + slot);
+        Map<String, String> next = new LinkedHashMap<>(account.preferences().cosmetics());
+        if (key == null || key.isBlank()) {
+            next.remove(s);
+        } else {
+            String k = key.trim().toLowerCase(Locale.ROOT);
+            if (!ITEM_KEY.matcher(k).matches()) throw ApiException.badRequest("无效的物品标识: " + key);
+            Instant now = Instant.now();
+            boolean owned = account.entitlements().stream().anyMatch(e -> e.key().equalsIgnoreCase(k) && e.active(now));
+            if (!owned && !free) throw ApiException.badRequest("玩家未拥有该物品: " + k);
+            next.put(s, k);
+            if (next.size() > MAX_COSMETIC_SLOTS) throw ApiException.badRequest("装扮槽位不能超过 " + MAX_COSMETIC_SLOTS + " 个");
+        }
+        accounts.save(account.withPreferences(account.preferences().withCosmetics(next)));
+        return new Cosmetics(Map.copyOf(next));
+    }
+
     // ---- admin ------------------------------------------------------------------------------------
 
     public record AccountView(@JsonUnwrapped PlayerAccount account, boolean online, boolean banned, boolean muted) {
@@ -193,7 +230,7 @@ public class PlayerService {
     public synchronized AccountView grant(String uuid, String key, Integer days, String source) {
         PlayerAccount account = require(uuid);
         Instant now = Instant.now();
-        String normalizedKey = key == null ? "" : key.trim().toUpperCase(Locale.ROOT);
+        String normalizedKey = normalizeKey(key);
         if (normalizedKey.isEmpty()) throw ApiException.badRequest("权益标识不能为空");
         List<PlayerAccount.Entitlement> list = new ArrayList<>();
         PlayerAccount.Entitlement existing = null;
@@ -210,6 +247,15 @@ public class PlayerService {
         }
         list.add(new PlayerAccount.Entitlement(normalizedKey, until, source, now));
         return save(account.withEntitlements(list));
+    }
+
+    /**
+     * Entitlement keys: an inventory item ({@code graffiti:smile}, it has a colon) is lower case like the game's data;
+     * a permission ({@code PRIORITY_QUEUE}) upper case.
+     */
+    public static String normalizeKey(String key) {
+        String k = key == null ? "" : key.trim();
+        return k.indexOf(':') >= 0 ? k.toLowerCase(Locale.ROOT) : k.toUpperCase(Locale.ROOT);
     }
 
     public synchronized AccountView revoke(String uuid, String key) {
@@ -243,7 +289,7 @@ public class PlayerService {
                 a.ban() != null && a.ban().active(now) ? a.ban() : null,
                 a.mute() != null && a.mute().active(now) ? a.mute() : null,
                 a.entitlements().stream().filter(e -> e.active(now)).toList(),
-                preferences.allowPartyInvites(), preferences.readAnnouncements(), preferences.builds());
+                preferences.allowPartyInvites(), preferences.readAnnouncements(), preferences.builds(), preferences.cosmetics());
     }
 
     private AccountView view(PlayerAccount a, Instant now) {

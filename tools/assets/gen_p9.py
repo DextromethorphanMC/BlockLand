@@ -57,7 +57,8 @@ def bake_clip(g, clip, rest):
     channels = []
     for node, comps in rest.items():
         for path, rest_val in comps.items():
-            vals = np.array([f[node][path] for f in frames])
+            # a node the clip's pose leaves out (a skin's effect node in the ordinary clips) stays at rest
+            vals = np.array([f[node][path] if path in f.get(node, {}) else rest_val for f in frames])
             if path == "rotation":
                 vals = np.array(make_continuous(list(vals)))
                 same = np.all(np.abs(np.abs(vals @ rest_val) - 1) < 1e-7)
@@ -65,7 +66,8 @@ def bake_clip(g, clip, rest):
                 same = np.all(np.abs(vals - rest_val) < 1e-7)
             if same and node not in clip.force_nodes:
                 continue
-            interp = "STEP" if path == "scale" else "LINEAR"
+            # scales hide and show parts (STEP); effect nodes a clip grows and shrinks ask for LINEAR (clip.linear_scale)
+            interp = "STEP" if path == "scale" and node not in getattr(clip, "linear_scale", ()) else "LINEAR"
             ts, vs = times, vals
             if interp == "STEP":                      # keep only change points
                 keep = [0] + [i for i in range(1, len(vs)) if np.any(np.abs(vs[i] - vs[i - 1]) > 1e-9)]

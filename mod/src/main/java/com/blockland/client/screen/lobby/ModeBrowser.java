@@ -10,6 +10,7 @@ import com.blockland.anim.Ticker;
 import com.blockland.client.ClientLobbyState;
 import com.blockland.client.ClientMedia;
 import com.blockland.client.font.UiFont;
+import com.blockland.client.rank.RankBadge;
 import com.blockland.client.ui.Draw;
 import com.blockland.client.ui.Tr;
 import com.blockland.network.packet.LobbyGroupEntry;
@@ -263,8 +264,9 @@ public final class ModeBrowser {
         int textMax = cw - 24;
         Draw.text(g, Draw.fit(m.title(), (int) (textMax / 1.2f)), 12, 9, 1.2f, ColorMath.fade(available ? TEXT : MUTED, a), true);
         String time = m.timeLimitSeconds() > 0 ? tr("blockland.modes.time_limit", clock(m.timeLimitSeconds())) : tr("blockland.modes.no_time_limit");
-        Draw.text(g, Tr.text(m.formatLabel()) + "  ·  " + tr("blockland.modes.players", m.requiredPlayers()) + "  ·  " + time, 12, 26, 1f,
-                ColorMath.fade(MUTED, a), false);
+        String format = m.dropIn() ? tr("blockland.modes.drop_in", m.requiredPlayers())
+                : Tr.text(m.formatLabel()) + "  ·  " + tr("blockland.modes.players", m.requiredPlayers()) + "  ·  " + time;
+        Draw.text(g, format, 12, 26, 1f, ColorMath.fade(MUTED, a), false);
         if (!available) {
             Draw.text(g, Draw.fit(Tr.text(m.unavailableReason()), textMax), 12, 44, 1f, ColorMath.fade(ERROR, a), false);
         } else {
@@ -273,8 +275,9 @@ public final class ModeBrowser {
             float dotAlpha = m.playing() > 0 || m.queued() > 0 ? 0.55f + 0.45f * pulse : 0.6f;
             Draw.glow(g, 15, 48, 5, 5, ColorMath.fade(dot, a * 0.5f * dotAlpha));
             Draw.rect(g, 13, 46, 4, 4, ColorMath.fade(dot, a * dotAlpha));
-            Draw.text(g, tr("blockland.modes.queue_line", m.queued(), m.requiredPlayers(), m.playing()), 22, 44, 1f,
-                    ColorMath.fade(m.queued() > 0 ? TEXT : DIM, a), false);
+            String line = m.dropIn() ? tr("blockland.modes.online_line", m.playing())
+                    : tr("blockland.modes.queue_line", m.queued(), m.requiredPlayers(), m.playing());
+            Draw.text(g, line, 22, 44, 1f, ColorMath.fade(m.queued() > 0 || m.dropIn() && m.playing() > 0 ? TEXT : DIM, a), false);
         }
 
         if (limited) LimitedTime.modeBadge(g, m.availableUntil(), cw - 6, ch - 17, a);
@@ -289,6 +292,7 @@ public final class ModeBrowser {
             Draw.rect(g, cw - tagW - kitW - 10, 6, kitW, 12, ColorMath.fade(0xAA05080D, a));
             Draw.text(g, kit, cw - tagW - kitW - 6, 8, 1f, ColorMath.fade(MUTED, a), false);
         }
+        if (m.ranked()) RankBadge.modeTag(g, cw - 6, 21, a);
         g.pose().popMatrix();
     }
 

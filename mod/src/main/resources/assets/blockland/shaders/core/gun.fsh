@@ -1,8 +1,9 @@
 #version 150
 
 #moj_import <minecraft:dynamictransforms.glsl>
+#moj_import <blockland:scene.glsl>
 
-// Uniform packing: see gun.vsh.
+// Uniform packing: see gun.vsh. BlockLandScene / BlShadowMap: the world's lighting (rendering spec §2, §8).
 uniform sampler2D Sampler0;          // albedo (display colours)
 uniform sampler2D NormalSampler;     // LabPBR _n: normal xy (DirectX: green = down), AO, height
 uniform sampler2D SpecularSampler;   // LabPBR _s: smoothness, F0 / metal id, porosity, emission (255 = none)
@@ -13,13 +14,16 @@ in vec2 texCoord0;
 in vec3 objectPos;
 in float vertexAo;
 in vec4 lightColor;
+in vec4 blockLightColor;
 
 out vec4 fragColor;
 
 // A small studio light rig in view space (like a weapon viewmodel): key light above/right, cool fill from the left, a
 // rim from behind and a sky-gradient environment that rough surfaces see blurred. Lit in linear light (GGX, Smith,
 // Schlick), converted back to display space and scaled by Minecraft's lightmap like vanilla shading; emission is
-// added after the lightmap.
+// added after the lightmap. Lit by the world (flag 64, rendering spec §8) the rig is dimmed and the world's own light
+// takes over: the sun with its shadow at the weapon, the sky's share of the lightmap tinted and shadowed, the dynamic
+// lights (a muzzle flash lights its own gun) and reflections of the sky.
 const vec3 KEY = vec3(0.37968, 0.81930, 0.42963);
 const vec3 FILL = vec3(-0.90886, 0.20449, 0.36354);
 const vec3 RIM = vec3(0.0, 0.34894, -0.93715);
@@ -115,6 +119,15 @@ vec3 environment(vec3 r, float roughness) {
     return mix(GROUND, SKY, sky) * (1.0 - 0.35 * roughness);
 }
 
+// The world seen in a reflection (world-space direction): the sky above as bright as the sky light at the weapon, a
+// dark floor below; block light (torches) fills both a little.
+vec3 worldEnvironment(vec3 r, float roughness, vec3 skyShare, vec3 blockShare) {
+    float sky = smoothstep(-0.35 - 0.45 * roughness, 0.8 + 0.2 * roughness, r.y);
+    vec3 above = BlSkyColor.rgb * bl_luminance(skyShare) + blockShare * 0.35;
+    vec3 below = (skyShare + blockShare) * 0.06;
+    return mix(below, above, sky) * (1.0 - 0.35 * roughness);
+}
+
 // Light reflected by one directional light: Lambert diffuse (the 1/pi is in the light) and GGX specular.
 vec3 directLight(vec3 n, vec3 v, vec3 l, vec3 diffuse, vec3 f0, float a, float light, float diffuseShare) {
     float nol = dot(n, l);
@@ -204,6 +217,57 @@ vec4 circuitPlane(vec2 p, float aa, float phase) {
     return vec4(core, halo, pulse * core, body);
 }
 
+// Distances to the nearest and the second-nearest feature point of a 3D cellular (Worley) noise, cells of size 1.
+vec2 cellular(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = p - i;
+    float d1 = 8.0, d2 = 8.0;
+    for (int z = -1; z <= 1; z++) {
+        for (int y = -1; y <= 1; y++) {
+            for (int x = -1; x <= 1; x++) {
+                vec3 g = vec3(float(x), float(y), float(z));
+                vec3 o = vec3(hash13(i + g), hash13(i + g + vec3(19.1, 7.3, 3.7)), hash13(i + g + vec3(5.2, 31.7, 11.3)));
+                vec3 r = g + o - f;
+                float d = dot(r, r);
+                if (d < d1) {
+                    d2 = d1;
+                    d1 = d;
+                } else if (d < d2) {
+                    d2 = d;
+                }
+            }
+        }
+    }
+    return sqrt(vec2(d1, d2));
+}
+
+// Distance from p to the segment from a to b.
+float segment(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+    return length(pa - ba * h);
+}
+
+// The glyphs of the inferno effect (asset spec section 38): some cells of a plane carry a rune - a stem and three
+// strokes between six anchor points picked by the cell's hash. Returns (stroke 0..1, the cell's ignition threshold).
+vec2 runeGlyph(vec2 p, float aa) {
+    vec2 cell = floor(p);
+    if (hash12(cell + vec2(2.17, 9.31)) < 0.62) return vec2(0.0);
+    vec2 f = p - cell;
+    vec2 pts[6] = vec2[6](vec2(0.28, 0.22), vec2(0.72, 0.22), vec2(0.28, 0.5), vec2(0.72, 0.5), vec2(0.28, 0.78), vec2(0.72, 0.78));
+    float d = segment(f, vec2(0.5, 0.16), vec2(0.5, 0.84));
+    for (int k = 0; k < 3; k++) {
+        int a = int(hash12(cell + vec2(float(k) * 3.1, 1.7)) * 5.999);
+        int b = int(hash12(cell + vec2(float(k) * 5.7, 4.3)) * 5.999);
+        if (a != b) d = min(d, segment(f, pts[a], pts[b]));
+    }
+    float soft = max(aa, 1e-4) * 0.8;
+    float stroke = 1.0 - smoothstep(0.05 - soft, 0.05 + soft, d);
+    // too fine to resolve: no glyph rather than shimmer
+    stroke *= 1.0 - smoothstep(0.25, 0.6, aa);
+    return vec2(stroke, hash12(cell + vec2(8.13, 0.71)));
+}
+
 vec3 starLayer(vec2 p, float t) {
     vec2 cell = floor(p);
     vec2 f = fract(p);
@@ -218,9 +282,16 @@ vec3 starLayer(vec2 p, float t) {
 
 void main() {
     int flags = int(ModelOffset.z + 0.5);
+    // an opaque draw of the world's frame stores its emission in the alpha (rendering spec §3)
+    bool encode = (flags & 48) == 48 && bl_encodeEmission();
+    // lit by the world: DrawList asked SceneLighting.weaponsLit() (the provider hands a block with the world's light)
+    bool worldLit = (flags & 64) != 0;
     vec4 albedo = texture(Sampler0, texCoord0) * ColorModulator;
+    // the skin effect's id, and in its fraction how far the effect surges this frame (asset spec §38; DrawList.add)
+    int effect = int(floor(TextureMat[3][3] + 0.001));
+    float surge = clamp((TextureMat[3][3] - float(effect)) / 0.98, 0.0, 1.0);
     // sprays (asset spec §29, effect 5): the vertex AO byte carries the decal's facing fade, not occlusion
-    bool decal = int(TextureMat[3][3] + 0.5) == 5;
+    bool decal = effect == 5;
     if (decal) {
         albedo.a *= vertexAo;
     }
@@ -229,7 +300,11 @@ void main() {
     }
     if ((flags & 1) != 0) {
         // fullbright: emissive parts and effects keep their colour; additive blending ignores alpha
-        fragColor = (flags & 8) != 0 ? vec4(albedo.rgb * albedo.a, albedo.a) : albedo;
+        if (encode) {
+            fragColor = vec4(albedo.rgb, bl_emissionAlpha(max(albedo.r, max(albedo.g, albedo.b))));
+        } else {
+            fragColor = (flags & 8) != 0 ? vec4(albedo.rgb * albedo.a, albedo.a) : albedo;
+        }
         return;
     }
     vec3 n = normalize(viewNormal);
@@ -280,8 +355,7 @@ void main() {
     }
     vec3 diffuse = albedoLinear * (1.0 - metallic);
 
-    // skin effects
-    int effect = int(TextureMat[3][3] + 0.5);
+    // skin effects (a surge brightens them; at 0 they are exactly as at rest)
     vec4 params = TextureMat[2];
     vec3 effectColor = TextureMat[3].rgb;
     float time = TextureMat[1][3];
@@ -293,15 +367,17 @@ void main() {
         // iridescent: a thin coating whose colour follows the viewing angle and drifts across the surface
         float pattern = noise3(objectPos * max(params.w, 0.01) + vec3(time * params.z));
         vec3 film = thinFilm(nov, max(params.y, 0.05) * (0.30 + 0.50 * pattern));
-        f0 = mix(f0, film * mix(0.55, 1.0, metallic), clamp(params.x, 0.0, 1.0));
-        diffuse = mix(diffuse, diffuse * film * 1.6, clamp(params.x, 0.0, 1.0) * 0.5);
+        float strength = mix(clamp(params.x, 0.0, 1.0), 1.0, surge);
+        f0 = mix(f0, film * mix(0.55, 1.0, metallic), strength);
+        diffuse = mix(diffuse, diffuse * film * 1.6, strength * 0.5);
+        glow = toLinear(film) * 0.35 * surge;
     } else if (effect == 2) {
         // flow: the emission mask glows, pulses run along the weapon towards the muzzle (-z)
         float pulseLength = max(params.y, 0.005);
         float period = max(pulseLength * 6.0, 0.05);
         float d = (fract((-objectPos.z - params.x * time) / period) - 0.5) * period;
         float pulse = exp(-(d * d) / (pulseLength * pulseLength) * 2.0);
-        glow = toLinear(effectColor) * emission * (clamp(params.z, 0.0, 1.0) + params.w * pulse) * 1.5;
+        glow = toLinear(effectColor) * emission * (clamp(params.z, 0.0, 1.0) + params.w * pulse) * 1.5 * (1.0 + 2.5 * surge);
         emission = 0.0;
     } else if (effect == 3) {
         // galaxy: stars and nebula deep below the surface, shifted by the view (parallax)
@@ -318,7 +394,7 @@ void main() {
             stars += starLayer(p * max(params.y, 0.05) * (3.0 + layer * 1.7), time * params.z + layer * 17.0) * (1.25 - 0.2 * layer);
         }
         vec3 nebula = toLinear(texture(Sampler0, texCoord0 - slope * depth * 0.6).rgb * ColorModulator.rgb) * params.w;
-        glow = stars * toLinear(effectColor) * 1.6 + nebula * 0.55;
+        glow = stars * toLinear(effectColor) * 1.6 * (1.0 + 2.0 * surge) + nebula * 0.55 * (1.0 + surge);
         diffuse = albedoLinear * 0.12;
     } else if (effect == 4) {
         // circuit: neon traces laid out in the rest-pose space (seamless over the weapon and its attachments), each face
@@ -338,11 +414,54 @@ void main() {
         if (w.z > 0.02) c += w.z * circuitPlane(cells.xy, max(fw.x, fw.y), -(cells.x + cells.y) / density / PERIOD - shift);
         float strength = clamp(params.z, 0.0, 1.0);
         vec3 neon = toLinear(clamp(hueShift(effectColor, 6.2831853 * (params.w * time + objectPos.z * 0.35)), 0.0, 1.0));
-        glow = neon * (c.x * (0.3 + 1.2 * strength) + c.y * 0.32 * strength + c.z * 2.6);
+        glow = neon * (c.x * (0.3 + 1.2 * strength) + c.y * 0.32 * strength + c.z * 2.6) * (1.0 + 2.0 * surge);
         // the traces sit under the lacquer: copper dark where they run, the chips' packages a touch lighter
         diffuse *= (1.0 - 0.6 * c.x) * (1.0 + 0.8 * c.w);
         emission = 0.0;
         coat = 1.0;
+    } else if (effect == 6) {
+        // inferno: molten veins along the cracks of a cellular network laid out in the rest-pose space (seamless over
+        // the weapon and its attachments), energy running through them towards the muzzle (-z), glyphs burnt into the
+        // flanks. At rest only a smoulder (params.z) shows; the surge spreads over the surface from scattered seeds
+        // behind a white-hot front, opens the veins, chars the steel, lights the glyphs and the silhouette.
+        float density = max(params.x, 1.0);
+        vec3 q = objectPos * density;
+        vec3 warp = vec3(noise3(q * 0.35 + vec3(0.0, 0.0, time * 0.3)), noise3(q * 0.35 + vec3(7.1, 3.3, time * 0.3)),
+                noise3(q * 0.35 + vec3(2.9, 8.7, time * 0.3))) - 0.5;
+        vec2 cells = cellular(q + warp * 0.8);
+        float edge = cells.y - cells.x;
+        float aa = max(fwidth(edge), 1e-4);
+        float sharp = 1.0 - smoothstep(0.35, 0.9, fwidth(q.x) + fwidth(q.y) + fwidth(q.z));
+        float crack = (1.0 - smoothstep(0.0, 0.07 + aa * 1.5, edge)) * mix(0.35, 1.0, sharp);
+        float core = (1.0 - smoothstep(0.0, 0.022 + aa, edge)) * sharp;
+        // energy packets riding the veins towards the muzzle
+        float flow = noise3(vec3(q.xy * 0.25, q.z * 0.25 + time * params.y * density * 0.25));
+        float packets = 0.55 + 0.45 * sin(6.2831853 * (-objectPos.z * density * 0.08 - time * params.y * 3.0) + flow * 6.0);
+        // the surge spreads from scattered seeds; a white-hot front where it is arriving (or cooling back)
+        float seed = noise3(objectPos * 26.0) * 0.75 + noise3(objectPos * 61.0) * 0.25;
+        float level = surge * 1.3 - 0.15;
+        float reveal = smoothstep(seed - 0.06, seed + 0.06, level);
+        float front = (1.0 - smoothstep(0.0, 0.07, abs(level - seed))) * step(0.02, surge);
+        float beat = 0.86 + 0.14 * sin(time * 8.5);
+        float smoulder = clamp(params.z, 0.0, 1.0) * (0.35 + 0.65 * packets);
+        float heat = max(smoulder, reveal * beat);
+        vec3 ember = toLinear(effectColor);
+        vec3 hot = mix(ember, vec3(1.0, 0.78, 0.42), core * (0.35 + 0.65 * reveal));
+        glow = hot * crack * heat * (0.6 + 1.4 * packets) * (1.0 + 2.0 * reveal);
+        // glyphs on the faces turned sideways (the flanks), lighting one after another as the surge rises
+        vec3 faceNormal = cross(dFdx(objectPos), dFdy(objectPos));
+        float side = abs(faceNormal.x) / max(length(faceNormal), 1e-12);
+        vec2 glyph = runeGlyph(objectPos.zy * 62.0, max(fwidth(objectPos.z), fwidth(objectPos.y)) * 62.0);
+        float lit = smoothstep(glyph.y, glyph.y + 0.12, surge * 1.5 - 0.35);
+        glow += mix(ember, vec3(1.0, 0.55, 0.25), 0.5) * glyph.x * lit * smoothstep(0.7, 0.9, side) * 2.2 * beat;
+        glow += vec3(1.0, 0.86, 0.62) * front * 1.8;
+        // the silhouette glows with the heat
+        glow += ember * pow(1.0 - nov, 3.0) * reveal * 0.8;
+        // the steel chars where the fire has taken it
+        float charred = clamp(params.w, 0.0, 1.0) * reveal * (1.0 - crack);
+        diffuse *= 1.0 - 0.75 * charred;
+        f0 = mix(f0, f0 * vec3(0.5, 0.32, 0.28), charred);
+        roughness = mix(roughness, 0.8, charred * 0.6);
     }
 
     // geometric specular anti-aliasing: curved and bumpy surfaces widen their highlights instead of sparkling
@@ -352,21 +471,56 @@ void main() {
     alpha = sqrt(clamp(alpha * alpha + min(2.0 * variance, 0.18), 0.0, 1.0));
     float directAlpha = max(alpha, 0.045);
 
-    vec3 ambient = mix(AMBIENT_DOWN, AMBIENT_UP, n.y * 0.5 + 0.5);
     float directAo = mix(1.0, ao, 0.35);
-    vec3 color = diffuse * ambient * ao
-            + (directLight(n, v, KEY, diffuse, f0, directAlpha, KEY_LIGHT, 1.0)
+    vec3 studio = (directLight(n, v, KEY, diffuse, f0, directAlpha, KEY_LIGHT, 1.0)
             + directLight(n, v, FILL, diffuse, f0, directAlpha, FILL_LIGHT, 1.0)
-            + directLight(n, v, RIM, diffuse, f0, directAlpha, RIM_LIGHT, 0.0)) * directAo
-            + environment(reflect(-v, n), sqrt(alpha)) * environmentBrdf(f0, sqrt(alpha), nov) * ao;
-    if (coat > 0.0) {
-        float coatNov = max(dot(geometric, v), 1e-4);
-        color += coat * (environment(reflect(-v, geometric), 0.06) * environmentBrdf(vec3(0.04), 0.06, coatNov) * ao
-                + directLight(geometric, v, KEY, vec3(0.0), vec3(0.04), 0.03, KEY_LIGHT, 0.0) * directAo);
+            + directLight(n, v, RIM, diffuse, f0, directAlpha, RIM_LIGHT, 0.0)) * directAo;
+    vec3 display;
+    if (worldLit) {
+        // positions and directions in camera-relative world space (the viewmodel's sit just in front of the eye)
+        mat3 toWorld = transpose(mat3(BlViewRotation));
+        vec3 worldPos = toWorld * viewPos;
+        vec3 worldNormal = toWorld * n;
+        vec3 light = toLinear(lightColor.rgb);
+        vec3 blockShare = toLinear(blockLightColor.rgb);
+        vec3 skyShare = max(light - blockShare, vec3(0.0));
+        // the sun (the moon at night) reaches the weapon where the sky does and its shadow does not fall
+        float shadow = bl_shadow(worldPos, toWorld * geometric, gl_FragCoord.xy);
+        float skyAccess = clamp((ModelOffset.y - 6.0) / 9.0, 0.0, 1.0);
+        vec3 sunView = mat3(BlViewRotation) * BlSunDir.xyz;
+        vec3 sun = BlSunColor.rgb * (0.85 * skyAccess * shadow);
+        vec3 direct = directLight(n, v, sunView, diffuse, f0, directAlpha, 1.0, 1.0) * sun * directAo;
+        // the sky's share of the light: its own tint in full shadow, only part of it left there
+        vec3 shade = mix(BlAmbient.rgb * max(BlAmbient.a, 0.0), vec3(1.0), shadow);
+        vec3 ambientLight = (blockShare + skyShare * shade) * mix(0.55, 1.0, worldNormal.y * 0.5 + 0.5);
+        vec3 points = bl_pointLights(worldPos, worldNormal);
+        vec3 env = worldEnvironment(toWorld * reflect(-v, n), sqrt(alpha), skyShare * shade, blockShare);
+        vec3 color = studio * 0.35 * light
+                + direct
+                + diffuse * ambientLight * 0.45 * ao
+                + (diffuse + f0 * 0.35) * points * directAo
+                + env * environmentBrdf(f0, sqrt(alpha), nov) * ao;
+        if (coat > 0.0) {
+            float coatNov = max(dot(geometric, v), 1e-4);
+            vec3 coatEnv = worldEnvironment(toWorld * reflect(-v, geometric), 0.06, skyShare * shade, blockShare);
+            color += coat * (coatEnv * environmentBrdf(vec3(0.04), 0.06, coatNov) * ao
+                    + directLight(geometric, v, sunView, vec3(0.0), vec3(0.04), 0.03, 1.0, 0.0) * sun * directAo);
+        }
+        display = toDisplay(color);
+    } else {
+        vec3 ambient = mix(AMBIENT_DOWN, AMBIENT_UP, n.y * 0.5 + 0.5);
+        vec3 color = diffuse * ambient * ao + studio
+                + environment(reflect(-v, n), sqrt(alpha)) * environmentBrdf(f0, sqrt(alpha), nov) * ao;
+        if (coat > 0.0) {
+            float coatNov = max(dot(geometric, v), 1e-4);
+            color += coat * (environment(reflect(-v, geometric), 0.06) * environmentBrdf(vec3(0.04), 0.06, coatNov) * ao
+                    + directLight(geometric, v, KEY, vec3(0.0), vec3(0.04), 0.03, KEY_LIGHT, 0.0) * directAo);
+        }
+        display = toDisplay(color) * lightColor.rgb;
     }
-
-    vec3 display = toDisplay(color) * lightColor.rgb;
     // emission (LabPBR _s alpha, effects) is light of its own: not darkened by the lightmap
-    display += albedo.rgb * emission + toDisplay(glow);
-    fragColor = vec4(display, albedo.a);
+    vec3 glowDisplay = toDisplay(glow);
+    display += albedo.rgb * emission + glowDisplay;
+    float outAlpha = encode ? bl_emissionAlpha(max(emission, bl_luminance(glowDisplay))) : albedo.a;
+    fragColor = vec4(display, outAlpha);
 }

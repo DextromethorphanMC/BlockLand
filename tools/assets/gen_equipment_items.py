@@ -12,6 +12,7 @@ from gen_equipment import ITEM_IDS
 from gen_items import render_items_icon, write_json
 from glbread import GLTF
 from preview import load_materials
+import third_person
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EQUIPMENT_DIR = os.path.join(HERE, "..", "..", "mod", "src", "main", "resources", "assets", "blockland", "models",
@@ -130,9 +131,7 @@ def build(path):
         write_json(path("models", "item", f"{key}_held.json"),
                    {"textures": {"0": tex, "particle": tex}, "elements": held_elements(key, names),
                     "display": gki.held_model(tex)["display"]})
-        write_json(path("items", f"{key}.json"), {"model": {
-            "type": "minecraft:select", "property": "minecraft:display_context",
-            "cases": [{"when": ["gui", "ground", "fixed"],
-                       "model": {"type": "minecraft:model", "model": f"blockland:item/{key}"}}],
-            "fallback": {"type": "minecraft:model", "model": f"blockland:item/{key}_held"}}})
+        write_json(path("items", f"{key}.json"), third_person.weapon_definition(
+            {"type": "minecraft:model", "model": f"blockland:item/{key}"},
+            {"type": "minecraft:model", "model": f"blockland:item/{key}_held"}))
         print(f"equipment items: {key} icon, item models, held palette, item definition")

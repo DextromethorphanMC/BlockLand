@@ -9,6 +9,7 @@ import textures as tx
 from gen_items import patch_colours, render_items_icon, write_json
 from glbread import GLTF
 from preview import GUN_DIR, hidden_set, load_materials
+import third_person
 
 GUN = "ks3"
 DEFAULT_SKINS = {"olive": {"tints": {"stock": [0.30, 0.34, 0.20], "pump": [0.30, 0.34, 0.20]}}}
@@ -156,9 +157,7 @@ def skin_select(x):
 
 
 def item_definition():
-    return {"model": {"type": "minecraft:select", "property": "minecraft:display_context",
-                      "cases": [{"when": ["gui", "ground", "fixed"], "model": skin_select(GUN)}],
-                      "fallback": skin_select(f"{GUN}_held")}}
+    return third_person.weapon_definition(skin_select(GUN), skin_select(f"{GUN}_held"))
 
 
 # ------------------------------------------------------------------------------------------- build

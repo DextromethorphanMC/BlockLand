@@ -148,7 +148,8 @@ MODELS = {
 # Tables of later weapons live in modules of their own (parallel work on different weapons): each module has
 # `models()` -> {model: table} in the format above. Missing modules are skipped.
 MODEL_MODULES = ("pbr_models_tommy", "pbr_models_ks3", "pbr_models_usp", "pbr_models_dagger", "pbr_models_stocks",
-                 "pbr_models_underbarrel", "pbr_models_rpd", "pbr_models_karambit", "pbr_models_equipment")
+                 "pbr_models_underbarrel", "pbr_models_rpd", "pbr_models_karambit", "pbr_models_equipment",
+                 "pbr_models_bomb")
 
 
 def _load_model_modules():

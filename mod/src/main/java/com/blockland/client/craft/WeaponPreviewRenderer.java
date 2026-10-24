@@ -1,17 +1,8 @@
 package com.blockland.client.craft;
 
-import com.blockland.BlockLand;
-import com.blockland.client.gltf.ClipSampler;
-import com.blockland.client.gltf.GltfModel;
-import com.blockland.client.gltf.Pose;
 import com.blockland.client.render.DrawList;
-import com.blockland.client.render.GpuModel;
-import com.blockland.client.render.ModelCache;
-import com.blockland.client.spray.SprayDecals;
-import com.blockland.client.viewmodel.ViewmodelRig;
 import com.blockland.craft.Build;
 import com.blockland.craft.CraftCatalog;
-import com.blockland.craft.CraftData;
 import com.blockland.craft.Craftable;
 import com.mojang.blaze3d.ProjectionType;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -27,11 +18,8 @@ import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Quaternionfc;
 import org.joml.Vector3f;
-import org.joml.Vector3fc;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Renders a crafted weapon (gun or knife, with its attachment models and skin) into a GUI texture with the same GPU
@@ -39,7 +27,8 @@ import java.util.List;
  * rotation, zoom, size): while the player just looks at the 工匠 screen the GPU only blits the cached image.
  */
 public final class WeaponPreviewRenderer extends PictureInPictureRenderer<WeaponPreviewRenderer.State> {
-    private static final float FOV = 28f;
+    /** Vertical field of view of the preview camera (degrees). */
+    public static final float FOV = 28f;
 
     private final DrawList draws = new DrawList();
     private final CachedPerspectiveProjectionMatrixBuffer projection = new CachedPerspectiveProjectionMatrixBuffer("BlockLand weapon preview", 0.01f, 40f);
@@ -68,13 +57,6 @@ public final class WeaponPreviewRenderer extends PictureInPictureRenderer<Weapon
     }
 
     /**
-     * One model's meshes to draw: the weapon's own, or an attachment's at its mount (with its slot's skin region, and the
-     * mount's rest position as its effect origin so skin effects run on across the joint, spec §30).
-     */
-    private record Part(GpuModel model, Pose pose, boolean[] hidden, int root, String region, Vector3fc effectOrigin) {
-    }
-
-    /**
      * How the last preview was seen: the weapon's rest-pose space to view space, the vertical field of view (degrees) and
      * the aspect, so the 工匠 screen can turn a click on the preview into a ray (placing sprays).
      */
@@ -92,6 +74,38 @@ public final class WeaponPreviewRenderer extends PictureInPictureRenderer<Weapon
     @Nullable
     public static Camera lastCamera() {
         return lastCamera;
+    }
+
+    /**
+     * The preview camera for an assembly: the visible weapon framed by the centre and radius of its meshes in the rest
+     * pose, turned by {@code yaw} / {@code pitch} (or {@code orientation}), {@code zoom} closer. Maps the assembly's pose
+     * space to view space; with {@link #FOV} and the picture's aspect it tells where a node lands on the picture (the
+     * in-game 工匠 draws its callout lines to the real mounts with it). Null when nothing of the weapon is drawn.
+     */
+    @Nullable
+    public static Matrix4f viewFor(WeaponAssembly assembly, float yaw, float pitch, float zoom, @Nullable Quaternionfc orientation) {
+        float[] frame = frameOf(assembly);
+        return frame == null ? null : viewFor(frame, yaw, pitch, zoom, orientation);
+    }
+
+    /** What the camera frames: the centre (x, y, z) and radius of the assembly's drawn meshes; null when nothing is drawn. */
+    @Nullable
+    public static float[] frameOf(WeaponAssembly assembly) {
+        Vector3f min = new Vector3f(Float.MAX_VALUE), max = new Vector3f(-Float.MAX_VALUE);
+        assembly.bounds(new Matrix4f(), true, min, max);
+        if (min.x > max.x) return null;
+        Vector3f center = new Vector3f(min).add(max).mul(0.5f);
+        return new float[]{center.x, center.y, center.z, new Vector3f(max).sub(min).length() * 0.5f};
+    }
+
+    /** {@link #viewFor(WeaponAssembly, float, float, float, Quaternionfc)} for a {@link #frameOf frame} computed once. */
+    public static Matrix4f viewFor(float[] frame, float yaw, float pitch, float zoom, @Nullable Quaternionfc orientation) {
+        float distance = frame[3] / (float) Math.tan(Math.toRadians(FOV) / 2) * 1.08f / Math.max(0.5f, zoom);
+        return new Matrix4f()
+                .translate(0, 0, -distance)
+                .rotate(orientation != null ? orientation : new Quaternionf()
+                        .rotateX((float) Math.toRadians(pitch)).rotateY((float) Math.toRadians(yaw)))
+                .translate(-frame[0], -frame[1], -frame[2]);
     }
 
     @Override
@@ -115,88 +129,23 @@ public final class WeaponPreviewRenderer extends PictureInPictureRenderer<Weapon
         Craftable weapon = CraftCatalog.get(state.weaponId()).orElse(null);
         Build build = weapon == null ? null : CraftCatalog.complete(weapon, state.build());
         // a special skin's own model (same node contract, spec §30), else the weapon's
-        GpuModel model = weapon == null ? null : ModelCache.get(WeaponLook.modelOf(weapon, build));
-        if (model == null && weapon != null) model = ModelCache.get(BlockLand.id(weapon.model()));
+        WeaponAssembly assembly = weapon == null ? null : WeaponAssembly.of(weapon, build, null, false);
         GpuTextureView color = RenderSystem.outputColorTextureOverride;
         GpuTextureView depth = RenderSystem.outputDepthTextureOverride;
-        if (model == null || color == null) return;
+        if (assembly == null || color == null) return;
         int width = color.texture().getWidth(0), height = color.texture().getHeight(0);
 
-        GltfModel source = model.source;
-        int weaponRoot = source.node(weapon.modelRoot());
-        if (weaponRoot < 0) return;
-        Pose pose = new Pose(source);
-        GltfModel.Animation idle = source.animation("idle");
-        if (idle != null) new ClipSampler(idle).sample(0, pose);
-        pose.computeWorld(new Matrix4f());
-        boolean[] hidden = WeaponLook.hiddenNodes(source, weapon, build, -1);
-
-        List<Part> parts = new ArrayList<>();
-        parts.add(new Part(model, pose, hidden, weaponRoot, "", new Vector3f()));
-        for (ViewmodelRig.Attachment attachment : WeaponLook.attachments(weapon, build)) {
-            int mount = source.node(attachment.mount());
-            GpuModel att = mount < 0 || hidden[mount] ? null : ModelCache.get(attachment.model());
-            if (att == null) continue;
-            Pose attPose = new Pose(att.source);
-            attPose.computeWorld(pose.world[mount]);
-            parts.add(new Part(att, attPose, new boolean[att.source.nodes.size()], att.source.node("attachment"), attachment.region(),
-                    model.restOrigin(mount)));
-        }
-
-        // frame the visible weapon: centre and radius of its meshes in the rest pose
-        Vector3f min = new Vector3f(Float.MAX_VALUE), max = new Vector3f(-Float.MAX_VALUE), p = new Vector3f();
-        for (Part part : parts) {
-            GltfModel src = part.model.source;
-            for (int index : src.order) {
-                if (!drawn(part, index)) continue;
-                for (GltfModel.Primitive primitive : src.meshes.get(src.nodes.get(index).mesh).primitives) {
-                    float[] pos = primitive.positions;
-                    for (int v = 0; v < pos.length; v += 3) {
-                        part.pose.world[index].transformPosition(pos[v], pos[v + 1], pos[v + 2], p);
-                        min.min(p);
-                        max.max(p);
-                    }
-                }
-            }
-        }
-        if (min.x > max.x) return;
-        Vector3f center = new Vector3f(min).add(max).mul(0.5f);
-        float radius = new Vector3f(max).sub(min).length() * 0.5f;
-        float distance = radius / (float) Math.tan(Math.toRadians(FOV) / 2) * 1.08f / Math.max(0.5f, state.zoom());
-
-        Matrix4f view = new Matrix4f()
-                .translate(0, 0, -distance)
-                .rotate(state.orientation() != null ? state.orientation() : new Quaternionf()
-                        .rotateX((float) Math.toRadians(state.pitch())).rotateY((float) Math.toRadians(state.yaw())))
-                .translate(-center.x, -center.y, -center.z);
-        CraftData.Skin skin = WeaponLook.skinOf(weapon, build);
-        animated = skin != null && skin.hasEffects();
-        GpuModel.Style style = WeaponLook.style(skin);
-        Matrix4f modelView = new Matrix4f();
-        for (Part part : parts) {
-            GltfModel src = part.model.source;
-            for (int index : src.order) {
-                if (!drawn(part, index)) continue;
-                modelView.set(view).mul(part.pose.world[index]);
-                part.model.addNode(draws, index, modelView, style, part.region, part.effectOrigin, 15, 15, 1);
-            }
-        }
+        Matrix4f view = viewFor(assembly, state.yaw(), state.pitch(), state.zoom(), state.orientation());
+        if (view == null) return;
+        animated = assembly.animated();
+        assembly.draw(draws, view, 15, 15, true);
         // the build's sprays, projected at this same rest pose (spec §29)
-        SprayDecals sprays = SprayDecals.of(weapon, build);
-        if (sprays.madeFor(model)) sprays.drawRest(draws, view, 15, 15);
+        assembly.drawSprays(draws, view, 15, 15);
         lastCamera = new Camera(weapon.id(), new Matrix4f(view), FOV, width / (float) Math.max(1, height));
         RenderSystem.backupProjectionMatrix();
         RenderSystem.setProjectionMatrix(projection.getBuffer(width, height, FOV), ProjectionType.PERSPECTIVE);
         draws.flush(color, depth, Minecraft.getInstance().gameRenderer.lightTexture().getTextureView(), "BlockLand weapon preview");
         RenderSystem.restoreProjectionMatrix();
         rendered = state;
-    }
-
-    /** A mesh node of the part's root subtree that the build does not hide. */
-    private static boolean drawn(Part part, int index) {
-        GltfModel src = part.model.source;
-        GltfModel.Node node = src.nodes.get(index);
-        if (node.mesh < 0 || part.hidden[index]) return false;
-        return part.root < 0 || index == part.root || src.isUnder(index, part.root);
     }
 }

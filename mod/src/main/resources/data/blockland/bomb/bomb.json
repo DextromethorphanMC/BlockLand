@@ -1,0 +1,41 @@
+{
+  "name": "炸药包",
+  "description": "枪战爆破专用。进攻方在包点内按住左键安放，倒计时结束后爆炸；防守方靠近并按住拆弹键拆除。",
+  "model": "models/bomb/c4.glb",
+  "drawTime": 0.6,
+  "anims": {
+    "idle": "idle",
+    "draw": "draw",
+    "inspect": "inspect",
+    "walk": "walk",
+    "sprint": "sprint",
+    "plant": "plant"
+  },
+  "handling": {
+    "weight": 0.8,
+    "sway": 1.0,
+    "bob": 1.0,
+    "inertia": 0.9,
+    "sprintOut": 0.16,
+    "tacticalSprint": 3.0,
+    "adsTilt": 0
+  },
+  "blast": {
+    "radius": 16.0,
+    "innerRadius": 5.0,
+    "damage": 200.0,
+    "minDamage": 6.0,
+    "throughWalls": true,
+    "knockback": 1.6,
+    "shake": 3.0
+  },
+  "beep": {
+    "slowInterval": 1.0,
+    "fastInterval": 0.12,
+    "finalSeconds": 1.2
+  },
+  "defuseRange": 2.2,
+  "defuseAngle": 40.0,
+  "plantDrift": 0.45,
+  "pickupRange": 1.4
+}

@@ -10,6 +10,7 @@ import textures as tx
 from gen_items import render_items_icon, write_json
 from glbread import GLTF
 from preview import KNIFE_DIR, load_materials
+import third_person
 
 KNIFE = "dagger"
 PATCH = {"blade": 0, "blade_edge": 1, "guard": 2, "handle": 3, "pommel": 4}
@@ -65,10 +66,8 @@ def held_model(texture):
 
 
 def item_definition():
-    return {"model": {"type": "minecraft:select", "property": "minecraft:display_context",
-                      "cases": [{"when": ["gui", "ground", "fixed"],
-                                 "model": {"type": "minecraft:model", "model": f"blockland:item/{KNIFE}"}}],
-                      "fallback": {"type": "minecraft:model", "model": f"blockland:item/{KNIFE}_held"}}}
+    return third_person.weapon_definition({"type": "minecraft:model", "model": f"blockland:item/{KNIFE}"},
+                                          {"type": "minecraft:model", "model": f"blockland:item/{KNIFE}_held"})
 
 
 def build(path):

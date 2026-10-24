@@ -303,6 +303,7 @@ class SetDef:
     size: int                           # pixels
     tile: float                         # metres per repeat
     seed: int
+    detail: float = 1.0                 # how much pack() lifts the visible detail band (0 = keep the recipe as it is)
 
 
 def px_mm(d: SetDef):
@@ -314,10 +315,15 @@ def uv_scale(name):
     return round(UV_UNIT / SETS[name].tile, 6)
 
 
-def normal_from_height(h_mm, pmm):
-    """DirectX-convention tangent-space normal (x right, y down the image) from a height map in millimetres."""
+def normal_from_height(h_mm, pmm, slope_limit=None):
+    """DirectX-convention tangent-space normal (x right, y down the image) from a height map in millimetres; with
+    `slope_limit`, slopes ease into that value (tanh) instead of growing without bound."""
     dx = (np.roll(h_mm, -1, 1) - np.roll(h_mm, 1, 1)) / (2 * pmm)
     dy = (np.roll(h_mm, -1, 0) - np.roll(h_mm, 1, 0)) / (2 * pmm)
+    if slope_limit is not None:
+        s = np.hypot(dx, dy)
+        k = np.where(s > 1e-9, slope_limit * np.tanh(s / slope_limit) / np.maximum(s, 1e-9), 1.0)
+        dx, dy = dx * k, dy * k
     n = np.stack([-dx, -dy, np.ones_like(dx)], -1)
     return n / np.linalg.norm(n, axis=-1, keepdims=True)
 
@@ -337,18 +343,62 @@ def cavity_ao(h_mm, pmm, radius_mm=0.6):
     return np.clip(1 - AO_STRENGTH * np.clip(depth / AO_DEPTH_MM, 0, 1), 0.0, 1.0)
 
 
+#: What of a set reaches the screen: the first-person weapon gets about 0.2 mm per screen pixel at 4K and 0.4 mm at DLSS
+#: Performance, so marks finer than VISIBLE_MM average away in the mip chain (the runtime keeps them as roughness:
+#: Textures' Toksvig mips). The band from there up to DETAIL_MM - grain, blast, orange peel, grinding marks, scratches,
+#: wear - is what reads as the material, and the recipes' true-to-scale amplitudes leave it too faint to see in the game.
+#: pack() lifts that band (times the set's `detail`) in the normal map, the albedo and the roughness; the height channel
+#: and the AO stay true. Soft limits keep strong edges (camo patterns, stipples, cracks) from overshooting.
+VISIBLE_MM = 0.25
+DETAIL_MM = 4.0
+RELIEF_GAIN = 6.0           # the band's relief (normal map only)
+SLOPE_LIMIT = 1.2           # normal slopes ease into ~50 degrees
+ALBEDO_GAIN = 2.2           # the band's contrast (log of linear light: a ratio, never darker than black)
+ALBEDO_LIMIT = 0.25         # ... eased into this much (log units: faint grain is lifted, two-tone patterns barely)
+ROUGH_GAIN = 2.4            # the band's roughness variation
+ROUGH_LIMIT = 0.12          # ... eased into this much roughness
+
+
+def detail_band(img, pmm):
+    """The VISIBLE_MM..DETAIL_MM band of a map (per channel), as a deviation around its local mean."""
+    lo, hi = VISIBLE_MM / pmm * 0.5, DETAIL_MM / pmm * 0.5
+    if img.ndim == 3:
+        return np.stack([detail_band(img[..., c], pmm) for c in range(img.shape[2])], -1)
+    return blur(img, lo) - blur(img, hi)
+
+
+def soft(x, limit):
+    return limit * np.tanh(x / limit)
+
+
+def lift_detail(lay: Layers, d: SetDef):
+    """-> (relief for the normal map in mm, albedo sRGB, roughness) with the visible band lifted (see VISIBLE_MM)."""
+    pmm = px_mm(d)
+    relief = lay.height if lay.relief is None else lay.height + lay.relief
+    alb = np.clip(lay.albedo, 0, 1)
+    rough = np.clip(lay.rough, 0.02, 1)
+    if d.detail <= 0:
+        return relief, alb, rough
+    relief = relief + (RELIEF_GAIN - 1) * d.detail * detail_band(relief, pmm)
+    if lay.emission is None:                                    # glowing patterns keep their exact colours
+        lin = alb ** 2.2 + 0.005
+        lifted = lin * np.exp((ALBEDO_GAIN - 1) * d.detail * soft(detail_band(np.log(lin), pmm), ALBEDO_LIMIT))
+        alb = np.clip(lifted - 0.005, 0, 1) ** (1 / 2.2)
+    rough = np.clip(rough + (ROUGH_GAIN - 1) * d.detail * soft(detail_band(rough, pmm), ROUGH_LIMIT), 0.02, 1)
+    return relief, alb, rough
+
+
 def pack(lay: Layers, d: SetDef):
     """-> (albedo uint8 (H,W,3), _n uint8 (H,W,4), _s uint8 (H,W,4))."""
     pmm = px_mm(d)
-    alb = np.clip(lay.albedo, 0, 1)
-    n = normal_from_height(lay.height if lay.relief is None else lay.height + lay.relief, pmm)
+    relief, alb, rough = lift_detail(lay, d)
+    n = normal_from_height(relief, pmm, SLOPE_LIMIT if d.detail > 0 else None)
     ao = cavity_ao(lay.height, pmm)
     if lay.ao is not None:
         ao = ao * lay.ao
     depth = (lay.height.max() - lay.height) / HEIGHT_STEP_MM
     hgt = np.clip(255 - np.round(depth), 1, 255) / 255
     nmap = np.stack([n[..., 0] * 0.5 + 0.5, n[..., 1] * 0.5 + 0.5, np.clip(ao, 0, 1), hgt], -1)
-    rough = np.clip(lay.rough, 0.02, 1)
     smooth = 1 - np.sqrt(rough)
     f0 = np.broadcast_to(np.asarray(lay.f0, float), rough.shape)
     g = np.where(lay.metal, 255, np.clip(np.round(f0 * 255), 0, 229))
@@ -1075,7 +1125,8 @@ SETS = {
 # Texture sets of later weapons live in modules of their own (so several weapons can be worked on at once): each
 # module has `sets(pt)` -> {name: SetDef}, `pt` being this module (its recipes and helpers). Missing modules are skipped.
 SET_MODULES = ("pbr_sets_tommy", "pbr_sets_ks3", "pbr_sets_usp", "pbr_sets_dagger", "pbr_sets_stocks",
-               "pbr_sets_neon", "pbr_sets_karambit", "pbr_sets_equipment")
+               "pbr_sets_neon", "pbr_sets_karambit", "pbr_sets_equipment",
+               "pbr_sets_bomb")
 
 
 def _load_set_modules():

@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { MapMarker } from '../gametypes'
+import type { MapMarker, MapRegion } from '../gametypes'
 import type { GameMap, TopView } from '../types'
 
 export const TEAM_COLORS = ['#e5484d', '#3e8ef7', '#46a758', '#f5d90a', '#29c5d6', '#e93d82', '#f76b15', '#eeeeee', '#2f7c57', '#0d74ce', '#8e4ec6', '#8b8d98']
 
-/** Canvas top-down render of a map with spawn points and game type markers overlaid. */
+/** Canvas top-down render of a map with spawn points, game type markers and areas overlaid. */
 export function TopDown({
   view,
   map,
   markers,
+  regions = [],
   selected,
   onMarkerClick,
 }: {
   view: TopView | undefined
   map: GameMap
   markers: MapMarker[]
+  regions?: MapRegion[]
   selected: Set<string>
   onMarkerClick: (id: string) => void
 }) {
@@ -40,6 +42,20 @@ export function TopDown({
           ctx.fillRect(x * scale, z * scale, scale, scale)
         }
       }
+    }
+    for (const r of regions) {
+      const x = Math.min(r.x1, r.x2) * scale, z = Math.min(r.z1, r.z2) * scale
+      const w = (Math.abs(r.x2 - r.x1) + 1) * scale, h = (Math.abs(r.z2 - r.z1) + 1) * scale
+      ctx.globalAlpha = 0.28
+      ctx.fillStyle = r.color
+      ctx.fillRect(x, z, w, h)
+      ctx.globalAlpha = 1
+      ctx.strokeStyle = selected.has(r.id) ? '#ffffff' : r.color
+      ctx.lineWidth = 2
+      ctx.strokeRect(x + 1, z + 1, w - 2, h - 2)
+      ctx.fillStyle = '#ffffff'
+      ctx.font = 'bold 13px sans-serif'
+      ctx.fillText(r.label, x + 4, z + 15)
     }
     for (const m of markers) {
       const s = Math.max(scale, 4)
@@ -67,7 +83,7 @@ export function TopDown({
         ctx.fillText(String(ti + 1), p.x * scale + scale + 4, p.z * scale)
       }
     })
-  }, [view, map, markers, selected, scale, width, length, colors])
+  }, [view, map, markers, regions, selected, scale, width, length, colors])
 
   const toBlock = (e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -90,7 +106,12 @@ export function TopDown({
         onClick={(e) => {
           const { x, z } = toBlock(e)
           const marker = markers.find((m) => Math.abs(m.x - x) <= 1 && Math.abs(m.z - z) <= 1)
-          if (marker) onMarkerClick(marker.id)
+          if (marker) {
+            onMarkerClick(marker.id)
+            return
+          }
+          const region = regions.find((r) => x >= Math.min(r.x1, r.x2) && x <= Math.max(r.x1, r.x2) && z >= Math.min(r.z1, r.z2) && z <= Math.max(r.z1, r.z2))
+          if (region) onMarkerClick(region.id)
         }}
       />
       <div className="small muted hover-info">{hover || '将鼠标移到地图上查看坐标'}</div>

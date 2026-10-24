@@ -116,4 +116,26 @@ class PlayerPreferencesTest {
         // a build saved before sprays existed reads as none
         assertThat(new PlayerAccount.WeaponBuild("default", Map.of()).sprays()).isEmpty();
     }
+
+    @Test
+    void cosmeticsNeedTheItemOwnedOrFreeAndItemKeysStayLowerCase(@TempDir Path dir) {
+        PlayerService players = service(dir);
+        players.login(PLAYER, "Steve");
+
+        assertThatThrownBy(() -> players.setCosmetic(PLAYER, "card", "card:aurora", false)).isInstanceOf(ApiException.class);
+        assertThat(players.setCosmetic(PLAYER, "card", "card:default", true).slots()).containsEntry("card", "card:default");
+
+        // an admin grant of an item key is stored the way the game names it
+        players.grant(PLAYER, "Card:Aurora", 0, "admin");
+        assertThat(players.status(PLAYER).orElseThrow().entitlements()).extracting(PlayerAccount.Entitlement::key).contains("card:aurora");
+        players.grant(PLAYER, "priority_queue", 7, "admin");
+        assertThat(players.status(PLAYER).orElseThrow().entitlements()).extracting(PlayerAccount.Entitlement::key).contains("PRIORITY_QUEUE");
+
+        assertThat(players.setCosmetic(PLAYER, "card", "CARD:aurora", false).slots()).containsEntry("card", "card:aurora");
+        assertThat(players.setCosmetic(PLAYER, "graffiti.1", "card:aurora", false).slots()).hasSize(2);
+        assertThat(players.setCosmetic(PLAYER, "graffiti.1", null, false).slots()).containsOnlyKeys("card");
+        assertThat(service(dir).cosmetics(PLAYER).slots()).containsEntry("card", "card:aurora");
+        assertThat(players.status(PLAYER).orElseThrow().cosmetics()).containsEntry("card", "card:aurora");
+        assertThatThrownBy(() -> players.setCosmetic(PLAYER, "Bad Slot!", "card:aurora", false)).isInstanceOf(ApiException.class);
+    }
 }

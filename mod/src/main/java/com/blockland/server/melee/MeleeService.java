@@ -1,5 +1,7 @@
 package com.blockland.server.melee;
 
+import com.blockland.server.spectate.Watchers;
+import com.blockland.network.packet.ViewmodelPackets;
 import com.blockland.BlockLand;
 import com.blockland.combat.HitRecords;
 import com.blockland.effect.ActionLocks;
@@ -69,8 +71,9 @@ public final class MeleeService implements MeleePacketListeners.Server {
         fighter.readyAt = now + (long) (data.cooldown * 1e9);
         int ticks = Math.max(1, Math.round(data.impact * 20));
         fighter.strike = new Strike(attack.slot(), knife.id, attack.heavy(), attack.combo(), server.getTickCount() + ticks);
-        // third person: everyone else sees the arm swing and hears the blade
+        // third person: everyone else sees the arm swing and hears the blade; spectators in its eyes see the swing itself
         player.swing(InteractionHand.MAIN_HAND, true);
+        Watchers.action(player, ViewmodelPackets.Kind.MELEE, attack.heavy() ? 1 : 0, attack.combo());
         play(player.level(), player, player.getEyePosition(), data.swingSound, attack.heavy() ? 0.9F : 0.7F);
     }
 
