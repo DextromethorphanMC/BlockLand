@@ -542,14 +542,18 @@ def titanium_blasted(size, rng):
 
 def satin_blade(size, rng, pmm):
     """Satin-finished stainless blade: fine grind lines along the blade (u), faint tarnish, hairline scratches."""
-    lines = noise(size, rng, 60, 0.55) * 0.7 + noise(size, rng, 14, 0.5) * 0.3
+    # Grinding follows physical millimetres, not a fixed pixel count. Broad belt passes carry
+    # the sheen; hairlines live in normals, never in a deep displacement or painted black stripe.
+    lines = 0.7 * noise(size, rng, 12.0 / pmm, max(0.65, 0.12 / pmm)) \
+        + 0.3 * noise(size, rng, 3.0 / pmm, max(0.65, 0.22 / pmm))
+    passes = noise(size, rng, 28.0 / pmm, 2.4 / pmm)
     tarn = smoothstep(0.8, 2.0, fbm(size, rng, size / 6, 3))
-    sc = scratches(size, rng, 90, (10, 70), strength=(0.2, 0.7))
-    alb = tint(srgb([0.745, 0.75, 0.765]), 0.025 * lines + 0.03 * fbm(size, rng, size / 8, 3), 1.0)
-    alb = lerp(alb, srgb([0.66, 0.62, 0.55]), 0.25 * tarn)
-    h = 0.0012 * lines - 0.002 * sc
-    rough = 0.27 + 0.05 * lines + 0.05 * tarn - 0.08 * sc
-    return Layers(alb, h, rough, np.ones((size, size), bool))
+    sc = scratch_field(size, rng, pmm, 32, (0.6, 8.0), angle=0, spread=0.18, strength=(0.15, 0.5))
+    alb = tint(srgb([0.745, 0.75, 0.765]), 0.008 * lines + 0.012 * passes, 1.0)
+    alb = lerp(alb, srgb([0.66, 0.62, 0.55]), 0.12 * tarn)
+    rough = 0.255 + 0.035 * lines + 0.045 * passes + 0.045 * tarn + 0.025 * sc
+    return Layers(alb, groove(sc, 0.002), rough, np.ones((size, size), bool), relief=0.0008 * lines)
+
 
 
 def polished_edge(size, rng):
@@ -616,7 +620,11 @@ def anodized_black(size, rng, pmm):
     h = groove(sc, 0.006) - 0.002 * scuff + 0.004 * dust
     rough = np.where(metal, 0.28, 0.50 + 0.04 * blast + 0.03 * mott - 0.18 * oil - 0.14 * scuff - 0.10 * sc
                      + 0.25 * dust)
-    return Layers(alb, h, rough, metal, f0=0.05, relief=0.0025 * blast)
+    # Machining visible through the hard coat, kept below the bead-blast grain. The broad
+    # cut pass modulates specular response rather than making black optics look dusty grey.
+    tool = milling(size, rng, pmm, pitch_mm=0.65, sweep=0.08)
+    rough += 0.022 * tool
+    return Layers(alb, h, rough, metal, f0=0.05, relief=0.0014 * blast + 0.0008 * tool)
 
 
 def cerakote(size, rng, pmm, colour, heat=False):
@@ -772,7 +780,17 @@ def painted_steel(size, rng, pmm, paint=(0.13, 0.13, 0.14), coverage=0.003, vert
     h = -0.012 * primer - 0.004 * bare + 0.015 * blister + groove(s, 0.004) + 0.003 * dust
     rough = 0.40 + 0.04 * mott + 0.02 * peel - 0.07 * sheen - 0.06 * scuff - 0.05 * s + 0.30 * dust + 0.05 * blister
     rough = np.where(metal, 0.32, rough * (1 - primer) + 0.62 * primer)
-    return Layers(alb, h, rough, metal, f0=0.045, porosity=0.05 + 0.25 * primer, relief=0.08 * sheet + 0.004 * peel)
+    relief = 0.025 * sheet + 0.0025 * peel
+    if vertical:
+        # Drawn magazine sheet and insertion wear: longitudinal, softly broken polishing
+        # lanes, not extra tiling silver chips. Keep coating/primer/substrate masks intact.
+        draw = noise(size, rng, 0.45 / pmm, 22.0 / pmm)
+        lane = smoothstep(0.3, 1.3, noise(size, rng, 2.5 / pmm, 32.0 / pmm))
+        contact = lane * (0.4 + 0.6 * handled) * (1 - primer)
+        rough = rough - 0.085 * contact + 0.018 * draw
+        alb = lerp(alb, alb * 1.08, contact)
+        relief += 0.0012 * draw
+    return Layers(alb, h, rough, metal, f0=0.045, porosity=0.05 + 0.25 * primer, relief=relief)
 
 
 def g10(size, rng, colour=(0.56, 0.12, 0.10)):
@@ -1145,6 +1163,16 @@ def _load_set_modules():
 
 
 _load_set_modules()
+
+# Offline art direction only: retain shared textures, dimensions and runtime material bindings.
+# Fine polished surfaces must not receive the same sixfold normal gain as coarse moulded grips.
+import json as _json
+with open(os.path.join(HERE, "surface_quality.json"), encoding="utf-8") as _f:
+    SURFACE_QUALITY = _json.load(_f)
+for _name, _detail in SURFACE_QUALITY["detail"].items():
+    if _name not in SETS or not 0 <= _detail <= 1:
+        raise ValueError(f"Invalid surface detail profile: {_name}")
+    SETS[_name].detail = _detail
 
 
 def set_path(name, suffix=""):

@@ -51,7 +51,9 @@ REQUIRED_EVENTS = {"draw": {"equip"}, "reload": {"mag_release", "mag_out", "mag_
 SHOTS = {"fire": ("gun",), "fire_last": ("gun",), "fire_L": ("gun_L",), "fire_last_L": ("gun_L",),
          "fire_both": ("gun", "gun_L")}
 MIRROR = np.diag([-1.0, 1.0, 1.0, 1.0])
-BUDGET = 5000                    # section 24: triangles of one pistol as drawn (one magazine fitted)
+from model_quality import BUDGETS
+
+BUDGET = BUDGETS["pistol"]                    # section 24: triangles of one pistol as drawn (one magazine fitted)
 HAND_REACH = 0.075               # wrist within this of its gun's grip pivot while holding it
 CROSSHAIR = 0.15                 # section 2: half side of the crosshair square, in screen heights
 MUZZLE_TIP = 0.04                # the last few centimetres of the barrel may reach into it

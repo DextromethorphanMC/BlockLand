@@ -8,7 +8,12 @@ import numpy as np
 def sets(pt):
     def olive(size, rng, pmm):
         """Olive drab enamel on a pressed steel body (the M67 sphere, the M84 tube, the M18 can)."""
-        return pt.painted_steel(size, rng, pmm, paint=(0.205, 0.235, 0.150), coverage=0.004)
+        lay = pt.painted_steel(size, rng, pmm, paint=(0.205, 0.235, 0.150), coverage=0.004)
+        # Cast shell under enamel: broad casting grain, deliberately unlike stamped bands.
+        cast = pt.noise(size, rng, 0.75 / pmm)
+        lay.relief += 0.009 * cast
+        lay.rough = np.clip(lay.rough + 0.13 + 0.025 * cast, 0.08, 0.95)
+        return lay
 
     def zinc(size, rng, pmm):
         """Zinc-plated spring steel (the levers): a blasted matt steel with the yellowish cast of the plating."""

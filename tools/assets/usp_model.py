@@ -102,7 +102,7 @@ def slide_mesh():
     hole_g = np.stack(list(sh.circle(0, -0.0116, 0.0026, 8).T) + [np.full(8, SZ0)], 1)
     sh.cap_polygon(m, ring[::-1], "slide", [hole_b, hole_g])
     for r_out, r_in, cy, seg in ((0.0078, 0.0064, 0.0, 18), (0.0026, 0.0019, -0.0116, 8)):
-        tube = sh.revolve([(r_out, SZ0), (r_out, SZ0 + 0.0040), (r_in, SZ0 + 0.0040)], seg, "slide", outward=False)
+        tube = sh.revolve([(r_out, SZ0), (r_out, SZ0 + 0.0040), (r_in, SZ0 + 0.0040)], seg, "slide", outward=False, precision=True)
         m.merge(tube.translated((0, cy, 0)))
     # extractor (right, behind the port), loaded-chamber flat and the rear plate over the striker channel
     m.merge(sh.box(SW - 0.0003, 0.0006, 0.0300, SW + 0.0007, 0.0046, 0.0440, 0.0003, "slide"))
@@ -114,7 +114,7 @@ def slide_mesh():
 def barrel_mesh():
     prof = [(0.0, -0.0600), (0.0058, -0.0600), (0.0058, CROWN_Z + 0.0008), (0.0064, CROWN_Z), (0.0072, CROWN_Z),
             (0.0076, CROWN_Z + 0.0005), (0.0076, -0.0175), (0.0058, -0.0165)]
-    m = sh.revolve(prof, 18, "barrel", outward=True)
+    m = sh.revolve(prof, 18, "barrel", outward=True, precision=True)
     m.set_material(lambda c, n: np.hypot(c[0], c[1]) < 0.0060, "steel_dark")        # dark bore
     m.merge(sh.box(-0.0094, -0.0086, -0.0165, 0.0094, 0.0110, 0.0290, 0.0009, "barrel"))  # hood
     m.merge(sh.disc((0, 0, 0.02905), (0, 0, 1), 0.0061, 12, "steel_dark"))          # chamber mouth

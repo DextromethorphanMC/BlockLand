@@ -730,8 +730,24 @@ the box projection of §6, given our material names, texture sets and regions, a
 (shapes, details and proportions); their own textures are not shipped. Their licences (all CC-BY-4.0) are credited in
 `tools/assets/CREDITS.md` and in the README.
 
-Budgets (first person, every part of the weapon file, attachments not counted): rifles / SMGs / shotguns ≤ 9k
-triangles, pistols ≤ 5k each, knives ≤ 3k.
+Precision authoring budgets (`model_quality.json`; attachments and fx_shell not counted): rifles / SMGs /
+shotguns ≤ 18k triangles, pistols ≤ 10k each (one magazine fitted), knives ≤ 12k, equipment ≤ 12k.
+These replace the original low-poly 9k / 5k / 3k / 4k limits; historical counts below describe the original assets.
+The third-person renderer currently shares these meshes: there is no separate distance LOD, so large crowds still
+need in-game performance testing. Do not silently increase these limits to make a failed model pass.
+
+Curved parts opt into `shapes.revolve(..., precision=True)`; sampling is based on a 0.04 mm circular chord error,
+with at most 96 radial segments (authored minima are never reduced). This is an offline geometric target, NOT a
+screen-space error or an industry-quality certification. Intentional polygonal parts and open meshes joining
+fixed authored rings stay unchanged. Round bevels evaluate more points on their original arc; blade grids retain
+all authored breakpoints and re-evaluate the analytic edge/fullers between them. Flat faces are not subdivided.
+Flashbang vents are actual bevelled holes in a 1.2 mm curved shell with a core recessed by 3.5 mm, not dark discs.
+Sizes, rig/node transforms, clips/events, skin material names/regions and mount positions remain the contract.
+
+Run `python -I tools/assets/check_model_quality.py` for geometry tests and serialized model budgets; use
+`--baseline <original-models-directory>` to check node/animation/material contracts against an earlier build.
+Run `check_glb.py` and `pbr_check.py` as well. Visual judgement (inspect highlights, silhouette, skin seams,
+finger contacts, third-person crowds) remains a user-side in-game check; these tests do not certify COD parity.
 
 ## 24. Thompson SMG (`models/gun/tommy.glb`, weapon id `tommy`)
 
@@ -1399,7 +1415,7 @@ Camera within the §4 limits in every clip (throw ±2.4° pitch / 3.4° roll at 
 `equipment`, `equipment_items`, `equipment_sounds`), `pbr_sets_equipment.py`, `pbr_models_equipment.py`; checks
 `check_equipment.py` (claims files with an `equipment` node: nodes, materials / regions, clips, STEP scales, events,
 the data timing, the item in the hand until its release and gone after it, the pin on the left index finger once
-pulled, pin and cooked spoon gone in the hold, the lighter flame at the rag, crosshair, eye distance, budget 4000).
+pulled, pin and cooked spoon gone in the hold, the lighter flame at the rag, crosshair, eye distance, equipment budget in `model_quality.json`).
 
 ## 37. Third person, dropped and framed weapons (the `blockland:weapon` item model)
 
@@ -1564,3 +1580,13 @@ Files: `bomb_model.py`, `bomb_rig.py`, `bomb_clips.py`, `gen_bomb.py`, `gen_bomb
 `check_bomb.py` (nodes and parents, materials / regions / sets, clips, lengths, loops, camera limits, events, the
 data's `drawTime`, the bomb in the hand until `place` and still after it, the fingertip on the keys at every press,
 the left hand by the bomb, crosshair, eye distance, budget).
+
+
+### 表面精度与预算（离线资产）
+
+- `surface_quality.json` 按纹理组校准可见细节增益；它只供 `pbr_textures.py` 烘焙使用，不增加运行时分支、贴图采样或材质批次。不得为追求“清晰”把抛光刃口、喷砂铝、粗橡胶统一放大到同一法线强度。
+- 刀身拉丝、刀刃抛光、弹匣纵向插拔磨痕、瞄具硬质阳极氧化加工纹和手雷铸造漆面必须区分。金属裸露、底漆、覆盖漆保持原 LabPBR 通道约定；磨痕主要通过粗糙度表现，不把底色整体刷白。
+- 保留共享纹理的尺寸、真实重复尺度和现有 mip/Toksvig 路径。不要默认升级到 4K；RGBA8 全 mip 分配应与基线一致（该值是所有资源同时驻留的上限估算，不是实测显存）。
+- 倍镜旋钮使用轴向凹槽、倒角和刻度，替代多层完整环带；不移动 `aim`、`lens_ocular`、`lens_objective`，不修改内壁黑色材质、透镜或准星。刻度在已有 `steel_dark` 批次内。
+- P9 弹匣观察孔为穿过 1 mm 背板的倒角孔，背后黄铜退后 2.75 mm；不得用贴在实体表面上的黄铜圆片替代。保持弹匣轮廓、弹药位置、标准/扩容动画绑定。
+- 非视觉回归：`python -I tools/assets/check_surface_quality.py --baseline ORIGINAL_PROJECT_COPY`，以及 `check_model_quality.py`、`pbr_check.py`、`check_glb.py`。表面检查约束尺寸、批次、总三角形不增长、绑定一致，并对观察孔做射线深度测试。COD 接近程度、镜面稳定性和帧时间仍需用户实机验收。

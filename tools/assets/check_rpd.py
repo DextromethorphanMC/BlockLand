@@ -40,7 +40,9 @@ REQUIRED_EVENTS = {"draw": {"equip"}, "reload": {"cover_open", "belt", "mag_out"
                    "reload_empty": {"cover_open", "belt", "mag_out", "mag_in", "cover_close", "bolt_back",
                                     "bolt_forward"},
                    "inspect": {"inspect_move", "cover_open", "cover_close"}}
-BUDGET = 9000
+from model_quality import BUDGETS
+
+BUDGET = BUDGETS["long_gun"]
 MIN_TRAVEL = 0.08
 
 

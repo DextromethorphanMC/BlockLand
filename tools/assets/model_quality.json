@@ -1,0 +1,6 @@
+{
+  "curve_error_m": 0.00004,
+  "max_radial_segments": 96,
+  "blade_subdivisions": 2,
+  "budgets": {"long_gun": 18000, "pistol": 10000, "knife": 12000, "equipment": 12000}
+}

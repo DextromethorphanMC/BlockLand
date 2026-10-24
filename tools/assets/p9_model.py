@@ -40,6 +40,7 @@ MAG_ORIGIN = grip_center(GRIP_LEN) + MAG_S * FRONT
 
 
 def round_bevel(r, steps=2):
+    steps = sh.arc_segments(r, steps, np.pi / 2)
     th = np.linspace(0, np.pi / 2, steps + 1)
     return [(r - r * np.sin(t), r - r * np.cos(t)) for t in th]
 
@@ -59,7 +60,7 @@ def extrude_z(loop_xy, holes=(), z0=0.0, z1=0.01, bevel=((0.0, 0.0),), material=
 
 def pin(center, r, half_len, material, axis="x", seg=12):
     m = sh.revolve([(0, -half_len), (r * 0.8, -half_len), (r, -half_len + r * 0.2), (r, half_len - r * 0.2),
-                    (r * 0.8, half_len), (0, half_len)], seg, material)
+                    (r * 0.8, half_len), (0, half_len)], seg, material, precision=True)
     if axis == "x":
         m = sh.place(m, x_axis=(0, 1, 0), y_axis=(0, 0, 1), z_axis=(1, 0, 0))
     return m.translated(center)
@@ -126,18 +127,18 @@ def slide_mesh():
 def barrel_mesh():
     prof = [(0.0, -0.0600), (0.0045, -0.0600), (0.0045, -0.0872), (0.0051, -0.0880), (0.0062, -0.0880),
             (0.00675, -0.0875), (0.00675, -0.0160), (0.0050, -0.0150)]
-    m = sh.revolve(prof, 24, "barrel", outward=True)
+    m = sh.revolve(prof, 24, "barrel", outward=True, precision=True)
     m.set_material(lambda c, n: np.hypot(c[0], c[1]) < 0.0047, "steel_dark")       # dark bore
     m.merge(sh.box(-0.0085, -0.0080, -0.0150, 0.0085, 0.0098, 0.0270, 0.0008, "barrel"))  # hood
     m.merge(sh.disc((0, 0, 0.02705), (0, 0, 1), 0.0049, 16, "steel_dark"))          # chamber mouth
     # recoil spring guide rod (front visible through the slide)
     rod = sh.revolve([(0.0, CROWN_Z), (0.0024, CROWN_Z), (0.0028, CROWN_Z + 0.0004), (0.0028, -0.0300),
-                      (0.0, -0.0300)], 12, "steel_dark")
+                      (0.0, -0.0300)], 12, "steel_dark", precision=True)
     m.merge(rod.translated((0, -0.0121, 0)))
     coil = []
     for k in range(4):                                   # a few spring coils behind the hole lip
         z = CROWN_Z + 0.0050 + k * 0.0032
-        coil.append(sh.revolve([(0.0029, z), (0.0036, z + 0.0008), (0.0029, z + 0.0016)], 12, "steel_dark")
+        coil.append(sh.revolve([(0.0029, z), (0.0036, z + 0.0008), (0.0029, z + 0.0016)], 12, "steel_dark", precision=True)
                     .translated((0, -0.0121, 0)))
     for c in coil:
         m.merge(c)

@@ -11,6 +11,7 @@ import numpy as np
 
 import shapes as sh
 from meshkit import Mesh
+from model_quality import refine_samples
 
 BLADE_LEN = 0.095              # along the curved centre line
 BLADE_R0 = 0.085               # radius of curvature at the root (tighter towards the point: a hook)
@@ -79,6 +80,7 @@ def blade_mesh():
     us = np.array([0.0, 0.04, 0.10, 0.17, 0.25, 0.33, 0.41, 0.49, 0.57, 0.65, 0.72, 0.79, 0.85, 0.90, 0.945, 0.975,
                    1.0])
     ss = np.array([1.0, 0.95, 0.85, 0.60, 0.30, 0.0, -0.30, -0.55, -0.72, -0.85, -0.94, -1.0])
+    us, ss = refine_samples(us), refine_samples(ss)
     nu, ns = len(us), len(ss)
     P = np.zeros((2, nu, ns, 3))
     for i, u in enumerate(us):
@@ -146,9 +148,9 @@ def handle_mesh():
 def ring_mesh(centre):
     """The finger ring (a torus, hole along Y) with a lanyard tab on its outside, and the neck into the handle."""
     prof = [(RING_R + RING_TUBE * np.cos(a), RING_TUBE * 1.25 * np.sin(a))
-            for a in np.linspace(0, 2 * np.pi, 10, endpoint=False)]
+            for a in np.linspace(0, 2 * np.pi, sh.arc_segments(RING_TUBE * 1.25, 10), endpoint=False)]
     rings = [[(r * np.cos(th), r * np.sin(th), z) for r, z in prof]
-             for th in np.linspace(0, 2 * np.pi, 22, endpoint=False)]
+             for th in np.linspace(0, 2 * np.pi, sh.arc_segments(RING_R + RING_TUBE, 22), endpoint=False)]
     torus = sh.loft(rings + [rings[0]], "ring", cap_start=False, cap_end=False)
     sh.orient_outward(torus)                       # a closed surface: wind it outwards
     m = sh.place(torus, origin=centre, x_axis=(1, 0, 0), y_axis=(0, 0, -1), z_axis=(0, 1, 0))
@@ -156,7 +158,7 @@ def ring_mesh(centre):
     out = np.array([-0.55, 0.0, 0.83])
     tab_c = np.asarray(centre, float) + out * (RING_R + RING_TUBE + 0.0015)
     tab = sh.revolve([(0.0018, -0.0018), (0.0042, -0.0018), (0.0042, 0.0018), (0.0018, 0.0018), (0.0018, -0.0018)],
-                     12, "ring")
+                     12, "ring", precision=True)
     m.merge(sh.place(tab, origin=tab_c, x_axis=(1, 0, 0), y_axis=(0, 0, -1), z_axis=(0, 1, 0)))
     return m
 

@@ -138,7 +138,7 @@ def feed_cover_mesh():
 def barrel_mesh():
     """Heavy barrel with the rear sight block on the trunnion, handguard bands, gas block and the cylinder."""
     m = sh.revolve([(0.0, CROWN_Z), (BARREL_R * 0.9, CROWN_Z), (BARREL_R, CROWN_Z + 0.001),
-                    (BARREL_R * 1.04, -0.300), (BARREL_R * 1.12, 0.0), (0.0, 0.0)], 18, "steel")
+                    (BARREL_R * 1.04, -0.300), (BARREL_R * 1.12, 0.0), (0.0, 0.0)], 18, "steel", precision=True)
     rs = sh.rounded_rect(-0.0120, -0.0100, 0.0120, SIGHT_Y - 0.0095, (0.004, 0.004, 0.003, 0.003), 2)
     m.merge(_loft_z([(sh.offset_loop(rs, 0.0010), -0.0400), (rs, -0.0380), (rs, 0.0060),
                      (sh.offset_loop(rs, 0.0010), 0.0080)], "steel"))
@@ -160,7 +160,7 @@ def muzzle_brake_mesh():
         c, s = np.cos(a), np.sin(a)
         slot = sh.box(-0.0016, 0.0098, MUZZLE_Z - 0.0005, 0.0016, 0.0120, MUZZLE_Z + 0.0180, 0.0002, "steel_dark")
         m.merge(sh.place(slot, x_axis=(c, s, 0), y_axis=(-s, c, 0), z_axis=(0, 0, 1)))
-    m.merge(sh.revolve([(0.0050, MUZZLE_Z - 0.0010), (0.0050, MUZZLE_Z + 0.0100)], 12, "steel_dark", outward=False))
+    m.merge(sh.revolve([(0.0050, MUZZLE_Z - 0.0010), (0.0050, MUZZLE_Z + 0.0100)], 12, "steel_dark", outward=False, precision=True))
     return m
 
 
@@ -275,7 +275,7 @@ def bolt_mesh():
             (HANDLE_Z - 0.0060, 0.0045)]
     m.merge(sh.extrude_x(np.array(stem), (), 0.0060, chamfer_bevel(0.0006), "steel_dark", x_center=REC_W + 0.0040))
     knob = sh.revolve([(0.0, 0.0), (0.0050, 0.0), (0.0058, 0.0010), (0.0058, 0.0110), (0.0045, 0.0135),
-                       (0.0, 0.0140)], 14, "steel_dark")
+                       (0.0, 0.0140)], 14, "steel_dark", precision=True)
     knob = sh.place(knob, x_axis=(0, 0, -1), y_axis=(0, 1, 0), z_axis=(1, 0, 0))
     m.merge(knob.translated((REC_W + 0.0090, 0.0015, HANDLE_Z + 0.0010)))
     return m
@@ -294,8 +294,8 @@ def trigger_mesh():
 def _round(seg=6):
     """One 7.62x39 round along -Z, base at z = 0 (case `brass` = lacquered steel, the bullet in steel_dark); light: a
     belt draws a dozen of them."""
-    case = sh.revolve([(0.0, 0.0), (0.0056, 0.0), (0.0055, -0.0270), (0.0040, -0.0390)], seg, "brass")
-    case.merge(sh.revolve([(0.0040, -0.0390), (0.0028, -0.0510), (0.0, -0.0565)], seg, "steel_dark"))
+    case = sh.revolve([(0.0, 0.0), (0.0056, 0.0), (0.0055, -0.0270), (0.0040, -0.0390)], seg, "brass", precision=True)
+    case.merge(sh.revolve([(0.0040, -0.0390), (0.0028, -0.0510), (0.0, -0.0565)], seg, "steel_dark", precision=True))
     return case
 
 

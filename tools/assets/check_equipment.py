@@ -50,7 +50,9 @@ MATERIALS = {
     "adrenaline": {"barrel": "barrel", "label": "label", "plunger": "plunger", "cap": "cap"},
 }
 NO_SET = {"vent", "glass", "liquid", "flame"}            # keep their glTF look (dark recesses, see-through, self-lit)
-MAX_TRIS = 4000
+from model_quality import BUDGETS
+
+MAX_TRIS = BUDGETS["equipment"]
 CROSSHAIR = 0.15
 
 

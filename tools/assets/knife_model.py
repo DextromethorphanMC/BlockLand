@@ -6,6 +6,7 @@ import numpy as np
 
 import shapes as sh
 from meshkit import Mesh
+from model_quality import refine_samples
 from p9_model import chamfer_bevel, round_bevel
 
 PIN_Y = 0.0062                 # pivot pins at (0, +-PIN_Y, 0)
@@ -42,6 +43,7 @@ def blade_mesh():
     """Ground blade: flats with a fuller, a crisp primary bevel (blade_edge) running out to the tip."""
     us = np.array([0.0, 0.04, 0.09, 0.15, 0.22, 0.30, 0.38, 0.46, 0.54, 0.62, 0.70, 0.77, 0.84, 0.90, 0.95, 0.985, 1.0])
     vs = np.array([0.0, 0.10, 0.17, 0.205, 0.27, 0.335, 0.37, 0.46, 0.55, 0.70, 0.85, 1.0])
+    us, vs = refine_samples(us), refine_samples(vs)
     zs = BLADE_Z0 + (TIP_Z - BLADE_Z0) * us
     nu, nv = len(us), len(vs)
     P = np.zeros((2, nu, nv, 3))                 # side (+x, -x), u, v
@@ -127,9 +129,9 @@ def handle_mesh(side):
     # pivot pin (through the tang) with domed heads, butt screw
     py = s * PIN_Y
     m.merge(sh.revolve([(0, -0.0064), (0.0022, -0.0064), (0.0028, -0.0060), (0.0028, 0.0060),
-                        (0.0022, 0.0064), (0, 0.0064)], 16, "pins").transformed(_x_axis((0, py, 0))))
+                        (0.0022, 0.0064), (0, 0.0064)], 16, "pins", precision=True).transformed(_x_axis((0, py, 0))))
     m.merge(sh.revolve([(0, -0.0062), (0.0015, -0.0062), (0.0019, -0.0059), (0.0019, 0.0059),
-                        (0.0015, 0.0062), (0, 0.0062)], 12, "pins").transformed(_x_axis((0, yc, 0.1215))))
+                        (0.0015, 0.0062), (0, 0.0062)], 12, "pins", precision=True).transformed(_x_axis((0, yc, 0.1215))))
     return m
 
 
@@ -148,7 +150,7 @@ def latch_mesh():
             (c[2] + 0.0072, c[1] + 0.0158), (c[2] + 0.0074, c[1] + 0.0172), (c[2] - 0.0016, c[1] + 0.0172),
             (c[2] - 0.0024, c[1] + 0.0160)]
     m = sh.extrude_x(prof, (), 0.0017, chamfer_bevel(0.0003), "latch")
-    m.merge(sh.revolve([(0, -0.0060), (0.0012, -0.0060), (0.0012, 0.0060), (0, 0.0060)], 10, "pins")
+    m.merge(sh.revolve([(0, -0.0060), (0.0012, -0.0060), (0.0012, 0.0060), (0, 0.0060)], 10, "pins", precision=True)
             .transformed(_x_axis(c)))
     return m
 

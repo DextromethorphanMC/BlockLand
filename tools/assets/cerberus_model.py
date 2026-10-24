@@ -230,7 +230,7 @@ def rivets_mesh():
 
 def bore_mesh(crown_z):
     m = sh.revolve([(0.0, crown_z + 0.0300), (0.0044, crown_z + 0.0300), (0.0044, crown_z + 0.0006),
-                    (0.0049, crown_z)], 12, "steel_dark", outward=False)
+                    (0.0049, crown_z)], 12, "steel_dark", outward=False, precision=True)
     return m
 
 

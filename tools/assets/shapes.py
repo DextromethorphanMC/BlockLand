@@ -2,6 +2,7 @@
 import numpy as np
 
 from meshkit import Mesh, newell_normal, plane_basis, triangulate
+from model_quality import arc_segments
 
 
 # ------------------------------------------------------------------ 2D outlines
@@ -190,9 +191,11 @@ def box(x0, y0, z0, x1, y1, z1, chamfer=0.0, material="default"):
     return prism_z(loop, z0, z1, c, material)
 
 
-def revolve(profile, segments, material, outward=True, start_angle=0.0):
+def revolve(profile, segments, material, outward=True, start_angle=0.0, precision=False):
     """Lathe a (r, z) profile around the Z axis. Profile points with r == 0 collapse to the axis."""
     prof = np.asarray(profile, dtype=float)
+    if precision:
+        segments = arc_segments(np.max(np.abs(prof[:, 0])), segments)
     t = start_angle + np.linspace(0, 2 * np.pi, segments, endpoint=False)
     rings = [np.stack([r * np.cos(t), r * np.sin(t), np.full(segments, z)], 1) for r, z in prof]
     m = Mesh()
@@ -241,3 +244,39 @@ def rot_x(mesh, deg, pivot=(0, 0, 0)):
     p = np.asarray(pivot, float)
     m[:3, 3] = p - r @ p
     return mesh.transformed(m)
+
+
+def perforated_band(radius, y0, y1, hole_radius, thickness, material, count=6, phase=0.0):
+    """Closed curved sheet cells with real bevelled through-holes, axis +Y.
+    Build in unwrapped (arc length, height) coordinates then evaluate on the cylinder.
+    Each cell is closed independently; adjacent cells meet at identical boundaries."""
+    half_w, half_h = radius * np.pi / count, (y1 - y0) / 2
+    if hole_radius + thickness / 4 >= min(half_w, half_h):
+        raise ValueError("hole does not fit the cylinder cell")
+    n = max(32, 16 * int(np.ceil(arc_segments(hole_radius, 16) / 16)))
+    angles = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    direction = np.stack([np.cos(angles), np.sin(angles)], 1)
+    # Uniform boundary samples make staggered rows meet on the SAME cylinder chords.
+    # Ray-projecting the hole's angles onto the rectangle would leave mismatched T-junctions.
+    nx, ny = 3 * n // 8, n // 8
+    boundary = np.array([(x, y) for y in (-half_h, half_h)
+                         for x in np.linspace(-half_w, half_w, nx + 1)]
+                        + [(x, y) for x in (-half_w, half_w)
+                           for y in np.linspace(-half_h, half_h, ny + 1)[1:-1]])
+    order = np.argsort(np.mod(np.arctan2(boundary[:, 1], boundary[:, 0]), 2 * np.pi))
+    boundary = boundary[order]
+    mouth = direction * hole_radius
+    lip = direction * (hole_radius + thickness / 4)
+    m = Mesh()
+    for cell in range(count):
+        theta = phase + 2 * np.pi * cell / count
+        rings = []
+        # Walk across the outer skin, down the cell boundary, back along the inner skin, up the bore.
+        for uv, r in [(mouth, radius - thickness / 4), (lip, radius), (boundary, radius),
+                      (boundary, radius - thickness), (mouth, radius - thickness)]:
+            a = theta + uv[:, 0] / radius
+            rings.append(np.stack([r * np.cos(a), (y0 + y1) / 2 + uv[:, 1], r * np.sin(a)], 1))
+        piece = loft(rings + [rings[0]], material, cap_start=False, cap_end=False)
+        orient_outward(piece)
+        m.merge(piece)
+    return m

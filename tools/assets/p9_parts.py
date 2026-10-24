@@ -90,7 +90,7 @@ def laser_mesh():
         m.merge(sh.box(x0, -0.0366, -0.0700, x1, -0.0322, -0.0480, 0.0005, "attachment"))       # rail clamp
         x0, x1 = sorted((s * 0.0112, s * 0.0131))
         m.merge(sh.box(x0, -0.0490, -0.0432, x1, -0.0440, -0.0378, 0.0005, "attachment"))       # paddles
-    bez = sh.revolve([(0.0028, -0.0801), (0.0042, -0.0801), (0.0042, -0.0785)], 20, "attachment")
+    bez = sh.revolve([(0.0028, -0.0801), (0.0042, -0.0801), (0.0042, -0.0785)], 20, "attachment", precision=True)
     m.merge(bez.translated((LASER_LENS[0], LASER_LENS[1], 0)))
     m.merge(sh.disc(LASER_LENS + np.array([0, 0, 0.0001]), (0, 0, -1), 0.0029, 16, "laser_lens"))
     m.merge(sh.box(-0.0090, -0.0430, -0.0796, -0.0015, -0.0400, -0.0786, 0.0003, "attachment"))  # brand strip
@@ -107,12 +107,27 @@ def cartridge(length=0.0290, r=0.00493, seg=14, material="brass"):
     """9 mm round along -Z (bullet forward), case head at z = 0."""
     prof = [(0.0, 0.0), (r, 0.0), (r, -0.0150), (r * 0.97, -0.0190), (r * 0.90, -0.0225),
             (r * 0.70, -0.0262), (r * 0.35, -length + 0.0006), (0.0, -length)]
-    return sh.revolve(prof, seg, material)
+    return sh.revolve(prof, seg, material, precision=True)
 
 
 def mag_mesh(extended=False):
     ext = 0.025 if extended else 0.0
     m = _mag_place(sh.prism_z(mag_outline(), -ext, MAG_LEN, 0.0006, "mag"))
+    holes = (0.030, 0.045, 0.060, 0.075) + ((0.015, 0.0) if extended else ())
+    # Actual punched rear sheet with chamfered ports; old gold dots floated on a solid wall.
+    # Match the existing flat face exactly; do not alter feed height, envelope or animation nodes.
+    keep = [i for i, f in enumerate(m.f)
+            if not all(abs(m.v[j][2] - 0.01625) < 1e-9 for j in f)]
+    m.f, m.m, m.uv = ([items[i] for i in keep] for items in (m.f, m.m, m.uv))
+    outer = [(-0.00775, -ext + 0.0006), (0.00775, -ext + 0.0006),
+             (0.00775, MAG_LEN - 0.0006), (-0.00775, MAG_LEN - 0.0006)]
+    ports = [np.array([(-0.0040 + 0.0013 * np.cos(a), y + 0.0013 * np.sin(a))
+                       for a in np.linspace(0, 2 * np.pi, 12, endpoint=False)]) for y in holes]
+    panel = extrude_z(outer, ports, 0.01525, 0.01625, chamfer_bevel(0.00012), "mag")
+    m.merge(panel)
+    # Recessed brass visible behind the sheet, no new material or draw batch.
+    for y in holes:
+        m.merge(sh.disc((-0.0040, y, 0.0135), (0, 0, 1), 0.00165, 12, "brass"))
     if extended:
         rings = [(mag_outline(0.0018), -ext - 0.0090), (mag_outline(0.0030), -ext - 0.0075),
                  (mag_outline(0.0026), -ext - 0.0030), (mag_outline(0.0012), -ext - 0.0005)]
@@ -126,13 +141,10 @@ def mag_mesh(extended=False):
         plate[:, 1] += np.where(plate[:, 1] > 0.0, 0.0012, 0.0)      # finger lip at the front
         m.merge(_mag_place(sh.prism_z(plate, -0.0058, 0.0002, 0.0012, "mag_base")))
     m.merge(cartridge().translated((0.0028, MAG_LEN + 0.0046, 0.0150)))   # top round, bullet forward
-    holes = (0.030, 0.045, 0.060, 0.075) + ((0.015, 0.0) if extended else ())
-    for y in holes:
-        m.merge(sh.disc((-0.0040, y, 0.01625 + 0.00008), (0, 0, 1), 0.0013, 10, "brass"))
     return m
 
 
 def shell_mesh(scale=1.25):
     prof = [(0.0, 0.0040), (0.0041, 0.0040), (0.0041, -0.00955), (0.00482, -0.00955), (0.00496, 0.0064),
             (0.00432, 0.0070), (0.00432, 0.0081), (0.00498, 0.0085), (0.00498, 0.00955), (0.0, 0.00955)]
-    return sh.revolve([(r * scale, z * scale) for r, z in prof], 20, "brass")
+    return sh.revolve([(r * scale, z * scale) for r, z in prof], 20, "brass", precision=True)

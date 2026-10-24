@@ -7,6 +7,7 @@ import numpy as np
 
 import shapes as sh
 from meshkit import Mesh
+from model_quality import refine_samples
 from p9_model import round_bevel
 
 TIP_Z = -0.170                 # point of the blade
@@ -58,6 +59,7 @@ def blade_mesh():
     """Ground blade on a (u, s) grid, both flats; the outer fifth of each side is the edge bevel (blade_edge)."""
     us = np.array([0.0, 0.05, 0.10, 0.17, 0.24, 0.31, 0.38, 0.44, 0.52, 0.60, 0.68, 0.76, 0.83, 0.89, 0.945, 1.0])
     ss = np.array([1.0, 0.92, 0.80, 0.62, 0.40, 0.20, 0.08, 0.0, -0.08, -0.20, -0.40, -0.62, -0.80, -0.92, -1.0])
+    us, ss = refine_samples(us), refine_samples(ss)
     zs = BLADE_Z0 + (TIP_Z - BLADE_Z0) * us
     nu, ns = len(us), len(ss)
     P = np.zeros((2, nu, ns, 3))
@@ -91,7 +93,7 @@ def guard_mesh():
     m = sh.extrude_x(prof, (), 0.0062, round_bevel(0.0018, 1), "guard")
     for sy in (-1, 1):
         ball = sh.revolve([(0.0, -0.0052), (0.0030, -0.0043), (0.0045, -0.0026), (0.0052, 0.0), (0.0045, 0.0026),
-                           (0.0030, 0.0043), (0.0, 0.0052)], 12, "guard")
+                           (0.0030, 0.0043), (0.0, 0.0052)], 12, "guard", precision=True)
         m.merge(sh.place(ball, origin=(0.0, sy * (GUARD_Y + 0.0012), 0.5 * (GUARD[0] + GUARD[1])),
                          x_axis=(1, 0, 0), y_axis=(0, 0, 1), z_axis=(0, 1, 0)))
     # the blade's shoulder plate on the guard's front (a raised oval boss around the ricasso)
@@ -142,7 +144,7 @@ def pommel_mesh():
     m = sh.loft(rings, "pommel")
     # lanyard loop: a flat ring standing in the y-z plane (its hole runs along X), a short neck into the cap
     ring = sh.revolve([(0.0029, -0.0017), (0.0056, -0.0017), (0.0056, 0.0017), (0.0029, 0.0017), (0.0029, -0.0017)],
-                      16, "pommel")
+                      16, "pommel", precision=True)
     m.merge(sh.place(ring, origin=LOOP_C, x_axis=(0, 0, 1), y_axis=(0, 1, 0), z_axis=(1, 0, 0)))
     m.merge(sh.box(-0.0016, -0.0030, z1 - 0.0012, 0.0016, 0.0030, LOOP_C[2] - 0.0048, 0.0006, "pommel"))
     return m

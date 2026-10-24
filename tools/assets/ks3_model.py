@@ -133,7 +133,7 @@ def barrel_mesh():
             (0.0128, m0 + 0.0100), (0.0124, m0 + 0.0110), (0.0124, c0 - 0.0130), (0.0128, c0 - 0.0120),
             (0.0128, c0 - 0.0010), (r + 0.0006, c0), (r, c0 + c), (r, -0.0120), (0.0122, -0.0110),
             (0.0122, 0.0040), (0.0, 0.0040)]
-    m = sh.revolve(prof, 24, "barrel")
+    m = sh.revolve(prof, 24, "barrel", precision=True)
     # knurling on the choke: ridges between the two bands
     for k in range(12):
         a = 2 * np.pi * k / 12
@@ -167,7 +167,7 @@ def laser_clamp_mesh():
     seg = [(BARREL_R + 0.0001, LASER_Z - 0.0090), (BARREL_R + 0.0026, LASER_Z - 0.0090),
            (BARREL_R + 0.0030, LASER_Z - 0.0085), (BARREL_R + 0.0030, LASER_Z + 0.0085),
            (BARREL_R + 0.0026, LASER_Z + 0.0090), (BARREL_R + 0.0001, LASER_Z + 0.0090)]
-    m = sh.revolve(seg, 20, "steel_dark")
+    m = sh.revolve(seg, 20, "steel_dark", precision=True)
     m.merge(sh.box(BARREL_R + 0.0012, -0.0060, LASER_Z - 0.0110, BARREL_R + 0.0062, 0.0060, LASER_Z + 0.0110, 0.0006,
                    "steel_dark"))
     return m
@@ -179,7 +179,7 @@ def front_sight_mesh():
     side = [(z - 0.0080, RIB_TOP - 0.0002), (z + 0.0070, RIB_TOP - 0.0002), (z + 0.0040, SIGHT_Y - 0.0050),
             (z + 0.0010, SIGHT_Y - 0.0020), (z - 0.0010, SIGHT_Y - 0.0020), (z - 0.0050, SIGHT_Y - 0.0080)]
     m = sh.extrude_x(side, (), 0.0019, chamfer_bevel(0.0004), "steel_dark")
-    bead = sh.revolve([(0.0, 0.0016), (0.0010, 0.0014), (0.0016, 0.0), (0.0010, -0.0014), (0.0, -0.0016)], 10, "brass")
+    bead = sh.revolve([(0.0, 0.0016), (0.0010, 0.0014), (0.0016, 0.0), (0.0010, -0.0014), (0.0, -0.0016)], 10, "brass", precision=True)
     m.merge(bead.translated((0.0, SIGHT_Y - 0.0016, z)))                  # bead top on the sight line
     return m.translated((0.0, -SIGHT_Y, -z))
 
@@ -202,7 +202,7 @@ def tube_mesh(end, extended):
     r = TUBE_R
     prof = [(0.0, 0.0050), (r, 0.0050), (r, end + 0.0030), (r + 0.0006, end + 0.0020), (r + 0.0006, end - 0.0120),
             (r - 0.0004, end - 0.0145), (0.0045, end - 0.0150), (0.0045, end - 0.0170), (0.0, end - 0.0170)]
-    m = sh.revolve(prof, 20, "barrel")
+    m = sh.revolve(prof, 20, "barrel", precision=True)
     for k in range(10):                                                        # cap knurl ridges
         a = 2 * np.pi * (k + 0.5) / 10
         m.merge(sh.box(-0.0010, -0.0003, end - 0.0115, 0.0010, 0.0006, end + 0.0010, 0.0, "barrel")
@@ -214,7 +214,7 @@ def tube_mesh(end, extended):
         for y, rr in ((0.0, BARREL_R), (TUBE_Y, TUBE_R)):
             clamp.merge(sh.revolve([(rr + 0.0001, z - 0.0060), (rr + 0.0024, z - 0.0060), (rr + 0.0028, z - 0.0055),
                                     (rr + 0.0028, z + 0.0055), (rr + 0.0024, z + 0.0060), (rr + 0.0001, z + 0.0060)],
-                                   18, "steel_dark").translated((0.0, y, 0.0)))
+                                   18, "steel_dark", precision=True).translated((0.0, y, 0.0)))
         clamp.merge(sh.box(-0.0060, TUBE_Y + TUBE_R - 0.0010, z - 0.0058, 0.0060, -BARREL_R + 0.0010, z + 0.0058,
                            0.0010, "steel_dark"))
         m.merge(clamp)
@@ -233,7 +233,7 @@ def pump_mesh():
                        "steel_dark"))
     for z_a, z_b in ((-0.3050, -0.2960), (-0.0800, -0.0710)):
         ring = [(TUBE_R + 0.0004, z_a), (0.0192, z_a), (0.0192, z_b), (TUBE_R + 0.0004, z_b)]
-        m.merge(sh.revolve(ring, 18, "steel_dark").translated((0.0, TUBE_Y, 0.0)))
+        m.merge(sh.revolve(ring, 18, "steel_dark", precision=True).translated((0.0, TUBE_Y, 0.0)))
     return m.translated(-o)
 
 
@@ -290,8 +290,8 @@ def shell_mesh(spent=False, seg=14):
     m = Mesh()
     if spent:                                       # the open mouth shows the hull's inside down to the wad
         inner = [(0.0, hull[0][1] + 0.0060), (0.0080, hull[0][1] + 0.0060), (0.0084, hull[0][1])]
-        m.merge(sh.revolve(inner + hull, seg, "shell"))
+        m.merge(sh.revolve(inner + hull, seg, "shell", precision=True))
     else:
-        m.merge(sh.revolve(hull, seg, "shell"))
-    m.merge(sh.revolve(head, seg, "brass"))
+        m.merge(sh.revolve(hull, seg, "shell", precision=True))
+    m.merge(sh.revolve(head, seg, "brass", precision=True))
     return m

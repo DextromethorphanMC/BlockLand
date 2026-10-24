@@ -20,18 +20,20 @@ Y_UP = dict(x_axis=(1, 0, 0), y_axis=(0, 0, -1), z_axis=(0, 1, 0))      # revolv
 
 def revolve_y(profile, seg, material, origin=(0, 0, 0)):
     """Lathe an (r, y) profile about the item's Y axis (closed when it starts and ends on the axis)."""
-    m = sh.revolve(profile, seg, material)
+    m = sh.revolve(profile, seg, material, precision=material != "flame")
     return sh.place(m, origin=origin, **Y_UP)
 
 
 def revolve_z(profile, seg, material, origin=(0, 0, 0)):
     """Lathe an (r, z) profile about the item's Z axis."""
-    m = sh.revolve(profile, seg, material)
+    m = sh.revolve(profile, seg, material, precision=material != "flame")
     return m.translated(np.asarray(origin, float)) if np.any(origin) else m
 
 
 def torus(centre, normal_axis, radius, tube, material, seg=20, tseg=8, squash=1.0):
     """A ring: centre line `radius`, tube `tube`; the hole along `normal_axis` (0 = X, 1 = Y, 2 = Z)."""
+    seg = sh.arc_segments(radius + tube, seg)
+    tseg = sh.arc_segments(tube * max(1.0, squash), tseg)
     prof = [(radius + tube * np.cos(a), tube * squash * np.sin(a)) for a in np.linspace(0, 2 * np.pi, tseg, endpoint=False)]
     rings = [[(r * np.cos(th), r * np.sin(th), z) for r, z in prof] for th in np.linspace(0, 2 * np.pi, seg, endpoint=False)]
     m = sh.loft(rings + [rings[0]], material, cap_start=False, cap_end=False)
@@ -45,6 +47,7 @@ def torus(centre, normal_axis, radius, tube, material, seg=20, tseg=8, squash=1.
 def tube_along(path, radius, material, seg=8, flat=1.0, twist=0.0, up=(0, 1, 0), radii=None):
     """A closed tube along a 3D polyline (cord, wire, rag); `flat` squashes the section along the second axis,
     `twist` turns the section (radians per metre), `radii` per-point radius factors."""
+    seg = sh.arc_segments(radius * max(1.0, flat), seg)
     path = np.asarray(path, float)
     n = len(path)
     secs = []
@@ -168,7 +171,7 @@ def frag_body_r(y):
 def frag():
     """M67 pattern: a smooth steel sphere (64 mm), the fuze screwed into its top, the lever down the +X side."""
     prof = [(0.0, -FRAG_R * 0.985)]
-    for a in np.linspace(-80, 66, 20):
+    for a in np.linspace(-80, 66, sh.arc_segments(FRAG_R, 20, np.radians(146)) + 1):
         r = FRAG_R * np.cos(np.radians(a))
         prof.append((r, FRAG_R * 0.985 * np.sin(np.radians(a))))
     prof += [(0.0112, 0.0296), (0.0, 0.0296)]
@@ -191,20 +194,25 @@ def flash_body_r(y):
 
 
 def flashbang():
-    """M84 pattern: a perforated steel tube (43 mm) with heavier end caps, rows of large vent holes (dark recesses),
+    """M84 pattern: a perforated steel tube (43 mm) with heavier end caps, rows of large bevelled vent holes (1.2 mm shell over a recessed core),
     a printed band near the bottom, the fuze on top."""
     y_lo, y_hi = FLASH_Y
-    body = revolve_y([(0.0, y_lo - 0.004), (0.0205, y_lo - 0.004), (0.0228, y_lo - 0.0025), (0.0228, y_lo + 0.006),
-                      (FLASH_R, y_lo + 0.0072), (FLASH_R, y_hi - 0.0072), (0.0228, y_hi - 0.006),
-                      (0.0228, y_hi + 0.0015), (0.0130, y_hi + 0.0028), (0.0, y_hi + 0.0028)], 28, "body")
+    # Separate end caps leave the vented centre genuinely open, not covered by dark decals.
+    body = revolve_y([(0.0, y_lo - 0.004), (0.0205, y_lo - 0.004), (0.0228, y_lo - 0.0025),
+                      (0.0228, y_lo + 0.006), (FLASH_R, y_lo + 0.0072), (FLASH_R, -0.035),
+                      (FLASH_R - 0.0012, -0.035), (FLASH_R - 0.0012, y_lo), (0.0, y_lo)], 72, "body")
+    body.merge(revolve_y([(FLASH_R, 0.019), (FLASH_R, y_hi - 0.0072), (0.0228, y_hi - 0.006),
+                           (0.0228, y_hi + 0.0015), (0.0130, y_hi + 0.0028), (0.0, y_hi + 0.0028),
+                           (0.0, y_hi), (FLASH_R - 0.0012, y_hi - 0.0072),
+                           (FLASH_R - 0.0012, 0.019), (FLASH_R, 0.019)], 72, "body"))
     label = revolve_y([(FLASH_R + 0.0001, y_lo + 0.0085), (FLASH_R + 0.0004, y_lo + 0.0090),
                        (FLASH_R + 0.0004, y_lo + 0.0235), (FLASH_R + 0.0001, y_lo + 0.0240)], 28, "label")
     vents = Mesh()
     for row, y in enumerate((-0.026, -0.008, 0.010)):
-        for k in range(6):
-            a = np.radians(k * 60 + (30 if row % 2 else 0) + 15)
-            n = V(np.cos(a), 0.0, np.sin(a))
-            vents.merge(sh.disc(n * (FLASH_R + 0.00025) + V(0, y, 0), n, 0.0062, 12, "vent"))
+        vents.merge(sh.perforated_band(FLASH_R, y - 0.009, y + 0.009, 0.0062, 0.0012, "body",
+                                       phase=np.radians(15 + (30 if row % 2 else 0))))
+    # Recessed inner canister seen THROUGH the holes; never a coplanar disc on the outer shell.
+    vents.merge(revolve_y([(FLASH_R - 0.0035, -0.036), (FLASH_R - 0.0035, 0.020)], 48, "vent"))
     body.merge(label)
     body.merge(vents)
     body.merge(torus(V(0.0, y_lo - 0.0062, 0.0), 2, 0.0030, 0.0009, "fuze", seg=12, tseg=6))
@@ -334,13 +342,13 @@ def throwing_knife():
         blade.m[k] = "blade_edge"
     tang_prof = [(-0.0205, 0.0110), (0.0640, 0.0098), (0.0700, 0.0080), (0.0720, 0.0), (0.0700, -0.0080),
                  (0.0640, -0.0098), (-0.0205, -0.0110)]
-    hole = sh.circle(0.0605, 0.0, 0.0034, 12)
+    hole = sh.circle(0.0605, 0.0, 0.0034, sh.arc_segments(0.0034, 12))
     tang = sh.extrude_x(np.array(tang_prof), holes=[hole[:, [0, 1]]], half_width=KNIFE_HW,
                         bevel=((0.0006, 0.0), (0.0, 0.0006)), material="blade")
     # paracord wrap: a lofted sleeve with one ridge per turn of the cord (crossing wraps)
     secs = []
-    zs = np.linspace(-0.0120, 0.0500, 44)
-    loop = sh.superellipse(0.0060, 0.0128, 2.6, 16)
+    zs = np.linspace(-0.0120, 0.0500, 88)
+    loop = sh.superellipse(0.0060, 0.0128, 2.6, sh.arc_segments(0.0128, 16))
     for z in zs:
         bump = 1.0 + 0.10 * np.cos(2 * np.pi * (z + 0.012) / 0.0047) ** 2
         taper = 1.0 - 0.15 * np.clip((z - 0.044) / 0.006, 0, 1) - 0.12 * np.clip((-0.008 - z) / 0.004, 0, 1)

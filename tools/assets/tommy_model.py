@@ -294,13 +294,13 @@ def _ring(r0, r1, z0, z1, material, seg=12, chamfer=0.0):
     prof = [(r0, za), (r1 - c, za), (r1, za + c), (r1, zb - c), (r1 - c, zb), (r0, zb)]
     if c <= 0:
         prof = [(r0, za), (r1, za), (r1, zb), (r0, zb)]
-    return sh.revolve(prof, seg, material)
+    return sh.revolve(prof, seg, material, precision=True)
 
 
 def barrel_mesh():
     """Barrel from the receiver to the crown, its cooling fins and the front sight band (with the blade's base)."""
     m = sh.revolve([(0.0, CROWN_Z), (BARREL_R - 0.0010, CROWN_Z), (BARREL_R, CROWN_Z + 0.0010),
-                    (BARREL_R, REC_Z0 + 0.0040), (0.0, REC_Z0 + 0.0040)], 16, "steel")
+                    (BARREL_R, REC_Z0 + 0.0040), (0.0, REC_Z0 + 0.0040)], 16, "steel", precision=True)
     for z in FIN_ZS:
         m.merge(_ring(BARREL_R - 0.0002, FIN_R, z - FIN_T / 2, z + FIN_T / 2, "steel", 12))
     # a thicker collar where the fins end at the receiver, and one at the front of the finned section
@@ -357,7 +357,7 @@ def rear_sight_mesh():
     m.merge(sh.box(-0.0078, hi - 0.0005, z0, -gap, shoulder, z1, 0.0003, "steel_dark"))
     m.merge(sh.box(gap, hi - 0.0005, z0, 0.0078, shoulder, z1, 0.0003, "steel_dark"))
     m.merge(sh.box(-gap - 0.0002, hi - 0.0005, z0, gap + 0.0002, SIGHT_Y - 0.0018, z1, 0.0002, "steel_dark"))
-    screw = sh.revolve([(0.0, 0.0), (0.0024, 0.0), (0.0026, 0.0006), (0.0026, 0.0030), (0.0, 0.0030)], 10, "steel_dark")
+    screw = sh.revolve([(0.0, 0.0), (0.0024, 0.0), (0.0026, 0.0006), (0.0026, 0.0030), (0.0, 0.0030)], 10, "steel_dark", precision=True)
     m.merge(sh.place(screw, origin=(0.0086, 0.0155, REAR_NOTCH_Z + 0.0120), x_axis=(0, 1, 0), y_axis=(0, 0, 1),
                      z_axis=(1, 0, 0)))
     return m
@@ -410,15 +410,15 @@ def drum_mesh():
     prof = [(0.0, -hw), (0.0165, -hw), (0.0200, -hw + 0.0022), (0.0540, -hw + 0.0022), (0.0590, -hw + 0.0004),
             (r, -hw + 0.0040), (r, hw - 0.0040), (0.0590, hw - 0.0004), (0.0540, hw - 0.0022),
             (0.0200, hw - 0.0022), (0.0165, hw), (0.0, hw)]
-    disc = sh.revolve(prof, 24, "mag")                       # about Z: the bore axis
-    rib = lambda x: sh.revolve([(r - 0.0004, x - 0.0020), (r + 0.0015, x), (r - 0.0004, x + 0.0020)], 24, "mag")
+    disc = sh.revolve(prof, 24, "mag", precision=True)                       # about Z: the bore axis
+    rib = lambda x: sh.revolve([(r - 0.0004, x - 0.0020), (r + 0.0015, x), (r - 0.0004, x + 0.0020)], 24, "mag", precision=True)
     for x in (-0.0100, 0.0100):
         disc.merge(rib(x))
     hub = sh.revolve([(0.0, -hw - 0.0042), (0.0115, -hw - 0.0042), (0.0130, -hw - 0.0024), (0.0130, -hw + 0.0010),
-                      (0.0, -hw + 0.0010)], 12, "mag_base")
+                      (0.0, -hw + 0.0010)], 12, "mag_base", precision=True)
     disc.merge(hub)
     disc.merge(sh.revolve([(0.0, hw - 0.0010), (0.0100, hw - 0.0010), (0.0100, hw + 0.0016), (0.0085, hw + 0.0024),
-                           (0.0, hw + 0.0024)], 12, "mag_base"))
+                           (0.0, hw + 0.0024)], 12, "mag_base", precision=True))
     # winding key: a flat T-handle on the hub (built on the -Z face, turned to the rear below)
     disc.merge(sh.box(-0.0032, -0.0150, -hw - 0.0090, 0.0032, 0.0150, -hw - 0.0042, 0.0012, "mag_base"))
     disc.merge(sh.box(-0.0020, -0.0030, -hw - 0.0060, 0.0020, 0.0030, -hw - 0.0030, 0.0006, "mag_base"))
@@ -435,7 +435,7 @@ def shell_mesh():
     prof = [(0.0, 0.0114), (0.0057, 0.0114), (0.0060, 0.0108), (0.0060, 0.0098), (0.0050, 0.0092),
             (0.0050, 0.0080), (0.0060, 0.0074), (0.0060, -0.0114), (0.0054, -0.0114), (0.0054, -0.0100),
             (0.0, -0.0100)]
-    return sh.revolve(prof, 14, "brass")
+    return sh.revolve(prof, 14, "brass", precision=True)
 
 
 def default_source():

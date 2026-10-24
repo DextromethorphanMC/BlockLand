@@ -31,7 +31,9 @@ PARENTS = {"viewmodel": None, "knife": "viewmodel", "blade": "knife", "tip": "bl
            "handle": "knife", "pommel": "knife", "mount_charm": "knife", "camera": "viewmodel",
            "arm_R": "viewmodel", "arm_R_fore": "arm_R", "arm_L": "viewmodel", "arm_L_fore": "arm_L"}
 MESH_NODES = {"blade", "guard", "handle", "pommel"}
-MAX_TRIS = 3000             # section 24 budgets: knives
+from model_quality import BUDGETS
+
+MAX_TRIS = BUDGETS["knife"]             # section 24 budgets: knives
 CROSSHAIR = 0.15            # section 2: half side of the crosshair square, in screen heights
 POINT_SHARE = 0.40          # the outer share of the blade towards the point may enter it (the balisong: its whole blade)
 

@@ -30,7 +30,9 @@ REGIONS = {"wood": "stock", "wood_foregrip": "handguard", "wood_grip": "grip", "
 DURATIONS = {"idle": (2.0, 2.0), "draw": (0.5, 0.8), "fire": (0.07, 0.10), "fire_last": (0.07, 0.10),
              "reload": (2.0, 2.6), "reload_empty": (2.5, 3.1), "inspect": (3.5, 4.5), "walk": (0.6, 1.6),
              "sprint": (0.5, 0.8), "tac_sprint": (0.4, 0.9)}
-BUDGET = 9000                      # VIEWMODEL_SPEC Round G: rifles / SMGs / shotguns
+from model_quality import BUDGETS
+
+BUDGET = BUDGETS["long_gun"]                      # VIEWMODEL_SPEC Round G: rifles / SMGs / shotguns
 MIN_TRAVEL = 0.07                  # the cocking knob's stroke in fire and reload_empty
 
 

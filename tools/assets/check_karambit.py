@@ -31,7 +31,9 @@ PARENTS = {"viewmodel": None, "knife": "viewmodel", "blade": "knife", "tip": "bl
            "handle": "knife", "mount_charm": "knife", "camera": "viewmodel",
            "arm_R": "viewmodel", "arm_R_fore": "arm_R", "arm_L": "viewmodel", "arm_L_fore": "arm_L"}
 MESH_NODES = {"blade", "handle", "ring"}
-MAX_TRIS = 3000             # section 24 budgets: knives
+from model_quality import BUDGETS
+
+MAX_TRIS = BUDGETS["knife"]             # section 24 budgets: knives
 CROSSHAIR = 0.15            # section 2: half side of the crosshair square, in screen heights
 POINT_SHARE = 0.40          # the outer share of the blade towards the point may enter it (the balisong: its whole blade)
 
@@ -82,13 +84,14 @@ def check_nodes(g, r, label):
     W = g.world_matrices({})
     down = W[g.names["mount_charm"]][:3, :3] @ np.array([0.0, -1.0, 0.0])
     r.check(down[1] < -0.999, f"{label}: mount_charm -Y does not hang straight down ({np.round(down, 3)})")
-    # the point is the tip of the blade (furthest blade vertex from the guard)
+    # A hooked blade's outer curve can be further from the guard than its point.
+    # The needle point is where the two flats (+/-Y) meet at zero thickness, not argmax(radius).
     blade = g.names["blade"]
     pts = np.concatenate([p["positions"] for p in g.mesh_primitives(g.nodes[blade]["mesh"])])
     tip_local = np.asarray(g.nodes[g.names["tip"]].get("translation", [0, 0, 0]))
-    far = pts[int(np.argmax(np.linalg.norm(pts, axis=1)))]
-    r.check(np.linalg.norm(far - tip_local) < 0.002, f"{label}: tip {np.round(tip_local, 4)} is not at the point "
-                                                     f"{np.round(far, 4)}")
+    points = np.unique(np.round(pts[np.abs(pts[:, 1]) < 1e-7], 7), axis=0)
+    r.check(len(points) == 1 and np.linalg.norm(points[0] - tip_local) < 1e-5,
+            f"{label}: tip {np.round(tip_local, 4)} does not match the single zero-thickness blade point")
 
 
 def check_materials(g, r, label):

@@ -77,7 +77,7 @@ def cartridge(length=0.0322, r=0.0060, seg=10, material="brass"):
     """.45 ACP round along -Z (bullet forward), case head at z = 0: a short fat case and a round-nose bullet."""
     prof = [(0.0, 0.0), (r, 0.0), (r, -0.0228), (r * 0.95, -0.0240), (r * 0.86, -0.0270),
             (r * 0.62, -0.0298), (r * 0.30, -length + 0.0005), (0.0, -length)]
-    return sh.revolve(prof, seg, material)
+    return sh.revolve(prof, seg, material, precision=True)
 
 
 def mag_mesh(extended=False):
@@ -106,4 +106,4 @@ def shell_mesh(scale=1.25):
     """Spent .45 ACP case (fat, straight-walled), enlarged by `scale` like the P9's so it reads on screen."""
     prof = [(0.0, 0.0050), (0.0052, 0.0050), (0.0052, -0.0114), (0.0058, -0.0114), (0.0060, 0.0080),
             (0.0054, 0.0087), (0.0054, 0.0100), (0.0061, 0.0104), (0.0061, 0.0114), (0.0, 0.0114)]
-    return sh.revolve([(r * scale, z * scale) for r, z in prof], 20, "brass")
+    return sh.revolve([(r * scale, z * scale) for r, z in prof], 20, "brass", precision=True)

@@ -207,14 +207,31 @@ def lens_disc(r, facing, material, seg=32):
 
 
 def _knurled(r, z0, z1, ribs, depth, material, seg=36):
-    """Cylinder along Z with `ribs` shallow knurling rings (a turret cap or power ring)."""
-    prof = [(0.0, z0), (r - 0.0006, z0), (r, z0 + 0.0006)]
-    for k in range(ribs):
-        a = z0 + 0.0010 + (z1 - z0 - 0.0020) * (k + 0.25) / ribs
-        b = z0 + 0.0010 + (z1 - z0 - 0.0020) * (k + 0.75) / ribs
-        prof += [(r, a), (r - depth, a + 0.0003), (r - depth, b - 0.0003), (r, b)]
-    prof += [(r, z1 - 0.0006), (r - 0.0006, z1), (0.0, z1)]
-    return sh.revolve(prof, seg, material)
+    """Axially fluted adjustment ring with chamfered shoulders and top indexing.
+    Replaces stacked lathe rings: tactile silhouette, fewer triangles, same material batches.
+    `ribs` sets the number of major graduations, not another stack of geometry rings.
+    """
+    n = max(24, 4 * ((seg + 3) // 4))
+    a = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    flute = np.where(np.arange(n) % 2, depth, 0.0)
+    bevel = min(0.0006, (z1 - z0) * 0.15)
+    sections = []
+    for z, radius in ((z0, np.full(n, r - bevel)), (z0 + bevel, r - flute),
+                      (z1 - bevel, r - flute), (z1, np.full(n, r - bevel))):
+        sections.append(np.stack([radius * np.cos(a), radius * np.sin(a), np.full(n, z)], 1))
+    m = sh.loft(sections, material)
+    # Small shallow index inlays stay within the existing steel_dark primitive; never lens/glass.
+    for k in range(ribs * 3):
+        angle = k * 2 * np.pi / (ribs * 3)
+        u = np.array([np.cos(angle), np.sin(angle), 0.0])
+        v = np.array([-np.sin(angle), np.cos(angle), 0.0])
+        outer = r - bevel - 0.0004
+        inner = outer - (0.0022 if k % 3 == 0 else 0.0011)
+        pts = [u * inner - v * 0.00016, u * outer - v * 0.00016,
+               u * outer + v * 0.00016, u * inner + v * 0.00016]
+        m.add_poly(np.array(pts) + [0, 0, z1 + 0.000015], "steel_dark")
+    return m
+
 
 
 CUP_RATIO = 1.40                   # section 22: eyecup outer radius / eyepiece glass radius (1.35 .. 1.45)

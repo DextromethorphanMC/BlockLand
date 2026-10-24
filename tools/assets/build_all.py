@@ -33,6 +33,8 @@ def apply_pbr(*models):
 def build_pbr_textures():
     import pbr_textures
     pbr_textures.build()
+    import pbr_apply
+    pbr_apply.refresh_factors()
 
 
 def build_pbr():

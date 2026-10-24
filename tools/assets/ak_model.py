@@ -59,18 +59,18 @@ def _loft_z(pairs, material):
 def _cyl_z(r, z0, z1, material, seg=18, y=0.0, x=0.0, chamfer=0.0):
     c = min(chamfer, 0.45 * abs(z1 - z0))
     prof = [(0.0, z0), (r - c, z0), (r, z0 + c), (r, z1 - c), (r - c, z1), (0.0, z1)]
-    return sh.revolve(prof, seg, material).translated((x, y, 0.0))
+    return sh.revolve(prof, seg, material, precision=True).translated((x, y, 0.0))
 
 
 def _cyl_x(r, x0, x1, center_yz, material, seg=12):
-    m = sh.revolve([(0.0, x0), (r, x0), (r, x1), (0.0, x1)], seg, material)
+    m = sh.revolve([(0.0, x0), (r, x0), (r, x1), (0.0, x1)], seg, material, precision=True)
     m = sh.place(m, x_axis=(0, 1, 0), y_axis=(0, 0, 1), z_axis=(1, 0, 0))
     return m.translated((0.0, center_yz[0], center_yz[1]))
 
 
 def _rivet(x, y, z, side, r=0.0019, material="steel"):
     """Dome rivet head on a receiver side (side = +1 right / -1 left)."""
-    m = sh.revolve([(0.0, 0.0010), (r * 0.55, 0.0009), (r, 0.0002), (r, -0.0006), (0.0, -0.0006)], 10, material)
+    m = sh.revolve([(0.0, 0.0010), (r * 0.55, 0.0009), (r, 0.0002), (r, -0.0006), (0.0, -0.0006)], 10, material, precision=True)
     m = sh.place(m, x_axis=(0, 1, 0), y_axis=(0, 0, 1), z_axis=(side, 0, 0))
     return m.translated((x, y, z))
 
@@ -144,7 +144,7 @@ def dust_cover_mesh():
 def barrel_mesh():
     """Barrel with the rear sight block, gas block, handguard retainers and the slant muzzle brake."""
     m = sh.revolve([(0.0, CROWN_Z), (BARREL_R * 0.9, CROWN_Z), (BARREL_R, CROWN_Z + 0.001),
-                    (BARREL_R * 1.04, -0.250), (BARREL_R * 1.10, 0.0), (0.0, 0.0)], 18, "steel")
+                    (BARREL_R * 1.04, -0.250), (BARREL_R * 1.10, 0.0), (0.0, 0.0)], 18, "steel", precision=True)
     # rear sight block over the front trunnion (carries the tangent leaf)
     rs_low = sh.rounded_rect(-0.0120, -0.0100, 0.0120, SIGHT_Y - 0.0185, (0.004, 0.004, 0.003, 0.003), 2)
     rs_top = sh.rounded_rect(-0.0105, -0.0100, 0.0105, SIGHT_Y - 0.0090, (0.004, 0.004, 0.003, 0.003), 2)
@@ -332,7 +332,7 @@ def bolt_mesh():
             (HANDLE_Z - 0.0040, 0.0110)]
     m.merge(sh.extrude_x(np.array(stem), (), 0.0060, chamfer_bevel(0.0006), "steel_dark", x_center=REC_W + 0.0040))
     knob = sh.revolve([(0.0, 0.0), (0.0048, 0.0), (0.0055, 0.0010), (0.0055, 0.0100), (0.0042, 0.0125),
-                       (0.0, 0.0130)], 14, "steel_dark")
+                       (0.0, 0.0130)], 14, "steel_dark", precision=True)
     knob = sh.place(knob, x_axis=(0, 0, -1), y_axis=(0, 1, 0), z_axis=(1, 0, 0))
     m.merge(knob.translated((REC_W + 0.0085, 0.0060, HANDLE_Z + 0.0010)))
     return m
@@ -409,7 +409,7 @@ def mag_mesh(extended=False):
     m.merge(sh.place(plate, origin=np.array([0.0, y, z]), x_axis=(1, 0, 0), y_axis=-up, z_axis=-fwd))
     # top round (lacquered steel case, copper-jacketed bullet forward)
     m.merge(sh.revolve([(0.0, 0.0), (0.0056, 0.0), (0.0055, -0.0270), (0.0045, -0.0320), (0.0040, -0.0390),
-                        (0.0030, -0.0480), (0.0010, -0.0560), (0.0, -0.0565)], 12, "brass")
+                        (0.0030, -0.0480), (0.0010, -0.0560), (0.0, -0.0565)], 12, "brass", precision=True)
             .translated((0.0, 0.0060, 0.0260)))
     return m
 
@@ -419,4 +419,4 @@ def shell_mesh(scale=1.15):
     prof = [(0.0, 0.0193), (0.0050, 0.0193), (0.0057, 0.0185), (0.0057, 0.0175), (0.0050, 0.0170),
             (0.0050, 0.0155), (0.0056, 0.0150), (0.0054, -0.0090), (0.0046, -0.0120), (0.0044, -0.0193),
             (0.0040, -0.0193), (0.0040, -0.0170), (0.0, -0.0170)]
-    return sh.revolve([(r * scale, z * scale) for r, z in prof], 18, "brass")
+    return sh.revolve([(r * scale, z * scale) for r, z in prof], 18, "brass", precision=True)

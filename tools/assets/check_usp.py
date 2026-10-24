@@ -6,7 +6,9 @@ import numpy as np
 
 from glbread import GLTF
 
-BUDGET = 5000          # section 24 budgets: triangles of a pistol as drawn (one magazine fitted)
+from model_quality import BUDGETS
+
+BUDGET = BUDGETS["pistol"]          # section 24 budgets: triangles of a pistol as drawn (one magazine fitted)
 
 
 def claims(path, names):

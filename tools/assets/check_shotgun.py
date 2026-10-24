@@ -325,5 +325,6 @@ def check(path, arms, r):
     check_attach.check_weapon(path, arms, r, label)
     tris = sum(len(g.accessor(p["indices"])) // 3 for n in g.nodes if "mesh" in n and n["name"] != "fx_shell"
                for p in g.json["meshes"][n["mesh"]]["primitives"])
-    r.check(tris <= 9000, f"{label}: {tris} triangles over the long-gun budget (9k)")
+    from model_quality import BUDGETS
+    r.check(tris <= BUDGETS["long_gun"], f"{label}: {tris} triangles over the long-gun budget")
     r.note(f"{label} triangles (excluding attachments and fx_shell): {tris}")

@@ -1,6 +1,6 @@
 """Binds the LabPBR texture sets and skin regions to the weapon GLBs and bakes per-vertex AO (VIEWMODEL_SPEC 20 / 21).
 
-python -I tools/assets/pbr_apply.py [model ...]     (model = "gun/p9", "attachment/suppressor" ...; default: all)
+python -I tools/assets/pbr_apply.py [--factors-only] [model ...]     (model = "gun/p9", "attachment/suppressor" ...; default: all)
 
 Per model a table maps every material to (texture set, region); a material used by parts of different regions is
 split first (a copy with a suffixed name per region, e.g. the AK's `wood` -> `wood_handguard`, `wood_grip`). For each
@@ -605,8 +605,42 @@ def apply(model, verbose=True, path=None):
     return True
 
 
+def refresh_factors(models=None):
+    """Refresh texture-derived fallback factors only; preserve geometry, AO, UVs and bindings.
+
+    Run after texture-only rebuilds, without ray baking already verified geometry again.
+    """
+    stats = {}
+    for model in models or MODELS:
+        path = glb_path(model)
+        if not os.path.exists(path):
+            continue
+        g = Glb(path)
+        changed = False
+        for m in g.json.get("materials", []):
+            key = m.get("extras", {}).get("pbr", "")
+            if not key.startswith("textures/pbr/"):
+                continue
+            name = key[len("textures/pbr/"):]
+            if name not in stats:
+                stats[name] = set_stats(name)
+            if stats[name] is None:
+                continue
+            pbr = m.setdefault("pbrMetallicRoughness", {})
+            for field, value in zip(("metallicFactor", "roughnessFactor"), stats[name]):
+                if pbr.get(field) != value:
+                    pbr[field] = value
+                    changed = True
+        if changed:
+            g.save(path)
+        print(f"pbr factors: {model}: {'updated' if changed else 'unchanged'}; geometry/AO untouched")
+
+
 def main(argv):
     want = [a for a in argv if a in MODELS] or list(MODELS)
+    if "--factors-only" in argv:
+        refresh_factors(want)
+        return
     for model in want:
         apply(model)
 

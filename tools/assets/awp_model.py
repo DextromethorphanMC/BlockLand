@@ -87,7 +87,7 @@ def receiver_mesh():
     # screws holding the action in the chassis (both sides)
     for s in (-1, 1):
         for z in (0.0240, 0.2150):
-            hd = sh.revolve([(0.0, 0.0008), (0.0024, 0.0008), (0.0027, 0.0), (0.0, 0.0)], 12, "steel_dark")
+            hd = sh.revolve([(0.0, 0.0008), (0.0024, 0.0008), (0.0027, 0.0), (0.0, 0.0)], 12, "steel_dark", precision=True)
             hd = sh.place(hd, x_axis=(0, 1, 0), y_axis=(0, 0, 1), z_axis=(s, 0, 0))
             m.merge(hd.translated((s * (STOCK_W + 0.0001), -0.0350, z)))
     return m
@@ -131,7 +131,7 @@ def barrel_mesh():
         r = r_at(z) * (0.93 if z == CROWN_Z else 1.0)
         rings.append(_ring_xy(_flute_section(r, depth), z))
     m = sh.loft(rings, "barrel")
-    m.merge(sh.revolve([(0.0040, CROWN_Z + 0.0005), (0.0040, CROWN_Z - 0.0001)], 12, "steel_dark", outward=False))
+    m.merge(sh.revolve([(0.0040, CROWN_Z + 0.0005), (0.0040, CROWN_Z - 0.0001)], 12, "steel_dark", outward=False, precision=True))
     return m
 
 
@@ -139,7 +139,7 @@ def muzzle_brake_mesh():
     """Two-port muzzle brake screwed onto the crown (node `muzzle_brake`: hidden while a suppressor is fitted)."""
     z1, z0 = CROWN_Z + 0.0020, MUZZLE_Z
     m = sh.revolve([(0.0, z1), (BRAKE_R - 0.0012, z1), (BRAKE_R, z1 - 0.0012), (BRAKE_R, z0 + 0.0020),
-                    (BRAKE_R - 0.0020, z0), (0.0060, z0), (0.0060, z0 + 0.010), (0.0, z0 + 0.010)], 24, "barrel")
+                    (BRAKE_R - 0.0020, z0), (0.0060, z0), (0.0060, z0 + 0.010), (0.0, z0 + 0.010)], 24, "barrel", precision=True)
     # side ports: dark recesses with the baffle walls between them
     for s in (-1, 1):
         for k in range(3):
@@ -213,7 +213,7 @@ def chassis_mesh():
                    "steel_dark"))
     # sling loop on the left side (the charm hangs from it)
     loop = sh.revolve([(0.0018, -0.0010), (0.0034, -0.0010), (0.0034, 0.0010), (0.0018, 0.0010), (0.0018, -0.0010)],
-                      12, "steel_dark")
+                      12, "steel_dark", precision=True)
     loop = sh.place(loop, x_axis=(0, 0, 1), y_axis=(0, 1, 0), z_axis=(1, 0, 0))
     m.merge(loop.translated(CHARM_POINT + np.array([-0.0012, 0.0030, 0.0])))
     return m
@@ -241,7 +241,7 @@ def butt_mesh():
                       (c1 - 0.0080, CHEEK_Y), (c0 + 0.0130, CHEEK_Y), (c0, CHEEK_Y - 0.0040)])
     m.merge(sh.extrude_x(cheek, (), 0.0190, round_bevel(0.0030, 2), "stock"))
     for z in (c0 + 0.0250, c1 - 0.0250):                                           # cheek piece posts
-        post = sh.revolve([(0.0, -0.0040), (0.0030, -0.0040), (0.0030, 0.0040), (0.0, 0.0040)], 10, "steel_dark")
+        post = sh.revolve([(0.0, -0.0040), (0.0030, -0.0040), (0.0030, 0.0040), (0.0, 0.0040)], 10, "steel_dark", precision=True)
         post = sh.place(post, x_axis=(1, 0, 0), y_axis=(0, 0, -1), z_axis=(0, 1, 0))
         m.merge(post.translated((-0.0150, COMB_Y - 0.0010, z)))
         m.merge(post.translated((0.0150, COMB_Y - 0.0010, z)))
@@ -288,7 +288,7 @@ def grip_mesh():
 def bolt_shroud_mesh():
     """Non-rotating bolt shroud behind the receiver with the cocking indicator (node `bolt`, bolt space at rest)."""
     m = sh.revolve([(0.0, REC_Z1 - 0.0020), (0.0120, REC_Z1 - 0.0020), (0.0128, REC_Z1 + 0.0020),
-                    (0.0128, REC_Z1 + 0.0240), (0.0100, REC_Z1 + 0.0300), (0.0, REC_Z1 + 0.0300)], 20, "bolt")
+                    (0.0128, REC_Z1 + 0.0240), (0.0100, REC_Z1 + 0.0300), (0.0, REC_Z1 + 0.0300)], 20, "bolt", precision=True)
     m.merge(_cyl_z(0.0026, REC_Z1 + 0.0290, REC_Z1 + 0.0360, "steel_dark", 10, y=0.0, chamfer=0.0008))   # indicator
     m.merge(sh.box(-0.0030, 0.0110, REC_Z1 + 0.0040, 0.0030, 0.0150, REC_Z1 + 0.0220, 0.0006, "bolt"))   # top fin
     return m
@@ -303,7 +303,7 @@ def bolt_body_mesh():
     for k in range(4):                                                             # spiral flutes on the body
         z = 0.0600 + k * 0.0300
         m.merge(sh.revolve([(BOLT_R - 0.0004, z), (BOLT_R + 0.0001, z + 0.0020), (BOLT_R + 0.0001, z + 0.0100),
-                            (BOLT_R - 0.0004, z + 0.0120)], 18, "steel_dark"))
+                            (BOLT_R - 0.0004, z + 0.0120)], 18, "steel_dark", precision=True))
     # handle: stem from the body out to the right, swept back a little, then the knob
     a = np.radians(-HANDLE_DROP)
     d = np.array([np.cos(a), np.sin(a), 0.10])
@@ -312,14 +312,14 @@ def bolt_body_mesh():
     knob = knob_rest()
     stem_len = float(np.linalg.norm(knob - root))
     stem = sh.revolve([(0.0, 0.0), (0.0048, 0.0), (0.0040, 0.0080), (0.0034, stem_len - 0.0060),
-                       (0.0040, stem_len), (0.0, stem_len)], 12, "bolt")
+                       (0.0040, stem_len), (0.0, stem_len)], 12, "bolt", precision=True)
     z_ax = (knob - root) / stem_len
     x_ax = np.cross((0.0, 0.0, 1.0), z_ax)
     x_ax /= np.linalg.norm(x_ax)
     y_ax = np.cross(z_ax, x_ax)
     m.merge(sh.place(stem, origin=root, x_axis=x_ax, y_axis=y_ax, z_axis=z_ax))
     ball = sh.revolve([(0.0, -KNOB_R)] + [(KNOB_R * np.sin(t), -KNOB_R * np.cos(t)) for t in np.linspace(0.3, 2.84, 8)]
-                      + [(0.0, KNOB_R)], 14, "bolt")
+                      + [(0.0, KNOB_R)], 14, "bolt", precision=True)
     m.merge(sh.place(ball, origin=knob, x_axis=x_ax, y_axis=y_ax, z_axis=z_ax))
     return m
 
@@ -362,7 +362,7 @@ def mag_mesh():
     m.merge(sh.box(0.0040, -0.0010, -MAG_HL + 0.0040, MAG_HW - 0.0010, 0.0030, MAG_HL - 0.0060, 0.0005, "mag"))
     rnd = sh.revolve([(0.0, 0.0), (0.0074, 0.0), (0.0074, -0.0050), (0.0072, -0.0560), (0.0058, -0.0640),
                       (0.0044, -0.0700), (0.0044, -0.0740), (0.0035, -0.0820), (0.0018, -0.0905), (0.0, -0.0930)],
-                     14, "brass")
+                     14, "brass", precision=True)
     m.merge(rnd.translated((0.0, 0.0030, MAG_HL - 0.0050)))
     return m
 
@@ -378,4 +378,4 @@ def shell_mesh(scale=1.0):
     prof = [(0.0, 0.0345), (0.0068, 0.0345), (0.0075, 0.0338), (0.0075, 0.0325), (0.0066, 0.0318),
             (0.0066, 0.0300), (0.0074, 0.0294), (0.0072, -0.0170), (0.0058, -0.0250), (0.0046, -0.0285),
             (0.0046, -0.0345), (0.0040, -0.0345), (0.0040, -0.0320), (0.0, -0.0320)]
-    return sh.revolve([(r * scale, z * scale) for r, z in prof], 18, "brass")
+    return sh.revolve([(r * scale, z * scale) for r, z in prof], 18, "brass", precision=True)
