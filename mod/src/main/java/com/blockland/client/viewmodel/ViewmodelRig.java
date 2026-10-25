@@ -352,6 +352,7 @@ public final class ViewmodelRig<A> {
         }
         // swimming: any one-shot (a shot, a reload, a cut) brings the weapon up out of the swim carry
         motion.swim().hands(action != null && !ended);
+        motion.prone().hands(action != null && !ended);
         motion.update(dt, player, sprinting, calm);
         cameraRig.update(dt, calm);
     }
@@ -402,6 +403,7 @@ public final class ViewmodelRig<A> {
         }
         deadBlend(p);
         motion.swim().poseFreeArm(p, armL);
+        motion.prone().poseFreeArm(p, armL);
         cameraFromPose(p);
         p.computeWorld(root);
         // the support hand on the underbarrel attachment (spec §35), wherever the clip's hand holds the weapon
@@ -549,6 +551,12 @@ public final class ViewmodelRig<A> {
     }
 
     /** A node scaled to zero by the current animation, or under one (hidden this frame). */
+    /** Whether {@link #drawMeshes} draws node {@code index}'s mesh this frame (inside the viewmodel, shown, not collapsed). */
+    boolean drawsNode(int index, @Nullable boolean[] hidden) {
+        return index >= 0 && index < outside.length && !outside[index] && !(hidden != null && index < hidden.length && hidden[index])
+                && !isCollapsed(index);
+    }
+
     public boolean isCollapsed(int index) {
         for (int n = index; n >= 0; n = pose.model().nodes.get(n).parent) {
             if (pose.isCollapsed(n)) return true;
@@ -843,6 +851,7 @@ public final class ViewmodelRig<A> {
     private List<ArmPart> armParts = List.of();
     /** CPU skinning of the skinned arms meshes (elbow and wrist bend round, spec §7); this rig's own buffers. */
     private final ArmSkin armSkin = new ArmSkin();
+    private final ViewmodelBlood blood = new ViewmodelBlood();
     @Nullable
     private TextureRef armsTexture;
     private final GpuModel.Style armsStyle = new GpuModel.Style() {
@@ -864,17 +873,22 @@ public final class ViewmodelRig<A> {
         String variant = skin.model() == PlayerSkin.Model.SLIM ? "slim" : "wide";
         armsTexture = TextureRef.managed(skin.texture());
         GltfModel source = model.source;
+        blood.beginArms(arms);
         for (ArmPart part : armParts(arms)) {
             if (!part.variant.equals(variant)) continue;
             int node = source.node(part.joint);
             if (node < 0 || hidden != null && hidden[node] || isCollapsed(node)) continue;
             if (part.node != null && part.node.skin != null) {
                 armSkin.draw(draws, arms, part.node, pose, node, base, armsStyle, blockLight, skyLight);
+                blood.arm(part.mesh, node, armSkin.skinned(part.mesh));
                 continue;
             }
             modelView.set(base).mul(pose.world[node]);
             arms.addMesh(draws, part.mesh, modelView, armsStyle, blockLight, skyLight, 1);
+            blood.arm(part.mesh, node, null);
         }
+        // blood splashed onto the weapon and the hands, laid where it landed (rendering spec §19)
+        blood.draw(this, player, base, hidden, blockLight, skyLight);
     }
 
     /** arms.glb meshes with the joint they belong to; from node extras, or the v1 naming table. */

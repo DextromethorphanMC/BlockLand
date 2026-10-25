@@ -356,7 +356,7 @@ the round has left after water, see *Rounds in fluids*), `fluid(level, at, fluid
 pos, motion, profile)` / `slashEntity(level, at, entity, from, motion, profile)` (a blade; `motion` = the cut, a little
 forward), `drip(level, at, motion)` (water falling off something soaked) and `entityAt(level, end, shooter)` (for shots
 reported without their target). The gun module calls them from its local trace and for other players' shots (their
-direction from `Slides.eyePosition` of the shooter, or straight into the struck face when the shooter is out of sight),
+direction from `BodyActions.eyePosition` of the shooter, or straight into the struck face when the shooter is out of sight),
 the knife module from its strike and other players' impacts; decals stay the weapon's (`Decals.onBlock` with the ammo's
 decal, `Decals.onEntity` with its `bodyDecal`, `bullet_wound`, for rounds that still had a third of their energy; body
 decals lie on the cube of the drawn model and follow its animation, `client/render/EntityPoses`, asset spec §14).
@@ -490,8 +490,11 @@ outline shapes): it moves onto the outermost visible side under where it struck 
 collision box, a fence post's top under its raised one; nothing visible there and the drop is gone), and the sides that
 really cover its plane round it — one rectangle per box side, those under a full block left out — cut it and its run
 (Sutherland–Hodgman on the CPU, the pieces drawn as fans), so it never hangs over an edge, a slab's or a step's side, a
-corner or air, and carries on over a neighbouring block that continues the surface; the rectangles are found again every
-half second (blocks broken or placed), and a stain that none hold any more is gone. Stains lie off their face by 0.0025 + 0.00007 × their distance (the depth buffer's
+corner or air, and carries on over a neighbouring block that continues the surface — and where a surface really ends its
+outline turns to follow the edge rather than being cut straight (§19); the rectangles are found again every
+half second (blocks broken or placed), and a stain that none hold any more is gone. Drops landing in blood already lying
+there run together with it into pools, blood sticks to plants and to other bodies, and splashes back onto the weapon
+that struck (§19). Stains lie off their face by 0.0025 + 0.00007 × their distance (the depth buffer's
 precision); their occasional checks (rain, the block under them, light) run on the pool's own tick counter, not their
 age, which jumps in the rain. With second collisions off, blood vanishes where it lands. Stains stay `splatLife` × the setting seconds (0 = drops vanish
 where they land), dry matte and darker over `dryTime`, and in the rain thin out — paler, wider, more see-through — and
@@ -530,7 +533,7 @@ the surface, then sheets and columns, then drops), clouds back to front, sparks.
 | molten rock (`pipeline/impact_molten`) | `blockland:core/impact_fluid` modes 4 (drops: sphere impostors) and 5 (splats, the crater) | none; depth test LEQUAL **and write** | temperature in `Color.a`: white-hot → orange → a dark crust breaking up the glow (noise), the crust lit like the world; writes its glow as emission (`bl_emissionAlpha`) so it blooms |
 | water (`pipeline/impact_fluid`) | `blockland:core/impact_fluid` modes 2 rings, 3 white water, 0 sheets / columns, 1 drops | premultiplied; depth test, no write | the lighting pack's water look (terrain.fsh, `BL_KIND_WATER`): the biome-tinted body lit by the lightmap (+ dynamic lights), `BlSkyColor` reflected by Fresnel (f0 0.02, strength `BlWater.z`, less indoors and under water), the sun's glint (shadowed); thin parts more transparent. Rings are only the change of the surface normal (three Gaussian crests' slope) — the reflection and glint move, nothing is painted on the water. White water: noisy aerated foam. Without world lighting the fog colour stands in for the sky (the same look vanilla's water has then), so the splash matches the water around it either way |
 | cloud lobes back to front | `blockland:core/impact_dust` | premultiplied (`ONE, ONE_MINUS_SRC_ALPHA`); depth test, no write | each lobe (a sphere, 1–8 per cloud by mass, fewer past 28 / 56 blocks) intersects the view ray with itself, clips the far end where the ray meets the world (the depth copy, §10), and integrates its cloud's shared density field with four samples: α = 1 − e^−τ. The field: a Gaussian of the cloud's radius, stretched along the throw and sagging below the centre, cut off smoothly inside the lobes; its edge eroded into billows by three octaves of cloud-anchored noise in blocks (the billows grow slower than the cloud, so it rolls outward instead of inflating), the erosion biting deeper with age so a puff breaks into wisps before it is gone. The `ImpactClouds` block per cloud: centre and radius; lobe density, cloud density, seed, age; throw direction × stretch, sag. `Color.a` = the cloud's index. Composited over one another the lobes multiply their transmittances, so they read as one cloud with a dense core thinning outward, thinning where it touches geometry. Lit like the world (`bl_skyShade`: the lightmap's block part as it is, its sky part shaded by the sun's reach), so dust in the sun is as bright as the sunlit wall it came off, never a dark film over it: the reach is the lobe's shadow × the light let through the cloud — the closed-form optical depth of the Gaussian towards the sun (`ρ·e^(−2d⊥²/r²)·√(π/8)·r·erfc(√2·s/r)`, erfc ≈ 1 − tanh(1.2x)) with a multiple-scattering tail (orders of ½ the light at ½ the depth), so its core and far side are shaded, not black — × a mild Henyey–Greenstein lobe (g 0.35, a third of the way from isotropic; above full sun the thin edges glow towards it), skylight dimmed under a thick cloud, dynamic lights; without world lighting the lightmap with the same self-shadowing; fades just in front of the camera |
-| blood stains (`pipeline/impact_fluid`) | `blockland:core/impact_fluid` mode 7, first of the fluid draws | premultiplied; depth test, no write | a quad on the block face (lifted 0.0025), cut to the face rectangles under it (above), in the splat's frame (uv to ±1.35: rim near 1 with lobes and spines from noise round the edge, satellites in cells beyond it, more of them ahead) or a run's (x across, y down to the tip, narrowing, a bead at its end); Normal.x = face × 2 (+1 run) in sixteenths, .y seed, .z wetness; lit like the world (the face's normal), a wet film reflecting the sky by Fresnel and the sun's glint (tighter the wetter), darker where thick and at a dried rim; not drawn past 72 blocks or from behind its face |
+| blood lying on things (`pipeline/impact_blood`) | `blockland:core/impact_blood` (its own vertex layout, `client/impact/BloodStains`), after the molten rock, before the water | premultiplied; depth test, no write, depth bias | stains on faces, runs, pools and stains on plants: §19 |
 | bubbles, blood drops | `blockland:core/impact_fluid` modes 8 and 6, last of the fluid draws | premultiplied; depth test, no write | camera-facing spheres: a bubble clear in the middle, bright at its rim, a highlight; a blood drop the blood look with full gloss, stretched along its motion |
 | sparks | `blockland:core/impact_spark` | `ONE, ONE` colour, alpha × (1 − a) (at most 0.3 per spark); depth test, no write | additive streaks stretched over about a tick of motion, white-hot core, fogged; lower the target's alpha so they bloom (§3) |
 
@@ -648,6 +651,10 @@ the feet, within 20 blocks; setting 水面涟漪与水花) every stride of about
 standing on it, up and back from the foot (`Impacts.kick`). The viewmodel (`ViewmodelRig`, every weapon) asks `Wetness.of(player)` each frame and hands it to its `DrawList.wetness`,
 which packs it into ModelOffset.z's fraction (flags + 0.45 × wetness, so `int(z + 0.5)` is still the flags); gun.fsh
 takes `max(rain wetness, soak)`: a weapon out of the water is wet all over, beads clinging to its sides too, until it dries.
+Rain falling on a body (sky above its head, looked at twice a second) soaks it too, 0.03 more each time up to 0.4: the
+weapon's rain wetness itself follows the rain *falling* (`BlWeather.y`, never the ground's slow `BlWeather.x`), so
+when the rain stops (or the holder goes under a roof) what is left on the weapon and the hands is that soaking,
+drying in under 20 s — not the minutes the ground takes.
 
 **Rain wetness** (setting 雨天湿润 0..1; `light/Sky` → `BlWeather.x`): rain wets only where the camera's biome rains (not
 snow, not deserts); surfaces soak in about 15 s and dry in about 90 s. `bl_wetness`: the wetness where sky light reaches
@@ -663,7 +670,7 @@ in the weapon's own space on the plane of the surface normal's dominant axis, th
 per block (droplets of 1–2 mm, the densest), 150 (2–5 mm) and 75 (5–11 mm, sparse: merged beads, rarer on steep faces);
 radii mostly at the small end; more on the tops, few on the sides, 1.35× and steeper hanging on the undersides. While
 rain falls (`BlWeather.y`) each bead lands suddenly, grows a little and is gone again (merged, run off); the coverage
-follows the rain wetness, so they gather as the weapon soaks. The bigger drops on sloping and upright faces run down
+follows the weapon's rain wetness (the rain falling now, plus the holder's soaking), so they gather as the weapon soaks. The bigger drops on sloping and upright faces run down
 them (lanes 1.1 cm apart, each drop sliding in fits — sticking, letting go — wandering, a hair-thin wet trail above it;
 the down direction is the world's, carried into the weapon's space through the model-view, so the drops run downhill
 however the weapon is held). Anti-aliasing: a layer fades into the film (more gloss, no drops) where a pixel covers more
@@ -726,7 +733,9 @@ u second v, 2 second u and v, 3 second u first v; on a side face 0 and 3 are the
 tangent (−n.z, n.x)). The sprite is looked up at the vertex's own uv: FaceBakery shrinks a face's uvs towards the
 sprite's middle (`uvShrinkRatio`), so that uv lies inside its sprite whichever way u and v run (crops and vines run u
 backwards). Never look past the uv: the cell beyond the sprite's edge is a neighbouring sprite, and a still block next to
-a plant in the atlas would wave. The vertex's height in its block comes from the section-local `Position` (bottom edges snap down
+a plant in the atlas would wave. The CPU gets the same bits per texture from `client/render/PlantWind` (published by the
+block materials after every stitch), for whatever must move with a plant: a shader handed them calls `bl_wind` as the
+terrain shader does (blood on plants and leaves, §19). The vertex's height in its block comes from the section-local `Position` (bottom edges snap down
 within 0.25, tops within 0.1; crops start 1/16 below their block). The plant's **stem** is the middle of its block: the
 face's midpoint (half a face width — 0.5, or 0.707 on a diagonal cross — back along the tangent) lies in it for all four
 corners, so the whole plant shares one stem, one push and one height.
@@ -771,3 +780,78 @@ dividing 2048 blocks (`BlCamera` wraps there) and real time (`BlFlags.w`). The f
 position (`worldPos`) for the sun's shadow and the lights: the shadow map's terrain casters (`shadow_terrain`) hold the
 plants still, so a moved plant takes its own still shadow and casts a still one. Moving plants carry no motion vectors
 (TAA, DLSS and motion blur treat them as still geometry).
+
+## 19. Blood (`client/impact`, `client/decal`)
+
+Blood is part of the impacts (§12: the drops, mist, plumes, wounds); this section is where it ends up. No stain is a
+texture: every outline is made from the stain's seed in `blockland:core/impact_blood`, every relief is a height field.
+
+**On faces.** A landed drop is a splat (§12). Its quad (`client/impact/BloodStains`, its own vertex layout: position,
+colour, the stain's uv, lightmap, then `Stain` (distances to the edges, seed, wetness), `Shape` (kind × 16 + face × 2
+(+1 a run), wind bits, radius, gloss), `Anchor` (the point the wind moves it with), `Atlas` (a plant's uv)) is cut to the
+rectangles of the surface under it as before, and every corner also carries, for its rectangle, the signed distance to
+the rectangle's **real edges** nearest the stain along the face's two axes. A real edge is one where the surface ends: not
+shared for the most part with a neighbouring rectangle that carries the surface on, not where the search window cut it
+(`ImpactParticles.exposed`). A distance to a line is linear, so it interpolates exactly over a piece. The shader keeps the
+blood a hair (1.2 mm) short of such an edge and joins the outline's distance field and the edge's with a smooth
+intersection (rounded over 0.22 × the radius): where a splat or a pool reaches the end of a floor, a step, a slab's side,
+its outline turns to run along the edge, rounded where the two meet, and bulges a little against it (held back by its
+surface tension); over a continued surface nothing changes. Satellites stop at the edge too.
+
+**Pools.** A drop landing on blood already lying on the same face within `poolMerge` × its radius (on a wall half that:
+drops run there rather than gather) runs into it: the stain grows area for area towards `poolMax` (radius) and creeps out
+to that over `poolSpread` seconds (its clip window covers where it is creeping to), its middle shifting towards the new
+drop, wet again and living on; on a floor it becomes a **pool**: rounder (its stretch eases off), slow round lobes
+instead of spines, no satellites, thicker. A wound bleeding on the spot and a body bleeding out make pools: a wounded body
+that dies lets `deathPool` drops fall where it lies (`Wounds.bleedOut`). A pool on a floor grown past `overflow` ×
+`poolMax` that reaches a real edge **runs over it**: a run starts at the top of the side below (`ImpactParticles.spill`,
+once per side), down as far as the wall goes.
+
+**Relief and shading.** The height field: a meniscus rising steeply over 0.25 × the radius (at least 1.5 mm) from the
+outline to a low dome, the thicker against an edge, faint ripples while wet; its height 1.1 mm for a splat, 2.2 mm a
+pool, 0.8 mm a run, 0.5 mm on a plant, a third of that once dry. Its normal comes from the screen-space derivatives of the
+height and the position (a surface gradient: a normal map without a texture or tangents), so the sun's glint, the sky's
+Fresnel reflection (by the gloss: wet 1, washed 0.6) and the lights catch the film's rim and ripples; drying, it flattens,
+darkens and goes matte, a darker coffee ring at its rim. Lit like the world as the drops are (§12).
+
+**On plants.** A drop going through a block whose model has a quad the wind bends (`client/render/PlantWind`: grass,
+flowers, crops, saplings; no collision box) sticks to that quad with the blood's `plants` chance (each block once): the
+quad found in the block's baked model (with its random offset), the point projected onto it, the quad's level axis and the
+block atlas uv under the stain (and its change per block along the quad and up) kept with it. Drawn on the quad (a little
+towards the eye), the plant's own texture's alpha cuts it to the blades. In the vertex shader the whole stain moves with
+the plant at its middle: `bl_wind` (the same function the terrain shader moves the plant's vertices with) at the anchor,
+as the top corner of a cross quad at that height whose stem is the anchor's column — the lean, the flutter, the gusts and
+bodies pushing the plant aside. Stains on leaf blocks (`leaves` wind) move with the canopy's smooth field the same way,
+vertex by vertex. A plant broken, cut or trampled flat takes its stain with it; rain washes it out like any other.
+
+**On bodies.** Flying blood is tested against the living bodies round where it flew last tick (not the camera's own body
+in first person; at most 24): a drop entering one (not the body it came out of, for its first 12 ticks) stains it with the
+blood's `bodies` chance — the decal type `bodyDecal` (`blood_spatter`: six variants, splats with a lobed rim, spines and a
+tail thrown along the way it flew, satellites) laid on the drawn model's cube it strikes (the body decals, `client/decal`;
+they move with the model). The impact module only calls `Impacts.BodyStains`, which the client wires to
+`Decals.onEntity`; a drop the model does not take flies on.
+
+**On the weapon and the hands.** A hit on a body splashes blood back onto the weapon of whoever struck it
+(`client/render/WeaponBlood`, a contract like `Wetness`): a blade's attacker (the eye the cut came from) gets
+`weaponBlade`, a round's shooter (looking down its line at the wound within `weaponRange` blocks) `weaponRound` ×
+(1 − distance / range). The impact module records each splash — the way the blood flies (from the wound towards the
+holder), how much, when, `weaponLife` / `weaponDry` — and whatever draws the holder's weapon takes the splashes it has not
+laid yet. The first-person viewmodel (`client/viewmodel/ViewmodelBlood`, one hook in `ViewmodelRig.drawArms`) lays each as
+2 + 6 × amount drops: each flies along the splash's way, falling a little and spread, and lands on a point picked over the
+drawn weapon and hands by area × how squarely the surface faces it (more on the front, nearer the struck body) that
+nothing nearer covers (a ray back towards the wound). There it becomes a decal: a square on the surface, its u the way the
+drop slid over it (drawn out up to 2.6 × the more glancing it came in), every triangle of the hit part in a thin slab
+round the surface and turned the same way clipped to it — stored as barycentric weights of the part's vertices, not
+positions. Every frame the decal is rebuilt from the part's vertices as they are now (a weapon node's mesh; a finger's;
+the skinned arm and palm as `ArmSkin` skinned them this frame) and drawn at that part's matrix, so it lies on the surface
+through every animation and bend and never moves; old drops keep their place when new ones land. `gun.fsh` (effect 7,
+params seed, wetness, opacity, stretch; the vertex AO byte the facing fade) draws the drop in the decal's square: a body
+with a ragged rim behind the middle, a tail into the front and a few satellites thrown ahead; a dielectric film, dark red
+and deepest where it pools, raised and glossy (a relief from its height field, a clear coat) while wet, a flat
+brown-black crust with a darker rim when dry; the rain's water lies on top of it. Each drop dries and fades on its own;
+at most 56 pieces per holder (the oldest go). Kept per holder and weapon model: the hands keep theirs across weapons, a
+weapon's blood is back when it is drawn again (until it has faded). Glass, effects and see-through parts take none.
+
+Data (`impacts.json`, a material's `blood`): `poolMerge`, `poolMax`, `poolSpread`, `overflow`, `plants`, `bodyDecal`,
+`bodies`, `weaponRange`, `weaponBlade`, `weaponRound`, `weaponLife`, `weaponDry`, `deathPool`; the body decal in
+`decals.json`, its texture from `tools/assets/gen_decals.py`.

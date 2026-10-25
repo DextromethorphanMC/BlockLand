@@ -32,7 +32,8 @@ import org.joml.Vector3f;
  *       weapon swings through a dip and a roll instead of sliding straight, and coming out it settles with a bounce;</li>
  *   <li>aiming down sights: the weapon swings in on an arc (a cant, a dip, a pull towards the cheek half-way) and
  *       settles with a small dip;</li>
- *   <li>whole-body moves from outside ({@link BodyMotion}): in a slide the weapon tilts and drops low;</li>
+ *   <li>whole-body moves from outside ({@link BodyMotion}, the movement actions of spec §47): in a slide the weapon
+ *       tilts and drops low; lying prone, crawling and diving it follows {@link ProneLayer};</li>
  *   <li>swimming ({@link SwimPose}): the weapon rests in a low carry riding the strokes, the free arm out of view, and
  *       comes up quickly whenever the hands work it or it is aimed;</li>
  *   <li>the hands working the weapon (spec §31.4): clip events shove the whole rig — weapon, both arms, camera — by
@@ -57,6 +58,26 @@ public final class ViewmodelMotion {
 
         /** 0..1 how far into a slide the local player is. */
         float slide();
+
+        /** 0..1 how far down the local player lies (prone, and after a dive's landing). */
+        default float prone() {
+            return 0;
+        }
+
+        /** 0..1 how far into a dive the local player is. */
+        default float dive() {
+            return 0;
+        }
+
+        /** 0..1 how fast the local player crawls lying down. */
+        default float crawl() {
+            return 0;
+        }
+
+        /** Degrees the weapon still wanders aimed lying down. */
+        default float proneSway() {
+            return 0;
+        }
     }
 
     private static BodyMotion body = BodyMotion.NONE;
@@ -98,6 +119,8 @@ public final class ViewmodelMotion {
     private final Spring lookDown = new Spring(0).config(60, 14);
     /** The swimming pose's layer: the carry, the strokes, the weapon brought up to be used. */
     private final SwimPose swim = new SwimPose();
+    /** The prone and dive layer: down on the ground, the crawl carry, the dive's throw. */
+    private final ProneLayer prone = new ProneLayer();
     /** Eye to muzzle (or blade tip) in the rest pose, metres; rotational inertia relative to a pistol. */
     private float reach = 0.45f, inertia = 1;
     private boolean wasCrouching;
@@ -309,6 +332,7 @@ public final class ViewmodelMotion {
         // breathing: slower and shallower at rest, quick and deep after a sprint
         breathPhase += dt * (1.55 + 2.2 * exertion);
         swim.update(dt, player, aim);
+        prone.update(dt, player, aim, body, camera, (float) Math.sqrt(Math.max(0.3f, handling.weight)));
         updateCamera(aim);
     }
 
@@ -445,6 +469,7 @@ public final class ViewmodelMotion {
                 + (-Math.max(0, down) * 0.006f + Math.max(0, -down) * 0.006f) * hip;
         root.translate(x, y, z);
         swim.applyOffsets(root, aim);
+        prone.applyOffsets(root, aim);
     }
 
     /** How far the wall pose is in: the push-back spring eased (anim library), so the weapon tips away smoothly. */
@@ -525,6 +550,7 @@ public final class ViewmodelMotion {
         root.rotateY((float) Math.toRadians(yaw));
         root.rotateX((float) Math.toRadians(pitch));
         swim.applyRotations(root, aim);
+        prone.applyRotations(root, aim, body.proneSway());
     }
 
     // ---- outputs ----------------------------------------------------------------------------------
@@ -532,6 +558,11 @@ public final class ViewmodelMotion {
     /** The swimming layer (its carry style; the rig tells it when the hands work the weapon). */
     public SwimPose swim() {
         return swim;
+    }
+
+    /** The prone and dive layer (its carry style; the rig tells it when the hands work the weapon). */
+    public ProneLayer prone() {
+        return prone;
     }
 
     /** 0..1 how far into a sprint carry (run or tactical) the weapon is; firing waits until it is lowered. */

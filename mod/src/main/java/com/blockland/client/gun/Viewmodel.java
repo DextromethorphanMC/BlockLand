@@ -13,6 +13,7 @@ import com.blockland.client.spray.SprayDecals;
 import com.blockland.client.viewmodel.SkinEffects;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.client.viewmodel.ViewmodelRig;
+import com.blockland.client.viewmodel.WeaponOverlays;
 import com.blockland.craft.Build;
 import com.blockland.craft.CraftData;
 import com.blockland.gun.GunData;
@@ -424,6 +425,7 @@ public final class Viewmodel {
         rig.motion().applyRotations(root, a, !rig.hasSprintClips());
         root.translate(-HIP_PIVOT.x, -HIP_PIVOT.y, -HIP_PIVOT.z);
         recoil.apply(root, HIP_PIVOT);
+        WeaponOverlays.adjustRoot(root);
     }
 
     // ---- drawing ----------------------------------------------------------------------------------
@@ -445,6 +447,7 @@ public final class Viewmodel {
         resolveAds();
         buildRoot();
         rig.pose(root);
+        WeaponOverlays.afterPose(rig, base, blockLight, skyLight);
         rig.drawMeshes(base, hidden, skinEffects.style(WeaponLook.style(stats.skin())), blockLight, skyLight);
         rig.drawArms(base, player, hidden, blockLight, skyLight);
         drawEffects(base);

@@ -73,6 +73,7 @@ final class KnifeViewmodel {
         if (ready) {
             rig.motion().setHandling(knife.handling);
             rig.motion().swim().setStyle(SwimPose.Style.KNIFE);
+            rig.motion().prone().setStyle(com.blockland.client.viewmodel.ProneLayer.Style.KNIFE);
         }
         return ready;
     }

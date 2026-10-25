@@ -4,6 +4,7 @@ import net.minecraft.network.FriendlyByteBuf;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /** 枪战感染 messages: choosing a monster, using its skill, and what the client shows about its own role. */
 public final class InfectionPackets {
@@ -107,6 +108,32 @@ public final class InfectionPackets {
 
         public static S2CSkill decode(FriendlyByteBuf buf) {
             return new S2CSkill(buf.readFloat(), buf.readFloat());
+        }
+    }
+
+    /** A monster is burning a fuse of {@code seconds} (it swells and flashes on every screen); 0 = put out. */
+    public record S2CFuse(UUID player, float seconds) {
+        public static void encode(S2CFuse msg, FriendlyByteBuf buf) {
+            buf.writeUUID(msg.player);
+            buf.writeFloat(msg.seconds);
+        }
+
+        public static S2CFuse decode(FriendlyByteBuf buf) {
+            return new S2CFuse(buf.readUUID(), buf.readFloat());
+        }
+    }
+
+    /** A monster blast of {@code radius} blocks went off at (x, y, z): the client's fire, smoke and shake. */
+    public record S2CBlast(double x, double y, double z, float radius) {
+        public static void encode(S2CBlast msg, FriendlyByteBuf buf) {
+            buf.writeDouble(msg.x);
+            buf.writeDouble(msg.y);
+            buf.writeDouble(msg.z);
+            buf.writeFloat(msg.radius);
+        }
+
+        public static S2CBlast decode(FriendlyByteBuf buf) {
+            return new S2CBlast(buf.readDouble(), buf.readDouble(), buf.readDouble(), buf.readFloat());
         }
     }
 }

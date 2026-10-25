@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "blockland:block/ammo_crate"
+    },
+    "facing=east": {
+      "model": "blockland:block/ammo_crate"
+    },
+    "facing=south": {
+      "model": "blockland:block/ammo_crate"
+    },
+    "facing=west": {
+      "model": "blockland:block/ammo_crate"
+    }
+  }
+}

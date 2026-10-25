@@ -36,6 +36,8 @@ public final class BlockLand {
         EquipmentContent.register(context.getModBusGroup());
         BombContent.register(context.getModBusGroup());
         ParachuteContent.register(context.getModBusGroup());
+        com.blockland.supply.SupplyContent.register(context.getModBusGroup());
+        com.blockland.armor.ArmorContent.register(context.getModBusGroup());
         com.blockland.battleroyale.BattleRoyaleContent.register(context.getModBusGroup());
         BLEffects.register(context.getModBusGroup());
         BLEntities.register(context.getModBusGroup());

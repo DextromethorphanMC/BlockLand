@@ -1,0 +1,35 @@
+{
+  "minSpeed": 0.2,
+  "windowTicks": 10,
+  "boost": 1.25,
+  "minLaunchSpeed": 0.42,
+  "maxLaunchSpeed": 0.6,
+  "lift": 0.14,
+  "airDrag": 0.985,
+  "maxAirTicks": 40,
+  "landSlideTicks": 12,
+  "landFriction": 0.84,
+  "landEndSpeed": 0.05,
+  "cooldownTicks": 30,
+  "eyeHeight": 0.4,
+  "camera": {
+    "pitch": 5,
+    "roll": 3,
+    "fovKick": 0.07,
+    "landKick": 3.5
+  },
+  "pose": {
+    "bodyPitch": 12
+  },
+  "hitBody": {
+    "back": 1.05,
+    "forward": 0.35,
+    "height": 0.45,
+    "halfWidth": 0.32
+  },
+  "hitHead": {
+    "back": -0.55,
+    "height": 0.3,
+    "half": 0.22
+  }
+}

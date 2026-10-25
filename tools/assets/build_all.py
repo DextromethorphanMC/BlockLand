@@ -178,7 +178,9 @@ STEP_MODULES = ("build_tommy", "build_ks3", "build_usp", "build_dagger", "build_
                 "build_fx_special", "build_rpd", "build_karambit", "build_equipment",
                 "build_bomb", "build_battleroyale", "build_parachute", "build_graffiti", "build_new_guns",
                 "gen_kill_icons", "build_uzi", "build_p90", "build_mp5", "build_sten", "build_ssg08", "build_calico", "build_scar", "build_m4a1", "build_jackhammer",
-                "build_crowbar", "build_knuckles")
+                "build_crowbar", "build_knuckles",
+                "build_handcannon", "build_vector", "build_baton", "build_ammo_crate", "build_creeper_zombie", "build_movement",
+                "build_deagle", "build_revolver", "build_armor")
 
 
 def _load_step_modules():

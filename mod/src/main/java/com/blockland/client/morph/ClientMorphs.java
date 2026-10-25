@@ -33,6 +33,7 @@ import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 /**
  * Draws morphed players (the server decides who, {@link S2CMorph}) with a vanilla entity's model instead of their
@@ -46,6 +47,9 @@ public final class ClientMorphs {
     private static final Map<UUID, LivingEntity> proxies = new HashMap<>();
     @Nullable
     private static ClientLevel level;
+    /** Lets a game dress a player's proxy before it is drawn (e.g. a fuse's swelling); null = nothing. */
+    @Nullable
+    private static BiConsumer<UUID, LivingEntity> decorator;
 
     private ClientMorphs() {
     }
@@ -78,6 +82,14 @@ public final class ClientMorphs {
         proxies.clear();
     }
 
+    /**
+     * Called with each morphed player's proxy right before it is drawn, so a game can set what the proxy's renderer reads
+     * besides the copied pose (state the player entity does not carry). One decorator; null removes it.
+     */
+    public static void setDecorator(@Nullable BiConsumer<UUID, LivingEntity> decorator) {
+        ClientMorphs.decorator = decorator;
+    }
+
     /** The entity type a player is drawn as, or null. */
     @Nullable
     public static EntityType<?> morphOf(UUID player) {
@@ -108,6 +120,7 @@ public final class ClientMorphs {
         proxy.yBodyRotO = player.yBodyRotO;
         proxy.yHeadRot = player.yHeadRot;
         proxy.yHeadRotO = player.yHeadRotO;
+        if (decorator != null) decorator.accept(player.getUUID(), proxy);
         return proxy;
     }
 

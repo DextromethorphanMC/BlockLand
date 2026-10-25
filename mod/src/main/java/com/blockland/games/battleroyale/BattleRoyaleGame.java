@@ -460,8 +460,9 @@ final class BattleRoyaleGame implements GameInstance {
     }
 
     @Override
-    public boolean allowSlide(ServerPlayer player) {
-        return mode.flag("allowSlide", true);
+    public boolean allowAction(ServerPlayer player, com.blockland.movement.action.MovementAction action) {
+        boolean slide = mode.flag(com.blockland.movement.action.MovementAction.SLIDE.setting(), true);
+        return action == com.blockland.movement.action.MovementAction.SLIDE ? slide : mode.flag(action.setting(), slide);
     }
 
     private void eliminate(ServerPlayer player, @Nullable ServerPlayer killer, boolean fellIntoVoid) {

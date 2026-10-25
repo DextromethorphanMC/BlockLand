@@ -877,5 +877,252 @@
       "blockland:knife/crowbar_tap_2"
     ],
     "subtitle": "subtitles.blockland.knife.crowbar_tap"
+  },
+  "knife.baton_equip": {
+    "sounds": [
+      "blockland:knife/baton_equip"
+    ],
+    "subtitle": "subtitles.blockland.knife.baton_equip"
+  },
+  "knife.baton_open": {
+    "sounds": [
+      "blockland:knife/baton_open_1",
+      "blockland:knife/baton_open_2",
+      "blockland:knife/baton_open_3"
+    ],
+    "subtitle": "subtitles.blockland.knife.baton_open"
+  },
+  "knife.baton_close": {
+    "sounds": [
+      "blockland:knife/baton_close"
+    ],
+    "subtitle": "subtitles.blockland.knife.baton_close"
+  },
+  "knife.baton_swing": {
+    "sounds": [
+      "blockland:knife/baton_swing_1",
+      "blockland:knife/baton_swing_2",
+      "blockland:knife/baton_swing_3"
+    ],
+    "subtitle": "subtitles.blockland.knife.baton_swing"
+  },
+  "knife.baton_swing_heavy": {
+    "sounds": [
+      "blockland:knife/baton_swing_heavy_1",
+      "blockland:knife/baton_swing_heavy_2"
+    ],
+    "subtitle": "subtitles.blockland.knife.baton_swing_heavy"
+  },
+  "knife.baton_hit_flesh": {
+    "sounds": [
+      "blockland:knife/baton_hit_flesh_1",
+      "blockland:knife/baton_hit_flesh_2",
+      "blockland:knife/baton_hit_flesh_3"
+    ],
+    "subtitle": "subtitles.blockland.knife.baton_hit_flesh"
+  },
+  "knife.baton_hit_wall": {
+    "sounds": [
+      "blockland:knife/baton_hit_wall_1",
+      "blockland:knife/baton_hit_wall_2",
+      "blockland:knife/baton_hit_wall_3"
+    ],
+    "subtitle": "subtitles.blockland.knife.baton_hit_wall"
+  },
+  "infection.creeper_fuse": {
+    "sounds": [
+      "blockland:infection/creeper_fuse_1",
+      "blockland:infection/creeper_fuse_2"
+    ],
+    "subtitle": "subtitles.blockland.infection.creeper_fuse"
+  },
+  "gun.handcannon.fire": {
+    "sounds": [
+      "blockland:gun/handcannon_fire_1",
+      "blockland:gun/handcannon_fire_2",
+      "blockland:gun/handcannon_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.handcannon.fire"
+  },
+  "supply.crate_open": {
+    "sounds": [
+      "blockland:supply/crate_open"
+    ],
+    "subtitle": "subtitles.blockland.supply.crate_open"
+  },
+  "supply.crate_close": {
+    "sounds": [
+      "blockland:supply/crate_close"
+    ],
+    "subtitle": "subtitles.blockland.supply.crate_close"
+  },
+  "supply.rummage": {
+    "sounds": [
+      "blockland:supply/rummage_1",
+      "blockland:supply/rummage_2"
+    ],
+    "subtitle": "subtitles.blockland.supply.rummage"
+  },
+  "supply.magazine": {
+    "sounds": [
+      "blockland:supply/magazine_1",
+      "blockland:supply/magazine_2"
+    ],
+    "subtitle": "subtitles.blockland.supply.magazine"
+  },
+  "movement.prone": {
+    "sounds": [
+      "blockland:movement/prone_1",
+      "blockland:movement/prone_2"
+    ],
+    "subtitle": "subtitles.blockland.movement.prone"
+  },
+  "movement.prone_up": {
+    "sounds": [
+      "blockland:movement/prone_up_1",
+      "blockland:movement/prone_up_2"
+    ],
+    "subtitle": "subtitles.blockland.movement.prone_up"
+  },
+  "movement.dive": {
+    "sounds": [
+      "blockland:movement/dive_1",
+      "blockland:movement/dive_2"
+    ],
+    "subtitle": "subtitles.blockland.movement.dive"
+  },
+  "movement.dive_land": {
+    "sounds": [
+      "blockland:movement/dive_land_1",
+      "blockland:movement/dive_land_2"
+    ],
+    "subtitle": "subtitles.blockland.movement.dive_land"
+  },
+  "gun.vector.fire": {
+    "sounds": [
+      "blockland:gun/vector_fire_1",
+      "blockland:gun/vector_fire_2",
+      "blockland:gun/vector_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.vector.fire"
+  },
+  "gun.vector.fire_far": {
+    "sounds": [
+      "blockland:gun/vector_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.vector.fire_far"
+  },
+  "gun.deagle.fire": {
+    "sounds": [
+      "blockland:gun/deagle_fire_1",
+      "blockland:gun/deagle_fire_2",
+      "blockland:gun/deagle_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.deagle.fire"
+  },
+  "armor.vest_equip": {
+    "sounds": [
+      "blockland:armor/vest_equip"
+    ],
+    "subtitle": "subtitles.blockland.armor.vest_equip"
+  },
+  "armor.plate_draw": {
+    "sounds": [
+      "blockland:armor/plate_draw"
+    ],
+    "subtitle": "subtitles.blockland.armor.plate_draw"
+  },
+  "armor.plate_insert": {
+    "sounds": [
+      "blockland:armor/plate_insert_1",
+      "blockland:armor/plate_insert_2"
+    ],
+    "subtitle": "subtitles.blockland.armor.plate_insert"
+  },
+  "armor.plate_hit": {
+    "sounds": [
+      "blockland:armor/plate_hit_1",
+      "blockland:armor/plate_hit_2",
+      "blockland:armor/plate_hit_3"
+    ],
+    "subtitle": "subtitles.blockland.armor.plate_hit"
+  },
+  "armor.plate_break": {
+    "sounds": [
+      "blockland:armor/plate_break_1",
+      "blockland:armor/plate_break_2"
+    ],
+    "subtitle": "subtitles.blockland.armor.plate_break"
+  },
+  "gun.revolver.fire": {
+    "sounds": [
+      "blockland:gun/revolver_fire_1",
+      "blockland:gun/revolver_fire_2",
+      "blockland:gun/revolver_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.revolver.fire"
+  },
+  "gun.revolver.dry": {
+    "sounds": [
+      "blockland:gun/revolver_dry"
+    ],
+    "subtitle": "subtitles.blockland.gun.dry_fire"
+  },
+  "gun.revolver_latch": {
+    "sounds": [
+      "blockland:gun/revolver_latch"
+    ],
+    "subtitle": "subtitles.blockland.gun.revolver_latch"
+  },
+  "gun.cylinder_open": {
+    "sounds": [
+      "blockland:gun/revolver_cylinder_open"
+    ],
+    "subtitle": "subtitles.blockland.gun.cylinder_open"
+  },
+  "gun.ejector": {
+    "sounds": [
+      "blockland:gun/revolver_ejector"
+    ],
+    "subtitle": "subtitles.blockland.gun.ejector"
+  },
+  "gun.case_out": {
+    "sounds": [
+      "blockland:gun/revolver_case_1",
+      "blockland:gun/revolver_case_2",
+      "blockland:gun/revolver_case_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.case_out"
+  },
+  "gun.speedloader": {
+    "sounds": [
+      "blockland:gun/revolver_speedloader"
+    ],
+    "subtitle": "subtitles.blockland.gun.speedloader"
+  },
+  "gun.speedloader_twist": {
+    "sounds": [
+      "blockland:gun/revolver_speedloader_twist"
+    ],
+    "subtitle": "subtitles.blockland.gun.speedloader"
+  },
+  "gun.cylinder_close": {
+    "sounds": [
+      "blockland:gun/revolver_cylinder_close"
+    ],
+    "subtitle": "subtitles.blockland.gun.cylinder_close"
+  },
+  "gun.cylinder_spin": {
+    "sounds": [
+      "blockland:gun/revolver_cylinder_spin"
+    ],
+    "subtitle": "subtitles.blockland.gun.cylinder_spin"
+  },
+  "gun.handcannon.dud": {
+    "sounds": [
+      "blockland:gun/handcannon_dud_1",
+      "blockland:gun/handcannon_dud_2"
+    ],
+    "subtitle": "subtitles.blockland.gun.handcannon.dud"
   }
 }

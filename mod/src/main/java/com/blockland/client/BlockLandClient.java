@@ -13,8 +13,8 @@ import com.blockland.client.infection.ClientInfection;
 import com.blockland.client.input.WeaponInput;
 import com.blockland.client.melee.ClientKnives;
 import com.blockland.client.morph.ClientMorphs;
-import com.blockland.client.movement.ClientSlide;
-import com.blockland.client.movement.SlidePose;
+import com.blockland.client.movement.ClientActions;
+import com.blockland.client.movement.ActionPoses;
 import com.blockland.client.render.ModelCache;
 import com.blockland.client.render.Textures;
 import com.blockland.client.result.MatchResults;
@@ -114,6 +114,9 @@ public final class BlockLandClient {
         WeaponInput.init(modBus);
         Decals.init(modBus);
         com.blockland.client.impact.Impacts.init(modBus);
+        // blood flying into a body leaves a stain on it (rendering spec §19): the impact module hands it to the body decals
+        com.blockland.client.impact.Impacts.setBodyStains((body, at, dir, decal, size) ->
+                Decals.onEntity(decal, body, at.subtract(dir.scale(0.4)), at, dir));
         // the render pipeline (render scale, upscaling, anti-aliasing, HDR post, sun and shadows, dynamic lights): first,
         // so its frame hooks and HUD composite layer come before every feature's own
         Graphics.init(modBus);
@@ -151,11 +154,14 @@ public final class BlockLandClient {
         ClientActionLock.init(modBus);
         // what equipment does when it goes off: blasts, smoke, fire, the flash white-out and the adrenaline rush
         com.blockland.client.equipment.effect.ClientEquipmentEffects.init(modBus);
-        // the slide: prediction and camera, third-person pose, and the weapon's tilt (shared viewmodel motion)
-        ClientSlide.init(modBus);
-        SlidePose.init();
+        // movement actions (slide, prone, dive): prediction and camera, third-person poses, and the weapon's poses
+        // (shared viewmodel motion)
+        ClientActions.init(modBus);
+        ActionPoses.init();
         com.blockland.client.parachute.ClientParachute.init(modBus);
-        ViewmodelMotion.setBodyMotion(ClientSlide::amount);
+        com.blockland.client.supply.ClientSupply.init(modBus);
+        com.blockland.client.armor.ClientArmor.init(modBus);
+        ViewmodelMotion.setBodyMotion(ClientActions.BODY);
         com.blockland.client.dev.DevAutomation.init();
     }
 

@@ -3,7 +3,7 @@ package com.blockland.server.graffiti;
 import com.blockland.common.Sounds;
 import com.blockland.graffiti.GraffitiCatalog;
 import com.blockland.graffiti.GraffitiData;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.GraffitiPacketListeners;
 import com.blockland.network.packet.GraffitiPackets;
@@ -133,7 +133,7 @@ public final class GraffitiService implements GraffitiPacketListeners.Server {
     @Nullable
     private GraffitiPackets.Placement place(ServerPlayer player, GraffitiData.Graffiti graffiti, GraffitiData.Rules rules) {
         ServerLevel level = player.level();
-        Vec3 eye = Slides.eyePosition(player), look = player.getLookAngle();
+        Vec3 eye = BodyActions.eyePosition(player), look = player.getLookAngle();
         BlockHitResult hit = level.clip(new ClipContext(eye, eye.add(look.scale(rules.range)), ClipContext.Block.COLLIDER,
                 ClipContext.Fluid.NONE, player));
         float size = Math.max(0.2f, graffiti.size);

@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/deagle_held",
+  "textures": {
+    "0": "blockland:item/deagle_held_stainless",
+    "particle": "blockland:item/deagle_held_stainless"
+  }
+}

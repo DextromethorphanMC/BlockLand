@@ -48,8 +48,8 @@ public final class BlockLandConfig {
         BUILDER.pop();
 
         BUILDER.push("movement");
-        // inside a match the mode's allowSlide setting (backend) decides
-        SLIDE_OUTSIDE_MATCHES = BUILDER.comment("不在对局中的世界内玩家（进入世界的管理员）能否滑铲；对局中由模式的「允许滑铲」决定")
+        // inside a match the mode's allowSlide / allowProne / allowDive settings (backend) decide
+        SLIDE_OUTSIDE_MATCHES = BUILDER.comment("不在对局中的世界内玩家（进入世界的管理员）能否滑铲、匍匐和飞扑；对局中由模式的「允许滑铲 / 匍匐 / 飞扑」决定")
                 .define("slideOutsideMatches", true);
         BUILDER.pop();
 

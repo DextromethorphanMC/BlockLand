@@ -720,6 +720,127 @@
           "default": "none"
         }
       }
+    },
+    "baton": {
+      "name": "警棍",
+      "description": "21 英寸伸缩警棍，一甩即弹出锁定。挥击轻快、出手快，钝击伤害介于刀具和撬棍之间；重击单手高举劈下。",
+      "model": "models/knife/baton.glb",
+      "drawTime": 0.65,
+      "comboWindow": 0.65,
+      "light": {
+        "damage": 5.0,
+        "range": 2.7,
+        "radius": 0.42,
+        "duration": 0.42,
+        "impact": 0.14,
+        "cooldown": 0.36,
+        "knockback": 0.3,
+        "backstabMultiplier": 1.0,
+        "punch": 1.0,
+        "swings": [
+          {
+            "clip": "light_1",
+            "slashAngle": 215
+          },
+          {
+            "clip": "light_2",
+            "slashAngle": 15
+          }
+        ],
+        "blockDecal": "blunt_dent",
+        "bodyDecal": "bruise",
+        "impactProfile": "blunt",
+        "swingSound": "blockland:knife.baton_swing"
+      },
+      "heavy": {
+        "damage": 11.0,
+        "range": 2.8,
+        "radius": 0.34,
+        "duration": 0.8,
+        "impact": 0.32,
+        "cooldown": 0.75,
+        "knockback": 0.6,
+        "backstabMultiplier": 1.3,
+        "punch": 2.2,
+        "swings": [
+          {
+            "clip": "heavy",
+            "slashAngle": 270
+          }
+        ],
+        "blockDecal": "blunt_dent",
+        "bodyDecal": "bruise",
+        "impactProfile": "blunt_heavy",
+        "swingSound": "blockland:knife.baton_swing_heavy"
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint",
+        "walk": "walk",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "equip": "blockland:knife.baton_equip",
+        "hitFlesh": "blockland:knife.baton_hit_flesh",
+        "hitBlock": "blockland:knife.baton_hit_wall",
+        "hitMarker": "blockland:gun.hitmarker",
+        "critical": "blockland:gun.headshot",
+        "kill": "blockland:gun.kill"
+      },
+      "handling": {
+        "weight": 0.7,
+        "sway": 1.1,
+        "bob": 1.0,
+        "inertia": 0.9,
+        "sprintOut": 0.15,
+        "tacticalSprint": 3.0,
+        "adsTilt": 0,
+        "cameraKick": 1.0,
+        "cameraRoll": 1.0,
+        "cameraFov": 1.0,
+        "cameraRumble": 0.7
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "chrome": {
+          "name": "镀铬",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/common/polished_steel",
+              "uvScale": 1.25
+            }
+          }
+        },
+        "red": {
+          "name": "赤红",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/crowbar/paint_red",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "damascus": {
+          "name": "大马士革",
+          "rarity": "legendary",
+          "regions": {
+            "blade": {
+              "pbr": "textures/pbr/skin/damascus/blade",
+              "uvScale": 0.5
+            }
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      }
     }
   }
 }

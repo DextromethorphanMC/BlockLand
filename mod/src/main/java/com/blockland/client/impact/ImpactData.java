@@ -218,6 +218,33 @@ final class ImpactData {
          */
         float bleed = 2.5f;
         float bleedRate = 4;
+        /**
+         * Pools (rendering spec §19): a drop landing on a stain lying on the same face, within this share of its radius,
+         * runs into it rather than making a stain of its own — a wound bleeding on the spot, a body bleeding out — and the
+         * stain grows area for area into a pool, at most {@code poolMax} in radius (blocks), creeping out to its new
+         * size over {@code poolSpread} seconds. A pool on a floor that has grown past {@code overflow} × poolMax runs
+         * over the floor's edge where it reaches one and down the side below.
+         */
+        float poolMerge = 0.85f;
+        float poolMax = 0.42f;
+        float poolSpread = 1.6f;
+        float overflow = 0.35f;
+        /** Chance a drop going through a plant the wind moves (grass, flowers, crops) sticks to it, and moves with it. */
+        float plants = 0.45f;
+        /** Drops striking another body stain it: the decal type ({@code decals.json}, "" = none) and the chance. */
+        String bodyDecal = "blood_spatter";
+        float bodies = 0.8f;
+        /**
+         * Blood splashed back onto the weapon of whoever struck the body from within {@code weaponRange} blocks: how much a
+         * blade's hit leaves, a round's at point-blank range (less further off), the seconds it lasts and stays wet.
+         */
+        float weaponRange = 3;
+        float weaponBlade = 0.35f;
+        float weaponRound = 0.3f;
+        float weaponLife = 40;
+        float weaponDry = 8;
+        /** A wounded body that dies lets this many drops fall where it lies (they run together into a pool). */
+        float deathPool = 10;
     }
 
     /** How a round scales the effect (pistol 1). */

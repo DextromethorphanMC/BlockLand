@@ -252,9 +252,51 @@ def bruise(seed):
     return _finish(rgb, a)
 
 
+def blood_spatter(seed):
+    """Blood flung onto a body (rendering spec §19): no two alike — a splat with a ragged, lobed rim, spines and a tail
+    thrown out along the frame's X (the way it flew), satellite droplets ahead of it, darker and thicker in the middle, a
+    thin pale edge where it has soaked in. Body decals lie at any rotation, so nothing runs."""
+    rng = np.random.default_rng(seed)
+    x, y = _grid(64, 64)
+    cx, cy = 24 + rng.uniform(-3, 3), 32 + rng.uniform(-3, 3)
+    dx, dy = x - cx, y - cy
+    r = np.hypot(dx, dy)
+    ang = np.arctan2(dy, dx)
+    base = rng.uniform(7.0, 11.0)
+    rim = base * (1 + 0.22 * np.sin(3 * ang + rng.uniform(0, 6)) + 0.12 * np.sin(7 * ang + rng.uniform(0, 6))
+                  + 0.06 * np.sin(13 * ang + rng.uniform(0, 6)))
+    # forward (+x) it is drawn out into a tail
+    rim *= 1 + 0.6 * np.clip(np.cos(ang), 0, None) ** 3
+    body = np.clip((rim - r) / 1.5, 0, 1)
+    spines = np.zeros_like(r)
+    for _ in range(int(rng.integers(4, 9))):
+        th = rng.normal(0.0, 0.6)
+        u = dx * np.cos(th) + dy * np.sin(th)
+        v = -dx * np.sin(th) + dy * np.cos(th)
+        length = rng.uniform(10.0, 26.0)
+        width = 1.3 * np.clip(1 - u / length, 0, 1)
+        spines = np.maximum(spines, ((u > 0) & (u < length) & (np.abs(v) < width + 0.2)).astype(float))
+    drops = np.zeros_like(r)
+    for _ in range(int(rng.integers(6, 14))):
+        th = rng.normal(0.0, 0.8)
+        dist = rng.uniform(base * 1.2, 28.0)
+        px, py = cx + dist * np.cos(th), cy + dist * np.sin(th)
+        rr = rng.uniform(0.6, 2.2) * (1 - dist / 40)
+        drops = np.maximum(drops, np.clip((rr - np.hypot((x - px) * 0.8, y - py)) / 0.6, 0, 1))
+    cover = np.maximum(body, np.maximum(spines, drops))
+    thick = np.clip(1 - r / np.maximum(rim, 1e-3), 0, 1) * body
+    noise = tx.tile_noise(64, 2.0, rng)
+    rgb = np.zeros((64, 64, 3))
+    rgb[:] = (0.46, 0.035, 0.03)
+    rgb = rgb * (1 - 0.45 * thick[..., None]) * (0.9 + 0.2 * noise[..., None])
+    soak = (cover > 0) & (body < 0.6) & (body > 0)
+    rgb[soak] = rgb[soak] * 1.25
+    return _finish(rgb, cover * 0.95)
+
+
 DECALS = {"bullet_hole": (bullet_hole, 4), "knife_slash": (knife_slash, 2), "knife_stab": (knife_stab, 2),
           "knife_cut": (knife_cut, 2), "bullet_wound": (bullet_wound, 4), "blunt_dent": (blunt_dent, 2),
-          "punch_mark": (punch_mark, 2), "bruise": (bruise, 2)}
+          "punch_mark": (punch_mark, 2), "bruise": (bruise, 2), "blood_spatter": (blood_spatter, 6)}
 
 
 def build(path):

@@ -1955,3 +1955,390 @@ only as an off-hand item), its knuckle line along the held model's grip axis (`r
 `knuckles_sounds`), `pbr_models_knuckles.py`, `pbr_sets_knuckles.py`; checks `check_knuckles.py` (claims
 `knuckles.glb`: nodes, materials, clips, contact times at the data's fractions with the landing fist in front of the
 centre, the fingers in the rings, crosshair, eye distance, budget). 8.8k triangles (4.4k per duster).
+
+## 43. Hand cannon (`models/gun/handcannon.glb`, weapon id `handcannon`, 手炮)
+
+An original procedural **single-shot 40 mm grenade pistol**: a cut-down break-open launcher with a pistol grip. It is
+built to the **P9 contract** (as the Desert Eagle, §48): `handcannon_model.py` defines the names the P9 rig and clips
+read, and `gen_handcannon.py` re-runs `p9_rig`, `p9_clips` and `p9_loco` against it (`variants.load`), so nodes,
+materials, events, the idle / draw / walk / sprint / tac_sprint clips and the hand anchors are the P9's. Its own fire,
+reload and inspect are `handcannon_clips.py`. Nodes, by the contract's names:
+
+* `barrel`: a 248 mm aluminium tube (olive paint, material `barrel`) with a counterbored chamber, two grip rings, a
+  sight rib and a **tall front blade at the muzzle** between two protective ears, its top on the sight line. It hangs
+  on the hinge pin under its breech (`HINGE`): the node's origin is the hinge and its rotation about X is part of the
+  pose (negative = muzzle down; the stop `OPEN` is −44°);
+* `frame` (material `polymer`): the short steel receiver (the standing breech and firing pin), the forward knuckle the
+  barrel hinges on, the side latch, the squared trigger guard and the raked rubber `grip`; `slide` is the fixed top
+  rail (no travel: `SLIDE_LOCK` 0), `sight_iron` the rear notch with two dots; an external spur `hammer`, a curved
+  `trigger`; `slide_stop` is the barrel latch the thumb presses;
+* `mag` / `mag_standard`: the 40 × 46 mm high-explosive round in the chamber (aluminium case `mag`, olive projectile
+  `mag_base`, gilded band and fuze `brass`); `mag_extended` repeats it for the contract and is never shown;
+  `fx_shell` is the spent case.
+
+The iron sight line (`SIGHT_Y`) is low enough that the smallest red dot's window stays clear of the front blade.
+
+Clips: **fire** — the hammer falls and the wrists are driven back 20 mm, the muzzle flipping 12° slowly (the arms
+absorb it), the support hand clamping; `fire_ads` / `fire_last_ads` hold the sight picture (`lateral` 0.004,
+`max_turn` 0.004°). **reload_empty** (the runtime plays it after every shot; 2.45 s): the gun rolls left and comes in,
+the support hand leaves the grip for the barrel, the thumb presses the latch (`mag_release`), the hand pulls the barrel
+down onto its stop (it bounces) and the hammer cocks with it; the gun is flicked up and the spent case springs out of
+the chamber (`mag_out`: guns.json `ejectEvent` `mag_out` makes the runtime throw `fx_shell` from the `ejection` node,
+which sits at the open chamber's mouth; the round hides, scale 0); the hand fetches a grenade on an arc, lines it up
+behind the chamber and pushes it in with the thumb (`mag_in`, the round shows again); it swings the barrel shut with a
+snap (`slide_forward`: the gun jolts, the camera nods) and re-grips. **reload** (2.2 s) is the same, shorter (a live
+round is swapped). **inspect** turns the gun over, breaks it open a little to look at the round and snaps it shut.
+The hip pose is 4 mm lower, 10 mm further right and 16 mm further back than the P9's.
+
+Data (guns.json): category pistol, ammo **`grenade`** (榴弹, item `grenade_ammo`), one magazine `handcannon_1` of
+capacity 1, semi, 60 rpm, heavy recoil and camera kick, reload 2.2 / 2.45 s, `ejectEvent` `mag_out`. **Slots:
+`optic` only** (iron sights by default, every optic). The `grenade` ammo is a **launched round**: its `projectile`
+object (`speed` 52 blocks/s, `gravity` 9.8, `armDistance` 6 blocks, `life` 8 s) and `blast` (the frag grenade's
+parameters: radius 4.5, innerRadius 1.4, damage 28 → minDamage 4, knockback 1.0). Any gun whose ammo declares a
+`projectile` fires it through `GunService` (no per-gun code): the server spawns a `GunGrenade` entity
+(`ThrowableItemProjectile`, the 3D round model, synced gravity) from the eye along the aim with the gun's spread; it
+flies on an arc with a smoke trail; on impact past the arming distance (or when its life runs out) it detonates through
+the equipment module's public API (`EquipmentEffects.detonate(..., "frag", blast, owner)`: falloff, line of sight,
+knockback, the frag explosion's effects and sound, no block damage, the kill credited to the shooter with the hand
+cannon as the weapon, `allowDamage` respected); nearer than the arming distance it only strikes (the ammo's `damage`,
+6, to an entity it hits) and drops with a clunk (`gun.handcannon.dud`). The shot packet carries face `LAUNCHED` (−4):
+spectators see the flash and the fire clip, no tracer or bullet impacts.
+
+Skins `default` (olive), `black` (tints), `gold` (legendary, tints), plus the shared gun skins. Regions: `polymer`
+(frame) and `slide` → `body`, `barrel` → `barrel`, `grip` → `grip`, `steel_dark` → `detail`, the round → `magazine`.
+Sounds `gun.handcannon.fire` (a deep hollow "thoomp", no supersonic crack) and `gun.handcannon.dud`
+(`gen_handcannon_sounds.py`). Items: icons per skin, the held model, `grenade_ammo` (a flat icon in the GUI, the 3D
+round elsewhere: `grenade_ammo_round`). Files: `handcannon_model.py`, `handcannon_clips.py`, `gen_handcannon.py`,
+`gen_handcannon_items.py`, `gen_handcannon_sounds.py`, `build_handcannon.py` (steps `handcannon`, `handcannon_items`,
+`handcannon_sounds`), `pbr_models_handcannon.py`; Java `gun/GunGrenade`, `client/gun/GrenadeRounds` (renderer and the
+client explosion). Checks `check_handcannon.py` (claims `handcannon.glb`: the P9 contract via `check_glb.check_gun`,
+the pistol budget, the optic-only slot, one single-round magazine of a launched round with a blast, `ejectEvent`
+`mag_out`, the barrel shut at rest and at both reloads' end and at its stop while open, the round hidden from `mag_out`
+to `mag_in`, the front blade on the sight line). 6.5k triangles drawn.
+
+## 44. Vector (`models/gun/vector.glb`, weapon id `vector`)
+
+An original procedural model after the KRISS Vector Gen II (sections 18–21, 31, built like the MP5 of §40;
+`vector_model.py`, design frame +X right, +Y up, +Z back, bore on the axis, z = 0 at the breech face). Its proportions are
+traced off an orthographic reference sheet (0.64 mm per reference pixel; the bore and the breech face as origin): 617 mm
+with the stock unfolded, 355 mm receiver, 140 mm barrel, 17.0k triangles (both magazines; budget 18k). Flat dark earth
+two-tone: receiver, lower and grip FDE, rails, sights, barrel, stock and magazines black.
+
+* **Upper** (`receiver`, material `upper`, region `body`, set `vector/upper`: FDE ceramic coating over the anodised
+  aluminium): a long slab — the top rail stands 52 mm over the bore, which runs low, level with the top of the
+  shooter's hand; a core with two 3 mm flanks over it so the ejection port (right), the charging slot (left, at the
+  front) and the window onto the recoil mechanism (left: guide rods and springs) are real openings; its underside low in
+  front (the nose, the mechanism) and stepping up behind the lower to the top of the trigger-guard opening; a
+  full-length rail (33 slots), the accessory rail under the square nose (underbarrel mount), a side-rail stub at the
+  right of the nose (laser), the barrel collar, screw heads, the bolt catch; behind the rear face the stock adapter with
+  its ribbed hinge knob on the left, kept low on top (36 mm over the bore) so the eye looks over it at ADS.
+* **Lower** (`lower`, region `grip`, set `vector/lower`: FDE glass-filled polymer): a deep slab whose front slants down
+  and back from under the nose to the magazine well's mouth (finger ribs along it), a flat underside, the strap rising
+  into the grip's base, the big trigger-guard opening between the slab and the grip with the slim guard bar across it;
+  a core with recessed panels in its flanks (a long slot along the slanted front, a shorter one by the opening), the
+  raised chevron, pins, the well's mouth collar raked with the magazine; `pistol_grip` raked 16°, deep at the top where
+  it grows out of the receiver, stippled pads, finger ribs down its front.
+* **Parts**: `bolt` = the non-reciprocating charging handle's slider in the left slot (the slide-lock node, +Z, 56 mm
+  stroke) with its child `handle_lever`, the knob that folds out about +Y (80°) from its hinge at the slider's rear;
+  `carrier` = the bolt seen through the port (46 mm when firing); `trigger` (hanging from just under the upper, level
+  with the bore), `selector` (left, over the grip), `paddle` = the ambidextrous magazine release tabs on the lower's
+  flanks behind the well (pressed forward about X); flip-up irons on the rail (`sight_iron` post + `front_sight_hood`
+  leaf, `sight_rear` aperture ring, 270 mm sight radius; both hidden by an optic), the three-prong flash hider
+  `muzzle_brake` (hidden by a barrel attachment), the side-folding skeleton `stock` (the bar from the adapter — the
+  cheek rest —, bending down into the vertical butt frame, the strut from under the bar to its foot, the rubber pad;
+  hidden by a stock attachment), `mag_standard` 25 rounds / `mag_extended` 30 rounds (straight polymer Glock-style
+  .45 magazines, 205 / 245 mm).
+* **Magazine**: raked 17° back in its well (`vector_rig.MAG_Q`, the foot rearward), its pivot the top of the body under
+  the chamber, the well's mouth `WELL_DEPTH` 103.5 mm down its axis. Clips move the magazine in its own frame
+  (`vector_clips.mag_at`), so drops and seats follow the rake.
+* **Mounts**: `mount_optic` on the rail 130 mm behind the breech face (every optic's eye then sits ≥ 2.5 cm behind the
+  rail's end), `mount_laser` on the side rail, `mount_barrel` on the thread, `mount_stock` on the adapter's rear,
+  `mount_underbarrel` on the rail under the nose, `mount_charm` under the adapter's left (sling point).
+* **Clips** (`vector_clips.py`; rig `vector_rig.py`, MP5-style anchors: the support hand wraps the lower's slanted front
+  from below): `idle`, `draw` 0.60, `fire` / `fire_last` 0.052 s (1150 rpm; the Super V turns the recoil down into the
+  hand: a short shove straight back, almost no rise), `fire_ads` / `fire_last_ads` (`ads_fire`), `reload` 2.20 (thumb on
+  the release, the magazine drops free down its rake out of the deep well and is tossed, the new one lined up and pushed
+  home, a tug; the presentation held a little further out than for a short gun so the well shows), `reload_empty` 2.60
+  (the same change, then the hand hooks the knob, flips it out, hauls the handle back and lets it fly), `inspect` 3.90,
+  `walk`, `sprint`, `tac_sprint` (muzzle up at the right, the top turned in to the face). The iron-sight eye point is
+  85 mm behind the rear aperture. No bolt hold-open (`slideLock` offset 0).
+* **Data**: guns.json `vector` (smg ammo, magazines `vector_25` / `vector_30`, slots optic / barrel / laser / magazine /
+  stock / underbarrel / charm), sounds `gun.vector.fire` / `fire_far` (`gen_vector_sounds.py`), texture sets
+  `vector/upper`, `lower` (FDE), `stock`, `mag`, `barrel` (`pbr_sets_vector.py`, bound in `pbr_models_vector.py`; rails
+  and small parts `common/steel_dark`, the butt pad `common/rubber`). Skins `default` (FDE), `woodland`, `desert`,
+  `arctic`, `tiger` (camo on body / stock / grip), `gold`. Steps `vector`, `vector_sounds` (`build_vector.py`),
+  `vector_items` (gen_gun_items); checks `check_vector.py` (the magazine's drop measured down its rake).
+
+## 45. Baton (`models/knife/baton.glb`, weapon id `baton`, 警棍)
+
+An original procedural friction-lock expandable baton on the knife contract (§11–§13, built like §41), after a common
+21-inch police baton: a ribbed foam-rubber grip on the handle tube with a front collar, an anodised end cap with a
+lanyard loop, and two nested black-oxide steel shafts — an 18 mm tube and a 13 mm rod ending in a 20 mm tip knob —
+that slide out of the handle and lock on their tapered ends: 0.56 m from the cap to the tip open, 0.22 m collapsed.
+
+```
+viewmodel
+├─ knife                  root at the right-hand grip (the middle of the rubber)
+│  ├─ handle (mesh)       grip, handle tube and collar, end cap, lanyard loop: materials grip, hardware
+│  ├─ shaft_1 (mesh)      the middle shaft; slides along the knife's Z (0 open .. +0.158 collapsed)
+│  │  └─ shaft_2 (mesh)   the tip shaft and knob; slides in shaft_1 (0 open .. +0.168 collapsed)
+│  │     └─ tip           empty at the knob's point
+│  └─ mount_charm         through the lanyard loop (§19)
+├─ camera, arm joints (§16)
+```
+
+Rig (`baton_rig.py`): a hammer grip on the rubber, the thumb wrapped towards the tip; the knife follows the IK hand
+and the wrist limits turn the baton with it (as §41), it can `roll` in the fingers, and `ext1` / `ext2` (1 = locked
+open) set the shafts' slide. The rest pose is open. Swings key the elbow's pole like the crowbar's
+(`baton_clips.feasible`).
+
+Clips (knives.json `baton`; light and quick, the strikes snapped by the wrist and forearm): `idle`, `draw` (0.65 s:
+drawn collapsed from below, cocked beside the shoulder and flicked forward — the shafts fly out, the tip shaft a hair
+behind, and lock with a crack at 0.31 s; the hand and the camera jolt), `light_1` (0.42 s forehand, the baton over the
+screen centre at 0.14 s), `light_2` (0.42 s backhand, 0.14 s), `heavy` (0.80 s one-handed overhead strike landing on the
+screen centre at 0.32 s and stopping dead), `inspect` (3.4 s: held up and turned in the fingers, driven tip-first at the
+floor so the blow collapses it at 1.36 s, the collapsed baton looked at, flicked open again at 2.355 s), `walk`,
+`sprint`, `tac_sprint`. Events `baton_equip`, `baton_open`, `baton_close`, `baton_swing`, `baton_swing_heavy` (sounds
+`blockland:knife.baton_*`, `gen_baton_sounds.py`: thin steel tubes ringing ≈ 610 Hz, the lock's double crack).
+Materials `shaft` (region `blade`, set `baton/shaft`), `grip` (region `handle`, `baton/grip`), `hardware` (region
+`hardware`, `baton/hardware`); AO per mesh (the parts slide). Skins `default`, `chrome`, `red`, `damascus`
+(legendary). Impacts: profiles `blunt` / `blunt_heavy`, decals `blunt_dent` / `bruise` (§41). Item assets as §41
+(held model at 25 units per metre, display scales × 1.8).
+Files: `baton_model.py`, `baton_rig.py`, `baton_clips.py`, `gen_baton.py`, `gen_baton_items.py`, `gen_baton_sounds.py`,
+`build_baton.py` (steps `baton`, `baton_items`, `baton_sounds`), `pbr_models_baton.py`, `pbr_sets_baton.py`; checks
+`check_baton.py` (claims `baton.glb`: nodes, the tip at the knob, the open length, materials, clips and their events'
+sound events, contact times at the data's fractions, the shafts within their travel — open at rest and at every clip's
+end, collapsed when the draw starts —, the right hand fixed on the grip, crosshair, eye distance, budget). 5.0k
+triangles.
+
+## 46. Ammo crate (`models/block/ammo_crate.glb`, block `blockland:ammo_crate`, 弹药箱) and the resupply
+
+An original procedural military ammunition crate standing on the floor of its block: three-plank board walls on two
+skids, corner and end cleats, manila rope handles through the end cleats, steel corner brackets, a framed lid on two
+strap hinges at the back held shut by two over-centre latches at the front, olive-drab paint over pine with a yellow
+band; inside, three steel ammo cans and a row of loaded magazines. 0.84 × 0.50 m, 0.41 m high (13.4 × 8 × 6.6 px),
+front towards −Z (north). 7.8k triangles.
+
+```
+crate                     root at the middle of the block's floor (identity)
+├─ body (mesh)            walls, skids, cleats, handles, brackets, hinge knuckles, latch plates
+├─ contents (mesh)        ammo cans, magazines
+├─ lid (mesh)             pivot on the hinge axis (back top edge, along X); +X rotation opens it
+├─ latch_L, latch_R (mesh) pivots at the levers' feet; −X rotation swings them down and out
+```
+
+Clips `open` (0.55 s: the latches snap down, the lid swings up to 105° and settles; events `latch`, `lid_open`) and
+`close` (0.42 s: the lid falls shut and bounces, the latches are pushed back; events `lid_shut`, `latch`); the rest
+pose is shut. Materials `wood`, `marking`, `rope` (region `body`), `metal` (`hardware`), `can`, `mag`, `brass`
+(`contents`); sets `ammo_crate/wood`, `ammo_crate/marking`, `ammo_crate/rope`, `common/parkerized`, `equipment/olive`,
+`common/anodized_black`, `common/brass`; AO per mesh (the lid moves).
+
+Block (`supply/AmmoCrateBlock`, `AmmoCrateBlockEntity`, `SupplyContent`): `FACING` horizontal (the front towards the
+player who placed it), render shape invisible (the block entity renderer `client/supply/AmmoCrateRenderer` draws the
+GLB with the weapon pipeline, lit like third-person weapons, through vanilla render types in the shadow pass); the
+collision / outline box matches the shut crate (checked). The block model only carries the break particles; the
+item shows the rendered icon in the GUI and a cuboid crate elsewhere; it drops itself. The lid: the server sends a
+block event (`EVENT_OPEN`, the ticks it stays open), each client plays `open`, holds it and plays `close`.
+
+Resupply (`server/supply/AmmoCrateService`, rules `data/blockland/supply/ammo_crate.json`): a held gun keeps vanilla's
+block interaction to itself, so the client sends `SupplyPackets.C2SUse` when the use button is pressed on a crate within
+`reach` (aiming is held off while a crate is under the crosshair). The server tops the gun's ammunition up to
+`magazines` spare magazines of the fitted magazine on top of a full gun (loose rounds into the inventory), opens the lid,
+plays the rummage, swings the player's off hand (the arm reaching, as others see it), answers `S2CResupplied` and says
+what it gave; a gun with nothing to take gets "ammo full". `cooldown` seconds between uses.
+
+First person (`client/supply/ResupplyOverlay` through `client/viewmodel/WeaponOverlays`, motion data
+`assets/blockland/supply/resupply.json`, works for every gun): the viewmodel root is lowered and canted about `pivot`
+(keys `[t, pitch, yaw, roll, x, y, z]`); the left arm's joints move rigidly about the shoulder — `down` swings it into
+the crate, `up` turns it so the wrist comes to an offset from the gun's own magazine node (keys `[t, down, up]`); the
+gun's fitted magazine mesh shows in the left hand while it comes back up; at the end the gun's ordinary reload starts
+(`reach`, 0.95 s) or, the gun being full, the magazine goes into a pouch (`stow`, 1.45 s). The hands are busy
+meanwhile (no firing, aiming, reloading or inspecting). Dual guns skip the arm. Sounds `supply.crate_open`,
+`supply.crate_close`, `supply.rummage`, `supply.magazine` (`gen_ammo_crate_sounds.py`).
+
+Files: `ammo_crate_model.py`, `gen_ammo_crate.py`, `gen_ammo_crate_items.py`, `gen_ammo_crate_sounds.py`,
+`build_ammo_crate.py` (steps `ammo_crate`, `ammo_crate_items`, `ammo_crate_sounds`), `pbr_sets_ammo_crate.py`,
+`pbr_models_ammo_crate.py`, `ammo_crate_preview.py` (first-person resupply sheets from the same motion data); checks
+`check_ammo_crate.py` (claims `ammo_crate.glb`: nodes and pivots, materials, clips and their end poses, inside the
+block, lid clear of the contents, the collision box, the resupply data and its sounds, budget). `check_glb.py` with
+no arguments also checks `models/block/*.glb`.
+
+## 47. Movement actions (slide, prone, dive)
+
+One action system for the body's special movements — `movement/action` (common), `server/movement/ActionService`
+(authority), `client/movement` (prediction, camera, third person) and the shared first-person layers in
+`client/viewmodel` — so every gun and knife adapts without clips of its own.
+
+| Action | Data | Mode setting | Collision pose | Eye (scale 1) | Trigger |
+|---|---|---|---|---|---|
+| `SLIDE` 滑铲 | `movement/slide.json` (`SlideRules`) | `allowSlide` | crouching | 0.97 | crouch (or the slide key, unbound) while sprinting on the ground |
+| `PRONE` 匍匐 | `movement/prone.json` (`ProneRules`) | `allowProne` | crawl (vanilla's swimming pose out of water, 0.6 high) | 0.4 | the prone key (default C) on the ground, or out of a slide |
+| `DIVE` 飞扑 | `movement/dive.json` (`DiveRules`) | `allowDive` | crawl | 0.4 | the prone key in the air within `windowTicks` of a sprint leaving the ground |
+
+* **State.** `BodyActions` is the one facade every side asks: `state(entity)` → `ActionState(action, yaw)` (null when
+  upright), `eyePosition(entity[, partialTick])` — the only place shots, cuts and throws take their eyes from —,
+  `isActing` / `isSliding` / `isLying`, and each action's `hitBody` / `hitHead` (`BodyBoxes`). The server registers
+  `ActionService` as its view; the client its prediction plus what the server reported for others. Prone's yaw is the
+  body's (`yBodyRot`, it turns with the player); a slide and a dive keep the direction they started in.
+* **Hit boxes.** `combat/HitShapes.bodyBoxes`: the body box from `back` behind to `forward` ahead of the position along
+  the yaw, `height` high, `halfWidth` wide; the head a cube of `half` round `back` behind (negative: ahead — lying down
+  the head is in front) at `height`. Prone and dive: body 1.05 back / 0.35 ahead, 0.45 high; head 0.55 ahead, 0.3 up.
+* **Network.** `C2SAction(action, start, yaw)`, `S2CAction(entity, action | -1, yaw)` (to trackers; to the player
+  itself on a refusal, an end or a change), `S2CRules(mask)` (bit per allowed action, re-sent every 10 ticks).
+* **Server rules.** Not dead / spectating / mounted / gliding / in water / flying, the mode allows it, per-action
+  cooldown and a 4-tick spam gap. Slide: a sprint on the ground fast enough (unchanged). Prone: on the ground; it ends
+  a slide. Dive: in the air within the window after a sprint left the ground, fast enough. A dive that touches the
+  ground becomes prone on the server (sound `movement.dive_land`). Ending an action releases the forced pose; under
+  anything too low vanilla keeps the player crawling. Outside matches the config `movement.slideOutsideMatches` allows
+  all three. Mode settings missing `allowProne` / `allowDive` follow `allowSlide` (backend `MovementSettings`, admin
+  checkboxes; infection: humans only).
+* **Client.** `ClientActions` routes the keys (prone key `key.blockland.prone`), the network and the camera to one
+  local action at a time — `ClientSlide`, `ClientProne`, `ClientDive` — through one input wrapper (`ActionInput`:
+  slide and dive keys do not push; crawling they push at `crawlSpeed` × vanilla's crawl, no jump, crouch or sprint).
+  Prone: the prone key, jump or crouch get up (to a crouch while crouch is held) when there is room to stand. Dive:
+  launch speed `boost` × the run speed within `minLaunchSpeed`…`maxLaunchSpeed`, `lift` upwards, `airDrag` per tick
+  instead of vanilla's; on touchdown prone with a chest slide (`landSlideTicks`, `landFriction`, `landEndSpeed`).
+  Camera: the slide's roll and FOV kick (unchanged), the dive's pitch / roll / FOV and its landing dip; lying down the
+  camera is vanilla's crawl eye height with vanilla's smoothing.
+* **First person** (`ViewmodelMotion.BodyMotion`: `slide()`, `prone()`, `dive()`, `crawl()`, `proneSway()`): the slide's
+  tilt as before; `ProneLayer` (like `SwimPose`, style `GUN` / `KNIFE`): the drop onto the chest (a weapon dip and a
+  camera jolt, harder landing a dive), lying still low and steady, aimed a slow wander of `aimSway` degrees, crawling the
+  crawl carry (canted across the chest, muzzle down, rocking with each elbow, the free arm reaching forward at the lower
+  left, camera heave on each elbow) that comes up at once for a shot, a reload, a cut or aiming; the dive throws the
+  weapon forward and up.
+* **Third person** (`ActionPoses`): the slide's lean (unchanged); prone is vanilla's crawl pose (forced and synced),
+  with a weapon in hand the arms held forward on it and the body rocking with the crawl; the dive is the crawl's flat
+  body with the arms thrown forward and the nose dipping `pose.bodyPitch`.
+* **Sounds** (`gen_movement_sounds.py`, step `movement_sounds`): `movement.prone`, `movement.prone_up`,
+  `movement.dive`, `movement.dive_land` (2 variants each); the slide keeps `movement.slide`.
+
+## 48. Desert Eagle (`models/gun/deagle.glb`, weapon id `deagle`, 沙漠之鹰)
+
+The heavy .50 gas-operated semi-automatic pistol after the Mark XIX (what §43 modelled before the hand cannon became a
+grenade pistol), an original procedural model built to the **P9 contract** like the USP (§26): `deagle_model.py`
+defines the names the P9 rig and clips read and `gen_deagle.py` re-runs the P9's rig, clips and locomotion against it
+(`variants.load`). 267 mm long, 32 mm across the slide:
+
+* `barrel` (fixed): a 6-inch barrel of the Mark XIX's triangular section (short upright flanks on the frame, long flats
+  sloping in to the narrow top), the 12.7 mm bore open at the muzzle, a low rail with cross slots along its top, the
+  **front sight blade at the muzzle** (on the fixed barrel, its top on the sight line);
+* `slide`: the short heavy bolt-carrier housing behind the barrel (rear serrations, the ejection port on the right, the
+  extractor, the ambidextrous safety levers); `sight_iron` is only the rear sight (two dots);
+* `frame` (steel, material `polymer` by the contract's name): the dust cover, a big squared trigger guard with a hooked
+  serrated front, a deep grip with wrap-around rubber `grip` panels, the magazine release, the takedown lever; a rounded
+  spur `hammer`, a wide `trigger`, a long `slide_stop`;
+* one single-stack 7-round magazine (`mag_standard`; `mag_extended` repeats it for the contract and is never shown).
+
+Patched into the P9's rig and clips: slide stroke 40 mm (`SLIDE_LOCK`, guns.json `slideLock`), the optic plate on the
+slide in front of the rear sight, the hip pose lower, further right and back, and a far heavier shot (`fire_kick`: the
+wrists driven back and the muzzle flipping high, the arms absorbing it); `fire_ads` / `fire_last_ads` hold the sight
+picture tighter. Data (guns.json): category pistol, **ammo `pistol`** with `damageScale` 1.9 (6 × 1.9 = 11.4 a body
+shot, ×2 to the head: two body shots or one head shot; there is no magnum ammunition), magazine `deagle_7`, semi,
+150 rpm, heavy recoil and camera kick, reload 2.0 / 2.45 s. **Slots: `optic` only.** Skins `default` (black),
+`stainless` (regions `body` / `barrel`), `gold` (legendary), plus the shared gun skins. Sound `gun.deagle.fire`
+(`gen_deagle_sounds.py`). Items: icons per skin, the held model. Files: `deagle_model.py`, `gen_deagle.py`,
+`gen_deagle_items.py`, `gen_deagle_sounds.py`, `build_deagle.py` (steps `deagle`, `deagle_items`, `deagle_sounds`),
+`pbr_models_deagle.py`; checks `check_deagle.py` (claims `deagle.glb`: the P9 contract, the pistol budget, the slide
+stroke matching guns.json, the front sight lined up with the rear one, the optic-only slot list). 7.2k triangles drawn.
+
+## 49. Revolver (`models/gun/revolver.glb`, weapon id `revolver`, 左轮)
+
+(Owned by the revolver builder.) An original six-shot double-action .357 in the classic mould: a 4-inch barrel with a
+full underlug and a ventilated rib (five slots), a red-insert front post and an adjustable rear sight on the top strap, a
+fluted six-chamber cylinder swinging out to the left on its crane, the ejector rod under the barrel and its star, the
+cylinder release latch behind the cylinder, a spur hammer and a smooth trigger, a wooden grip. Built by
+`build_revolver.py` (`revolver_model.py` meshes, `revolver_rig.py` rig, `revolver_clips.py` clips, `gen_revolver.py`,
+`gen_revolver_items.py`, `gen_revolver_sounds.py`); `check_revolver.py` checks it.
+
+**Data** (`guns.json`): pistol ammunition, `damageScale` 1.75, 160 rpm (each pull is the long double-action stroke), the
+`revolver_6` magazine (6, node `mag_standard`, no extended magazine), reload 2.7 s full or empty (`reloadEmpty` and
+`fireLast` reuse `reload` / `fire`), slots `optic` (a small mount on the top strap; it hides `sight_rear`) and `charm`
+only. `ejectEvent` `case_out`: no case on a shot (they stay in the cylinder); the reload's six `case_out` events throw the
+six cases from `ejection`. `slideLock` is `cylinder` (nothing locks back on the last shot).
+
+**Nodes.** `gun` → `frame` (`body`), `barrel`, `grip`, `sight_iron` (the front post), `sight_rear`, `hammer` (pivot behind
+the cylinder; cocks back `HAMMER_COCKED` 38°), `trigger`, `latch` (slides forward to release), `crane` (its axis under the
+cylinder's left front; swings `CRANE_OPEN` 86° out and down to the left) → `cylinder` (spins about the bore axis) →
+`ejector` (rod and star, a 22 mm stroke along the axis) → `rounds` (six live rounds; scaled to 0 while empty), and
+`ejection` (on the cylinder);
+`mag` (the speedloader in the left hand, scale 0 outside the reload) → `mag_standard` (the loader), `loader_rounds`;
+`muzzle`, `aim_iron`, `mount_optic`, `mount_charm`, `fx_shell`. The rig follows the P9 interface (§3–§6) so its
+`idle`, `draw`, `walk`, `sprint` and `tac_sprint` are the P9's run on the revolver's rig; the hand anchors are its own
+(`grip`, `support`, `cradle` under the open cylinder, `cylinder`, `ejector`, `loader`).
+
+**Fire** (0.30 s): the trigger's stroke cocks the hammer and turns the cylinder one chamber, 60°, then the hammer falls at
+22 ms and the heavy kick follows. The cylinder's index is a STEP channel (`step_nodes`): it advances 60° and snaps back
+to 0 at the end of the clip, which looks identical by the cylinder's six-fold symmetry, so every shot plays the same
+clip. `fire_ads` is `ads_fire.aimed` over the iron sight.
+
+**Reload** (2.70 s, a speedloader): the thumb pushes the latch (`revolver_latch`), the left fingers push the cylinder out
+(`cylinder_open` 0.22–0.36), the gun rolls muzzle-up, the left palm punches the ejector (`ejector` 0.60) and the six
+cases fly (`case_out` ×6, 0.615–0.665) — the cylinder's `rounds` go to scale 0; the gun rolls the open cylinder up
+toward the camera (−62° roll), the left hand brings the loader in from the belt, aligns its rounds with the chambers
+(`speedloader` at 1.42, the loader's rounds coincide with the chambers), twists the knob (`speedloader_twist` 1.50), the
+`rounds` come back and the empty loader leaves; the left fingers swing the cylinder shut (`cylinder_close` 2.16) and the
+hands return to the grip.
+
+**Inspect** (3.60 s): the cylinder swung out, the left fingers spin it (three turns, 0.70–1.75, `cylinder_spin`), the
+right flank turned to the camera, the cylinder snapped shut (`cylinder_close` 2.24).
+
+**Materials and skins.** `steel` (`body`, `revolver/blued`), `barrel` (`barrel`, `revolver/blued`), `grip` (`grip`,
+`tommy/walnut`), `steel_dark` (`detail`), `loader` (`magazine`, `p9/polymer`), `brass` / `bullet` (`common/brass`, no
+region), `bore` and `insert` (no PBR set; the insert glows faintly). Skins `default` (blued, walnut), `stainless`
+(`revolver/stainless`), `ivory` (`revolver/ivory` grips) and `gold`.
+
+**Sounds** (`gen_revolver_sounds.py`): `gun.revolver.fire` (three variants: the .357's ringing crack and the cylinder
+gap's spit), `gun.revolver.dry` (the hammer on an empty chamber), and the clip events `gun.revolver_latch`,
+`gun.cylinder_open`, `gun.ejector`, `gun.case_out`, `gun.speedloader`, `gun.speedloader_twist`, `gun.cylinder_close`,
+`gun.cylinder_spin`.
+
+## 50. Body armour (`vest`, 防弹衣) and armour plates (`armor_plate`, 防弹板)
+
+A plate carrier worn in the chest slot (`blockland:vest`, chest-slot equippable with no vanilla armour points and no
+armour model) holding up to three armour plates (`blockland:armor_plate`, stacks of 8). Rules are data:
+`data/blockland/armor/armor.json` — `maxPlates` 3, `plateDurability` 10 (a player has 20 health), `vestProtection` 0.1,
+`headshotsBypass` false, `insertSeconds` 1.1, `insertDip` 14°, the plate's first-person `handling`, and `covers`: damage
+type id (or `#tag`) → the share of such a hit the armour takes (bullets 1.0, explosions 0.7, knives 0.6, a bare hand or a
+monster's claw 0.5; falls, fire, the void and anything unlisted pass it by).
+
+**Protection** (`server/armor/ArmorService`, one hook: the hurt event, before vanilla's own armour). Of a covered hit
+`share × damage` meets the carrier: it wears the plates down, the last inserted (outermost) first, a plate breaking when
+its durability runs out and the rest going on to the next; what gets past the plates is cut by `vestProtection`; the
+uncovered part of the hit goes straight through. The plates live in the carrier's `blockland:vest` item component (the
+durability left in each, synced with the stack, so others see the plates in it). A hit on the armour plays
+`armor.plate_hit` for everyone around, a plate breaking `armor.plate_break`; the wearer gets `S2CHit` (the HUD flashes; a
+break flashes the screen's edges and names it).
+
+**Inserting.** Holding a plate with the carrier on, a left-click (no vanilla hit or mining with a plate in hand) starts the
+insert at once on the client — the clip and the head bowing `insertDip` to watch it, the plate holding still against the
+bow so it is seen going in — and sends `C2SInsert`; the server checks room (`maxPlates`), answers `STARTED` and puts the
+plate in after `insertSeconds` if it is still in hand and the carrier still on (`DONE`, one plate used, `armor.plate_insert`),
+else `CANCELLED`; `NO_VEST` / `FULL` come back at once with an action-bar message. After `DONE` the next plate is drawn.
+
+**The carrier on the body** (`client/armor/VestLayer`, a player render layer): `models/armor/vest.glb` drawn in the body
+part's frame — the model's +Y up and −Z forward are the torso's, the origin at the neck, one unit a block, so it bends and
+turns with the torso in every pose (crouching, prone, swimming) — with the weapon pipeline like the third-person weapons,
+through vanilla render types while the shadow map captures entities. Nodes: `armor` (root) → `carrier` (the bags,
+cummerbund, shoulder straps, three magazine pouches, admin flap, drag handle; materials `carrier`, `webbing` (region
+`body`), `hardware`), `plate_1` (the front plate's bulge of its bag), `plate_2` (back), `plate_3` (the two side plates):
+a plate's node shows only while that many plates are in. No clips. The carrier lies on the torso (checked: no vertex
+inside it) and never stands off more than ~0.1. 3.9k triangles.
+
+**The plate in first person** (`client/armor/PlateViewmodel`, the shared `ViewmodelRig`): `models/armor/plate.glb` —
+`viewmodel` → `plate` (root) → `plate_body` (mesh: a single-curve ESAPI-cut ceramic plate, 0.25 × 0.32 m, 22 mm, bent
+round 0.45 m, polyurea coat `plate` (set `armor/polyurea`) and a `label`), `camera`, both arms. Both hands hold it by its
+side edges (palms on the edges, fingers round onto the strike face), fixed on it in every frame (checked). Clips: `idle`
+(2.0 s), `draw` (0.50 s, up from the pouch, event `plate_draw`), `insert` (1.0 s, stretched to `insertSeconds`: drawn in to
+the chest, turned upright like the bag and pushed down into it, seated with a jolt at 0.72 and kept down until the next
+draw), `walk`, `sprint` (`sprint` also serves the tactical sprint). Sounds `armor.vest_equip`, `plate_draw`, `plate_insert`,
+`plate_hit`, `plate_break` (`gen_armor_sounds.py`).
+
+**HUD** (`client/armor/ArmorHud`): over the hearts (vanilla's armour row — the carrier gives no vanilla armour), one
+segment per plate slot filled with the plate's durability left (amber when low), empty slots outlined; a progress bar
+under the crosshair while a plate goes in.
+
+Items in the creative tab "防具" (an empty carrier, a plate, and a carrier with three plates in it). Kits give them by id:
+`blockland:vest` at `chest`, `blockland:armor_plate` anywhere. Files: `armor_model.py`, `armor_rig.py`, `armor_clips.py`,
+`gen_armor.py`, `gen_armor_items.py`, `gen_armor_sounds.py`, `build_armor.py` (steps `armor`, `armor_items`,
+`armor_sounds`), `pbr_sets_armor.py` (`armor/nylon`, `armor/webbing`, `armor/polyurea`), `pbr_models_armor.py`; checks
+`check_armor.py` (claims `models/armor/vest.glb` and `plate.glb`).

@@ -7,7 +7,7 @@ import javax.annotation.Nullable;
 
 /**
  * The parachute (降落伞, item {@code blockland:parachute}, worn in the chest slot) as other modules see it, on both
- * sides — the way {@code movement/Slides} is for sliding. Games (e.g. 大逃杀) only use this facade: whether someone's
+ * sides — the way {@code movement/action/BodyActions} is for slides and prone. Games (e.g. 大逃杀) only use this facade: whether someone's
  * canopy is open, and on the server opening it for them or handing one out. The parachute module (server service,
  * client prediction) installs the views at start-up.
  */

@@ -40,6 +40,11 @@ public record MaterialLayer(@Nullable String pbr, float uvScale, @Nullable float
      * them ablaze — the surface chars, the veins open white-hot, the glyphs ignite.
      */
     public static final int INFERNO = 6;
+    /**
+     * Not a skin effect: a drop of blood laid on a weapon or a hand (rendering spec §19, client/viewmodel/ViewmodelBlood).
+     * Params (seed, wetness, opacity, stretch); the vertices' AO byte carries the decal's facing fade.
+     */
+    public static final int BLOOD = 7;
 
     public MaterialLayer {
         params = params == null ? new float[4] : params;

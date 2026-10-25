@@ -1,0 +1,35 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "gui"
+        ],
+        "model": {
+          "type": "minecraft:model",
+          "model": "blockland:item/baton"
+        }
+      },
+      {
+        "when": [
+          "firstperson_righthand",
+          "firstperson_lefthand"
+        ],
+        "model": {
+          "type": "minecraft:model",
+          "model": "blockland:item/baton_held"
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:special",
+      "base": "blockland:item/baton_held",
+      "model": {
+        "type": "blockland:weapon",
+        "fit": "blockland:item/baton_held"
+      }
+    }
+  }
+}

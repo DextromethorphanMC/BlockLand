@@ -296,7 +296,7 @@ def aim_matrix(g, optic=None):
 
 # Section 40: the mounts and hidden parts of these guns follow their slots in guns.json (absent slots included: never
 # assume every new weapon is an AK with all six mounts).
-SECTION_40 = ("uzi", "p90", "mp5", "sten", "ssg08", "calico", "scar", "m4a1", "jackhammer")
+SECTION_40 = ("uzi", "p90", "mp5", "sten", "ssg08", "calico", "scar", "m4a1", "jackhammer", "vector", "revolver")
 
 
 def _section_40():

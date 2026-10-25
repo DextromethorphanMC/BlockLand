@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/deagle_held",
+  "textures": {
+    "0": "blockland:item/deagle_held_gold_beads",
+    "particle": "blockland:item/deagle_held_gold_beads"
+  }
+}

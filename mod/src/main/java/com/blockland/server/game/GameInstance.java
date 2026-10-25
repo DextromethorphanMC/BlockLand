@@ -1,5 +1,6 @@
 package com.blockland.server.game;
 
+import com.blockland.movement.action.MovementAction;
 import com.blockland.server.content.model.GameModeDef;
 import com.blockland.server.content.model.MapDef;
 import net.minecraft.core.BlockPos;
@@ -86,11 +87,13 @@ public interface GameInstance {
     }
 
     /**
-     * Whether a participant may slide: the mode's {@code allowSlide} setting (backend, off when missing); a type may
-     * narrow it further (e.g. by role).
+     * Whether a participant may use a movement action (spec §47): the mode's setting for it ({@code allowSlide},
+     * {@code allowProne}, {@code allowDive}; backend, off when missing — prone and dive follow the slide's setting in
+     * modes saved before they existed); a type may narrow it further (e.g. by role).
      */
-    default boolean allowSlide(ServerPlayer player) {
-        return mode().flag("allowSlide", false);
+    default boolean allowAction(ServerPlayer player, MovementAction action) {
+        boolean slide = mode().flag(MovementAction.SLIDE.setting(), false);
+        return action == MovementAction.SLIDE ? slide : mode().flag(action.setting(), slide);
     }
 
     /** Whether a participant's guns fire and reload without using ammo (practice modes). */

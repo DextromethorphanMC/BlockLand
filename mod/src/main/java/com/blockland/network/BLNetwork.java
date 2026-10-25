@@ -11,6 +11,8 @@ import com.blockland.network.packet.ProfilePackets;
 import com.blockland.network.packet.C2SJoinQueue;
 import com.blockland.network.packet.RankedPackets;
 import com.blockland.network.packet.ParachutePackets;
+import com.blockland.network.packet.SupplyPackets;
+import com.blockland.network.packet.ArmorPackets;
 import com.blockland.network.packet.C2SLeaveQueue;
 import com.blockland.network.packet.C2SLobbyRequest;
 import com.blockland.network.packet.C2SPostMatch;
@@ -92,6 +94,10 @@ public final class BLNetwork {
     private static volatile BattleRoyalePacketListeners.Client battleRoyaleClientListener = BattleRoyalePacketListeners.Client.NOOP;
     private static volatile ParachutePacketListeners.Server parachuteServerListener = ParachutePacketListeners.Server.NOOP;
     private static volatile ParachutePacketListeners.Client parachuteClientListener = ParachutePacketListeners.Client.NOOP;
+    private static volatile SupplyPacketListeners.Server supplyServerListener = SupplyPacketListeners.Server.NOOP;
+    private static volatile SupplyPacketListeners.Client supplyClientListener = SupplyPacketListeners.Client.NOOP;
+    private static volatile ArmorPacketListeners.Server armorServerListener = ArmorPacketListeners.Server.NOOP;
+    private static volatile ArmorPacketListeners.Client armorClientListener = ArmorPacketListeners.Client.NOOP;
     private static volatile Function<Connection, UUID> senderResolver = connection -> null;
     private static volatile Function<UUID, Connection> connectionResolver = id -> null;
     @Nullable
@@ -165,6 +171,10 @@ public final class BLNetwork {
                 msg -> infectionClientListener.onRole(msg));
         toClient(InfectionPackets.S2CSkill.class, InfectionPackets.S2CSkill::encode, InfectionPackets.S2CSkill::decode,
                 msg -> infectionClientListener.onSkill(msg));
+        toClient(InfectionPackets.S2CFuse.class, InfectionPackets.S2CFuse::encode, InfectionPackets.S2CFuse::decode,
+                msg -> infectionClientListener.onFuse(msg));
+        toClient(InfectionPackets.S2CBlast.class, InfectionPackets.S2CBlast::encode, InfectionPackets.S2CBlast::decode,
+                msg -> infectionClientListener.onBlast(msg));
         toClient(S2CMorph.class, S2CMorph::encode, S2CMorph::decode, msg -> morphListener.onMorph(msg));
 
         // 工匠 (craft): builds are edited in the lobby (configuration phase) as well as in game
@@ -175,11 +185,11 @@ public final class BLNetwork {
         anyToClient(CraftPackets.S2CBuilds.class, CraftPackets.S2CBuilds::encode, CraftPackets.S2CBuilds::decode,
                 msg -> craftClientListener.onBuilds(msg));
 
-        // movement (slide): only in the world
-        toServer(MovementPackets.C2SSlide.class, MovementPackets.C2SSlide::encode, MovementPackets.C2SSlide::decode,
-                (msg, player) -> movementServerListener.onSlide(player, msg));
-        toClient(MovementPackets.S2CSlide.class, MovementPackets.S2CSlide::encode, MovementPackets.S2CSlide::decode,
-                msg -> movementClientListener.onSlide(msg));
+        // movement actions (slide, prone, dive): only in the world
+        toServer(MovementPackets.C2SAction.class, MovementPackets.C2SAction::encode, MovementPackets.C2SAction::decode,
+                (msg, player) -> movementServerListener.onAction(player, msg));
+        toClient(MovementPackets.S2CAction.class, MovementPackets.S2CAction::encode, MovementPackets.S2CAction::decode,
+                msg -> movementClientListener.onAction(msg));
         toClient(MovementPackets.S2CRules.class, MovementPackets.S2CRules::encode, MovementPackets.S2CRules::decode,
                 msg -> movementClientListener.onRules(msg));
 
@@ -267,6 +277,20 @@ public final class BLNetwork {
                 (msg, player) -> parachuteServerListener.onToggle(player, msg));
         toClient(ParachutePackets.S2CState.class, ParachutePackets.S2CState::encode, ParachutePackets.S2CState::decode,
                 msg -> parachuteClientListener.onState(msg));
+
+        // ammo crate resupply (弹药箱): only in the world
+        toServer(SupplyPackets.C2SUse.class, SupplyPackets.C2SUse::encode, SupplyPackets.C2SUse::decode,
+                (msg, player) -> supplyServerListener.onUse(player, msg));
+        toClient(SupplyPackets.S2CResupplied.class, SupplyPackets.S2CResupplied::encode, SupplyPackets.S2CResupplied::decode,
+                msg -> supplyClientListener.onResupplied(msg));
+
+        // body armour (防弹衣 / 防弹板): only in the world
+        toServer(ArmorPackets.C2SInsert.class, ArmorPackets.C2SInsert::encode, ArmorPackets.C2SInsert::decode,
+                (msg, player) -> armorServerListener.onInsert(player, msg));
+        toClient(ArmorPackets.S2CInsert.class, ArmorPackets.S2CInsert::encode, ArmorPackets.S2CInsert::decode,
+                msg -> armorClientListener.onInsert(msg));
+        toClient(ArmorPackets.S2CHit.class, ArmorPackets.S2CHit::encode, ArmorPackets.S2CHit::decode,
+                msg -> armorClientListener.onHit(msg));
     }
 
     private static <M> void toServer(Class<M> type, BiConsumer<M, FriendlyByteBuf> encoder, Function<FriendlyByteBuf, M> decoder,
@@ -465,6 +489,22 @@ public final class BLNetwork {
 
     public static void setParachuteClientListener(ParachutePacketListeners.Client listener) {
         parachuteClientListener = listener == null ? ParachutePacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setSupplyServerListener(SupplyPacketListeners.Server listener) {
+        supplyServerListener = listener == null ? SupplyPacketListeners.Server.NOOP : listener;
+    }
+
+    public static void setArmorServerListener(ArmorPacketListeners.Server listener) {
+        armorServerListener = listener == null ? ArmorPacketListeners.Server.NOOP : listener;
+    }
+
+    public static void setArmorClientListener(ArmorPacketListeners.Client listener) {
+        armorClientListener = listener == null ? ArmorPacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setSupplyClientListener(SupplyPacketListeners.Client listener) {
+        supplyClientListener = listener == null ? SupplyPacketListeners.Client.NOOP : listener;
     }
 
     public static void setSpectateServerListener(SpectatePacketListeners.Server listener) {

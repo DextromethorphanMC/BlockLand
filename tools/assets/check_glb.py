@@ -18,6 +18,8 @@ GUN_DIR = os.path.join(HERE, "..", "..", "mod", "src", "main", "resources", "ass
 KNIFE_DIR = os.path.join(os.path.dirname(GUN_DIR), "knife")
 EQUIPMENT_DIR = os.path.join(os.path.dirname(GUN_DIR), "equipment")      # section 36
 BOMB_DIR = os.path.join(os.path.dirname(GUN_DIR), "bomb")                # section 39
+BLOCK_DIR = os.path.join(os.path.dirname(GUN_DIR), "block")              # section 46 (block entity models)
+ARMOR_DIR = os.path.join(os.path.dirname(GUN_DIR), "armor")              # section 50 (body armour)
 FOV_Y = 54.0                       # section 2: viewmodel projection (vertical), used for the on-screen estimate
 CAM_TURN, CAM_ROLL = 2.5, 4.5      # section 31: largest camera pitch / yaw and roll of a clip (degrees)
 PARENTS = {
@@ -473,6 +475,12 @@ def main(argv):
         paths += sorted(
             os.path.join(BOMB_DIR, f) for f in (os.listdir(BOMB_DIR) if os.path.isdir(BOMB_DIR) else [])
             if f.endswith(".glb"))
+        paths += sorted(
+            os.path.join(BLOCK_DIR, f) for f in (os.listdir(BLOCK_DIR) if os.path.isdir(BLOCK_DIR) else [])
+            if f.endswith(".glb"))
+        paths += sorted(
+            os.path.join(ARMOR_DIR, f) for f in (os.listdir(ARMOR_DIR) if os.path.isdir(ARMOR_DIR) else [])
+            if f.endswith(".glb"))
     arms = GLTF(arms_path) if os.path.exists(arms_path) else None
     failed = 0
     if arms is not None:
@@ -519,7 +527,9 @@ def main(argv):
 # and `check(path, arms, r)`; the first module that claims a file checks it. Missing modules are skipped.
 CHECK_MODULES = ("check_tommy", "check_shotgun", "check_dual", "check_usp", "check_dagger", "check_rpd", "check_karambit", "check_equipment",
                  "check_bomb", "check_uzi", "check_p90", "check_mp5", "check_sten", "check_ssg08", "check_calico", "check_scar", "check_m4a1", "check_jackhammer",
-                 "check_crowbar", "check_knuckles")
+                 "check_crowbar", "check_knuckles",
+                 "check_handcannon", "check_vector", "check_baton", "check_ammo_crate",
+                 "check_deagle", "check_revolver", "check_armor")
 
 
 def _claimed_by(path, names):

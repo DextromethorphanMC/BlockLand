@@ -151,7 +151,9 @@ MODEL_MODULES = ("pbr_models_tommy", "pbr_models_ks3", "pbr_models_usp", "pbr_mo
                  "pbr_models_underbarrel", "pbr_models_rpd", "pbr_models_karambit", "pbr_models_equipment",
                  "pbr_models_bomb",
                  "pbr_models_uzi", "pbr_models_p90", "pbr_models_mp5", "pbr_models_sten", "pbr_models_ssg08", "pbr_models_calico", "pbr_models_scar", "pbr_models_m4a1", "pbr_models_jackhammer",
-                 "pbr_models_crowbar", "pbr_models_knuckles")
+                 "pbr_models_crowbar", "pbr_models_knuckles",
+                 "pbr_models_handcannon", "pbr_models_vector", "pbr_models_baton", "pbr_models_ammo_crate",
+                 "pbr_models_deagle", "pbr_models_revolver", "pbr_models_armor")
 
 
 def _load_model_modules():

@@ -7,7 +7,7 @@ import com.blockland.bomb.BombData;
 import com.blockland.bomb.PlantedBomb;
 import com.blockland.games.common.MatchText;
 import com.blockland.games.common.TeamArenaGame;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.packet.BombPackets;
 import com.blockland.server.arena.Arena;
@@ -340,7 +340,7 @@ final class BombGame extends TeamArenaGame {
         }
         takeBomb(player);
         Vec3 look = player.getLookAngle();
-        drop(Slides.eyePosition(player).add(0, -0.3, 0), new Vec3(look.x * 0.3, 0.15, look.z * 0.3));
+        drop(BodyActions.eyePosition(player).add(0, -0.3, 0), new Vec3(look.x * 0.3, 0.15, look.z * 0.3));
         return true;
     }
 
@@ -361,7 +361,7 @@ final class BombGame extends TeamArenaGame {
     /** A living defender, close to the bomb and looking at it. */
     private boolean canDefuse(ServerPlayer player) {
         if (planted == null || teamIndexOf(player.getUUID()) != DEFENDERS || !isAlive(player.getUUID()) || player.isSpectator()) return false;
-        Vec3 eye = Slides.eyePosition(player), target = planted.position().add(0, 0.1, 0);
+        Vec3 eye = BodyActions.eyePosition(player), target = planted.position().add(0, 0.1, 0);
         Vec3 to = target.subtract(eye);
         double distance = to.length();
         if (distance > data.defuseRange) return false;

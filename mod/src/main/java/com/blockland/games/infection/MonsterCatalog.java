@@ -40,6 +40,8 @@ final class MonsterCatalog {
         float speed = 1;
         float knockbackResistance = 0;
         Skill skill = new Skill();
+        /** An always-on skill, or null; {@code death_blast}: the monster goes off when it dies (MonsterBlasts). */
+        Skill passive;
     }
 
     /** A monster's active skill; {@code type} picks the implementation in {@link MonsterSkills}. */
@@ -58,10 +60,26 @@ final class MonsterCatalog {
         /** projectile: the entity fired (e.g. {@code blockland:slime_shot}) and its speed in blocks per tick. */
         String projectile = "";
         float speed = 1.5f;
+        /**
+         * self_destruct / death_blast: seconds of fuse (death_blast: the delay after death) — self_destruct slows the
+         * monster by {@code effect} / {@code amplifier} while it burns — and the blast: full {@code damage} within
+         * {@code innerRadius} falling off (quadratically) to {@code minDamage} at {@code radius} blocks, shoving
+         * everyone it reaches by {@code knockback}.
+         */
+        float fuse = 1.3f;
+        float radius = 4;
+        float innerRadius = 1.2f;
+        float damage = 20;
+        float minDamage = 2;
+        float knockback = 0.9f;
 
         /** Seconds the skill keeps working on the monster itself (for its HUD); projectiles act on others. */
         float activeSeconds() {
-            return "effect".equals(type) ? duration : 0;
+            return switch (type) {
+                case "effect" -> duration;
+                case "self_destruct" -> fuse;
+                default -> 0;
+            };
         }
     }
 

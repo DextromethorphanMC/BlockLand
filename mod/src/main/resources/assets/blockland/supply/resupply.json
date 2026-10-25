@@ -1,0 +1,35 @@
+{
+  "comment": "First-person resupply from an ammo crate (VIEWMODEL_SPEC section 46). Seconds, degrees, metres, viewmodel space. `gun`: keys [t, pitch, yaw, roll, x, y, z] of the viewmodel root, lowered and canted about `pivot`. `arm`: the left arm's joints moved rigidly about the shoulder: `down` puts the hand into the crate where it stands (`hand`: below its top, towards the player, at most `reachMax` from the shoulder; the canned `down` pose [pitch, yaw, roll, x, y, z] when the crate is unknown); `up` turns it so the wrist comes to `target` from the gun's magazine node (the new magazine held under the well); keys [t, down, up] blend rest -> down -> up. `look`: the head, keys [t, weight]: it leans over the crate (`lean` + `leanPerMetre` x how far the crate's top lies below the eye, at most `leanMax`, [forward, down]) and turns `share` of the way to look `inside` it (at most `maxPitch` / `maxYaw`), the lowered gun holding still against `gunStays` of that turn; `rummage` [from, to, degrees, hertz] shakes the view while the hand is in the crate, `jolts` [t, pitch, yaw, roll] ring out at `joltHz` / `joltDecay`. `reach`: the gun's reload follows; `stow`: the gun was full, the magazine goes into a pouch.",
+  "reach": 1.45,
+  "stow": 1.75,
+  "pivot": [0.12, -0.16, -0.30],
+  "gun": {
+    "reach": [[0, 0, 0, 0, 0, 0, 0], [0.28, -9, 4, 13, 0.015, -0.03, 0.015], [1.10, -10, 4, 14, 0.015, -0.032, 0.015], [1.45, 0, 0, 0, 0, 0, 0]],
+    "stow": [[0, 0, 0, 0, 0, 0, 0], [0.28, -9, 4, 13, 0.015, -0.03, 0.015], [1.40, -10, 4, 14, 0.015, -0.032, 0.015], [1.75, 0, 0, 0, 0, 0, 0]]
+  },
+  "arm": {
+    "down": [-74, 18, -8, 0.02, -0.07, 0.03],
+    "up": [-0.03, -0.075, 0.03],
+    "reach": [[0, 0, 0], [0.10, 0, 0], [0.38, 1, 0], [0.80, 1, 0], [1.12, 1, 1], [1.32, 1, 1], [1.45, 0, 0]],
+    "stow": [[0, 0, 0], [0.10, 0, 0], [0.38, 1, 0], [0.80, 1, 0], [1.12, 1, 1], [1.30, 1, 1], [1.52, 1, 0], [1.75, 0, 0]]
+  },
+  "hand": {"inside": 0.08, "toward": 0.08, "reachMax": 0.66},
+  "look": {
+    "reach": [[0, 0], [0.34, 1], [0.86, 1], [1.24, 0]],
+    "stow": [[0, 0], [0.34, 1], [0.86, 1], [1.24, 0]],
+    "share": 0.85,
+    "maxPitch": 55,
+    "maxYaw": 30,
+    "inside": 0.12,
+    "lean": [0.05, 0.0],
+    "leanPerMetre": [0.06, 0.22],
+    "leanMax": [0.18, 0.32],
+    "gunStays": 0.4,
+    "rummage": [0.40, 0.80, 0.35, 9.0],
+    "jolts": [[0.38, 1.1, 0.3, -0.6], [0.70, -0.8, 0.0, 0.5], [1.12, 0.5, -0.2, 0.3]],
+    "joltHz": 7.0,
+    "joltDecay": 7.0
+  },
+  "magazine": {"offset": [0.0, -0.045, 0.034], "rotation": [0, 0, 90], "reach": [0.72, 1.45], "stow": [0.72, 1.40]},
+  "events": [[0.70, "supply.magazine"]]
+}

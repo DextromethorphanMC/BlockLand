@@ -37,6 +37,41 @@
         "cooldown": 12,
         "sound": "minecraft:entity.llama.spit"
       }
+    },
+    "creeper_zombie": {
+      "name": "苦力怕僵尸",
+      "description": "满肚子火药的感染者，冲进人群引爆自己；被打死也会爆炸。",
+      "entity": "blockland:creeper_zombie",
+      "health": 45,
+      "speed": 1.06,
+      "knockbackResistance": 0.0,
+      "skill": {
+        "type": "self_destruct",
+        "name": "自爆",
+        "description": "点燃引信，1.3 秒后自爆（引燃时移动减慢），炸伤周围的人类，自己也会阵亡。被动「殉爆」：死亡后 0.5 秒爆炸。",
+        "fuse": 1.3,
+        "radius": 4.5,
+        "innerRadius": 1.5,
+        "damage": 26,
+        "minDamage": 3,
+        "knockback": 1.1,
+        "effect": "minecraft:slowness",
+        "amplifier": 1,
+        "cooldown": 8,
+        "sound": "blockland:infection.creeper_fuse"
+      },
+      "passive": {
+        "type": "death_blast",
+        "name": "殉爆",
+        "description": "死亡后 0.5 秒爆炸，炸伤周围的人类。",
+        "fuse": 0.5,
+        "radius": 3.2,
+        "innerRadius": 1.0,
+        "damage": 12,
+        "minDamage": 2,
+        "knockback": 0.7,
+        "sound": "blockland:infection.creeper_fuse"
+      }
     }
   }
 }

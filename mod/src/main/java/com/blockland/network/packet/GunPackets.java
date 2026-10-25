@@ -127,6 +127,8 @@ public final class GunPackets {
                           int hand) {
         /** {@link #face} of a round that skipped off water, or that a fluid spent, at the end point (no block, no entity). */
         public static final int SKIPPED = -2, SPENT = -3;
+        /** {@link #face} of a launched round (a grenade, flying on as an entity): the shot alone, no tracer or impact. */
+        public static final int LAUNCHED = -4;
 
         public S2CShot(int shooterId, double endX, double endY, double endZ, boolean hitBlock, int face, boolean suppressed) {
             this(shooterId, endX, endY, endZ, hitBlock, face, suppressed, 0);

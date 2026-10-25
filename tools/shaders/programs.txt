@@ -78,6 +78,7 @@ impact_debris        | blockland:core/impact_debris | blockland:core/impact_debr
 impact_dust          | blockland:core/impact_dust | blockland:core/impact_dust | Position,UV0,Color,UV2 |
 impact_spark         | blockland:core/impact_spark | blockland:core/impact_spark | Position,UV0,Color,UV2 |
 impact_fluid         | blockland:core/impact_fluid | blockland:core/impact_fluid | Position,Color,UV0,UV2,Normal |
+impact_blood         | blockland:core/impact_blood | blockland:core/impact_blood | Position,Color,UV0,UV2,Stain,Shape,Anchor,Atlas |
 # Name cards (client/profile, GUI)
 name_card            | blockland:core/name_card | blockland:core/name_card | Position,UV0,Color |
 # Wall graffiti (client/graffiti)

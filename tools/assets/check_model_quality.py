@@ -19,7 +19,7 @@ from meshkit import build_primitives, newell_normal
 from model_quality import BUDGETS, SETTINGS, arc_segments, refine_samples
 
 #: weapon files in the pistol budget
-PISTOLS = ("p9", "p9a", "usp", "usp_dual", "usp_dual_cerberus", "calico")
+PISTOLS = ("p9", "p9a", "usp", "usp_dual", "usp_dual_cerberus", "calico", "handcannon", "deagle", "revolver")
 import shapes as sh
 
 MODELS = Path(__file__).resolve().parents[2] / "mod/src/main/resources/assets/blockland/models"

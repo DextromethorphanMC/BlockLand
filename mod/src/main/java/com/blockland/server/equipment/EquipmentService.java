@@ -8,7 +8,7 @@ import com.blockland.equipment.EquipmentContent;
 import com.blockland.equipment.EquipmentData;
 import com.blockland.equipment.ThrownEquipment;
 import com.blockland.equipment.effect.EquipmentEffects;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.EquipmentPacketListeners;
 import com.blockland.network.packet.EquipmentPackets;
@@ -35,7 +35,7 @@ import java.util.function.Predicate;
 /**
  * Server authority for equipment: validates every request (selected slot, item held, cooldown), times the hand — the
  * pin coming out ({@code pullTime}), cooking, the release point of the throw clip ({@code releaseAt}), an injection's
- * {@code injectAt} — launches the {@link ThrownEquipment} from the eye ({@link Slides#eyePosition}), uses the item up
+ * {@code injectAt} — launches the {@link ThrownEquipment} from the eye ({@link BodyActions#eyePosition}), uses the item up
  * (unless the player's game hands out infinite equipment) and tells the thrower about knife hits. A grenade cooked past
  * its fuse goes off in the hand; one whose pin is out when the player switches away or dies drops live at their feet.
  */
@@ -189,7 +189,7 @@ public final class EquipmentService implements EquipmentPacketListeners.Server {
         Vec3 carried = player.position().subtract(player.xo, player.yo, player.zo).scale(0.7);
         if (carried.lengthSqr() > 0.36) carried = carried.normalize().scale(0.6);
         Vec3 velocity = direction.scale(launch.speed).add(carried);
-        Vec3 eye = Slides.eyePosition(player);
+        Vec3 eye = BodyActions.eyePosition(player);
         Vec3 right = Vec3.directionFromRotation(0, yaw + 90);
         Vec3 start = eye.add(direction.scale(0.35)).add(right.scale(-0.12)).add(0, -0.08, 0);
         launch(player, prep, now, clear(player, eye, start), velocity);
@@ -233,7 +233,7 @@ public final class EquipmentService implements EquipmentPacketListeners.Server {
     }
 
     private static Vec3 handPosition(ServerPlayer player) {
-        Vec3 eye = Slides.eyePosition(player);
+        Vec3 eye = BodyActions.eyePosition(player);
         return clear(player, eye, eye.add(player.getLookAngle().scale(0.4)).add(0, -0.25, 0));
     }
 

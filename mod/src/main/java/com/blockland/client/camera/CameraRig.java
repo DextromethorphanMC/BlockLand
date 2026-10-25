@@ -189,11 +189,15 @@ public final class CameraRig {
         float x = clamp(shiftX.get()) * k + clamp(bobX) * m, y = clamp(shiftY.get()) * k + clamp(bobY) * m;
         float z = clamp(shiftZ.get() + rattleShift.get()) * k + clamp(bobZ) * m;
         if (Math.abs(x) + Math.abs(y) + Math.abs(z) < 1e-5f || !camera.isInitialized()) return;
-        Method method = setter();
-        if (method == null) return;
         Vector3f left = camera.getLeftVector(), up = camera.getUpVector(), look = camera.getLookVector();
-        Vec3 at = camera.getPosition().add(-left.x * x + up.x * y - look.x * z, -left.y * x + up.y * y - look.y * z,
-                -left.z * x + up.z * y - look.z * z);
+        place(camera, camera.getPosition().add(-left.x * x + up.x * y - look.x * z, -left.y * x + up.y * y - look.y * z,
+                -left.z * x + up.z * y - look.z * z));
+    }
+
+    /** Puts the camera (the eye) at {@code at} for this frame: the head moving, the body leaning. */
+    public static void place(Camera camera, Vec3 at) {
+        Method method = setter();
+        if (method == null || !camera.isInitialized()) return;
         try {
             method.invoke(camera, at);
         } catch (ReflectiveOperationException | RuntimeException e) {

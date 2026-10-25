@@ -28,6 +28,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
@@ -114,6 +115,38 @@ final class InfectionGame implements GameInstance {
     private boolean disposed;
     private PlayerTeam humanTeam;
     private PlayerTeam monsterTeam;
+    /** Monster explosions (the self_destruct skill, the death_blast passive). */
+    private final MonsterBlasts blasts = new MonsterBlasts(new MonsterBlasts.Rules() {
+        @Override
+        public boolean isEnemy(UUID monster, LivingEntity victim) {
+            Fighter from = players.get(monster), target = players.get(victim.getUUID());
+            return from != null && target != null && target.active() && target.side != from.side;
+        }
+
+        @Override
+        public void selfDestructed(ServerPlayer monster) {
+            Fighter fighter = players.get(monster.getUUID());
+            if (fighter == null || fighter.side != Side.MONSTER || !fighter.active() || phase != Phase.PLAYING) return;
+            // a real death by its own blast, so the kill feed, the death camera and every death listener see it
+            DamageSource own = new DamageSource(monster.level().registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE)
+                    .getOrThrow(MonsterBlasts.DAMAGE), monster, monster);
+            monster.invulnerableTime = 0;
+            monster.hurtServer(monster.level(), own, Float.MAX_VALUE);
+            if (fighter.active()) died(monster, null, false);       // the hit did not go through: down all the same
+        }
+
+        @Override
+        public void fuse(UUID player, float seconds) {
+            InfectionPackets.S2CFuse msg = new InfectionPackets.S2CFuse(player, seconds);
+            forEachOnline(p -> BLNetwork.sendTo(p, msg));
+        }
+
+        @Override
+        public void blasted(Vec3 at, float radius) {
+            InfectionPackets.S2CBlast msg = new InfectionPackets.S2CBlast(at.x, at.y, at.z, radius);
+            forEachOnline(p -> BLNetwork.sendTo(p, msg));
+        }
+    });
 
     private record Spawn(BlockPos pos, float yaw) {
     }
@@ -286,6 +319,8 @@ final class InfectionGame implements GameInstance {
 
     private void tickPlaying() {
         int now = services.server().getTickCount();
+        blasts.tick(now, this::online);
+        if (phase != Phase.PLAYING) return;
         double voidY = arena.origin().getY() + (map.voidY == null ? DEFAULT_VOID_Y : map.voidY);
         for (Fighter fighter : new ArrayList<>(players.values())) {
             ServerPlayer player = online(fighter.id);
@@ -374,6 +409,7 @@ final class InfectionGame implements GameInstance {
         if (disposed) return;
         disposed = true;
         phase = Phase.FINISHED;
+        blasts.clear();
         List<ServerPlayer> online = onlinePlayers();
         for (Fighter fighter : players.values()) {
             if (fighter.monster != null || fighter.side == Side.MONSTER) Morphs.show(fighter.id, null, online);
@@ -481,7 +517,7 @@ final class InfectionGame implements GameInstance {
         int now = services.server().getTickCount();
         if (now < fighter.skillReadyAt) return;
         MonsterCatalog.Skill skill = fighter.monster.skill;
-        if (!MonsterSkills.use(player, skill)) return;
+        if (!MonsterSkills.use(player, skill, blasts)) return;
         fighter.skillReadyAt = now + Math.round(skill.cooldown * 20);
         BLNetwork.sendTo(player, new InfectionPackets.S2CSkill(skill.cooldown, skill.activeSeconds()));
     }
@@ -546,7 +582,8 @@ final class InfectionGame implements GameInstance {
             infect(player, infector, false);
             return;
         }
-        // a monster went down: it comes back after a while
+        // a monster went down: its fuse goes out, a death blast goes off; it comes back after a while
+        blasts.onDeath(player, fighter.monster, fell);
         Fighter killerState = killer == null ? null : players.get(killer.getUUID());
         if (killerState != null && killerState.side == Side.HUMAN) {
             killerState.kills++;
@@ -610,6 +647,12 @@ final class InfectionGame implements GameInstance {
         if (phase != Phase.PLAYING) return false;
         Fighter target = players.get(victim.getUUID());
         if (target == null || !target.active()) return false;
+        // a monster blast hurts the other side even when its monster is already down (the death blast)
+        if (source.is(MonsterBlasts.DAMAGE)) {
+            if (source.getEntity() == victim) return true;      // a self-destruct takes its monster with it
+            Fighter from = source.getEntity() == null ? null : players.get(source.getEntity().getUUID());
+            return from == null || from.side != target.side;
+        }
         Entity attacker = source.getEntity();
         if (attacker instanceof ServerPlayer player) {
             Fighter from = players.get(player.getUUID());
@@ -638,11 +681,11 @@ final class InfectionGame implements GameInstance {
         return false;
     }
 
-    /** Only humans slide (when the mode allows it): monsters run on their own model and skills. */
+    /** Only humans slide, go prone and dive (when the mode allows it): monsters run on their own model and skills. */
     @Override
-    public boolean allowSlide(ServerPlayer player) {
+    public boolean allowAction(ServerPlayer player, com.blockland.movement.action.MovementAction action) {
         Fighter fighter = players.get(player.getUUID());
-        return GameInstance.super.allowSlide(player) && fighter != null && fighter.side == Side.HUMAN;
+        return GameInstance.super.allowAction(player, action) && fighter != null && fighter.side == Side.HUMAN;
     }
 
     // ---- players ----------------------------------------------------------------------------------
@@ -694,6 +737,7 @@ final class InfectionGame implements GameInstance {
     public void removePlayer(UUID id, @Nullable ServerPlayer player, boolean disconnected) {
         Fighter fighter = players.remove(id);
         if (fighter == null) return;
+        blasts.cancel(id);
         if (phase == Phase.PLAYING || phase == Phase.ROUND_BREAK) {
             broadcast(Component.translatable("blockland.arena.player_left", fighter.name).withStyle(ChatFormatting.GRAY));
         }
@@ -770,6 +814,7 @@ final class InfectionGame implements GameInstance {
     }
 
     private void endRound(Side winner, Component reason) {
+        blasts.clear();
         if (winner == Side.HUMAN) humanRounds++;
         else monsterRounds++;
         // everyone on the winning side at the end of the round gets the round (infected players count as monsters)

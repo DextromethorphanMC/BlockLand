@@ -1,12 +1,16 @@
 package com.blockland.client.infection;
 
 import com.blockland.BlockLand;
+import com.blockland.client.equipment.effect.ClientEquipmentEffects;
+import com.blockland.client.morph.ClientMorphs;
+import com.blockland.entity.CreeperZombie;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.InfectionPacketListeners;
 import com.blockland.network.packet.InfectionPackets;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.AddGuiOverlayLayersEvent;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
@@ -14,8 +18,13 @@ import net.minecraftforge.client.gui.overlay.ForgeLayeredDraw;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.bus.BusGroup;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
+
 /**
- * Client side of 枪战感染: the monster selection panel when infected, the skill key and the monster HUD. Everything
+ * Client side of 枪战感染: the monster selection panel when infected, the skill key and the monster HUD, and what
+ * monster explosions look like (a burning fuse swells and flashes the monster, the blast's fire and smoke). Everything
  * shown (monsters, health, skills, cooldowns) comes from the server; the client only remembers its own role.
  */
 public final class ClientInfection {
@@ -25,6 +34,11 @@ public final class ClientInfection {
     private static long skillReadyAt;
     private static long skillActiveUntil;
     private static long skillUsedAt;
+    /** Burning fuses by player. */
+    private static final Map<UUID, Fuse> fuses = new HashMap<>();
+
+    private record Fuse(long start, float seconds) {
+    }
 
     private ClientInfection() {
     }
@@ -39,7 +53,16 @@ public final class ClientInfection {
                 if (isMonster() && mc.screen == null && System.nanoTime() >= skillReadyAt) BLNetwork.sendToServer(InfectionPackets.C2SUseSkill.INSTANCE);
             }
         });
-        ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(event -> role = InfectionPackets.S2CRole.NONE);
+        ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(event -> {
+            role = InfectionPackets.S2CRole.NONE;
+            fuses.clear();
+        });
+        // a monster burning its fuse swells and flashes wherever it is drawn
+        ClientMorphs.setDecorator((player, proxy) -> {
+            if (!(proxy instanceof CreeperZombie creeper)) return;
+            Fuse fuse = fuses.get(player);
+            creeper.fuse(fuse == null ? 0 : fuse.start(), fuse == null ? 0 : fuse.seconds());
+        });
         BLNetwork.setInfectionClientListener(new InfectionPacketListeners.Client() {
             @Override
             public void onSelect(InfectionPackets.S2CSelect select) {
@@ -62,6 +85,19 @@ public final class ClientInfection {
                 skillUsedAt = now;
                 skillReadyAt = now + (long) (skill.cooldown() * 1e9);
                 skillActiveUntil = now + (long) (skill.active() * 1e9);
+            }
+
+            @Override
+            public void onFuse(InfectionPackets.S2CFuse fuse) {
+                if (fuse.seconds() <= 0) fuses.remove(fuse.player());
+                else fuses.put(fuse.player(), new Fuse(System.nanoTime(), fuse.seconds()));
+            }
+
+            @Override
+            public void onBlast(InfectionPackets.S2CBlast blast) {
+                if (Minecraft.getInstance().level != null) {
+                    ClientEquipmentEffects.explosion(Minecraft.getInstance().level, new Vec3(blast.x(), blast.y(), blast.z()));
+                }
             }
         });
     }

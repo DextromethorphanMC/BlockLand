@@ -13,7 +13,9 @@
         "usp_dual_standard",
         "usp_dual_extended",
         "calico_50",
-        "calico_100"
+        "calico_100",
+        "deagle_7",
+        "revolver_6"
       ]
     },
     "smg": {
@@ -29,7 +31,9 @@
         "p90_50",
         "mp5_30",
         "mp5_40",
-        "sten_32"
+        "sten_32",
+        "vector_25",
+        "vector_30"
       ]
     },
     "shotgun": {
@@ -69,9 +73,61 @@
         "m4_30",
         "m4_45"
       ]
+    },
+    "grenade": {
+      "name": "榴弹",
+      "item": "grenade_ammo",
+      "damage": 6.0,
+      "headshotMultiplier": 1.0,
+      "magazines": [
+        "handcannon_1"
+      ],
+      "projectile": {
+        "speed": 52,
+        "gravity": 9.8,
+        "armDistance": 6,
+        "life": 8,
+        "blast": {
+          "radius": 4.5,
+          "innerRadius": 1.4,
+          "damage": 28,
+          "minDamage": 4,
+          "knockback": 1.0
+        }
+      }
     }
   },
   "magazines": {
+    "deagle_7": {
+      "name": "7 发弹匣",
+      "description": "7 发 .50 单排弹匣。",
+      "ammo": "pistol",
+      "capacity": 7,
+      "guns": [
+        "deagle"
+      ],
+      "node": "mag_standard"
+    },
+    "handcannon_1": {
+      "name": "40 毫米榴弹",
+      "description": "一发 40 毫米高爆榴弹：打开枪管装填，每发都要重新装填。",
+      "ammo": "grenade",
+      "capacity": 1,
+      "guns": [
+        "handcannon"
+      ],
+      "node": "mag_standard"
+    },
+    "revolver_6": {
+      "name": "快速装填器",
+      "description": "6 发 .357 快速装填器，整筒一次装入。",
+      "ammo": "pistol",
+      "capacity": 6,
+      "guns": [
+        "revolver"
+      ],
+      "node": "mag_standard"
+    },
     "p9_standard": {
       "name": "标准弹匣",
       "description": "15 发标准容量弹匣。",
@@ -279,6 +335,24 @@
       "node": "mag_extended",
       "reloadTimeScale": 1.08,
       "adsTimeScale": 1.04
+    },
+    "vector_25": {
+      "name": "25 发弹匣",
+      "description": "25 发 .45 双排弹匣（带扩容底座）。",
+      "ammo": "smg",
+      "capacity": 25,
+      "guns": ["vector"],
+      "node": "mag_standard"
+    },
+    "vector_30": {
+      "name": "30 发弹匣",
+      "description": "30 发加长弹匣：多带 5 发，换弹稍慢。",
+      "ammo": "smg",
+      "capacity": 30,
+      "guns": ["vector"],
+      "node": "mag_extended",
+      "reloadTimeScale": 1.06,
+      "adsTimeScale": 1.03
     },
     "sten_32": {
       "name": "32 发弹匣",
@@ -1852,6 +1926,312 @@
               {"particles": "cerberus.gather", "node": "muzzle", "from": 2.95, "to": 3.56, "fade": 0.15}
             ],
             "glow": {"node": "gun", "color": "#FF3A14", "intensity": 1.6, "radius": 4.5}
+          }
+        }
+      }
+    },
+    "deagle": {
+      "name": "沙漠之鹰",
+      "description": ".50 重型半自动手枪：单发威力极大（两枪击倒、爆头一枪），后坐力和枪口上跳很大、射速慢；只能加装瞄准镜。",
+      "category": "pistol",
+      "model": "models/gun/deagle.glb",
+      "ammo": "pistol",
+      "magazines": [
+        "deagle_7"
+      ],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron"
+        }
+      },
+      "fireModes": [
+        "semi"
+      ],
+      "rpm": 150,
+      "damageScale": 1.9,
+      "range": 90,
+      "falloff": {
+        "start": 18,
+        "end": 45,
+        "min": 0.7
+      },
+      "spread": {
+        "hip": 4.5,
+        "ads": 0.3,
+        "move": 2.0,
+        "air": 5.0,
+        "perShot": 2.4,
+        "max": 8.5,
+        "recovery": 6.0
+      },
+      "recoil": {
+        "vertical": 4.6,
+        "horizontal": 1.1,
+        "kick": 2.3,
+        "ads": 0.8
+      },
+      "adsTime": 0.22,
+      "drawTime": 0.6,
+      "reload": {
+        "tactical": 2.0,
+        "empty": 2.45
+      },
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.deagle.fire",
+        "dry": "gun.dry_fire"
+      },
+      "slideLock": {
+        "node": "slide",
+        "offset": [
+          0.0,
+          0.0,
+          0.040
+        ]
+      },
+      "handling": {
+        "weight": 1.6,
+        "sway": 1.15,
+        "bob": 1.05,
+        "inertia": 1.25,
+        "sprintOut": 0.28,
+        "tacticalSprint": 2.4,
+        "adsTilt": 6,
+        "recoilBack": 1.4,
+        "recoilRise": 1.8,
+        "recoilTwist": 1.2,
+        "recoilSnap": 0.8,
+        "recoilShake": 1.3,
+        "recoilPivot": 0.0,
+        "cameraKick": 1.8,
+        "cameraRoll": 1.3,
+        "cameraFov": 1.4,
+        "cameraRumble": 0.9
+      },
+      "skins": {
+        "default": {
+          "name": "标准（黑色）"
+        },
+        "stainless": {
+          "name": "不锈钢",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/p9/barrel",
+              "uvScale": 0.416667
+            },
+            "barrel": {
+              "pbr": "textures/pbr/p9/barrel",
+              "uvScale": 0.416667
+            }
+          }
+        },
+        "gold": {
+          "name": "黄金",
+          "rarity": "legendary",
+          "tints": {
+            "slide": [1.0, 0.77, 0.34],
+            "barrel": [1.0, 0.77, 0.34],
+            "polymer": [1.0, 0.77, 0.34],
+            "steel_dark": [1.0, 0.77, 0.34]
+          }
+        }
+      }
+    },
+    "handcannon": {
+      "name": "手炮",
+      "description": "单发 40 毫米榴弹手炮：榴弹呈弧线飞行、6 格外命中即爆炸（太近只会砸中不爆），每发后折开枪管重新装填；只能加装瞄准镜。",
+      "category": "pistol",
+      "model": "models/gun/handcannon.glb",
+      "ammo": "grenade",
+      "magazines": [
+        "handcannon_1"
+      ],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron"
+        }
+      },
+      "fireModes": ["semi"],
+      "ejectEvent": "mag_out",
+      "rpm": 60,
+      "damageScale": 1.0,
+      "range": 120,
+      "falloff": {"start": 120, "end": 120, "min": 1.0},
+      "spread": {"hip": 2.2, "ads": 0.25, "move": 1.6, "air": 4.0, "perShot": 0.0, "max": 2.2, "recovery": 9.0},
+      "recoil": {"vertical": 7.5, "horizontal": 1.2, "kick": 2.8, "ads": 0.85},
+      "adsTime": 0.26,
+      "drawTime": 0.65,
+      "reload": {"tactical": 2.2, "empty": 2.45},
+      "anims": {"idle": "idle", "draw": "draw", "fire": "fire", "fireLast": "fire_last", "reload": "reload",
+                "reloadEmpty": "reload_empty", "inspect": "inspect", "walk": "walk", "sprint": "sprint", "tacSprint": "tac_sprint"},
+      "sounds": {"fire": "gun.handcannon.fire", "dry": "gun.dry_fire"},
+      "slideLock": {"node": "slide", "offset": [0.0, 0.0, 0.0]},
+      "handling": {"weight": 1.9, "sway": 1.2, "bob": 1.1, "inertia": 1.35, "sprintOut": 0.3, "tacticalSprint": 2.3,
+                   "adsTilt": 5, "recoilBack": 1.6, "recoilRise": 2.2, "recoilTwist": 1.0, "recoilSnap": 0.7, "recoilShake": 1.5,
+                   "recoilPivot": 0.0, "cameraKick": 2.1, "cameraRoll": 1.4, "cameraFov": 1.6, "cameraRumble": 1.2},
+      "skins": {
+        "default": {"name": "标准（军绿）"},
+        "black": {"name": "黑色", "tints": {"barrel": [0.32, 0.32, 0.34], "polymer": [0.35, 0.35, 0.37]}},
+        "gold": {"name": "黄金", "rarity": "legendary",
+                 "tints": {"barrel": [1.0, 0.77, 0.34], "slide": [1.0, 0.77, 0.34], "steel_dark": [1.0, 0.77, 0.34]}}
+      }
+    },
+    "revolver": {
+      "name": "左轮手枪",
+      "description": "六发双动 .357 左轮：威力大、射速慢，摆出弹巢用快速装填器整筒装弹；只能加装瞄准镜和挂件。",
+      "category": "pistol",
+      "model": "models/gun/revolver.glb",
+      "ammo": "pistol",
+      "magazines": [
+        "revolver_6"
+      ],
+      "slots": {
+        "optic": {
+          "node": "mount_optic",
+          "default": "iron",
+          "hides": [
+            "sight_rear"
+          ]
+        },
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      },
+      "fireModes": [
+        "semi"
+      ],
+      "rpm": 160,
+      "damageScale": 1.75,
+      "range": 85,
+      "falloff": {
+        "start": 18,
+        "end": 45,
+        "min": 0.65
+      },
+      "spread": {
+        "hip": 4.0,
+        "ads": 0.25,
+        "move": 1.8,
+        "air": 4.5,
+        "perShot": 2.0,
+        "max": 8.0,
+        "recovery": 6.5
+      },
+      "recoil": {
+        "vertical": 4.0,
+        "horizontal": 0.9,
+        "kick": 2.0,
+        "ads": 0.8
+      },
+      "adsTime": 0.2,
+      "drawTime": 0.6,
+      "reload": {
+        "tactical": 2.7,
+        "empty": 2.7
+      },
+      "ejectEvent": "case_out",
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire",
+        "reload": "reload",
+        "reloadEmpty": "reload",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {
+        "fire": "gun.revolver.fire",
+        "dry": "gun.revolver.dry"
+      },
+      "slideLock": {
+        "node": "cylinder",
+        "offset": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "handling": {
+        "weight": 1.35,
+        "sway": 1.05,
+        "bob": 1.0,
+        "inertia": 1.15,
+        "sprintOut": 0.25,
+        "tacticalSprint": 2.5,
+        "adsTilt": 6,
+        "recoilBack": 1.25,
+        "recoilRise": 1.6,
+        "recoilTwist": 1.0,
+        "recoilSnap": 0.85,
+        "recoilShake": 1.1,
+        "recoilPivot": 0.0,
+        "cameraKick": 1.6,
+        "cameraRoll": 1.2,
+        "cameraFov": 1.2,
+        "cameraRumble": 0.7
+      },
+      "skins": {
+        "default": {
+          "name": "标准（烤蓝）"
+        },
+        "stainless": {
+          "name": "不锈钢",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/revolver/stainless",
+              "uvScale": 0.5
+            },
+            "barrel": {
+              "pbr": "textures/pbr/revolver/stainless",
+              "uvScale": 0.5
+            }
+          }
+        },
+        "ivory": {
+          "name": "象牙握把",
+          "regions": {
+            "grip": {
+              "pbr": "textures/pbr/revolver/ivory",
+              "uvScale": 0.5
+            }
+          }
+        },
+        "gold": {
+          "name": "黄金",
+          "rarity": "legendary",
+          "tints": {
+            "steel": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "barrel": [
+              1.0,
+              0.77,
+              0.34
+            ],
+            "steel_dark": [
+              1.0,
+              0.77,
+              0.34
+            ]
           }
         }
       }
@@ -3807,6 +4187,95 @@
         "cameraRoll": 1.2,
         "cameraFov": 1.4,
         "cameraRumble": 0.9
+      }
+    },
+    "vector": {
+      "name": "Vector 冲锋枪",
+      "description": ".45 口径冲锋枪：超 V 后坐系统把后坐力导向下方，射速极高、枪口几乎不跳；射程短，弹匣容量小。",
+      "category": "smg",
+      "model": "models/gun/vector.glb",
+      "ammo": "smg",
+      "magazines": ["vector_25", "vector_30"],
+      "slots": {
+        "optic": {"node": "mount_optic", "default": "iron", "hides": ["sight_rear", "sight_iron"]},
+        "barrel": {"node": "mount_barrel", "default": "none", "noneName": "消焰器", "hides": ["muzzle_brake"]},
+        "laser": {"node": "mount_laser", "default": "none"},
+        "magazine": {},
+        "stock": {"node": "mount_stock", "default": "none", "noneName": "折叠枪托", "hides": ["stock"]},
+        "underbarrel": {"node": "mount_underbarrel", "default": "none", "options": ["vertical_grip", "angled_grip"]},
+        "charm": {"node": "mount_charm", "default": "none"}
+      },
+      "fireModes": ["auto", "semi"],
+      "rpm": 1150,
+      "damageScale": 1.05,
+      "range": 70,
+      "falloff": {"start": 12, "end": 32, "min": 0.5},
+      "spread": {"hip": 3.4, "ads": 0.36, "move": 1.4, "air": 4.2, "perShot": 0.22, "max": 5.0, "recovery": 12.0},
+      "recoil": {"vertical": 0.45, "horizontal": 0.4, "kick": 0.6, "ads": 0.6},
+      "adsTime": 0.2,
+      "drawTime": 0.55,
+      "reload": {"tactical": 2.2, "empty": 2.6},
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {"fire": "gun.vector.fire", "dry": "gun.dry_fire"},
+      "slideLock": {"node": "bolt", "offset": [0.0, 0.0, 0.0]},
+      "skins": {
+        "default": {"name": "标准"},
+        "woodland": {"name": "林地迷彩",
+        "regions": {
+          "body": {"pbr": "textures/pbr/skin/camo/woodland", "uvScale": 0.333333},
+          "stock": {"pbr": "textures/pbr/skin/camo/woodland", "uvScale": 0.333333},
+          "grip": {"pbr": "textures/pbr/skin/camo/woodland", "uvScale": 0.333333}
+        }},
+        "desert": {"name": "沙漠迷彩",
+        "regions": {
+          "body": {"pbr": "textures/pbr/skin/camo/desert", "uvScale": 0.333333},
+          "stock": {"pbr": "textures/pbr/skin/camo/desert", "uvScale": 0.333333},
+          "grip": {"pbr": "textures/pbr/skin/camo/desert", "uvScale": 0.333333}
+        }},
+        "arctic": {"name": "雪地迷彩",
+        "regions": {
+          "body": {"pbr": "textures/pbr/skin/camo/arctic", "uvScale": 0.333333},
+          "stock": {"pbr": "textures/pbr/skin/camo/arctic", "uvScale": 0.333333},
+          "grip": {"pbr": "textures/pbr/skin/camo/arctic", "uvScale": 0.333333}
+        }},
+        "tiger": {"name": "虎纹",
+        "regions": {
+          "body": {"pbr": "textures/pbr/skin/camo/tiger", "uvScale": 0.333333},
+          "stock": {"pbr": "textures/pbr/skin/camo/tiger", "uvScale": 0.333333},
+          "grip": {"pbr": "textures/pbr/skin/camo/tiger", "uvScale": 0.333333}
+        }},
+        "gold": {"name": "鎏金", "rarity": "legendary",
+          "tints": {"upper": [1.0, 0.77, 0.34], "rail": [1.0, 0.77, 0.34], "barrel": [1.0, 0.77, 0.34]}}
+      },
+      "handling": {
+        "weight": 1.4,
+        "sway": 1.0,
+        "bob": 1.0,
+        "inertia": 1.1,
+        "sprintOut": 0.25,
+        "tacticalSprint": 2.7,
+        "adsTilt": 6,
+        "recoilBack": 0.95,
+        "recoilRise": 0.3,
+        "recoilTwist": 0.7,
+        "recoilSnap": 1.35,
+        "recoilShake": 0.85,
+        "recoilPivot": 0.06,
+        "cameraKick": 0.65,
+        "cameraRoll": 0.8,
+        "cameraFov": 0.7,
+        "cameraRumble": 0.3
       }
     }
   }

@@ -332,6 +332,7 @@ final class ImpactSpawner {
         d.size = size;
         d.shape = DROPLET;
         d.fluid = ImpactParticles.BLOOD;
+        d.blood = b;
         d.gravity = 1;
         // the air brakes the smaller drops harder
         d.drag = 0.02f + 0.03f * (0.03f - Math.min(0.03f, d.size)) / 0.03f;

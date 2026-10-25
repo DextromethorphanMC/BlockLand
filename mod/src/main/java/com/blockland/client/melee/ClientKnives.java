@@ -15,7 +15,7 @@ import com.blockland.melee.MeleeCatalog;
 import com.blockland.melee.MeleeContent;
 import com.blockland.melee.MeleeData;
 import com.blockland.melee.MeleeTrace;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.MeleePacketListeners;
 import com.blockland.network.packet.MeleePackets;
@@ -350,7 +350,7 @@ public final class ClientKnives {
         MeleeData.Attack attack = knife.attack(strikeHeavy);
         MeleeData.Swing swing = attack.swing(strikeCombo);
         ClientLevel level = (ClientLevel) player.level();
-        Vec3 eye = Slides.eyePosition(player);
+        Vec3 eye = BodyActions.eyePosition(player);
         MeleeTrace.Hit hit = MeleeTrace.trace(level, player, eye, player.getViewVector(1), attack);
         Vec3 cut = cutDirection(player.getViewYRot(1), player.getViewXRot(1), swing.slashAngle);
         Vec3 motion = bladeMotion(cut, player.getViewVector(1));
@@ -386,7 +386,7 @@ public final class ClientKnives {
         MeleeData.Attack attack = used.attack(impact.heavy());
         Vec3 point = new Vec3(impact.x(), impact.y(), impact.z());
         // the strike came from the attacker's eyes (low while it slides)
-        Vec3 from = attacker != null ? Slides.eyePosition(attacker) : point.add(0, 0.5, 0);
+        Vec3 from = attacker != null ? BodyActions.eyePosition(attacker) : point.add(0, 0.5, 0);
         Vec3 cut = attacker != null ? cutDirection(attacker.getViewYRot(1), attacker.getViewXRot(1), attack.swing(impact.combo()).slashAngle) : null;
         Vec3 look = point.subtract(from);
         look = look.lengthSqr() > 1e-6 ? look.normalize() : new Vec3(0, -1, 0);

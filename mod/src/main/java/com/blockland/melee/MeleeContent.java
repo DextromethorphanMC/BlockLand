@@ -54,7 +54,10 @@ public final class MeleeContent {
             "knife.crowbar_equip", "knife.crowbar_swing", "knife.crowbar_swing_heavy", "knife.crowbar_hit_flesh",
             "knife.crowbar_hit_wall", "knife.crowbar_tap",
             "knife.knuckles_equip", "knife.knuckles_swing", "knife.knuckles_swing_heavy", "knife.knuckles_hit_flesh",
-            "knife.knuckles_hit_wall", "knife.knuckles_clink");
+            "knife.knuckles_hit_wall", "knife.knuckles_clink",
+            // the baton (spec §45)
+            "knife.baton_equip", "knife.baton_open", "knife.baton_close", "knife.baton_swing", "knife.baton_swing_heavy",
+            "knife.baton_hit_flesh", "knife.baton_hit_wall");
 
     private static final Map<String, RegistryObject<Item>> KNIFE_ITEMS = new LinkedHashMap<>();
 

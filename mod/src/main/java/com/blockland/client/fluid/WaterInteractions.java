@@ -4,7 +4,7 @@ import com.blockland.client.impact.Impacts;
 import com.blockland.client.render.WaterRipples;
 import com.blockland.client.render.Wetness;
 import com.blockland.client.settings.ClientSettings;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -36,6 +36,8 @@ public final class WaterInteractions {
     private static final double RANGE = 48;
     /** Drips are drawn from this near. */
     private static final double DRIP_RANGE = 20;
+    /** Rain falling on a body soaks it (and what it carries) this far at most, this much more twice a second. */
+    private static final float RAIN_SOAK = 0.4f, RAIN_STEP = 0.03f;
 
     private static final Int2ObjectOpenHashMap<State> states = new Int2ObjectOpenHashMap<>();
     private static ClientLevel level;
@@ -116,9 +118,12 @@ public final class WaterInteractions {
             return;
         }
         float wet = Wetness.of(entity);
-        // rain on a wet body slows its drying (looked at twice a second)
-        if (wet > 0 && (tick + entity.getId()) % 10 == 0) {
-            Wetness.soak(entity, 0, time, world.isRainingAt(BlockPos.containing(box.getCenter().x, box.maxY + 0.2, box.getCenter().z)));
+        // rain falling on it wets it (and what it carries) up to a point and slows its drying; once the rain stops or it is
+        // under a roof, it dries on its own time (looked at twice a second)
+        if ((tick + entity.getId()) % 10 == 0) {
+            boolean raining = world.isRainingAt(BlockPos.containing(box.getCenter().x, box.maxY + 0.2, box.getCenter().z));
+            if (raining) Wetness.soak(entity, Math.min(RAIN_SOAK, wet + RAIN_STEP), time, true);
+            else if (wet > 0) Wetness.soak(entity, 0, time, false);
         }
         // dripping: seen only from near by, and not off the body the camera is in
         if (wet < 0.08f || entity.distanceToSqr(camera) > DRIP_RANGE * DRIP_RANGE) return;
@@ -201,7 +206,7 @@ public final class WaterInteractions {
 
     private static void strike(ClientLevel world, LivingEntity attacker) {
         // the swing starts at the attacker's eyes (low while it slides)
-        Vec3 eye = Slides.eyePosition(attacker);
+        Vec3 eye = BodyActions.eyePosition(attacker);
         Vec3 look = attacker.getLookAngle();
         // along the reach, the first point where the swing meets a water surface
         for (double d = 0.4; d <= 2.6; d += 0.2) {

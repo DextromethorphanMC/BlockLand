@@ -1,7 +1,7 @@
 package com.blockland.client.equipment;
 
 import com.blockland.equipment.EquipmentData;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Camera;
@@ -83,7 +83,7 @@ final class TrajectoryArc extends Particle {
         EquipmentData.Throw t = item.throwing;
         float pitch = player.getViewXRot(partialTick) - launch.pitchUp, yaw = player.getViewYRot(partialTick);
         Vec3 direction = Vec3.directionFromRotation(pitch, yaw);
-        Vec3 eye = Slides.eyePosition(player);
+        Vec3 eye = BodyActions.eyePosition(player);
         Vec3 pos = eye.add(direction.scale(0.35)).add(0, -0.08, 0);
         Vec3 velocity = direction.scale(launch.speed);
         points.add(pos);

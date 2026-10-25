@@ -1,6 +1,7 @@
 package com.blockland.games.infection;
 
 import com.blockland.BlockLand;
+import com.blockland.common.Sounds;
 import com.blockland.entity.EffectPayload;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -21,27 +22,31 @@ import java.util.Map;
 final class MonsterSkills {
     /** One kind of skill. */
     interface Kind {
-        void use(ServerPlayer player, MonsterCatalog.Skill skill);
+        void use(ServerPlayer player, MonsterCatalog.Skill skill, MonsterBlasts blasts);
     }
 
-    private static final Map<String, Kind> KINDS = Map.of("effect", MonsterSkills::effect, "projectile", MonsterSkills::projectile);
+    private static final Map<String, Kind> KINDS = Map.of("effect", (p, s, b) -> effect(p, s), "projectile", (p, s, b) -> projectile(p, s),
+            "self_destruct", (p, s, b) -> b.lightFuse(p, s));
 
     private MonsterSkills() {
     }
 
-    /** @return false when the skill's type is unknown (nothing happens) */
-    static boolean use(ServerPlayer player, MonsterCatalog.Skill skill) {
+    /**
+     * @param blasts the match's monster explosions (self_destruct lights a fuse there)
+     * @return false when the skill's type is unknown (nothing happens)
+     */
+    static boolean use(ServerPlayer player, MonsterCatalog.Skill skill, MonsterBlasts blasts) {
         Kind kind = KINDS.get(skill.type);
         if (kind == null) {
             BlockLand.LOGGER.warn("[BlockLand] Unknown monster skill type {}", skill.type);
             return false;
         }
-        kind.use(player, skill);
+        kind.use(player, skill, blasts);
         ServerLevel level = player.level();
         ResourceLocation sound = ResourceLocation.tryParse(skill.sound);
-        if (sound != null) {
-            BuiltInRegistries.SOUND_EVENT.getOptional(sound).ifPresent(event -> level.playSound(null, player.getX(), player.getY(), player.getZ(),
-                    event, SoundSource.PLAYERS, 1.0F, 1.15F));
+        // registered or only in sounds.json (a monster's own sound added through assets)
+        if (sound != null && !skill.sound.isEmpty()) {
+            level.playSound(null, player.getX(), player.getY(), player.getZ(), Sounds.byId(sound), SoundSource.PLAYERS, 1.0F, 1.15F);
         }
         return true;
     }

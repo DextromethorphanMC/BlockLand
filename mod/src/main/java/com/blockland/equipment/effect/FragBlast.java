@@ -33,6 +33,8 @@ final class FragBlast {
         float damage = Params.f(params, "damage", 24), minDamage = Params.f(params, "minDamage", 3);
         float knockback = Params.f(params, "knockback", 0.9f);
         boolean throughWalls = Params.b(params, "throughWalls", false);
+        // what the kill feed credits: the frag grenade, or what set it off (a grenade launcher's round)
+        String weapon = params.has("weapon") ? params.get("weapon").getAsString() : EffectDamage.FRAG_ITEM;
         level.playSound(null, centre.x, centre.y, centre.z, Sounds.byId(BlockLand.id("equipment.frag_explode")), SoundSource.PLAYERS,
                 5f, 0.92f + level.random.nextFloat() * 0.12f);
         AABB box = new AABB(centre, centre).inflate(radius);
@@ -46,7 +48,7 @@ final class FragBlast {
             if (exposure <= 0) continue;
             float t = distance <= inner ? 0 : (float) ((distance - inner) / Math.max(0.01, radius - inner));
             float amount = (minDamage + (damage - minDamage) * (1 - t) * (1 - t)) * exposure;
-            HitRecords.record(victim, owner, EffectDamage.FRAG_ITEM, false);
+            HitRecords.record(victim, owner, weapon, false);
             victim.invulnerableTime = 0;
             victim.hurtServer(level, EffectDamage.source(level, EffectDamage.FRAG, thrown, owner), amount);
             // the shove: away from the blast, a little upward

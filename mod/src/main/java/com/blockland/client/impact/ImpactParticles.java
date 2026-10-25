@@ -1,20 +1,29 @@
 package com.blockland.client.impact;
 
 import com.blockland.client.render.BlockFaces;
+import com.blockland.client.render.PlantWind;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.client.renderer.block.model.BlockModelPart;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Every live piece of every bullet impact, in fixed pools that never allocate while playing (a pool full to its budget
@@ -41,6 +50,13 @@ final class ImpactParticles {
     static final byte WATER = 1, LAVA = 2, BLOOD = 3;
     /** At most this many face rectangles cut a stain. */
     static final int MAX_CLIPS = 12;
+    /**
+     * What landed blood is (rendering spec §19): a splat (a drop's), a pool (drops run together on a floor), a stain on a
+     * plant (on its blades, moving with it).
+     */
+    static final byte SPLAT = 0, POOL = 1, PLANT = 2;
+    /** Bodies a tick's flying blood is tested against, at most. */
+    private static final int MAX_BODIES = 24;
     private static final Direction[] DIRECTIONS = Direction.values();
 
     /** A chunk, flake, splinter, shard, grain, leaf, droplet, bubble or a drop of a fluid. */
@@ -95,6 +111,32 @@ final class ImpactParticles {
         float runs, washRate, wash;
         /** Ticks a landed stain stays wet and glossy (it dries matte and darker over them). */
         int dry;
+        /** Blood: its material's data (pools, plants, bodies), null for anything else. */
+        ImpactData.Blood blood;
+        /** Landed blood: {@link #SPLAT}, {@link #POOL} or {@link #PLANT}. */
+        byte kind;
+        /** A pool: the radius it creeps out to (blocks); how many drops ran into it; the sides it ran over (-s -t +s +t). */
+        float grow;
+        byte merged, overflowed;
+        /**
+         * Per rectangle of {@link #clip}: which of its edges (bits s0, t0, s1, t1) are the surface's real edges — not shared
+         * with a neighbouring rectangle that carries the surface on, not where the search window cut it.
+         */
+        byte[] edges;
+        /** Wind bits ({@link PlantWind}) of what it lies on — a leaf block, a plant — 0 still. */
+        int windBits;
+        /**
+         * Blood on a plant: the plant's block, the plant quad's horizontal axis (unit, x z), and the block atlas uv under
+         * the stain's middle with its change per block along that axis and up.
+         */
+        long plant;
+        float pax, paz, atlasU, atlasV, dudA, dvdA, dudU, dvdU;
+        /** The block it last looked at for a plant on its way (each block once). */
+        long lastPlant;
+        /** The body it came out of (its own blood does not stain it at once), -1 none. */
+        int source;
+        /** In {@link #stains} (landed blood other drops may run into). */
+        boolean listed;
     }
 
     /**
@@ -192,6 +234,16 @@ final class ImpactParticles {
     private int budget = CAPACITY;
     /** Ticks since the pool was made: the stains' occasional checks run on it (their age jumps in the rain). */
     private int ticks;
+    /** Landed blood on faces that drops landing near by may run into (pools). */
+    private final List<Debris> stains = new ArrayList<>();
+    /** The body the pieces handed out now come out of (set round a hit on a body), -1 none. */
+    private int source = -1;
+    /** What stains bodies flying blood strikes (the decal module, through Impacts), null = nothing does. */
+    Impacts.BodyStains bodySink;
+    /** Bodies near this tick's flying blood, and the box the last tick's flying blood was in. */
+    private final List<Entity> bodies = new ArrayList<>();
+    private double flyMinX, flyMinY, flyMinZ, flyMaxX, flyMaxY, flyMaxZ;
+    private boolean flying, flyingNext;
 
     ImpactParticles() {
         for (int i = 0; i < CAPACITY; i++) {
@@ -209,7 +261,7 @@ final class ImpactParticles {
         // the oldest gives way, but a stain (blood lying on a face) is passed over a few times: a burst of debris must
         // not wipe the walls clean
         Debris d = null;
-        for (int tries = 0; tries < 8 && (d == null || d.alive && d.resting && d.face >= 0); tries++) {
+        for (int tries = 0; tries < 8 && (d == null || d.alive && d.resting && (d.face >= 0 || d.kind == PLANT)); tries++) {
             if (nextDebris >= Math.min(budget, CAPACITY)) nextDebris = 0;
             d = debris[nextDebris++];
         }
@@ -237,7 +289,19 @@ final class ImpactParticles {
         d.washRate = 0;
         d.wash = 0;
         d.dry = 120;
+        d.blood = null;
+        d.kind = SPLAT;
+        d.grow = 0;
+        d.merged = d.overflowed = 0;
+        d.windBits = 0;
+        d.lastPlant = Long.MIN_VALUE;
+        d.source = source;
         return d;
+    }
+
+    /** The body the pieces handed out from now on come out of (-1: none); set round a hit on a body. */
+    void source(int entityId) {
+        source = entityId;
     }
 
     /** A cloud: the oldest gives way when all are taken. */
@@ -334,12 +398,16 @@ final class ImpactParticles {
         fluids = settings.fluidPhysics;
         budget = settings.qualityLevel().budget;
         ticks++;
+        if (ticks % 20 == 0) pruneStains();
+        findBodies(level);
+        flyingNext = false;
         liveDebris = 0;
         for (Debris d : debris) {
             if (!d.alive) continue;
             tickDebris(level, d, windX, windZ);
             if (d.alive) liveDebris++;
         }
+        flying = flyingNext;
         liveClouds = 0;
         for (Cloud c : clouds) {
             if (!c.alive) continue;
@@ -372,6 +440,10 @@ final class ImpactParticles {
             return;
         }
         if (d.resting) {
+            if (d.fluid == BLOOD && d.kind == PLANT) {
+                tickPlantStain(level, d);
+                return;
+            }
             if (d.face >= 0) {
                 tickStain(level, d);
                 return;
@@ -438,6 +510,11 @@ final class ImpactParticles {
         // a dusty chunk in flight leaves a streak of powder behind it
         if (dustOn && now == 0 && d.trail > 0 && d.age % 3 == 0 && d.vx * d.vx + d.vy * d.vy + d.vz * d.vz > 0.004f) {
             puff(d.x, d.y, d.z, d.trail, 0.05f, 0.14f, 10 + d.age % 7, d.dustRgb, d.light, d.age * 0.37f + d.size);
+        }
+        if (d.fluid == BLOOD && now == 0 && d.blood != null) {
+            // blood in the air: a body in its way, a plant it goes through
+            flown(d);
+            if (hitBody(d) || onPlant(level, d)) return;
         }
         if (d.floating) {
             d.x += d.vx;
@@ -748,6 +825,11 @@ final class ImpactParticles {
             d.alive = false;
             return;
         }
+        // into blood already lying there: it runs together with it (a pool grows)
+        if (merge(level, d, face)) {
+            d.alive = false;
+            return;
+        }
         d.resting = true;
         d.face = (byte) face.ordinal();
         d.landed = d.age;
@@ -763,7 +845,14 @@ final class ImpactParticles {
         }
         d.washed = rainAt(level, d, face);
         d.light = light(level, d.x + nx * 0.1, d.y + ny * 0.1, d.z + nz * 0.1);
-        if (!clip(level, d)) d.alive = false;
+        d.kind = SPLAT;
+        d.grow = d.splat;
+        d.windBits = leafWind(level, d, face);
+        if (!clip(level, d)) {
+            d.alive = false;
+            return;
+        }
+        list(d);
     }
 
     /**
@@ -773,8 +862,10 @@ final class ImpactParticles {
     private static boolean clip(ClientLevel level, Debris d) {
         Direction face = DIRECTIONS[d.face];
         int a = face.getAxis().ordinal(), sa = BlockFaces.sAxis(face), ta = BlockFaces.tAxis(face);
-        // the splat's quad reaches 1.35 × its radius (× 1.2 washed), along its long axis × its stretch
-        float along = d.splat * 1.2f * 1.35f * d.stretch, across = d.splat * 1.2f * 1.35f;
+        // the splat's quad reaches 1.35 × its radius (× 1.2 washed), along its long axis × its stretch; a pool as far as it
+        // is creeping out to (the window must not cut it where the surface goes on)
+        float radius = Math.max(d.splat, d.grow);
+        float along = radius * 1.2f * 1.35f * d.stretch, across = radius * 1.2f * 1.35f;
         float ux = d.sx, uy = d.sy, uz = d.sz;
         float nx = face.getStepX(), ny = face.getStepY(), nz = face.getStepZ();
         float vx = ny * uz - nz * uy, vy = nz * ux - nx * uz, vz = nx * uy - ny * ux;
@@ -786,9 +877,37 @@ final class ImpactParticles {
             else reachT = Math.max(reachT, d.runMax + 0.01f);
         }
         if (d.clip == null) d.clip = new float[MAX_CLIPS * 4];
+        if (d.edges == null) d.edges = new byte[MAX_CLIPS];
         double plane = coordinate(d, a);
         d.clips = (byte) BlockFaces.surface(level, face, plane, coordinate(d, sa), coordinate(d, ta), reachS + 0.01f, reachT + 0.01f, d.clip);
+        for (int r = 0; r < d.clips; r++) {
+            int mask = 0;
+            for (int e = 0; e < 4; e++) {
+                if (exposed(d.clip, d.clips, r, e, (e & 1) == 0 ? reachS + 0.01f : reachT + 0.01f)) mask |= 1 << e;
+            }
+            d.edges[r] = (byte) mask;
+        }
         return d.clips > 0;
+    }
+
+    /**
+     * Whether edge {@code e} (s0, t0, s1, t1) of rectangle {@code r} is a real edge of the surface: not where the search
+     * window ({@code reach}) cut it, not (for the most part) shared with a neighbouring rectangle that carries the surface
+     * on (rendering spec §19: blood stops at real edges only).
+     */
+    private static boolean exposed(float[] clip, int count, int r, int e, float reach) {
+        float v = clip[r * 4 + e];
+        if (Math.abs(v) >= reach - 1e-4f) return false;
+        boolean sEdge = (e & 1) == 0;
+        float lo = clip[r * 4 + (sEdge ? 1 : 0)], hi = clip[r * 4 + (sEdge ? 3 : 2)];
+        int opposite = (e + 2) % 4;
+        float covered = 0;
+        for (int q = 0; q < count; q++) {
+            if (q == r || Math.abs(clip[q * 4 + opposite] - v) > 1e-3f) continue;
+            float qlo = clip[q * 4 + (sEdge ? 1 : 0)], qhi = clip[q * 4 + (sEdge ? 3 : 2)];
+            covered += Math.max(0, Math.min(hi, qhi) - Math.max(lo, qlo));
+        }
+        return covered < 0.9f * (hi - lo);
     }
 
     private static double coordinate(Debris d, int axis) {
@@ -847,11 +966,17 @@ final class ImpactParticles {
             drop.rgb = d.rgb;
             drop.light = d.light;
             drop.dustRgb = d.dustRgb;
+            drop.blood = d.blood;
             drop.density = 1.06f;
             drop.a = drop.b = drop.c = drop.pa = drop.pb = drop.pc = 0;
             drop.va = drop.vb = drop.vc = 0;
             // a full pool may hand out this very stain: then it is the drop now
             if (drop == d) return;
+        }
+        // a pool creeps out to the size the drops that ran into it make
+        if (d.splat < d.grow) {
+            float spread = d.blood != null ? d.blood.poolSpread : 1.6f;
+            d.splat = Math.min(d.grow, d.splat + (d.grow - d.splat) * 3f / Math.max(1, spread * 20) + 0.0003f);
         }
         int phase = ticks + d.landed;
         if (phase % 10 == 0) {
@@ -860,12 +985,309 @@ final class ImpactParticles {
                 d.alive = false;
                 return;
             }
+            if (d.kind == POOL && face == Direction.UP) overflow(level, d);
             if (phase % 40 == 0) {
                 d.washed = rainAt(level, d, face);
                 d.light = light(level, d.x + face.getStepX() * 0.1, d.y + face.getStepY() * 0.1, d.z + face.getStepZ() * 0.1);
             }
         }
         // rain washes a stain out faster: it ages × (1 + its wash rate)
+        if (d.washed && d.washRate > 0) {
+            d.wash += d.washRate;
+            int extra = (int) d.wash;
+            d.age += extra;
+            d.wash -= extra;
+        }
+    }
+
+    // ---- pools, plants, bodies (rendering spec §19) ----------------------------------------------------------------
+
+    /**
+     * A drop landing within reach of blood already lying on the same face runs into it: the stain grows by the drop's
+     * area (at most its data's {@code poolMax} in radius), creeping out to it over a moment ({@link #tickStain}); on a floor it
+     * rounds into a pool. Its middle shifts a little towards where the drop landed, it is wet again and lives on.
+     */
+    private boolean merge(ClientLevel level, Debris d, Direction face) {
+        ImpactData.Blood b = d.blood;
+        if (b == null || b.poolMerge <= 0) return false;
+        int a = face.getAxis().ordinal();
+        double plane = coordinate(d, a);
+        boolean floor = face == Direction.UP;
+        Debris best = null;
+        double bestDistance = Double.MAX_VALUE;
+        for (Debris o : stains) {
+            if (o == d || !o.alive || !o.resting || o.fluid != BLOOD || o.kind == PLANT || o.face != face.ordinal()) continue;
+            if (Math.abs(coordinate(o, a) - plane) > 0.02) continue;
+            double dx = d.x - o.x, dy = d.y - o.y, dz = d.z - o.z;
+            double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            // on a wall drops run rather than gather: only right on top of each other
+            double reach = Math.max(o.splat, o.grow) * b.poolMerge * (floor ? 1 : 0.5);
+            if (distance < reach && distance < bestDistance) {
+                best = o;
+                bestDistance = distance;
+            }
+        }
+        if (best == null) return false;
+        float r0 = Math.max(best.grow, best.splat), add = d.splat * 0.85f;
+        float grown = (float) Math.sqrt(r0 * r0 + add * add);
+        float most = Math.max(r0, b.poolMax);
+        float w = add * add / (r0 * r0 + add * add) * 0.5f;
+        best.x += (d.x - best.x) * w;
+        best.y += (d.y - best.y) * w;
+        best.z += (d.z - best.z) * w;
+        best.px = best.x;
+        best.py = best.y;
+        best.pz = best.z;
+        best.grow = Math.min(most, grown);
+        if (best.merged < 100) best.merged++;
+        if (floor) {
+            best.kind = POOL;
+            best.stretch = 1 + (best.stretch - 1) * 0.6f;
+        }
+        // fresh blood on it: wet again, and it stays
+        best.landed = best.age;
+        best.life = Math.max(best.life, best.age + d.stain);
+        if (!clip(level, best)) best.alive = false;
+        return true;
+    }
+
+    private void list(Debris d) {
+        if (d.listed) return;
+        d.listed = true;
+        stains.add(d);
+    }
+
+    /** Drops what no longer lies anywhere from {@link #stains} (dried, recycled into another piece). */
+    private void pruneStains() {
+        stains.removeIf(d -> {
+            boolean gone = !d.alive || !d.resting || d.fluid != BLOOD || d.face < 0;
+            if (gone) d.listed = false;
+            return gone;
+        });
+    }
+
+    /** The wind bits of a leaf block the stain lies on (the canopy rustles, the stain with it), 0 otherwise. */
+    private int leafWind(ClientLevel level, Debris d, Direction face) {
+        probe.set(d.x - face.getStepX() * 0.01, d.y - face.getStepY() * 0.01, d.z - face.getStepZ() * 0.01);
+        BlockState state = level.getBlockState(probe);
+        if (state.isAir()) return 0;
+        int bits = PlantWind.bits(Minecraft.getInstance().getBlockRenderer().getBlockModelShaper().getParticleIcon(state));
+        return PlantWind.mode(bits) == PlantWind.LEAVES ? bits : 0;
+    }
+
+    /**
+     * A pool on a floor grown past its data's {@code overflow} × {@code poolMax}, reaching a real edge of the floor: it runs
+     * over it and down the side below (a run), once per side.
+     */
+    private void overflow(ClientLevel level, Debris d) {
+        ImpactData.Blood b = d.blood;
+        if (b == null || b.overflow <= 0 || d.grow < b.overflow * b.poolMax || d.edges == null) return;
+        float reach = d.splat * 0.92f;
+        for (int r = 0; r < d.clips; r++) {
+            for (int e = 0; e < 4; e++) {
+                if ((d.edges[r] >> e & 1) == 0 || (d.overflowed >> e & 1) != 0) continue;
+                float limit = d.clip[r * 4 + e];
+                if (Math.abs(limit) > reach) continue;
+                boolean sEdge = (e & 1) == 0;
+                float lo = d.clip[r * 4 + (sEdge ? 1 : 0)] + 0.03f, hi = d.clip[r * 4 + (sEdge ? 3 : 2)] - 0.03f;
+                if (lo > hi) continue;
+                float across = Mth.clamp(0, lo, hi);
+                d.overflowed |= (byte) (1 << e);
+                spill(level, d, sEdge, e >= 2, limit, across);
+                return;
+            }
+        }
+    }
+
+    /** A run from a pool's edge down the side of the block below it (an UP face: s is x, t is z). */
+    private void spill(ClientLevel level, Debris pool, boolean alongS, boolean positive, float limit, float across) {
+        Direction side = alongS ? (positive ? Direction.EAST : Direction.WEST) : (positive ? Direction.SOUTH : Direction.NORTH);
+        double x = alongS ? pool.x + limit : pool.x + across, z = alongS ? pool.z + across : pool.z + limit;
+        Debris drop = debris(budget);
+        if (drop == pool) return;
+        drop.x = drop.px = x;
+        drop.y = drop.py = pool.y - 0.012;
+        drop.z = drop.pz = z;
+        drop.vx = drop.vz = 0;
+        drop.vy = -0.15f;
+        drop.size = 0.018f;
+        drop.shape = pool.shape;
+        drop.fluid = BLOOD;
+        drop.collide = true;
+        drop.stain = Math.max(20, pool.life - pool.age);
+        // it always runs: the pool keeps feeding it
+        drop.runs = 1;
+        drop.washRate = pool.washRate;
+        drop.dry = pool.dry;
+        drop.rgb = pool.rgb;
+        drop.light = pool.light;
+        drop.dustRgb = pool.dustRgb;
+        drop.blood = pool.blood;
+        drop.source = -1;
+        drop.life = 400;
+        stick(level, drop, side, alongS ? x : z);
+    }
+
+    /** Grows the box this tick's flying blood is in (the next tick looks for bodies there). */
+    private void flown(Debris d) {
+        if (!flyingNext) {
+            flyMinX = flyMaxX = d.x;
+            flyMinY = flyMaxY = d.y;
+            flyMinZ = flyMaxZ = d.z;
+            flyingNext = true;
+            return;
+        }
+        flyMinX = Math.min(flyMinX, d.x);
+        flyMinY = Math.min(flyMinY, d.y);
+        flyMinZ = Math.min(flyMinZ, d.z);
+        flyMaxX = Math.max(flyMaxX, d.x);
+        flyMaxY = Math.max(flyMaxY, d.y);
+        flyMaxZ = Math.max(flyMaxZ, d.z);
+    }
+
+    /** The living bodies round last tick's flying blood (not the camera's own body in first person). */
+    private void findBodies(ClientLevel level) {
+        bodies.clear();
+        if (!flying || bodySink == null) return;
+        Minecraft mc = Minecraft.getInstance();
+        Entity self = mc.options.getCameraType().isFirstPerson() ? mc.getCameraEntity() : null;
+        AABB box = new AABB(flyMinX, flyMinY, flyMinZ, flyMaxX, flyMaxY, flyMaxZ).inflate(1.5);
+        if (box.getSize() > 96) return;
+        for (Entity e : level.getEntities((Entity) null, box, e -> e instanceof LivingEntity && e.isAlive() && !e.isSpectator())) {
+            if (e == self) continue;
+            bodies.add(e);
+            if (bodies.size() >= MAX_BODIES) break;
+        }
+    }
+
+    /** A drop of blood flying into another body (not its own, at once): it stains it where it strikes, and is gone. */
+    private boolean hitBody(Debris d) {
+        if (bodies.isEmpty() || d.blood.bodies <= 0 || d.blood.bodyDecal == null || d.blood.bodyDecal.isEmpty()) return false;
+        Vec3 from = new Vec3(d.x, d.y, d.z), to = new Vec3(d.x + d.vx, d.y + d.vy, d.z + d.vz);
+        for (Entity body : bodies) {
+            if (body.getId() == d.source && d.age < 12) continue;
+            AABB box = body.getBoundingBox().inflate(0.04);
+            Optional<Vec3> at = box.contains(from) ? Optional.of(from) : box.clip(from, to);
+            if (at.isEmpty()) continue;
+            float chance = (d.size * 7919 + d.age * 0.618f + body.getId() * 0.37f) % 1;
+            if (chance > d.blood.bodies) return false;
+            Vec3 dir = to.subtract(from);
+            if (dir.lengthSqr() < 1e-8) dir = new Vec3(0, -1, 0);
+            if (bodySink.stain(body, at.get(), dir.normalize(), d.blood.bodyDecal, d.size)) {
+                d.alive = false;
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
+    /**
+     * A drop of blood going through a plant the wind bends (grass, flowers, crops — no collision box): with its data's
+     * {@code plants} chance it sticks to one of the plant's quads where it passes, as a stain on its blades
+     * ({@link #PLANT}): the plant's own texture cuts it, and the wind and bodies move it with the plant.
+     */
+    private boolean onPlant(ClientLevel level, Debris d) {
+        if (d.blood.plants <= 0) return false;
+        probe.set(d.x, d.y, d.z);
+        long key = probe.asLong();
+        if (key == d.lastPlant) return false;
+        d.lastPlant = key;
+        BlockState state = level.getBlockState(probe);
+        if (state.isAir() || !state.getFluidState().isEmpty() || !state.getCollisionShape(level, probe).isEmpty()) return false;
+        float chance = (d.size * 3571 + d.age * 0.618f + (key & 1023) * 0.0137f) % 1;
+        if (chance > d.blood.plants) return false;
+        Vec3 offset = state.getOffset(probe);
+        float qx = (float) (d.x - probe.getX() - offset.x), qy = (float) (d.y - probe.getY() - offset.y), qz = (float) (d.z - probe.getZ() - offset.z);
+        List<BlockModelPart> parts = Minecraft.getInstance().getBlockRenderer().getBlockModel(state).collectParts(RandomSource.create(key));
+        BakedQuad best = null;
+        float bestDistance = 0.2f;
+        for (BlockModelPart part : parts) {
+            for (BakedQuad quad : part.getQuads(null)) {
+                if (PlantWind.mode(PlantWind.bits(quad.sprite())) != PlantWind.BEND) continue;
+                float distance = planeDistance(quad.vertices(), qx, qy, qz);
+                if (distance < bestDistance) {
+                    best = quad;
+                    bestDistance = distance;
+                }
+            }
+        }
+        if (best == null || d.stain <= 0) return false;
+        int[] v = best.vertices();
+        // the quad: corner 0, its edges to corners 1 and 3 (a rectangle), and which of them is the level one
+        float x0 = Float.intBitsToFloat(v[0]), y0 = Float.intBitsToFloat(v[1]), z0 = Float.intBitsToFloat(v[2]);
+        float u0 = Float.intBitsToFloat(v[4]), w0 = Float.intBitsToFloat(v[5]);
+        float ax = Float.intBitsToFloat(v[8]) - x0, ay = Float.intBitsToFloat(v[9]) - y0, az = Float.intBitsToFloat(v[10]) - z0;
+        float au = Float.intBitsToFloat(v[12]) - u0, aw = Float.intBitsToFloat(v[13]) - w0;
+        float bx = Float.intBitsToFloat(v[24]) - x0, by = Float.intBitsToFloat(v[25]) - y0, bz = Float.intBitsToFloat(v[26]) - z0;
+        float bu = Float.intBitsToFloat(v[28]) - u0, bw = Float.intBitsToFloat(v[29]) - w0;
+        float la = ax * ax + ay * ay + az * az, lb = bx * bx + by * by + bz * bz;
+        if (la < 1e-6f || lb < 1e-6f) return false;
+        // the point on the quad (its parameters along the two edges), the uv there
+        float px = qx - x0, py = qy - y0, pz = qz - z0;
+        float pa = Mth.clamp((px * ax + py * ay + pz * az) / la, 0.04f, 0.96f), pb = Mth.clamp((px * bx + py * by + pz * bz) / lb, 0.04f, 0.96f);
+        boolean aLevel = Math.abs(ay) < Math.abs(by);
+        float hx = aLevel ? ax : bx, hz = aLevel ? az : bz, hl = (float) Math.sqrt(aLevel ? la : lb);
+        float uLen = (float) Math.sqrt(aLevel ? lb : la), upSign = Math.signum(aLevel ? by : ay);
+        d.x = probe.getX() + offset.x + x0 + pa * ax + pb * bx;
+        d.y = probe.getY() + offset.y + y0 + pa * ay + pb * by;
+        d.z = probe.getZ() + offset.z + z0 + pa * az + pb * bz;
+        d.px = d.x;
+        d.py = d.y;
+        d.pz = d.z;
+        d.pax = hx / hl;
+        d.paz = hz / hl;
+        d.atlasU = u0 + pa * au + pb * bu;
+        d.atlasV = w0 + pa * aw + pb * bw;
+        d.dudA = (aLevel ? au : bu) / hl;
+        d.dvdA = (aLevel ? aw : bw) / hl;
+        d.dudU = (aLevel ? bu : au) / uLen * upSign;
+        d.dvdU = (aLevel ? bw : aw) / uLen * upSign;
+        d.plant = key;
+        d.windBits = PlantWind.bits(best.sprite());
+        d.kind = PLANT;
+        d.face = -1;
+        d.vx = d.vy = d.vz = 0;
+        d.resting = true;
+        d.splat = d.size * 1.5f;
+        d.grow = d.splat;
+        d.stretch = 1;
+        d.landed = d.age;
+        d.life = d.age + d.stain;
+        d.run = d.runMax = 0;
+        d.drip = 0;
+        d.washed = level.isRaining() && level.isRainingAt(probe.above());
+        d.light = light(level, d.x, d.y, d.z);
+        return true;
+    }
+
+    /** Distance (blocks) from the point to the plane of a quad's vertex data, or MAX when it lies beyond the quad. */
+    private static float planeDistance(int[] v, float qx, float qy, float qz) {
+        float x0 = Float.intBitsToFloat(v[0]), y0 = Float.intBitsToFloat(v[1]), z0 = Float.intBitsToFloat(v[2]);
+        float ax = Float.intBitsToFloat(v[8]) - x0, ay = Float.intBitsToFloat(v[9]) - y0, az = Float.intBitsToFloat(v[10]) - z0;
+        float bx = Float.intBitsToFloat(v[24]) - x0, by = Float.intBitsToFloat(v[25]) - y0, bz = Float.intBitsToFloat(v[26]) - z0;
+        float nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+        float nl = (float) Math.sqrt(nx * nx + ny * ny + nz * nz);
+        float la = ax * ax + ay * ay + az * az, lb = bx * bx + by * by + bz * bz;
+        if (nl < 1e-6f || la < 1e-6f || lb < 1e-6f) return Float.MAX_VALUE;
+        float px = qx - x0, py = qy - y0, pz = qz - z0;
+        float a = (px * ax + py * ay + pz * az) / la, b = (px * bx + py * by + pz * bz) / lb;
+        if (a < -0.05f || a > 1.05f || b < -0.05f || b > 1.05f) return Float.MAX_VALUE;
+        return Math.abs(px * nx + py * ny + pz * nz) / nl;
+    }
+
+    /** Blood on a plant: dries, washes out in the rain, and goes with the plant (broken, cut, trampled flat). */
+    private void tickPlantStain(ClientLevel level, Debris d) {
+        if ((ticks + d.landed) % 20 == 0) {
+            probe.set(BlockPos.getX(d.plant), BlockPos.getY(d.plant), BlockPos.getZ(d.plant));
+            BlockState state = level.getBlockState(probe);
+            if (state.isAir() || !state.getCollisionShape(level, probe).isEmpty()) {
+                d.alive = false;
+                return;
+            }
+            d.washed = level.isRaining() && level.isRainingAt(probe.above());
+            d.light = light(level, d.x, d.y, d.z);
+        }
         if (d.washed && d.washRate > 0) {
             d.wash += d.washRate;
             int extra = (int) d.wash;

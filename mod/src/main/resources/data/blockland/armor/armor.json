@@ -1,0 +1,24 @@
+{
+  "comment": "Body armour (VIEWMODEL_SPEC section 50). A plate carrier (blockland:vest, chest slot) holds up to `maxPlates` armour plates (blockland:armor_plate). Of a hit of a covered kind, `covers` (damage type id, or #tag) gives the share the armour takes: that share wears the plates down first, the last inserted (outermost) first, each with `plateDurability` points; a plate worn down to `replaceBelow` of that or less is swapped for the next plate put in (before a free slot is used); what gets past the plates is cut by the vest's own `vestProtection`; the rest of the hit goes straight through. `headshotsBypass`: a headshot ignores the armour. A plate goes in after `insertSeconds` (left-click with a plate in hand, the vest on), the view dipping `insertDip` degrees.",
+  "maxPlates": 3,
+  "plateDurability": 10,
+  "replaceBelow": 0.5,
+  "vestProtection": 0.1,
+  "headshotsBypass": false,
+  "insertSeconds": 1.1,
+  "insertDip": 14,
+  "handling": {"weight": 0.7, "sway": 1.1, "bob": 1.05, "inertia": 0.9, "sprintOut": 0.15, "tacticalSprint": 3.0, "adsTilt": 0},
+  "covers": {
+    "blockland:bullet": 1.0,
+    "blockland:knife": 0.6,
+    "blockland:throwing_knife": 0.8,
+    "blockland:frag": 0.7,
+    "blockland:bomb": 0.5,
+    "blockland:monster_blast": 0.7,
+    "blockland:grenade": 0.7,
+    "#minecraft:is_explosion": 0.7,
+    "#minecraft:is_projectile": 0.8,
+    "minecraft:player_attack": 0.5,
+    "minecraft:mob_attack": 0.5
+  }
+}

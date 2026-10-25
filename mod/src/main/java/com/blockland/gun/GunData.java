@@ -45,11 +45,31 @@ public final class GunData {
         public float waterRange = 2.5f;
         public float lavaRange = 0.3f;
         public float skipAngle = 7;
+        /**
+         * A launched round (a grenade launcher's) instead of a bullet traced at once: it flies, falls and goes off where
+         * it strikes ({@link GunGrenade}); {@link #damage} is then what it does striking someone before it is armed.
+         * Null = a bullet.
+         */
+        @Nullable
+        public Projectile projectile;
 
         /** How this round fares in fluids. */
         public Ballistics.Medium medium() {
             return new Ballistics.Medium(waterRange, lavaRange, skipAngle);
         }
+    }
+
+    /** A launched round: its flight and the blast it ends in. */
+    public static final class Projectile {
+        /** Speed at the muzzle (blocks per second) and how fast it falls (blocks per second squared). */
+        public float speed = 50;
+        public float gravity = 9.8f;
+        /** Blocks from the muzzle before the fuze is armed: nearer, it only strikes (and clunks to the ground). */
+        public float armDistance = 6;
+        /** Seconds before it goes off wherever it is. */
+        public float life = 8;
+        /** The blast: the frag grenade's parameters (equipment.json {@code effect}: radius, innerRadius, damage …). */
+        public com.google.gson.JsonObject blast = new com.google.gson.JsonObject();
     }
 
     /** A magazine attachment: capacity and which guns accept it. */

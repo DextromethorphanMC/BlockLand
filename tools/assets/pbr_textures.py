@@ -1146,7 +1146,9 @@ SET_MODULES = ("pbr_sets_tommy", "pbr_sets_ks3", "pbr_sets_usp", "pbr_sets_dagge
                "pbr_sets_neon", "pbr_sets_karambit", "pbr_sets_equipment",
                "pbr_sets_bomb", "pbr_sets_camos",
                "pbr_sets_uzi", "pbr_sets_p90", "pbr_sets_mp5", "pbr_sets_sten", "pbr_sets_ssg08", "pbr_sets_calico", "pbr_sets_scar", "pbr_sets_m4a1", "pbr_sets_jackhammer",
-               "pbr_sets_crowbar", "pbr_sets_knuckles")
+               "pbr_sets_crowbar", "pbr_sets_knuckles",
+               "pbr_sets_handcannon", "pbr_sets_vector", "pbr_sets_baton", "pbr_sets_ammo_crate", "pbr_sets_blood",
+               "pbr_sets_deagle", "pbr_sets_revolver", "pbr_sets_armor")
 
 
 def _load_set_modules():

@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/revolver_held",
+  "textures": {
+    "0": "blockland:item/revolver_held_gold_beads",
+    "particle": "blockland:item/revolver_held_gold_beads"
+  }
+}

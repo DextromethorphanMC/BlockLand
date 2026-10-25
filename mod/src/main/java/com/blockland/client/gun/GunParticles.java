@@ -7,8 +7,7 @@ import com.blockland.craft.CraftData;
 import com.blockland.gun.GunContent;
 import com.blockland.gun.GunData;
 import com.blockland.gun.GunStats;
-import com.blockland.movement.SlideRules;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Camera;
@@ -114,9 +113,7 @@ final class GunParticles {
      * ({@code left}: the left hand's gun, asset spec §26).
      */
     static Vec3 thirdPersonMuzzle(Player player, float partialTick, boolean left) {
-        Vec3 eye = Slides.isSliding(player)
-                ? player.getPosition(partialTick).add(0, SlideRules.get().eyeHeight * player.getScale(), 0)
-                : player.getEyePosition(partialTick);
+        Vec3 eye = BodyActions.eyePosition(player, partialTick);
         Vec3 look = player.getViewVector(partialTick);
         float yaw = (float) Math.toRadians(player.getViewYRot(partialTick));
         Vec3 right = new Vec3(-Math.cos(yaw), 0, -Math.sin(yaw));

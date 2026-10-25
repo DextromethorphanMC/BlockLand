@@ -53,6 +53,11 @@ public final class ClientEquipmentEffects {
         }
     }
 
+    /** A blast with no thrown item behind it (an infected creeper going off): the frag's fire, smoke, light and shake. */
+    public static void explosion(ClientLevel level, Vec3 at) {
+        Blast.frag(level, at);
+    }
+
     /** Every client tick while the thrown entity is an active area (smoke, fire); {@code activeTicks} counts up from 0. */
     public static void tickActive(Entity thrown, String kind, JsonObject params, int activeTicks) {
         switch (kind) {

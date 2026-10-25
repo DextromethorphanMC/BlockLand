@@ -158,17 +158,17 @@ public final class Decals {
      * @param from  where the attack came from (the attacker's eye)
      * @param point where it struck the entity
      * @param along direction the decal's length follows, null = random rotation
+     * @return whether it went on (blood flying past a body's model flies on)
      */
-    public static void onEntity(String typeId, Entity target, Vec3 from, Vec3 point, @Nullable Vec3 along) {
+    public static boolean onEntity(String typeId, Entity target, Vec3 from, Vec3 point, @Nullable Vec3 along) {
         DecalTypes.Type type = DecalTypes.get(typeId);
         ClientLevel world = Minecraft.getInstance().level;
-        if (type == null || world == null || !target.isAlive()) return;
+        if (type == null || world == null || !target.isAlive()) return false;
         Vec3 dir = point.subtract(from);
-        if (dir.lengthSqr() < 1e-6) return;
+        if (dir.lengthSqr() < 1e-6) return false;
         BodySurface.ModelAnchor onModel = BodySurface.onModel(target, from, dir.normalize());
         if (onModel != null) {
-            onModel(type, world, target, onModel, along);
-            return;
+            return onModel(type, world, target, onModel, along);
         }
         BodySurface.Anchor anchor = BodySurface.anchor(target, from, dir.normalize());
         // the cut direction in part space, sized in part units (humanoid parts are scaled with the entity)
@@ -185,20 +185,21 @@ public final class Decals {
         float[] rect = {b[sAxis], b[tAxis], b[sAxis + 3], b[tAxis + 3]};
         Vector3f centre = new Vector3f(anchor.point()).fma(BODY_LIFT / scale, anchor.normal());
         DecalGeometry.Polygon polygon = layOut(type, centre, anchor.normal(), localAlong, axis, rect, 1 / scale);
-        if (polygon == null) return;
+        if (polygon == null) return false;
         Decal decal = new Decal(type, polygon, new Vector3f(anchor.normal()), world.getGameTime());
         decal.entityId = target.getId();
         decal.part = anchor.part();
         add(world, decal);
+        return true;
     }
 
     /** A body decal on a cube of the drawn model, laid out in the cube's space (model pixels) and clipped to its face. */
-    private static void onModel(DecalTypes.Type type, ClientLevel world, Entity target, BodySurface.ModelAnchor anchor, @Nullable Vec3 along) {
+    private static boolean onModel(DecalTypes.Type type, ClientLevel world, Entity target, BodySurface.ModelAnchor anchor, @Nullable Vec3 along) {
         Matrix4f toWorld = anchor.toWorld();
         // blocks per model pixel here (the entity's scale, a baby's, the 1/16)
         Vector3f scale = toWorld.getScale(new Vector3f());
         float size = (scale.x + scale.y + scale.z) / 3;
-        if (size < 1e-6f) return;
+        if (size < 1e-6f) return false;
         Vec3 localAlong = null;
         if (along != null) {
             Vector3f a = new Matrix4f(toWorld).invert().transformDirection(new Vector3f((float) along.x, (float) along.y, (float) along.z));
@@ -211,12 +212,13 @@ public final class Decals {
         float[] rect = {b[sAxis], b[tAxis], b[sAxis + 3], b[tAxis + 3]};
         Vector3f centre = new Vector3f(anchor.point()).fma(BODY_LIFT / size, normal);
         DecalGeometry.Polygon polygon = layOut(type, centre, normal, localAlong, axis, rect, 1 / size);
-        if (polygon == null) return;
+        if (polygon == null) return false;
         Decal decal = new Decal(type, polygon, new Vector3f(normal), world.getGameTime());
         decal.entityId = target.getId();
         decal.modelPath = anchor.path();
         decal.modelCube = anchor.cube();
         add(world, decal);
+        return true;
     }
 
     @Nullable

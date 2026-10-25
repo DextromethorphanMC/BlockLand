@@ -19,7 +19,7 @@ from gen_items import patch_colours, render_items_icon, write_json
 from glbread import GLTF
 from preview import GUN_DIR, hidden_set, load_materials
 
-GUNS = ("uzi", "p90", "mp5", "sten", "ssg08", "calico", "scar", "m4a1", "jackhammer")
+GUNS = ("uzi", "p90", "mp5", "sten", "ssg08", "calico", "scar", "m4a1", "jackhammer", "vector")
 TEMPLATE = {"pistol": "p9", "smg": "tommy", "rifle": "ak47", "lmg": "rpd", "sniper": "awp", "shotgun": "ks3"}
 UNIT = 0.044                      # metres per item-model unit (the AK's scale)
 ORIGIN = (8.0, 8.95, 7.3)         # gun-space origin in item-model units (as the AK / RPD held models)

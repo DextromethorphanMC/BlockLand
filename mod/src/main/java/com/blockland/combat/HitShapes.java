@@ -1,7 +1,8 @@
 package com.blockland.combat;
 
-import com.blockland.movement.SlideRules;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.ActionState;
+import com.blockland.movement.action.BodyActions;
+import com.blockland.movement.action.BodyBoxes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -13,8 +14,9 @@ import java.util.Optional;
 /**
  * What a shot or a blade can hit on an entity, shared by the gun and knife traces on both sides (the server's hit
  * registration and the attacker's prediction agree). An upright entity is its bounding box, its head the band from a
- * little below the eyes to the top; a sliding player is a low body box along the slide and a head box behind it,
- * matching the third-person slide pose ({@link SlideRules#hitBody} / {@link SlideRules#hitHead}).
+ * little below the eyes to the top; a player in a special movement ({@link BodyActions}: a slide, prone, a dive) is a
+ * low body box along the action's direction and a head box (behind the hips in a slide, ahead lying down), matching its
+ * third-person pose (the action's {@code hitBody} / {@code hitHead} data).
  */
 public final class HitShapes {
     private HitShapes() {
@@ -91,8 +93,11 @@ public final class HitShapes {
 
     /** The entity's hit boxes, each grown by {@code inflate}. */
     public static List<Box> of(Entity entity, double inflate) {
-        float yaw = Slides.slideYaw(entity);
-        if (!Float.isNaN(yaw)) return slideBoxes(entity.position(), yaw, Slides.scaleOf(entity), SlideRules.get(), inflate);
+        ActionState state = BodyActions.state(entity);
+        if (state != null) {
+            return bodyBoxes(entity.position(), state.yaw(), BodyActions.scaleOf(entity), BodyActions.hitBody(state.action()),
+                    BodyActions.hitHead(state.action()), inflate);
+        }
         return List.of(Box.of(entity.getBoundingBox().inflate(inflate), false));
     }
 
@@ -100,7 +105,7 @@ public final class HitShapes {
     @Nullable
     public static Hit clip(Entity entity, Vec3 from, Vec3 to, double inflate) {
         Hit hit = clip(of(entity, inflate), from, to);
-        if (hit == null || Slides.isSliding(entity)) return hit;
+        if (hit == null || BodyActions.isActing(entity)) return hit;
         return new Hit(hit.point(), inHeadBand(entity, hit.point().y));
     }
 
@@ -123,7 +128,7 @@ public final class HitShapes {
     }
 
     /**
-     * The part of the entity a hit at {@code point} struck: the hit box it lies on (a sliding player's body or head), or
+     * The part of the entity a hit at {@code point} struck: the hit box it lies on (an acting player's body or head), or
      * for an upright entity its bounding box — only the head band of it for a head hit. The wound's geometry (the side the
      * round went in, where it comes out) is that part's.
      */
@@ -143,7 +148,7 @@ public final class HitShapes {
             return best;
         }
         Box body = boxes.get(0);
-        if (!head || Slides.isSliding(entity)) return body;
+        if (!head || BodyActions.isActing(entity)) return body;
         AABB box = entity.getBoundingBox().inflate(0.02);
         double bottom = entity.getEyeY() - Math.max(0.12, entity.getBbHeight() * 0.12);
         return Box.of(new AABB(box.minX, Math.min(bottom, box.maxY - 0.1), box.minZ, box.maxX, box.maxY, box.maxZ), true);
@@ -158,16 +163,15 @@ public final class HitShapes {
     }
 
     /**
-     * A sliding player's body (legs and torso, along the slide) and head (behind the hips), from its position.
+     * The body (legs and torso, along the action's direction) and head of a player in a slide, prone or a dive, from
+     * its position.
      *
-     * @param yaw   slide direction (Minecraft yaw)
+     * @param yaw   the action's direction (Minecraft yaw)
      * @param scale the player's size scale
      */
-    public static List<Box> slideBoxes(Vec3 position, float yaw, float scale, SlideRules rules, double inflate) {
+    public static List<Box> bodyBoxes(Vec3 position, float yaw, float scale, BodyBoxes.Body b, BodyBoxes.Head h, double inflate) {
         double rad = Math.toRadians(yaw);
         Vec3 along = new Vec3(-Math.sin(rad), 0, Math.cos(rad));
-        SlideRules.HitBody b = rules.hitBody;
-        SlideRules.HitHead h = rules.hitHead;
         Vec3 bodyCenter = position.add(along.scale((b.forward - b.back) / 2 * scale)).add(0, b.height / 2 * scale, 0);
         Box body = new Box(bodyCenter, b.halfWidth * scale, b.height / 2 * scale, (b.forward + b.back) / 2 * scale, yaw, false);
         Vec3 headCenter = position.add(along.scale(-h.back * scale)).add(0, h.height * scale, 0);

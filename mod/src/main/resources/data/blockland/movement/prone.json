@@ -1,0 +1,24 @@
+{
+  "eyeHeight": 0.4,
+  "crawlSpeed": 0.6,
+  "enterTicks": 7,
+  "exitTicks": 9,
+  "cooldownTicks": 6,
+  "strokeLength": 0.9,
+  "aimSway": 0.45,
+  "camera": {
+    "dropKick": 1.6,
+    "riseKick": 0.8
+  },
+  "hitBody": {
+    "back": 1.05,
+    "forward": 0.35,
+    "height": 0.45,
+    "halfWidth": 0.32
+  },
+  "hitHead": {
+    "back": -0.55,
+    "height": 0.3,
+    "half": 0.22
+  }
+}

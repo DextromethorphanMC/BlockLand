@@ -1,0 +1,147 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "gui"
+        ],
+        "model": {
+          "type": "minecraft:select",
+          "property": "minecraft:custom_model_data",
+          "index": 0,
+          "cases": [
+            {
+              "when": "stainless",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_stainless"
+              }
+            },
+            {
+              "when": "ivory",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_ivory"
+              }
+            },
+            {
+              "when": "gold",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_gold"
+              }
+            },
+            {
+              "when": "aurora",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_magma"
+              }
+            },
+            {
+              "when": "gold_beads",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_gold_beads"
+              }
+            },
+            {
+              "when": "neon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_neon"
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "blockland:item/revolver"
+          }
+        }
+      },
+      {
+        "when": [
+          "firstperson_righthand",
+          "firstperson_lefthand"
+        ],
+        "model": {
+          "type": "minecraft:select",
+          "property": "minecraft:custom_model_data",
+          "index": 0,
+          "cases": [
+            {
+              "when": "stainless",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_held_stainless"
+              }
+            },
+            {
+              "when": "ivory",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_held_ivory"
+              }
+            },
+            {
+              "when": "gold",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_held_gold"
+              }
+            },
+            {
+              "when": "aurora",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_held_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_held_magma"
+              }
+            },
+            {
+              "when": "gold_beads",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_held_gold_beads"
+              }
+            },
+            {
+              "when": "neon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/revolver_held_neon"
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "blockland:item/revolver_held"
+          }
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:special",
+      "base": "blockland:item/revolver_held",
+      "model": {
+        "type": "blockland:weapon",
+        "fit": "blockland:item/revolver_held"
+      }
+    }
+  }
+}

@@ -23,6 +23,14 @@ public final class BLEntities {
             .clientTrackingRange(8)
             .build(key("slime_licker")));
 
+    /** 苦力怕僵尸: the zombie model with a creeper-green skin, swelling while its player burns a fuse. */
+    public static final RegistryObject<EntityType<CreeperZombie>> CREEPER_ZOMBIE = TYPES.register("creeper_zombie", () -> EntityType.Builder
+            .<CreeperZombie>of(CreeperZombie::new, MobCategory.MONSTER)
+            .sized(0.6F, 1.95F)
+            .eyeHeight(1.74F)
+            .clientTrackingRange(8)
+            .build(key("creeper_zombie")));
+
     public static final RegistryObject<EntityType<SlimeShot>> SLIME_SHOT = TYPES.register("slime_shot", () -> EntityType.Builder
             .<SlimeShot>of(SlimeShot::new, MobCategory.MISC)
             .sized(0.3F, 0.3F)
@@ -46,6 +54,14 @@ public final class BLEntities {
                     .updateInterval(1)
                     .build(key("thrown_equipment")));
 
+    /** A launched grenade (a gun firing {@code projectile} ammunition, the hand cannon's 40 mm round; gun module). */
+    public static final RegistryObject<EntityType<com.blockland.gun.GunGrenade>> GUN_GRENADE = TYPES.register("gun_grenade",
+            () -> EntityType.Builder.<com.blockland.gun.GunGrenade>of(com.blockland.gun.GunGrenade::new, MobCategory.MISC)
+                    .sized(0.15F, 0.15F)
+                    .clientTrackingRange(8)
+                    .updateInterval(1)
+                    .build(key("gun_grenade")));
+
     private BLEntities() {
     }
 
@@ -53,6 +69,7 @@ public final class BLEntities {
         TYPES.register(modBus);
         EntityAttributeCreationEvent.getBus(modBus).addListener(event -> {
             event.put(SLIME_LICKER.get(), Zombie.createAttributes().build());
+            event.put(CREEPER_ZOMBIE.get(), Zombie.createAttributes().build());
             event.put(PRACTICE_TARGET.get(), PracticeTarget.createAttributes().build());
         });
     }

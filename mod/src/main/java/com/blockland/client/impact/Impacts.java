@@ -1,13 +1,14 @@
 package com.blockland.client.impact;
 
 import com.blockland.client.render.LightSources;
+import com.blockland.client.render.WeaponBlood;
 import com.blockland.client.render.WaterRipples;
 import com.blockland.client.render.WorldFx;
 import com.blockland.client.settings.ClientSettings;
 import com.blockland.combat.Ballistics;
 import com.blockland.combat.HitShapes;
 import com.blockland.common.Sounds;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -28,6 +29,7 @@ import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -71,6 +73,26 @@ public final class Impacts {
     /** Impact sounds this tick: a shotgun's pellets or a burst land together, a few sounds carry them. */
     private static int soundsThisTick;
     private static final int MAX_SOUNDS_PER_TICK = 3;
+
+    /**
+     * What stains a body that flying blood strikes (rendering spec §19): wired up by the client (the decal module's body
+     * decals), so this module does not depend on it. Returns whether the stain went on (else the drop flies on).
+     */
+    @FunctionalInterface
+    public interface BodyStains {
+        /**
+         * @param at    where the drop struck the body's box
+         * @param dir   the way it was flying (unit)
+         * @param decal the blood's body decal type ({@code impacts.json} {@code bodyDecal})
+         * @param size  the drop's half size (blocks)
+         */
+        boolean stain(Entity body, Vec3 at, Vec3 dir, String decal, float size);
+    }
+
+    /** Wires up what stains bodies struck by flying blood; null = nothing does. */
+    public static void setBodyStains(@Nullable BodyStains stains) {
+        pool.bodySink = stains;
+    }
 
     private Impacts() {
     }
@@ -158,11 +180,16 @@ public final class Impacts {
             Vec3 normal = dir.scale(-0.7).add(side.scale(0.6)).normalize();
             ImpactSpawner.Hit hit = new ImpactSpawner.Hit(at, normal, dir, material, profile, null, rgb, rgb, light);
             ImpactSettings settings = settings();
-            if (settings.blood > 0 && ensureLevel(world)) {
+            // the body the camera is in throws no blood of its own on this screen (the spray and mist would cover the view
+            // as it is hit): only the others see it
+            if (settings.blood > 0 && !ownBody(target) && ensureLevel(world)) {
                 double surface = surfaceOver(world, at);
                 ImpactSpawner.Bleed bleed = new ImpactSpawner.Bleed(motion(target), head, settings.blood, settings.bloodStains);
+                pool.source(target.getId());
                 ImpactSpawner.blood(pool, hit, part.exit(at, dir), env, bleed, surface, scale, settings.qualityLevel().budget,
                         settings.dust, settings.bloodInWater, plainSprite(material), random);
+                pool.source(-1);
+                splashBack(world, at, dir, null, material.blood, profile.energy * settings.blood);
                 // and it goes on bleeding a moment, from where it went in
                 wounds.open(target, at, material.blood, rgb, settings.blood * (head ? material.blood.headMultiplier : 1) * profile.energy);
                 // shot standing in water, the wound just above it: the water splashes, tinged with blood
@@ -339,11 +366,14 @@ public final class Impacts {
         ImpactSpawner.Env env = env(world, at, side, BlockPos.containing(at));
         ImpactSettings settings = settings();
         if (material.blood != null) {
-            if (settings.blood <= 0) return;
+            if (settings.blood <= 0 || ownBody(target)) return;
             ImpactSpawner.Hit hit = new ImpactSpawner.Hit(at, side, motion, material, blade, null, rgb, rgb, light);
+            pool.source(target.getId());
             ImpactSpawner.cut(pool, hit, motion, env, new ImpactSpawner.Bleed(motion(target), head, settings.blood, settings.bloodStains),
                     surfaceOver(world, at), scale, settings.qualityLevel().budget, settings.dust, settings.bloodInWater, plainSprite(material),
                     random);
+            pool.source(-1);
+            splashBack(world, at, motion, from, material.blood, blade.energy * settings.blood);
             wounds.open(target, at, material.blood, rgb, settings.blood * (head ? material.blood.headMultiplier : 1) * blade.energy);
             return;
         }
@@ -448,7 +478,7 @@ public final class Impacts {
 
     /** Whether a hit at {@code at} is on the entity's head (its head box while it slides, else the head band). */
     private static boolean isHead(Entity target, Vec3 at) {
-        if (Slides.isSliding(target)) {
+        if (BodyActions.isActing(target)) {
             for (HitShapes.Box box : HitShapes.of(target, 0.03)) if (box.head() && box.contains(at)) return true;
             return false;
         }
@@ -554,10 +584,36 @@ public final class Impacts {
         mc.getSoundManager().play(new SimpleSoundInstance(event, SoundSource.BLOCKS, volume, pitch, random, at.x, at.y, at.z));
     }
 
+    /** The body the camera is in (the player, or whoever is watched through their eyes): it throws no blood on this screen. */
+    private static boolean ownBody(Entity target) {
+        return target == Minecraft.getInstance().getCameraEntity();
+    }
+
     /** The material's sprite for untextured pieces (drops, blood, bubbles), white concrete when it names none. */
     private static TextureAtlasSprite plainSprite(ImpactData.Material material) {
         ResourceLocation id = material.sprite == null ? null : ResourceLocation.tryParse(material.sprite);
         return Minecraft.getInstance().getTextureAtlas(TextureAtlas.LOCATION_BLOCKS).apply(id == null ? PLAIN : id);
+    }
+
+    /**
+     * Blood splashed back onto the weapon of whoever struck the body (rendering spec §19, the weapon): the player whose eye
+     * the attack came from ({@code from}, a blade) or who looks down the round's line at the wound within the blood's
+     * {@code weaponRange}; a blade's hit leaves its {@code weaponBlade}, a round's less the further off it was fired.
+     */
+    private static void splashBack(ClientLevel world, Vec3 at, Vec3 dir, @Nullable Vec3 from, @Nullable ImpactData.Blood b, float energy) {
+        if (b == null || b.weaponRange <= 0 || energy <= 0) return;
+        for (Player player : world.players()) {
+            if (player.isSpectator()) continue;
+            Vec3 eye = player.getEyePosition();
+            double distance = eye.distanceTo(at);
+            if (distance > b.weaponRange || distance < 1e-3) continue;
+            boolean struck = from != null ? eye.distanceTo(from) < 0.75 : at.subtract(eye).scale(1 / distance).dot(dir) > 0.9;
+            if (!struck) continue;
+            float amount = from != null ? b.weaponBlade : b.weaponRound * (float) (1 - distance / b.weaponRange);
+            WeaponBlood.splash(player, eye.subtract(at), amount * Math.min(1.5f, energy), world.getGameTime(),
+                    Math.round(b.weaponLife * 20), Math.round(b.weaponDry * 20));
+            return;
+        }
     }
 
     /** Keeps the pool to one level and the world effects pass alive there; false without a level. */
@@ -573,6 +629,7 @@ public final class Impacts {
     private static void tick() {
         soundsThisTick = 0;
         ClientLevel world = Minecraft.getInstance().level;
+        if (world != null && world.getGameTime() % 100 == 0) WeaponBlood.prune(world.getGameTime());
         if (world == null || world != level) {
             if (!pool.isEmpty() || !wounds.isEmpty()) clear();
             return;
@@ -608,6 +665,7 @@ public final class Impacts {
     private static void clear() {
         pool.clear();
         wounds.clear();
+        WeaponBlood.clear();
         ImpactCatalog.clearCaches();
         level = null;
         ImpactRenderer.release();

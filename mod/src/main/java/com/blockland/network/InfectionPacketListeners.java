@@ -34,5 +34,13 @@ public final class InfectionPacketListeners {
         void onRole(InfectionPackets.S2CRole role);
 
         void onSkill(InfectionPackets.S2CSkill skill);
+
+        /** A monster's fuse started (or went out). */
+        default void onFuse(InfectionPackets.S2CFuse fuse) {
+        }
+
+        /** A monster blast went off. */
+        default void onBlast(InfectionPackets.S2CBlast blast) {
+        }
     }
 }

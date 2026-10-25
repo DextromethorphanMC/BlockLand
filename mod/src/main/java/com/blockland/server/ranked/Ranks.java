@@ -10,7 +10,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * The ranked ladders (排位) as other server modules see it — the profile tab, the match loading screen, the lobby — the
- * way {@code movement/Slides} is for sliding. Every ranked mode has a ladder of its own: a player's score, tier and place
+ * way {@code movement/action/BodyActions} is for slides and prone. Every ranked mode has a ladder of its own: a player's score, tier and place
  * are always asked for a mode. The ranked service (backend client, matchmaking by score, results) installs the view at
  * start-up; without it everyone is unranked.
  */

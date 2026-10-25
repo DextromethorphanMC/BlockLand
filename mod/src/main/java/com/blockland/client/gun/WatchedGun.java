@@ -15,7 +15,7 @@ import com.blockland.gun.GunData;
 import com.blockland.gun.GunItem;
 import com.blockland.gun.GunState;
 import com.blockland.gun.GunStats;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import com.blockland.network.packet.GunPackets;
 import com.blockland.network.packet.ViewmodelPackets;
 import net.minecraft.client.Camera;
@@ -192,7 +192,7 @@ final class WatchedGun {
         viewmodel.setNextLeft(hand == 0 && gun.dual != null);
         viewmodel.play(Viewmodel.Action.FIRE, clip, length > interval && interval > 0 ? interval * 0.98f : 0);
         viewmodel.fired(stats.kick(), viewmodel.ads.get(), 1 << hand);
-        pendingTracers.add(new PendingTracer(end, hand));
+        if (shot.face() != GunPackets.S2CShot.LAUNCHED) pendingTracers.add(new PendingTracer(end, hand));
         if (gun.ejectEvent.isEmpty()) pendingShells[hand]++;
         return true;
     }
@@ -248,7 +248,7 @@ final class WatchedGun {
         Vec3[] muzzles = new Vec3[2];
         for (int gun = 0; gun < 2; gun++) {
             Matrix4f at = viewmodel.nodeMatrix("muzzle", gun, base, tmp);
-            muzzles[gun] = gun == 1 && at == null ? muzzles[0] : ViewmodelRenderer.viewToWorld(camera, at, Slides.eyePosition(player));
+            muzzles[gun] = gun == 1 && at == null ? muzzles[0] : ViewmodelRenderer.viewToWorld(camera, at, BodyActions.eyePosition(player));
         }
         CraftData.SkinFx skinFx = stats == null ? null : stats.skinFx();
         for (PendingTracer tracer : pendingTracers) {

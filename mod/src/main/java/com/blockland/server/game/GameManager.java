@@ -177,10 +177,13 @@ public final class GameManager {
         return game == null || game.allowBlockPlace(player, pos);
     }
 
-    /** Whether a participant may slide in their match (false for players outside a match: ask {@link #isPlaying} first). */
-    public boolean allowSlide(ServerPlayer player) {
+    /**
+     * Whether a participant may use a movement action in their match (false for players outside a match: ask
+     * {@link #isPlaying} first).
+     */
+    public boolean allowAction(ServerPlayer player, com.blockland.movement.action.MovementAction action) {
         GameInstance game = gameOf(player);
-        return game != null && game.allowSlide(player);
+        return game != null && game.allowAction(player, action);
     }
 
     /** Teams of matches that never cleaned up (the server stopped mid-match) would still tag their players' names. */

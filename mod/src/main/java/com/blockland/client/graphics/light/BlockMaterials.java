@@ -1,6 +1,7 @@
 package com.blockland.client.graphics.light;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.PlantWind;
 import com.blockland.client.render.SceneLighting;
 import com.google.gson.Gson;
 import com.mojang.blaze3d.buffers.Std140Builder;
@@ -22,8 +23,10 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -155,13 +158,17 @@ final class BlockMaterials {
                     rects.add(new Rect(sprite.getU0(), sprite.getV0(), sprite.getU1(), sprite.getV1(), entry, kind));
                 }
             }
+            Map<ResourceLocation, Integer> windBits = new HashMap<>();
             for (Entry entry : entries) {
                 int wind = entry.wind == null ? 0 : entry.wind.bits();
                 if (wind == 0) continue;
                 for (TextureAtlasSprite sprite : sprites(atlas, entry)) {
                     fill(image, sprite, cell, mapWidth, mapHeight, wind << 16, 0xFC << 16);
+                    windBits.put(sprite.contents().name(), wind >> 2);
                 }
             }
+            // the same bits for the CPU: what must move with a plant (blood on it) asks client/render/PlantWind
+            PlantWind.publish(windBits);
             if (map != null) map.close();
             map = RenderSystem.getDevice().createTexture(() -> "BlockLand block materials", GpuTexture.USAGE_TEXTURE_BINDING
                     | GpuTexture.USAGE_COPY_DST, TextureFormat.RGBA8, mapWidth, mapHeight, 1, 1);

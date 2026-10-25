@@ -96,7 +96,9 @@
                 "backMist": 0.9, "exitMist": 2.0, "mistSize": [0.3, 1.1], "mistLife": [0.8, 1.5], "mistOpacity": 0.72, "mistColor": "#9a1414",
                 "fineDrops": 26, "fineSpeed": [8, 16], "fineSize": [0.004, 0.009], "headMultiplier": 1.6, "radial": 0.35,
                 "runs": 0.6, "dryTime": 6, "rainWash": 1.2, "castOff": 12, "castSpeed": [2.2, 5.5], "bleed": 2.5, "bleedRate": 4,
-                "plume": 1.2, "plumeSize": [0.15, 1.6], "plumeLife": [7, 12], "plumeOpacity": 0.9, "plumeColor": "#5a0808", "splashTint": 0.35},
+                "plume": 1.2, "plumeSize": [0.15, 1.6], "plumeLife": [7, 12], "plumeOpacity": 0.9, "plumeColor": "#5a0808", "splashTint": 0.35,
+                "poolMerge": 0.85, "poolMax": 0.42, "poolSpread": 1.6, "overflow": 0.35, "plants": 0.45, "bodyDecal": "blood_spatter", "bodies": 0.8,
+                "weaponRange": 4.5, "weaponBlade": 1.0, "weaponRound": 0.8, "weaponLife": 40, "weaponDry": 8, "deathPool": 10},
       "blockTexture": false, "sprite": "minecraft:block/white_concrete", "blockDustColor": false, "color": "#7a0d0d", "sound": ""
     },
     "metal_armor": {

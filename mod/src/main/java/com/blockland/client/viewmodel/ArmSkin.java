@@ -43,6 +43,8 @@ final class ArmSkin implements AutoCloseable {
     private int[] drawn = new int[0];
     /** Per (generation, mesh): the skinned triangles for the vanilla path. */
     private final Map<Long, List<GltfModel.Primitive>> sources = new HashMap<>();
+    /** Per mesh: its last skinned triangles (what lies on the arm, blood, rides on them: ViewmodelBlood). */
+    private final Map<Integer, List<GltfModel.Primitive>> latest = new HashMap<>();
     @Nullable
     private ByteBuffer staging;
 
@@ -83,6 +85,13 @@ final class ArmSkin implements AutoCloseable {
         }
         modelView.set(base).mul(pose.world[anchor]);
         model.addMesh(draws, mesh, buffer, skinned, modelView, style, blockLight, skyLight, 1);
+        latest.put(mesh, skinned);
+    }
+
+    /** The mesh's vertices as last skinned (anchor space, one primitive per part), or null when it was not drawn. */
+    @Nullable
+    List<GltfModel.Primitive> skinned(int mesh) {
+        return latest.get(mesh);
     }
 
     /**
@@ -251,6 +260,7 @@ final class ArmSkin implements AutoCloseable {
         for (GpuBuffer buffer : buffers) buffer.close();
         buffers.clear();
         sources.clear();
+        latest.clear();
         arms = null;
     }
 }

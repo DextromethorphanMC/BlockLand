@@ -1,4 +1,4 @@
 {
   "replace": false,
-  "values": ["blockland:bullet", "blockland:knife", "blockland:throwing_knife", "blockland:frag", "blockland:molotov", "blockland:bomb"]
+  "values": ["blockland:bullet", "blockland:knife", "blockland:throwing_knife", "blockland:frag", "blockland:molotov", "blockland:bomb", "blockland:monster_blast"]
 }

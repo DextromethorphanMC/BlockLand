@@ -8,15 +8,18 @@ import com.blockland.combat.HitRecords;
 import com.blockland.combat.HitShapes;
 import com.blockland.server.combat.HitHistory;
 import com.blockland.effect.ActionLocks;
+import com.blockland.entity.BLEntities;
 import com.blockland.gun.GunContent;
 import com.blockland.gun.GunData;
+import com.blockland.gun.GunGrenade;
 import com.blockland.gun.GunMath;
 import com.blockland.gun.GunState;
 import com.blockland.gun.GunStats;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.GunPacketListeners;
 import com.blockland.network.packet.GunPackets;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -204,8 +207,23 @@ public final class GunService implements GunPacketListeners.Server {
 
         ServerLevel level = player.level();
         // a sliding shooter's eyes are low (where its camera is)
-        Vec3 eye = Slides.eyePosition(player);
+        Vec3 eye = BodyActions.eyePosition(player);
         int pellets = Math.max(1, stats.ammo().pellets);
+        if (stats.ammo().projectile != null) {
+            // a launched round flies on its own (GunGrenade); the others see the shot, not a tracer or an impact
+            Item roundItem = BuiltInRegistries.ITEM.getValue(BlockLand.id(stats.ammo().item));
+            for (int round = 0; round < shots; round++) {
+                Vec3 dir = GunMath.spreadDirection(yaw, pitch, spread, fire.seed(), round);
+                GunGrenade grenade = new GunGrenade(BLEntities.GUN_GRENADE.get(), level);
+                grenade.launch(player, gun, stats.ammo(), eye.add(dir.scale(0.4)), dir, new ItemStack(roundItem));
+                level.addFreshEntity(grenade);
+                Vec3 ahead = eye.add(dir);
+                BLNetwork.sendToTracking(player, new GunPackets.S2CShot(player.getId(), ahead.x, ahead.y, ahead.z, false,
+                        GunPackets.S2CShot.LAUNCHED, stats.suppressed(), volley ? round : fire.hand()));
+            }
+            playFire(level, player, stats, shots);
+            return;
+        }
         Rewind rewind = rewind(player);
         for (int round = 0; round < shots; round++) {
             // the client numbers a volley's pellets on from the first gun's, with the same seed
@@ -219,13 +237,16 @@ public final class GunService implements GunPacketListeners.Server {
                         shot.face, stats.suppressed(), hand));
             }
         }
+        playFire(level, player, stats, shots);
+    }
+
+    /** Everyone around hears the shots (a suppressed shot carries a quarter as far); the shooter already played them. */
+    private static void playFire(ServerLevel level, ServerPlayer player, GunStats stats, int shots) {
         SoundEvent sound = GunContent.sound(stats.fireSound());
-        if (sound != null) {
-            // everyone around hears it (a suppressed shot carries a quarter as far); the shooter already played it locally
-            for (int round = 0; round < shots; round++) {
-                level.playSound(player, player.getX(), player.getEyeY(), player.getZ(), sound, SoundSource.PLAYERS,
-                        stats.suppressed() ? 1.0F : 4.0F, 0.96F + level.random.nextFloat() * 0.08F);
-            }
+        if (sound == null) return;
+        for (int round = 0; round < shots; round++) {
+            level.playSound(player, player.getX(), player.getEyeY(), player.getZ(), sound, SoundSource.PLAYERS,
+                    stats.suppressed() ? 1.0F : 4.0F, 0.96F + level.random.nextFloat() * 0.08F);
         }
     }
 

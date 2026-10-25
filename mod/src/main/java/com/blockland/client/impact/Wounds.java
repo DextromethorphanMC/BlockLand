@@ -34,6 +34,7 @@ final class Wounds {
         float rate, owed, size;
         int rgb;
         ImpactData.Blood blood;
+        float amount;
     }
 
     private final List<Wound> wounds = new ArrayList<>();
@@ -53,6 +54,7 @@ final class Wounds {
         w.size = 0.8f + 0.2f * Math.min(2, amount);
         w.rgb = rgb;
         w.blood = blood;
+        w.amount = amount;
         if (wounds.size() >= MAX) wounds.remove(0);
         wounds.add(w);
     }
@@ -63,6 +65,12 @@ final class Wounds {
         for (Iterator<Wound> it = wounds.iterator(); it.hasNext(); ) {
             Wound w = it.next();
             Entity target = level.getEntity(w.entity);
+            if (target instanceof LivingEntity living && living.isDeadOrDying() && !target.isSpectator()) {
+                // it died of it: what is left runs out where it lies, into a pool (rendering spec §19)
+                bleedOut(level, pool, w, target, budget, stains, inWater, plain, random);
+                it.remove();
+                continue;
+            }
             if (target == null || !target.isAlive() || target.isSpectator() || --w.ticks <= 0) {
                 it.remove();
                 continue;
@@ -77,6 +85,7 @@ final class Wounds {
             BlockPos pos = BlockPos.containing(at);
             int light = LevelRenderer.getLightColor(level, pos);
             boolean wet = level.getFluidState(pos).is(FluidTags.WATER);
+            pool.source(w.entity);
             while (w.owed >= 1) {
                 w.owed -= 1;
                 if (wet) {
@@ -85,7 +94,29 @@ final class Wounds {
                     ImpactSpawner.bleed(pool, at, motion, w.blood, w.rgb, light, w.size, stains, budget, plain, random);
                 }
             }
+            pool.source(-1);
         }
+    }
+
+    /** A wounded body that died: its data's {@code deathPool} drops fall out of it close to the ground where it lies. */
+    private static void bleedOut(ClientLevel level, ImpactParticles pool, Wound w, Entity target, int budget, float stains,
+                                 boolean inWater, @Nullable TextureAtlasSprite plain, RandomSource random) {
+        int count = Math.round(w.blood.deathPool * Math.min(1.5f, Math.max(0.5f, w.amount)));
+        if (count <= 0) return;
+        Vec3 base = target.position();
+        BlockPos pos = BlockPos.containing(base.x, base.y + 0.3, base.z);
+        int light = LevelRenderer.getLightColor(level, pos);
+        boolean wet = level.getFluidState(pos).is(FluidTags.WATER);
+        pool.source(w.entity);
+        for (int i = 0; i < count; i++) {
+            Vec3 at = base.add((random.nextFloat() - 0.5) * 0.35, 0.25 + random.nextFloat() * 0.25, (random.nextFloat() - 0.5) * 0.35);
+            if (wet) {
+                if (inWater) ImpactSpawner.seep(pool, at, w.blood, light, random);
+            } else {
+                ImpactSpawner.bleed(pool, at, Vec3.ZERO, w.blood, w.rgb, light, w.size * 1.4f, stains, budget, plain, random);
+            }
+        }
+        pool.source(-1);
     }
 
     void clear() {

@@ -7,10 +7,9 @@
 // same look vanilla's water has then. Thin parts (the sheet's ragged rim, small drops) are more transparent; rings on
 // the surface are only the change they make to its reflection and glint; white water is aerated foam. Premultiplied
 // alpha, no emission. Lava (modes 4, 5, drawn opaque): molten rock glowing by its temperature, crusting dark as it
-// cools, writing its glow as emission. Blood (modes 6, 7) is a dark, glossy liquid: drops are spheres with the sky and
-// the sun on their wet film; stains lie on the faces of blocks with a ragged rim and satellite droplets ahead of the way
-// they struck, runs down walls ending in a bead, drying matte and darker. Bubbles (mode 8) are air in water: clear in
-// the middle, bright at the rim where light is bent and reflected, a glint.
+// cools, writing its glow as emission. Blood drops (mode 6) are a dark, glossy liquid: spheres with the sky and the sun
+// on their wet film (blood lying on things is impact_blood's). Bubbles (mode 8) are air in water: clear in the middle,
+// bright at the rim where light is bent and reflected, a glint.
 
 #moj_import <minecraft:fog.glsl>
 #moj_import <minecraft:dynamictransforms.glsl>
@@ -101,16 +100,6 @@ vec3 bloodShade(vec3 n, vec3 albedo, float gloss) {
     vec3 r = reflect(-v, n);
     float glint = pow(max(dot(r, sunDir), 0.0), mix(24.0, 180.0, gloss)) * gloss * (bl_worldLit() ? 2.2 : 0.8);
     return color + sunColor * glint;
-}
-
-// The outward normal of a block face from its Direction ordinal (down, up, north, south, west, east).
-vec3 faceNormal(int face) {
-    if (face == 0) return vec3(0.0, -1.0, 0.0);
-    if (face == 1) return vec3(0.0, 1.0, 0.0);
-    if (face == 2) return vec3(0.0, 0.0, -1.0);
-    if (face == 3) return vec3(0.0, 0.0, 1.0);
-    if (face == 4) return vec3(-1.0, 0.0, 0.0);
-    return vec3(1.0, 0.0, 0.0);
 }
 
 // Molten rock at temperature t (1 white-hot … 0 cold crust); returns colour and (w) emission.
@@ -208,50 +197,6 @@ void main() {
         vec3 n = normalize(impact_right() * uv.x + impact_up() * uv.y + impact_back() * sqrt(1.0 - d2));
         vec3 c = bloodShade(n, tint.rgb, 1.0);
         float alpha = tint.a * (1.0 - smoothstep(0.82, 1.0, d2) * 0.6);
-        fragColor = vec4(fogged(c) * alpha, alpha);
-        return;
-    }
-    if (mode == 7) {
-        // blood on the face of a block: Normal.x = face * 2 (+1 for a run) in sixteenths, .y seed, .z wetness
-        int code = int(normal.x / 0.0625 + 0.5);
-        bool run = (code & 1) == 1;
-        vec3 n = faceNormal(code / 2);
-        float gloss = clamp(normal.z, 0.0, 1.0);
-        float cover;
-        float thick;
-        if (!run) {
-            // the splat, uv in its own frame (+x the way the drop struck), its rim near 1: ragged with lobes and spines
-            float rho = length(uv);
-            float ang = atan(uv.y, uv.x);
-            vec2 around = vec2(cos(ang), sin(ang));
-            float rim = 0.74 + 0.2 * impact_noise(vec3(around * 2.2 + seed, seed * 0.37))
-                    + 0.12 * impact_noise(vec3(around * 7.0, seed + 5.0)) + 0.1 * max(around.x, 0.0);
-            float body = 1.0 - smoothstep(rim - 0.05, rim, rho);
-            // satellite droplets beyond the rim, more of them ahead
-            vec2 grid = uv * 4.5 + seed;
-            vec2 cell = floor(grid);
-            vec2 centre = vec2(impact_hash(vec3(cell, seed + 1.0)), impact_hash(vec3(cell, seed + 2.0))) * 0.6 + 0.2;
-            float dotSize = mix(0.08, 0.2, impact_hash(vec3(cell, seed + 3.0)));
-            float ahead = smoothstep(-0.3, 0.9, uv.x / max(rho, 1e-3));
-            float sat = (1.0 - smoothstep(dotSize * 0.7, dotSize, length(fract(grid) - centre)))
-                    * step(1.0 - 0.4 * ahead, impact_hash(vec3(cell, seed)))
-                    * step(rim + 0.04, rho) * (1.0 - smoothstep(1.15, 1.35, rho));
-            cover = max(body, sat);
-            // a drying stain darkens at its rim (the coffee ring); the middle is the thickest
-            thick = body * (1.0 - smoothstep(0.0, rim, rho) * 0.6);
-            thick += smoothstep(rim - 0.18, rim - 0.04, rho) * body * (1.0 - gloss) * 0.8;
-        } else {
-            // a run down the wall: uv.x across (-1..1), uv.y from the splat (0) down to the tip (1), ending in a bead
-            float w = mix(0.6, 0.25, uv.y) * (0.75 + 0.5 * impact_noise(vec3(uv.y * 5.0, seed, 1.0)));
-            float bead = 1.0 - smoothstep(0.28, 0.4, length(vec2(uv.x * 0.55, (uv.y - 0.9) * 2.6)));
-            cover = max(1.0 - smoothstep(w - 0.12, w, abs(uv.x)), bead) * (1.0 - smoothstep(0.97, 1.0, uv.y));
-            thick = cover * mix(0.5, 1.0, uv.y);
-        }
-        if (cover < 0.02) {
-            discard;
-        }
-        vec3 c = bloodShade(n, tint.rgb * mix(1.05, 0.7, clamp(thick, 0.0, 1.0)), gloss);
-        float alpha = clamp(cover * tint.a * mix(0.72, 0.98, clamp(thick, 0.0, 1.0)), 0.0, 1.0);
         fragColor = vec4(fogged(c) * alpha, alpha);
         return;
     }

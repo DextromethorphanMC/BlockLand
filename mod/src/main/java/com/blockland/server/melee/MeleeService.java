@@ -8,7 +8,7 @@ import com.blockland.effect.ActionLocks;
 import com.blockland.melee.MeleeContent;
 import com.blockland.melee.MeleeData;
 import com.blockland.melee.MeleeTrace;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.MeleePacketListeners;
 import com.blockland.network.packet.MeleePackets;
@@ -101,7 +101,7 @@ public final class MeleeService implements MeleePacketListeners.Server {
                 || player.getInventory().getSelectedSlot() != strike.slot) return;
         MeleeData.Attack attack = knife.attack(strike.heavy);
         ServerLevel level = player.level();
-        MeleeTrace.Hit hit = MeleeTrace.trace(level, player, Slides.eyePosition(player), player.getLookAngle(), attack);
+        MeleeTrace.Hit hit = MeleeTrace.trace(level, player, BodyActions.eyePosition(player), player.getLookAngle(), attack);
         switch (hit.type()) {
             case ENTITY -> {
                 damage(level, player, knife, attack, hit.entity());

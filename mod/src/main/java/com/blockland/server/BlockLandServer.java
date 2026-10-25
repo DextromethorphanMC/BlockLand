@@ -12,7 +12,7 @@ import com.blockland.games.practice.aim.AimPracticeGameType;
 import com.blockland.games.practice.bridge.BridgePracticeGameType;
 import com.blockland.games.skywars.SkyWarsGameType;
 import com.blockland.games.world.WorldGameType;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import com.blockland.network.BLNetwork;
 import com.blockland.server.arena.ArenaService;
 import com.blockland.server.backend.BackendClient;
@@ -40,7 +40,7 @@ import com.blockland.server.matchmaking.MatchmakingService;
 import com.blockland.server.media.MediaRelay;
 import com.blockland.server.melee.MeleeService;
 import com.blockland.server.equipment.EquipmentService;
-import com.blockland.server.movement.SlideService;
+import com.blockland.server.movement.ActionService;
 import com.blockland.server.parachute.ParachuteService;
 import com.blockland.parachute.Parachutes;
 import com.blockland.server.party.PartyService;
@@ -118,8 +118,10 @@ public final class BlockLandServer {
     public final MeleeService meleeService;
     public final EquipmentService equipmentService;
     public final CraftService craft;
-    public final SlideService slides;
+    public final ActionService actions;
     public final ParachuteService parachutes;
+    public final com.blockland.server.supply.AmmoCrateService supply;
+    public final com.blockland.server.armor.ArmorService armor;
     public final com.blockland.server.graffiti.GraffitiService graffiti;
     public final KillTracker kills;
     public final com.blockland.server.spectate.SpectateService spectate;
@@ -181,10 +183,13 @@ public final class BlockLandServer {
             com.blockland.server.game.GameInstance game = games.gameOf(player);
             return game != null && game.infiniteEquipment(player);
         });
-        // in a match the mode decides (and the type, e.g. only infection humans); outside matches a config option
-        this.slides = new SlideService(server, player -> games.isPlaying(player) ? games.allowSlide(player)
+        // movement actions (slide, prone, dive): in a match the mode decides (and the type, e.g. only infection humans);
+        // outside matches a config option
+        this.actions = new ActionService(server, (player, action) -> games.isPlaying(player) ? games.allowAction(player, action)
                 : BlockLandConfig.SLIDE_OUTSIDE_MATCHES.get());
         this.parachutes = new ParachuteService(server);
+        this.supply = new com.blockland.server.supply.AmmoCrateService(server);
+        this.armor = new com.blockland.server.armor.ArmorService(server);
         // wall graffiti: only in a match whose mode allows it; owned = free or an entitlement
         this.graffiti = new com.blockland.server.graffiti.GraffitiService(server, player -> {
             GameInstance game = games.gameOf(player);
@@ -270,8 +275,10 @@ public final class BlockLandServer {
                 instance.gunService.forget(player);
                 instance.meleeService.forget(player);
                 instance.equipmentService.forget(player);
-                instance.slides.forget(player);
+                instance.actions.forget(player);
                 instance.parachutes.forget(player);
+                instance.supply.forget(player);
+                instance.armor.forget(player);
                 instance.graffiti.forget(player);
                 instance.kills.forget(player);
                 instance.spectate.forget(player);
@@ -308,6 +315,13 @@ public final class BlockLandServer {
         LivingDeathEvent.BUS.addListener(event -> instance != null
                 && event.getEntity() instanceof ServerPlayer player
                 && instance.games.onPlayerDeath(player, event.getSource()));
+        // body armour soaks what it covers, once per hurt, before vanilla's own armour
+        net.minecraftforge.event.entity.living.LivingHurtEvent.BUS.addListener(event -> {
+            if (instance != null && !event.getEntity().level().isClientSide()) {
+                event.setAmount(instance.armor.onHurt(event.getEntity(), event.getSource(), event.getAmount()));
+            }
+            return false;
+        });
         LivingAttackEvent.BUS.addListener(event -> {
             if (instance == null || !(event.getEntity() instanceof ServerPlayer player)) return false;
             if (instance.games.isPlaying(player)) return !instance.games.allowDamage(player, event.getSource());
@@ -362,7 +376,7 @@ public final class BlockLandServer {
         BLNetwork.setMeleeServerListener(created.meleeService);
         BLNetwork.setEquipmentServerListener(created.equipmentService);
         BLNetwork.setCraftServerListener(created.craft);
-        BLNetwork.setMovementServerListener(created.slides);
+        BLNetwork.setMovementServerListener(created.actions);
         BLNetwork.setCombatServerListener(created.kills);
         InventoryCatalog.register(new CardItems());
         InventoryCatalog.register(new com.blockland.server.graffiti.GraffitiItems());
@@ -372,9 +386,11 @@ public final class BlockLandServer {
         Cosmetics.setStore(new OwnedCosmetics(created.cosmetics, created.inventory));
         // after every module registered its item types at start-up
         server.execute(created.inventory::publishRegistry);
-        Slides.setServerView(created.slides);
+        BodyActions.setServerView(created.actions);
         Ranks.setView(created.ranked);
         BLNetwork.setParachuteServerListener(created.parachutes);
+        BLNetwork.setSupplyServerListener(created.supply);
+        BLNetwork.setArmorServerListener(created.armor);
         Parachutes.setServerView(created.parachutes);
         BLNetwork.setInfectionServerListener(new InfectionActions(created.games::gameOf));
         BombActions bombActions = new BombActions(created.games::gameOf);
@@ -419,13 +435,17 @@ public final class BlockLandServer {
         BLNetwork.setProfileServerListener(null);
         Cosmetics.setStore(null);
         current.cosmetics.clear();
-        Slides.setServerView(null);
+        BodyActions.setServerView(null);
         Ranks.setView(null);
         current.ranked.clear();
-        current.slides.clear();
+        current.actions.clear();
         BLNetwork.setParachuteServerListener(null);
         Parachutes.setServerView(null);
         current.parachutes.clear();
+        BLNetwork.setSupplyServerListener(null);
+        current.supply.clear();
+        BLNetwork.setArmorServerListener(null);
+        current.armor.clear();
         BLNetwork.setGraffitiServerListener(null);
         BLNetwork.setSpectateServerListener(null);
         current.spectate.clear();
@@ -451,8 +471,10 @@ public final class BlockLandServer {
         gunService.tick();
         meleeService.tick();
         equipmentService.tick();
-        slides.tick();
+        actions.tick();
         parachutes.tick();
+        supply.tick();
+        armor.tick();
         graffiti.tick();
         kills.tick();
         spectate.tick();

@@ -344,6 +344,48 @@ float waterRun(vec2 q, float time, float seed, float density, out vec2 slope) {
     return max(drop, trail * 0.4);
 }
 
+// ---- blood on the weapon and the hands (rendering spec §19) -------------------------------------------------------
+// A blood decal (effect 7): one drop laid where it landed (client/viewmodel/ViewmodelBlood clips it onto the mesh, so it
+// rides on the surface it hit). The decal's uv square: the drop's body behind the middle, drawn out along +u (the way it
+// flew over the surface, `stretch`), a tail into the front and a few satellites thrown ahead of it, each with a ragged
+// rim. Returns the coverage (anti-aliased); `height` is the wet bead's relief (0..1).
+float bloodDisc(vec2 p, vec2 centre, vec2 radius, float seed, float aa, inout float height) {
+    vec2 rel = (p - centre) / radius;
+    float ang = atan(rel.y, rel.x);
+    float ragged = 1.0 + 0.13 * sin(ang * 3.0 + seed * 6.28) + 0.07 * sin(ang * 7.0 + seed * 17.0)
+            + 0.04 * sin(ang * 13.0 + seed * 31.0);
+    float d = length(rel) / ragged;
+    float c = 1.0 - smoothstep(1.0 - aa / min(radius.x, radius.y), 1.0, d);
+    height = max(height, sqrt(max(1.0 - d * d, 0.0)) * c);
+    return c;
+}
+
+float bloodSplat(vec2 uv, float seed, float stretch, float aa, out float height) {
+    height = 0.0;
+    vec2 p = uv * 2.0 - 1.0;
+    // the body: an ellipse drawn out along the flight, behind the middle (room for the throw ahead)
+    float len = 0.42 * mix(1.0, 1.55, clamp((stretch - 1.0) / 1.6, 0.0, 1.0));
+    float body = bloodDisc(p, vec2(-0.22, 0.0), vec2(len, 0.42), seed, aa, height);
+    // its tail into the front, narrowing
+    float x = p.x + 0.22;
+    float tailLen = 0.55 * (stretch - 0.8);
+    float w = 0.16 * (1.0 - clamp(x / max(tailLen + len, 1e-3), 0.0, 1.0));
+    float tail = x > 0.0 && x < len + tailLen ? 1.0 - smoothstep(w - aa, w, abs(p.y + 0.05 * sin(x * 9.0 + seed * 5.0))) : 0.0;
+    height = max(height, tail * 0.35);
+    float c = max(body, tail);
+    // satellites thrown ahead (and a stray or two to the side)
+    for (int i = 0; i < 4; i++) {
+        float h1 = fract(sin(seed * 12.9898 + float(i) * 78.233) * 43758.5453);
+        float h2 = fract(sin(seed * 39.3468 + float(i) * 11.135) * 24634.6345);
+        float h3 = fract(sin(seed * 73.1560 + float(i) * 52.235) * 51983.1931);
+        if (h3 < 0.25) continue;
+        vec2 at = vec2(mix(0.35, 0.85, h1), (h2 - 0.5) * 0.55);
+        float r = mix(0.05, 0.11, h3 * h3);
+        c = max(c, bloodDisc(p, at, vec2(r * mix(1.0, 1.4, h1), r), seed + float(i), aa, height));
+    }
+    return c;
+}
+
 void main() {
     int flags = int(ModelOffset.z + 0.5);
     // an opaque draw of the world's frame stores its emission in the alpha (rendering spec §3)
@@ -358,6 +400,21 @@ void main() {
     bool decal = effect == 5;
     if (decal) {
         albedo.a *= vertexAo;
+    }
+    // blood decals (spec §19, effect 7): params = (seed, wetness, opacity, stretch); the vertex AO byte is the facing fade
+    bool blood = effect == 7;
+    float bloodHeight = 0.0;
+    if (blood) {
+        float aa = clamp(fwidth(texCoord0.x) + fwidth(texCoord0.y), 0.004, 0.25) * 2.0;
+        float cover = bloodSplat(texCoord0, TextureMat[2].x, TextureMat[2].w, aa, bloodHeight);
+        float wet = clamp(TextureMat[2].y, 0.0, 1.0);
+        // wet: dark arterial red, deepest where it pools; dry: a brown-black crust, a darker rim (coffee ring)
+        vec3 fresh = mix(vec3(0.42, 0.04, 0.035), vec3(0.24, 0.012, 0.012), bloodHeight);
+        vec3 dried = mix(vec3(0.20, 0.07, 0.05), vec3(0.11, 0.035, 0.025), smoothstep(0.0, 0.5, bloodHeight));
+        albedo = vec4(mix(dried, fresh, wet), cover * clamp(TextureMat[2].z, 0.0, 1.0) * vertexAo);
+        if (albedo.a < 0.01) {
+            discard;
+        }
     }
     if (albedo.a < TextureMat[0][2]) {
         discard;
@@ -382,7 +439,7 @@ void main() {
 
     // LabPBR normal map: tilt (DirectX: +y = down the texture = +v), material AO
     // (textures are sampled under per-draw conditions only, so mip selection always has its derivatives)
-    float ao = decal ? 1.0 : vertexAo;
+    float ao = decal || blood ? 1.0 : vertexAo;
     if ((flags & 2) != 0) {
         vec4 nt = texture(NormalSampler, texCoord0);
         ao *= nt.b;
@@ -540,17 +597,41 @@ void main() {
     // undersides; the bigger ones on the sloping and upright faces let go and run downhill in fits, a hair-thin wet trail
     // behind them. Each bead is a shallow cap of water: its own normal for the coat's sharp reflection and the sun's
     // glint, a faint dark rim. Finer layers fade into the film where a pixel covers several of their cells. Soaked (just
-    // out of the water, in the flags' fraction: DrawList.wetness) it is wet all over, beads on every side, until it dries.
+    // out of the water, or rained on until the rain stopped, in the flags' fraction: DrawList.wetness) it is wet all
+    // over, beads on every side, until it dries.
     float soak = clamp((ModelOffset.z - float(flags)) / 0.45, 0.0, 1.0);
     vec3 coatN = geometric;
     // how much surface a pixel covers (blocks), taken here in uniform control flow for the drops' anti-aliasing
     float footprint = max(length(dFdx(objectPos)), length(dFdy(objectPos)));
-    if ((flags & 16) != 0 && (BlWeather.x > 0.0 || soak > 0.0) && BlCamera.w < 0.5) {
-        float open = smoothstep(0.7, 1.0, clamp((ModelOffset.y - 6.0) / 9.0, 0.0, 1.0));
+    // blood (spec §19, effect 7): a liquid film, no metal; wet it is a raised glossy bead (its relief from the drop's
+    // height field, a coat's sharp reflection), drying it flattens into a matte crust. Rain lies on top of it.
+    if (blood) {
+        float wet = clamp(TextureMat[2].y, 0.0, 1.0);
+        diffuse = albedoLinear;
+        metallic = 0.0;
+        f0 = vec3(0.022);
+        emission = 0.0;
+        roughness = mix(0.6, 0.06, wet);
+        coat = max(coat, wet * 0.85);
+        // the bead's surface: the height field (metres) as a surface gradient over the decal (screen derivatives)
+        float relief = bloodHeight * mix(0.00015, 0.0009, wet);
+        vec3 dpdx = dFdx(viewPos), dpdy = dFdy(viewPos);
+        vec3 r1 = cross(dpdy, geometric), r2 = cross(geometric, dpdx);
+        float det = dot(dpdx, r1);
+        vec3 grad = sign(det) * (dFdx(relief) * r1 + dFdy(relief) * r2);
+        if (abs(det) > 1e-14) {
+            n = normalize(abs(det) * geometric - grad);
+            coatN = n;
+        }
+    }
+    if ((flags & 16) != 0 && (BlWeather.y > 0.0 || soak > 0.0) && BlCamera.w < 0.5) {
+        float open = smoothstep(0.7, 1.0, clamp((floor(ModelOffset.y) - 6.0) / 9.0, 0.0, 1.0));
         vec3 upView = mat3(BlViewRotation) * vec3(0.0, 1.0, 0.0);
         float facing = dot(n, upView);
         float up = clamp(facing * 0.5 + 0.5, 0.0, 1.0);
-        float rain = BlWeather.x * open;
+        // the rain on it while it falls (not the ground's slow drying, BlWeather.x): what stays when it stops is the
+        // holder's soaking (client/render/Wetness, built up while the rain falls on them), drying on its own time
+        float rain = BlWeather.y * open;
         float falling = BlWeather.y * open;
         float wet = max(rain * mix(0.45, 1.0, up), soak * mix(0.75, 1.0, up));
         if (wet > 0.01) {
@@ -658,7 +739,7 @@ void main() {
         // head round the eye included, casts on the world but not on what they hold in front of their face
         float selfClear = SELF_CLEAR * (1.0 - smoothstep(1.2, 1.6, length(worldPos)));
         float shadow = bl_shadow(worldPos + BlSunDir.xyz * selfClear, toWorld * geometric, gl_FragCoord.xy);
-        float skyAccess = clamp((ModelOffset.y - 6.0) / 9.0, 0.0, 1.0);
+        float skyAccess = clamp((floor(ModelOffset.y) - 6.0) / 9.0, 0.0, 1.0);
         vec3 sunView = mat3(BlViewRotation) * BlSunDir.xyz;
         vec3 sun = BlSunColor.rgb * (0.85 * skyAccess * shadow);
         vec3 direct = directLight(n, v, sunView, diffuse, f0, directAlpha, 1.0, 1.0) * sun * directAo;

@@ -84,7 +84,7 @@ function InfectionSettingsForm({ settings, onChange, maps }: SettingsFormProps) 
       />
 
       <MonsterPicker value={s.monsters} published={monsters} onChange={(ids) => set({ monsters: ids })} />
-      <MovementFields settings={settings} onChange={onChange} note="只有人类可以滑铲。" />
+      <MovementFields settings={settings} onChange={onChange} note="只有人类可以滑铲、匍匐和飞扑。" />
       <p className="muted small">开局装备在下方「开局装备」中配置；玩家可以在游戏大厅中调整自己的装备布局。</p>
     </div>
   )

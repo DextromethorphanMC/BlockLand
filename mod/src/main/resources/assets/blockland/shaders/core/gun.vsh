@@ -15,7 +15,8 @@
 //                        run in the weapon's space - and the time in seconds)
 //                  [2] = effect params
 //                  [3] = (effect colour rgb, effect: 0 none, 1 iridescent, 2 flow, 3 galaxy, 4 circuit, 5 spray decal,
-//                        6 inferno - plus 0.98 x the effect's surge 0..1 in the fraction, asset spec §38)
+//                        6 inferno, 7 blood decal (params: seed, wetness, opacity, stretch; rendering spec §19) - plus
+//                        0.98 x the effect's surge 0..1 in the fraction, asset spec §38)
 
 #moj_import <minecraft:dynamictransforms.glsl>
 #moj_import <minecraft:projection.glsl>

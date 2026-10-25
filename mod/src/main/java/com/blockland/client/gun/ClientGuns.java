@@ -17,6 +17,7 @@ import com.blockland.client.scope.SightPose;
 import com.blockland.client.viewmodel.Holster;
 import com.blockland.client.viewmodel.SwimPose;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
+import com.blockland.client.viewmodel.WeaponOverlays;
 import com.blockland.craft.CraftData;
 import com.blockland.combat.Ballistics;
 import com.blockland.combat.HitShapes;
@@ -28,7 +29,7 @@ import com.blockland.gun.GunItem;
 import com.blockland.gun.GunMath;
 import com.blockland.gun.GunState;
 import com.blockland.gun.GunStats;
-import com.blockland.movement.Slides;
+import com.blockland.movement.action.BodyActions;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.GunPacketListeners;
 import com.blockland.network.packet.GunPackets;
@@ -165,6 +166,7 @@ public final class ClientGuns {
             event.register(RELOAD);
             event.register(FIRE_MODE);
         });
+        GrenadeRounds.init(modBus);
         RegisterClientReloadListenersEvent.getBus(modBus).addListener(event -> event.registerReloadListener(
                 (ResourceManagerReloadListener) manager -> {
                     FxMeshes.clear();
@@ -214,6 +216,12 @@ public final class ClientGuns {
             event.setYaw(event.getYaw() + viewmodel.cameraYaw());
             event.setRoll(event.getRoll() + viewmodel.cameraRoll());
             viewmodel.moveCamera(event.getCamera());
+            // something that has the hands (the ammo crate's resupply) turns and moves the head too
+            float[] angles = {event.getPitch(), event.getYaw(), event.getRoll()};
+            WeaponOverlays.adjustCamera(event.getCamera(), angles);
+            event.setPitch(angles[0]);
+            event.setYaw(angles[1]);
+            event.setRoll(angles[2]);
             // a zoomed scope's breathing sway moves the view itself (the overlay is the scope)
             event.setPitch(event.getPitch() + Optics.cameraSwayPitch());
             event.setYaw(event.getYaw() + Optics.cameraSwayYaw());
@@ -486,6 +494,7 @@ public final class ClientGuns {
         if (modelReady && holdingGun()) ViewmodelRenderer.suppressViewBobbing(player);
         // aim (a bolt-action gun takes the sight down while it works the bolt)
         boolean wantAds = free && stats.gun().canAim() && mc.options.keyUse.isDown() && !reloading && now >= drawEnd
+                && !WeaponOverlays.busy() && !WeaponOverlays.claimsUse()
                 && !SwimPose.running(player)
                 && !ActionLocks.isLocked(player)
                 && viewmodel.sprintAmount() < SPRINT_READY
@@ -555,7 +564,7 @@ public final class ClientGuns {
 
     /** @param shots 2 = a dual gun's volley (both guns at once), else 1 */
     private static void tryFire(LocalPlayer player, boolean click, int shots) {
-        if (stats == null || slot < 0) return;
+        if (stats == null || slot < 0 || WeaponOverlays.busy()) return;
         if (ActionLocks.isLocked(player)) {
             pendingShot = false;
             if (click) GunHud.flashHint(tr("blockland.gun.hud.slimed"));
@@ -645,12 +654,14 @@ public final class ClientGuns {
         // predicted tracer and impact, from this client's own trace (the server re-traces with the same seed: shot k's
         // pellets are numbered after the earlier shots'); shots leave from the camera, which is low while sliding. What
         // each projectile struck here goes with the shot: the server checks it against where that target stood then
-        Vec3 eye = Slides.eyePosition(player);
+        Vec3 eye = BodyActions.eyePosition(player);
         int pellets = Math.max(1, stats.ammo().pellets);
         int[] seen = new int[Math.min(GunPackets.C2SFire.MAX_SEEN, shots * pellets)];
+        // a launched round (a grenade) is the server's entity from the muzzle on: nothing to trace or predict here
+        boolean launched = stats.ammo().projectile != null;
         for (int shot = 0; shot < shots; shot++) {
             int from = volley ? shot : hand;
-            for (int pellet = 0; pellet < pellets; pellet++) {
+            for (int pellet = 0; pellet < pellets && !launched; pellet++) {
                 int index = shot * pellets + pellet;
                 Vec3 dir = GunMath.spreadDirection(yaw, pitch, spread, seed, index);
                 LocalHit hit = localTrace(player, eye, dir, stats.range());
@@ -755,8 +766,14 @@ public final class ClientGuns {
         return new LocalHit(end, GunPackets.C2SFire.NONE);
     }
 
+    /** Starts a reload as the reload key does (another module's action ending in one, e.g. a resupply). */
+    public static void requestReload() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player != null) startReload(player);
+    }
+
     private static void startReload(LocalPlayer player) {
-        if (stats == null || reloading || slot < 0) return;
+        if (stats == null || reloading || slot < 0 || WeaponOverlays.busy()) return;
         long now = System.nanoTime();
         if (now < drawEnd || ammo >= stats.capacity()) return;
         if (reserve() <= 0 && !player.isCreative()) {
@@ -836,7 +853,7 @@ public final class ClientGuns {
 
     /** Inspecting stops a sprint; the movement input keeps sprint off until the inspect ends. */
     private static void inspect() {
-        if (reloading || stats == null || System.nanoTime() < drawEnd || aim() > 0.05f) return;
+        if (reloading || stats == null || System.nanoTime() < drawEnd || aim() > 0.05f || WeaponOverlays.busy()) return;
         if (viewmodel.action() == Viewmodel.Action.FIRE || viewmodel.action() == Viewmodel.Action.INSPECT) return;
         LocalPlayer player = Minecraft.getInstance().player;
         if (player != null) SwimPose.stopRunning(player);
@@ -900,7 +917,7 @@ public final class ClientGuns {
         Vec3[] muzzles = new Vec3[2];
         for (int gun = 0; gun < 2; gun++) {
             Matrix4f at = viewmodel.nodeMatrix("muzzle", gun, base, tmp);
-            muzzles[gun] = gun == 1 && at == null ? muzzles[0] : ViewmodelRenderer.viewToWorld(camera, at, Slides.eyePosition(player));
+            muzzles[gun] = gun == 1 && at == null ? muzzles[0] : ViewmodelRenderer.viewToWorld(camera, at, BodyActions.eyePosition(player));
         }
         CraftData.SkinFx skinFx = stats == null ? null : stats.skinFx();
         // (no muzzle smoke here: in first person the muzzle is ~0.3 blocks from the eye and smoke would fill the screen)
@@ -973,11 +990,13 @@ public final class ClientGuns {
                         : new GunParticles.Flash(level, muzzle, skinFx.hasFlashColor() ? skinFx.flashRgb() : GunParticles.DEFAULT_FLASH,
                         Math.max(0.2f, skinFx.flashScale)));
             }
-            mc.particleEngine.add(tracer(level, muzzle, end, skinFx));
+            if (shot.face() != GunPackets.S2CShot.LAUNCHED) mc.particleEngine.add(tracer(level, muzzle, end, skinFx));
         }
+        // a launched grenade flies on as an entity: its flight and its blast are its own
+        if (shot.face() == GunPackets.S2CShot.LAUNCHED) return;
         // the round left the shooter's eyes (low while it slides), as the server traced it; a shooter out of sight leaves
         // only the struck face to go by
-        Vec3 eye = shooter == null ? null : Slides.eyePosition(shooter);
+        Vec3 eye = shooter == null ? null : BodyActions.eyePosition(shooter);
         boolean knownFace = shot.face() >= 0 && shot.face() < Direction.values().length;
         Vec3 dir = eye != null && end.distanceToSqr(eye) > 1e-6 ? end.subtract(eye).normalize()
                 : knownFace ? faceInto(Direction.values()[shot.face()]) : new Vec3(0, -1, 0);
