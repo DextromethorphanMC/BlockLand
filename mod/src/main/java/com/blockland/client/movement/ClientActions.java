@@ -1,5 +1,6 @@
 package com.blockland.client.movement;
 
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.viewmodel.ViewmodelMotion;
 import com.blockland.movement.action.ActionState;
 import com.blockland.movement.action.BodyActions;
@@ -154,7 +155,7 @@ public final class ClientActions {
             level = mc.level;
             remote.clear();
         }
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         remote.values().removeIf(r -> r.end != 0 && now - r.end > BLEND_OUT);
         ClientSlide.tick(mc);
         ClientProne.tick(mc);
@@ -194,7 +195,7 @@ public final class ClientActions {
 
     private static void received(MovementPackets.S2CAction message) {
         Minecraft mc = Minecraft.getInstance();
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         MovementAction action = MovementAction.byIndex(message.action());
         if (mc.player != null && message.entityId() == mc.player.getId()) {
             // the server refused, ended or changed our action
@@ -253,7 +254,7 @@ public final class ClientActions {
             return Math.max(ClientSlide.amount(), Math.max(ClientDive.amount(), ClientProne.amount()));
         }
         Remote r = remote.get(entityId);
-        return r == null ? 0 : r.amount(System.nanoTime());
+        return r == null ? 0 : r.amount(RenderClock.nanos());
     }
 
     /** The direction a player's action pose faces (the direction the server knows). */

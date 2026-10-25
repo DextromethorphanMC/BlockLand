@@ -1,6 +1,7 @@
 package com.blockland.client.impact;
 
 import com.blockland.BlockLand;
+import com.blockland.client.perf.Optimization;
 import com.blockland.client.render.SceneLighting;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
@@ -155,6 +156,8 @@ final class ImpactRenderer {
     private static final Vector3f a = new Vector3f(), b = new Vector3f(), c = new Vector3f(), d = new Vector3f();
     private static final List<ImpactParticles.Cloud> sortedClouds = new ArrayList<>();
     private static final List<ImpactParticles.Splash> sortedSplashes = new ArrayList<>();
+    /** The frame's live debris in pool order ({@code IMPACT_POOLS}; the pool's own pieces, which live as long as it). */
+    private static final ImpactParticles.Debris[] liveDebris = new ImpactParticles.Debris[ImpactParticles.CAPACITY];
     /**
      * The cloud block's contents, written on the CPU each frame and copied into the ring buffer before the pass. Native
      * byte order: a direct buffer starts out big-endian, and the GPU would read every float byte-swapped.
@@ -176,17 +179,35 @@ final class ImpactRenderer {
         Vector3f right = new Vector3f(camera.getLeftVector()).negate(), up = new Vector3f(camera.getUpVector()),
                 back = new Vector3f(camera.getLookVector()).negate();
 
+        // the pieces the walks below visit, in pool order: the whole pool, or (IMPACT_POOLS) only the live ones, gathered
+        // in one walk over the range that can hold them — the same pieces in the same order, as nothing here changes them
+        ImpactParticles.Debris[] pieces;
+        int pieceCount, sparkFrom, sparkTo;
+        if (Optimization.IMPACT_POOLS.on()) {
+            pieces = liveDebris;
+            pieceCount = pool.liveDebris(liveDebris);
+            sparkFrom = pool.sparkLo;
+            sparkTo = pool.sparkHi;
+        } else {
+            pieces = pool.debris;
+            pieceCount = pieces.length;
+            sparkFrom = 0;
+            sparkTo = pool.sparks.length - 1;
+        }
+
         // ---- the particle layout: debris, cloud lobes, sparks
         if (bytes == null) bytes = new ByteBufferBuilder(256 * 1024);
         BufferBuilder buffer = new BufferBuilder(bytes, VertexFormat.Mode.QUADS, DefaultVertexFormat.PARTICLE);
         int debris = 0;
-        for (ImpactParticles.Debris p : pool.debris) {
+        for (int k = 0; k < pieceCount; k++) {
+            ImpactParticles.Debris p = pieces[k];
             if (p.alive && p.fluid == 0 && !p.bubble) debris += debrisQuads(buffer, p, cam, right, up, partialTick);
         }
         cloudData.clear();
         int lobes = cloudLobes(buffer, pool, cam, right, up, partialTick, cloudData);
         int sparks = 0;
-        for (ImpactParticles.Spark p : pool.sparks) {
+        for (int k = sparkFrom; k <= sparkTo; k++) {
+            ImpactParticles.Spark p = pool.sparks[k];
             if (p.alive) sparks += sparkQuad(buffer, p, cam, up, partialTick);
         }
 
@@ -199,17 +220,19 @@ final class ImpactRenderer {
         }
         sortedSplashes.sort((p, q) -> Double.compare(distanceSqr(q.x, q.y, q.z, cam), distanceSqr(p.x, p.y, p.z, cam)));
         int moltenDrops = 0, moltenFlats = 0;
-        for (ImpactParticles.Debris p : pool.debris) {
+        for (int k = 0; k < pieceCount; k++) {
+            ImpactParticles.Debris p = pieces[k];
             if (p.alive && p.fluid == ImpactParticles.LAVA && !p.resting) moltenDrops += moltenDrop(fluids, p, cam, right, up, partialTick);
         }
-        for (ImpactParticles.Debris p : pool.debris) {
+        for (int k = 0; k < pieceCount; k++) {
+            ImpactParticles.Debris p = pieces[k];
             if (p.alive && p.fluid == ImpactParticles.LAVA && p.resting) moltenFlats += moltenSplat(fluids, p, cam, partialTick);
         }
         for (ImpactParticles.Splash s : sortedSplashes) {
             if (s.kind == ImpactParticles.LAVA) moltenFlats += crater(fluids, s, cam, partialTick);
         }
         // blood lying on surfaces and plants (its own layout; drawn under the splashes and drops in front of it)
-        int stains = BloodStains.build(pool, cam, partialTick);
+        int stains = BloodStains.build(pieces, pieceCount, cam, partialTick);
         int rings = 0, foam = 0, sheets = 0, drops = 0, bubbles = 0, bloodDrops = 0;
         for (ImpactParticles.Splash s : sortedSplashes) {
             if (s.kind == ImpactParticles.WATER) rings += rings(fluids, s, cam, partialTick);
@@ -220,13 +243,16 @@ final class ImpactRenderer {
         for (ImpactParticles.Splash s : sortedSplashes) {
             if (s.kind == ImpactParticles.WATER) sheets += crown(fluids, s, cam, partialTick) + column(fluids, s, cam, partialTick);
         }
-        for (ImpactParticles.Debris p : pool.debris) {
+        for (int k = 0; k < pieceCount; k++) {
+            ImpactParticles.Debris p = pieces[k];
             if (p.alive && p.fluid == ImpactParticles.WATER) drops += waterDrop(fluids, p, cam, right, up, partialTick);
         }
-        for (ImpactParticles.Debris p : pool.debris) {
+        for (int k = 0; k < pieceCount; k++) {
+            ImpactParticles.Debris p = pieces[k];
             if (p.alive && p.bubble) bubbles += bubble(fluids, p, cam, right, up, partialTick);
         }
-        for (ImpactParticles.Debris p : pool.debris) {
+        for (int k = 0; k < pieceCount; k++) {
+            ImpactParticles.Debris p = pieces[k];
             if (p.alive && p.fluid == ImpactParticles.BLOOD && !p.resting) bloodDrops += bloodDrop(fluids, p, cam, right, up, partialTick);
         }
 

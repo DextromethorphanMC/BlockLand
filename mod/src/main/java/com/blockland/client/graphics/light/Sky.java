@@ -2,6 +2,7 @@ package com.blockland.client.graphics.light;
 
 import com.blockland.client.graphics.GraphicsSettings;
 import com.blockland.client.graphics.shadow.SunPath;
+import com.blockland.client.render.RenderClock;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
@@ -107,7 +108,7 @@ final class Sky {
         boolean raining = level.dimensionType().hasSkyLight()
                 && level.getBiome(at).value().getPrecipitationAt(at, level.getSeaLevel()) == Biome.Precipitation.RAIN;
         float falling = raining ? rain : 0;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         float seconds = lastNanos == 0 ? 0 : Math.min(0.5f, (now - lastNanos) / 1e9f);
         lastNanos = now;
         float tau = falling > wet ? 15f : 90f;

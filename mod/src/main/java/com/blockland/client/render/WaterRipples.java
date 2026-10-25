@@ -41,7 +41,7 @@ public final class WaterRipples {
         strength[i] = power;
         dirX[i] = headingX;
         dirZ[i] = headingZ;
-        born[i] = System.nanoTime();
+        born[i] = RenderClock.nanos();
     }
 
     public static void clear() {
@@ -58,7 +58,7 @@ public final class WaterRipples {
     /** Hands every live ring in {@code world} to {@code sink}; returns how many. */
     public static int forEach(ClientLevel world, double camX, double camY, double camZ, Sink sink) {
         if (world != level) return 0;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         int count = 0;
         for (int i = 0; i < MAX; i++) {
             if (born[i] == 0) continue;

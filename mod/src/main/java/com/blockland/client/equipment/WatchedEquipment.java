@@ -1,5 +1,6 @@
 package com.blockland.client.equipment;
 
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.viewmodel.ViewSubject;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.equipment.EquipmentContent;
@@ -77,7 +78,7 @@ final class WatchedEquipment {
     /** {@code a}: 0 pressed, 1 released, 2 put away (see the packet). */
     private static void action(int a, boolean underhand) {
         EquipmentData.Equipment it = item;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         switch (a) {
             case 0 -> {
                 lob = underhand;
@@ -111,7 +112,7 @@ final class WatchedEquipment {
 
     static void frame(float dt) {
         if (!active()) return;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         EquipmentData.Equipment it = item;
         if (holdAt != 0 && now >= holdAt && viewmodel.action() != EquipmentViewmodel.Action.THROW) {
             // cocked: the hold clip loops until the release comes

@@ -2,6 +2,7 @@ package com.blockland.client.graphics.wind;
 
 import com.blockland.client.graphics.Graphics;
 import com.blockland.client.graphics.GraphicsSettings;
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.render.SceneLighting;
 import com.mojang.blaze3d.buffers.Std140Builder;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
@@ -150,7 +151,7 @@ public final class Wind {
         strength += (target - strength) * 0.01f;
 
         // gusts: born upwind out of sight's middle distance, gone once they are well past
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         gusts.removeIf(g -> g.age(now) > g.life);
         float rate = sky ? 0.12f + 0.35f * rain + 0.5f * thunder : 0;
         if (gusts.size() < SceneLighting.MAX_GUSTS && random.nextFloat() < rate / 20f) spawnGust(camera, now, rain, thunder);
@@ -245,7 +246,7 @@ public final class Wind {
         boolean on = on() && level != null && level == Minecraft.getInstance().level;
         float amount = on ? Graphics.settings().windStrength : 0;
         out.putVec4(Mth.cos(heading), Mth.sin(heading), on ? strength : 0, amount); // BlWind
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         int gustCount = on ? Math.min(gusts.size(), SceneLighting.MAX_GUSTS) : 0;
         int pusherCount = on ? Math.min(pushers.size(), SceneLighting.MAX_PUSHERS) : 0;
         int swayCount = 0;

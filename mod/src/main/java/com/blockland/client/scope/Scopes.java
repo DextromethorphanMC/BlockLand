@@ -4,6 +4,7 @@ import com.blockland.BlockLand;
 import com.blockland.anim.Ease;
 import com.blockland.client.render.GpuModel;
 import com.blockland.client.render.ModelCache;
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.settings.ClientSettings;
 import com.blockland.client.settings.ScopeSensitivity;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
@@ -107,7 +108,7 @@ final class Scopes {
         RegisterClientReloadListenersEvent.getBus(modBus).addListener(event -> event.registerReloadListener(
                 (ResourceManagerReloadListener) manager -> ReticleTextures.clear()));
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> {
-            if (lastPicture != 0 && System.nanoTime() - lastPicture > RELEASE_AFTER) {
+            if (lastPicture != 0 && RenderClock.nanos() - lastPicture > RELEASE_AFTER) {
                 picture.release();
                 lastPicture = 0;
             }
@@ -142,7 +143,7 @@ final class Scopes {
     static boolean stepZoom(int direction) {
         if (sight == null || aim < 0.5f || !zoom.variable()) return false;
         if (zoom.step(direction)) {
-            zoomChanged = System.nanoTime();
+            zoomChanged = RenderClock.nanos();
             Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.SPYGLASS_USE, direction > 0 ? 1.25f : 0.95f, 0.45f));
         }
         return true; // at either end the wheel still belongs to the scope
@@ -306,7 +307,7 @@ final class Scopes {
         GpuTextureView image = null;
         if (aim >= PICTURE_FROM && lensOnScreen) {
             image = picture.render(world, fov, side, power);
-            lastPicture = System.nanoTime();
+            lastPicture = RenderClock.nanos();
             if (!picture.usable()) return; // it just broke: zoom from the next frame on
         }
 
@@ -432,7 +433,7 @@ final class Scopes {
 
     /** Seconds since the power last changed (large when it never did). */
     static float sinceZoomChange() {
-        return zoomChanged == 0 ? 1e3f : (System.nanoTime() - zoomChanged) / 1e9f;
+        return zoomChanged == 0 ? 1e3f : (RenderClock.nanos() - zoomChanged) / 1e9f;
     }
 
     static ScopeSteady steady() {

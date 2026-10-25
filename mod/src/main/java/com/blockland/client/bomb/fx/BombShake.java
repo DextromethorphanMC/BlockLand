@@ -2,6 +2,7 @@ package com.blockland.client.bomb.fx;
 
 import com.blockland.anim.Spring;
 import com.blockland.anim.Ticker;
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.settings.ClientSettings;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
@@ -37,7 +38,7 @@ final class BombShake {
 
     static void init() {
         ViewportEvent.ComputeCameraAngles.BUS.addListener(event -> {
-            long now = System.nanoTime();
+            long now = RenderClock.nanos();
             float dt = last == 0 ? 0 : Math.min(0.1f, (now - last) / 1e9f);
             last = now;
             time += dt;

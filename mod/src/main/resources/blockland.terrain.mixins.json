@@ -1,0 +1,20 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.blockland.mixin.terrain",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [
+    "ClientChunkCacheMixin",
+    "ClientLevelMixin",
+    "CompileTaskAccess",
+    "CompileTaskDynamicQueueMixin",
+    "ModelBlockRendererCacheMixin",
+    "ModelBlockRendererMixin",
+    "SectionCompilerMixin",
+    "SectionCopyMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

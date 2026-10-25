@@ -1,6 +1,7 @@
 package com.blockland.client.viewmodel;
 
 import com.blockland.anim.Ease;
+import com.blockland.client.render.RenderClock;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.world.InteractionHand;
 import net.minecraftforge.client.event.RenderHandEvent;
@@ -57,7 +58,7 @@ public final class Holster {
     public static void start(Object who, Outgoing weapon) {
         owner = who;
         outgoing = weapon;
-        started = last = System.nanoTime();
+        started = last = RenderClock.nanos();
     }
 
     /** A module reuses this viewmodel instance: it stops dropping. */
@@ -71,7 +72,7 @@ public final class Holster {
     private static void render(int light) {
         Outgoing weapon = outgoing;
         if (weapon == null) return;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         float u = (now - started) / 1e9f / TIME;
         float dt = Math.min(0.1f, (now - last) / 1e9f);
         last = now;

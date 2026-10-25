@@ -3,6 +3,7 @@ package com.blockland.client.infection;
 import com.blockland.BlockLand;
 import com.blockland.client.equipment.effect.ClientEquipmentEffects;
 import com.blockland.client.morph.ClientMorphs;
+import com.blockland.client.render.RenderClock;
 import com.blockland.entity.CreeperZombie;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.InfectionPacketListeners;
@@ -50,7 +51,7 @@ public final class ClientInfection {
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> {
             Minecraft mc = Minecraft.getInstance();
             while (SKILL.consumeClick()) {
-                if (isMonster() && mc.screen == null && System.nanoTime() >= skillReadyAt) BLNetwork.sendToServer(InfectionPackets.C2SUseSkill.INSTANCE);
+                if (isMonster() && mc.screen == null && RenderClock.nanos() >= skillReadyAt) BLNetwork.sendToServer(InfectionPackets.C2SUseSkill.INSTANCE);
             }
         });
         ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(event -> {
@@ -81,7 +82,7 @@ public final class ClientInfection {
 
             @Override
             public void onSkill(InfectionPackets.S2CSkill skill) {
-                long now = System.nanoTime();
+                long now = RenderClock.nanos();
                 skillUsedAt = now;
                 skillReadyAt = now + (long) (skill.cooldown() * 1e9);
                 skillActiveUntil = now + (long) (skill.active() * 1e9);
@@ -90,7 +91,7 @@ public final class ClientInfection {
             @Override
             public void onFuse(InfectionPackets.S2CFuse fuse) {
                 if (fuse.seconds() <= 0) fuses.remove(fuse.player());
-                else fuses.put(fuse.player(), new Fuse(System.nanoTime(), fuse.seconds()));
+                else fuses.put(fuse.player(), new Fuse(RenderClock.nanos(), fuse.seconds()));
             }
 
             @Override
@@ -112,12 +113,12 @@ public final class ClientInfection {
 
     /** Seconds until the skill is ready (0 = ready). */
     static float skillCooldownLeft() {
-        return Math.max(0, (skillReadyAt - System.nanoTime()) / 1e9f);
+        return Math.max(0, (skillReadyAt - RenderClock.nanos()) / 1e9f);
     }
 
     /** 0..1 of the skill's active time left (0 = not active). */
     static float skillActive() {
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         if (now >= skillActiveUntil || skillActiveUntil <= skillUsedAt) return 0;
         return (skillActiveUntil - now) / (float) (skillActiveUntil - skillUsedAt);
     }

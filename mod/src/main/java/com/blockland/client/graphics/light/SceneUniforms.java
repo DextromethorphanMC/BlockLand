@@ -5,6 +5,7 @@ import com.blockland.client.graphics.ReflectionInfo;
 import com.blockland.client.graphics.ShadowInfo;
 import com.blockland.client.graphics.frame.FrameContext;
 import com.blockland.client.graphics.wind.Wind;
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.render.SceneLighting;
 import com.blockland.client.render.WaterRipples;
 import net.minecraft.client.Minecraft;
@@ -182,7 +183,7 @@ final class SceneUniforms implements SceneLighting.Provider {
                         boolean underwater, boolean clouds, float fogMode, int reflectionSteps) {
         scratch.clear();
         Std140Builder out = Std140Builder.intoBuffer(scratch);
-        float time = (float) ((System.nanoTime() / 1e9) % 3600.0);
+        float time = (float) ((RenderClock.nanos() / 1e9) % 3600.0);
         out.putVec4(lit, 1, lightCount, time); // BlFlags
         out.putVec4(sky.direction.x, sky.direction.y, sky.direction.z, sky.sun ? 1 : 0); // BlSunDir
         out.putVec4(sky.color[0], sky.color[1], sky.color[2], sky.strength); // BlSunColor

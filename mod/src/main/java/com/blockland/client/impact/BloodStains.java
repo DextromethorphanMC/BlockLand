@@ -1,5 +1,6 @@
 package com.blockland.client.impact;
 
+import com.blockland.client.perf.Optimization;
 import com.blockland.client.render.BlockFaces;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
@@ -10,6 +11,7 @@ import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 
 /**
  * The vertices of the blood lying on things (rendering spec §19), for {@code blockland:core/impact_blood}: a stain on a face
@@ -47,6 +49,37 @@ final class BloodStains {
     private static boolean anchorAtVertex;
     /** A stain's quad and its pieces while cut: per corner s, t on its face (from the stain) and its uv. */
     private static final float[] quad = new float[16], cut = new float[4 * 12], cutSwap = new float[4 * 12];
+    /** Which of the two holds the piece {@link #cutPiece} made last. */
+    private static float[] piece = cut;
+
+    /**
+     * A stain quad's pieces as last cut ({@code IMPACT_POOLS}) and what they were cut from: the quad's corners (bits) and
+     * the stain's {@code clipStamp}. One per stain and quad (the splat, its run), kept with the pool's piece.
+     */
+    static final class Cut {
+        private final int[] quadBits = new int[16];
+        private int stamp;
+        private boolean valid;
+        /** Rectangles cut (the stain's {@code clips} then) and each one's piece's corner count (below 3: nothing). */
+        private int rects;
+        private final byte[] n = new byte[ImpactParticles.MAX_CLIPS];
+        /** The pieces' corners one after another (s, t, u, v each). */
+        private float[] corners = new float[48];
+
+        /** Whether this was cut from this very quad and these very rectangles. */
+        boolean holds(float[] quad, ImpactParticles.Debris p) {
+            if (!valid || stamp != p.clipStamp || rects != p.clips) return false;
+            for (int i = 0; i < 16; i++) if (quadBits[i] != Float.floatToRawIntBits(quad[i])) return false;
+            return true;
+        }
+
+        void from(float[] quad, ImpactParticles.Debris p) {
+            valid = true;
+            stamp = p.clipStamp;
+            rects = p.clips;
+            for (int i = 0; i < 16; i++) quadBits[i] = Float.floatToRawIntBits(quad[i]);
+        }
+    }
 
     private BloodStains() {
     }
@@ -61,12 +94,16 @@ final class BloodStains {
         throw new IllegalStateException("No free vertex format element id for the blood stains");
     }
 
-    /** Writes every stain of the pool; returns the quads written ({@link #data()} holds them). */
-    static int build(ImpactParticles pool, Vec3 cam, float partialTick) {
+    /**
+     * Writes every stain among the first {@code count} of {@code pieces} (the pool, or its live pieces in pool order);
+     * returns the quads written ({@link #data()} holds them).
+     */
+    static int build(ImpactParticles.Debris[] pieces, int count, Vec3 cam, float partialTick) {
         bytes.clear();
         vertices = 0;
         int quads = 0;
-        for (ImpactParticles.Debris p : pool.debris) {
+        for (int k = 0; k < count; k++) {
+            ImpactParticles.Debris p = pieces[k];
             if (!p.alive || p.fluid != ImpactParticles.BLOOD || !p.resting) continue;
             if (p.kind == ImpactParticles.PLANT) quads += plant(p, cam, partialTick);
             else if (p.face >= 0) quads += face(p, cam, partialTick);
@@ -134,7 +171,7 @@ final class BloodStains {
         corner(1, ux * along - vx * across, uy * along - vy * across, uz * along - vz * across, sa, ta, 1.35f, -1.35f);
         corner(2, ux * along + vx * across, uy * along + vy * across, uz * along + vz * across, sa, ta, 1.35f, 1.35f);
         corner(3, -ux * along + vx * across, -uy * along + vy * across, -uz * along + vz * across, sa, ta, -1.35f, 1.35f);
-        int quads = clipped(p, x, y, z, sa, ta);
+        int quads = clipped(p, false, x, y, z, sa, ta);
         if (p.run < 0.004f || ny != 0) return quads;
         // its run down the wall: from the stain's middle to the tip, narrowing
         float run = p.run + (p.run < p.runMax ? (p.runMax - p.run) * 0.05f * pt : 0);
@@ -147,7 +184,7 @@ final class BloodStains {
         corner(1, hx * w, 0, hz * w, sa, ta, 1, 0);
         corner(2, hx * w, -run, hz * w, sa, ta, 1, 1);
         corner(3, -hx * w, -run, -hz * w, sa, ta, -1, 1);
-        return quads + clipped(p, x, y, z, sa, ta);
+        return quads + clipped(p, true, x, y, z, sa, ta);
     }
 
     private static void corner(int i, float dx, float dy, float dz, int sa, int ta, float u, float v) {
@@ -160,50 +197,101 @@ final class BloodStains {
     /**
      * Writes {@link #quad} cut to each rectangle of the surface the stain lies on (so it never hangs over an edge into the
      * air, and goes on over a neighbouring block that carries the surface on), each piece a fan of quads, every corner with
-     * its distances to the rectangle's real edges nearest the stain; returns how many quads.
+     * its distances to the rectangle's real edges nearest the stain; returns how many quads. {@code run}: the quad is the
+     * stain's run down the wall (it is cut on its own).
      */
-    private static int clipped(ImpactParticles.Debris p, float x, float y, float z, int sa, int ta) {
+    private static int clipped(ImpactParticles.Debris p, boolean run, float x, float y, float z, int sa, int ta) {
+        if (Optimization.IMPACT_POOLS.on()) return kept(p, run, x, y, z, sa, ta);
         int quads = 0;
         for (int r = 0; r < p.clips; r++) {
-            float[] in = cut, out = cutSwap;
-            System.arraycopy(quad, 0, in, 0, 16);
-            int n = 4;
-            for (int edge = 0; edge < 4 && n >= 3; edge++) {
-                // keep s ≥ s0, t ≥ t0, s ≤ s1, t ≤ t1
-                int k = edge & 1;
-                float limit = p.clip[r * 4 + edge], sign = edge < 2 ? 1 : -1;
-                int m = 0;
-                for (int i = 0; i < n; i++) {
-                    int j = (i + 1) % n;
-                    float di = (in[i * 4 + k] - limit) * sign, dj = (in[j * 4 + k] - limit) * sign;
-                    if (di >= 0) {
-                        System.arraycopy(in, i * 4, out, m * 4, 4);
-                        m++;
-                    }
-                    if (di >= 0 != dj >= 0 && m < 12) {
-                        float f = di / (di - dj);
-                        for (int c = 0; c < 4; c++) out[m * 4 + c] = in[i * 4 + c] + (in[j * 4 + c] - in[i * 4 + c]) * f;
-                        m++;
-                    }
-                    if (m >= 12) break;
-                }
-                float[] swap = in;
-                in = out;
-                out = swap;
-                n = m;
-            }
+            int n = cutPiece(p, r);
             if (n < 3) continue;
-            // the real edges of this rectangle nearest the stain, one along each axis (or none)
-            int edges = p.edges == null ? 0 : p.edges[r];
-            int es = nearest(p.clip, r, edges, 0, 2), et = nearest(p.clip, r, edges, 1, 3);
-            // a fan from the first corner, two triangles a quad (the last one may be half empty)
-            for (int i = 1; i + 1 < n; i += 2) {
-                faceVertex(in, 0, x, y, z, sa, ta, p.clip, r, es, et);
-                faceVertex(in, i, x, y, z, sa, ta, p.clip, r, es, et);
-                faceVertex(in, i + 1, x, y, z, sa, ta, p.clip, r, es, et);
-                faceVertex(in, Math.min(i + 2, n - 1), x, y, z, sa, ta, p.clip, r, es, et);
-                quads++;
+            quads += fan(piece, 0, n, p, r, x, y, z, sa, ta);
+        }
+        return quads;
+    }
+
+    /**
+     * {@link #clipped} with the cut kept ({@code IMPACT_POOLS}): the pieces depend only on the quad's corners and the
+     * stain's rectangles, and the rectangles change only where {@code clip} works them out again ({@code clipStamp}); while
+     * both are the same (the corners compared bit for bit) the kept pieces are the very floats a new cut would give. The
+     * fans are written from them as before, at the stain's position now.
+     */
+    private static int kept(ImpactParticles.Debris p, boolean run, float x, float y, float z, int sa, int ta) {
+        Cut kept = run ? p.runCut : p.splatCut;
+        if (kept == null) {
+            kept = new Cut();
+            if (run) p.runCut = kept;
+            else p.splatCut = kept;
+        }
+        if (!kept.holds(quad, p)) {
+            kept.from(quad, p);
+            int at = 0;
+            for (int r = 0; r < p.clips; r++) {
+                int n = cutPiece(p, r);
+                kept.n[r] = (byte) n;
+                if (n < 3) continue;
+                if (at + n * 4 > kept.corners.length) kept.corners = Arrays.copyOf(kept.corners, Math.max(kept.corners.length * 2, at + n * 4));
+                System.arraycopy(piece, 0, kept.corners, at, n * 4);
+                at += n * 4;
             }
+        }
+        int quads = 0, at = 0;
+        for (int r = 0; r < kept.rects; r++) {
+            int n = kept.n[r];
+            if (n < 3) continue;
+            quads += fan(kept.corners, at, n, p, r, x, y, z, sa, ta);
+            at += n * 4;
+        }
+        return quads;
+    }
+
+    /** {@link #quad} cut to the stain's rectangle {@code r}: returns the piece's corner count; the piece is {@link #piece}. */
+    private static int cutPiece(ImpactParticles.Debris p, int r) {
+        float[] in = cut, out = cutSwap;
+        System.arraycopy(quad, 0, in, 0, 16);
+        int n = 4;
+        for (int edge = 0; edge < 4 && n >= 3; edge++) {
+            // keep s ≥ s0, t ≥ t0, s ≤ s1, t ≤ t1
+            int k = edge & 1;
+            float limit = p.clip[r * 4 + edge], sign = edge < 2 ? 1 : -1;
+            int m = 0;
+            for (int i = 0; i < n; i++) {
+                int j = (i + 1) % n;
+                float di = (in[i * 4 + k] - limit) * sign, dj = (in[j * 4 + k] - limit) * sign;
+                if (di >= 0) {
+                    System.arraycopy(in, i * 4, out, m * 4, 4);
+                    m++;
+                }
+                if (di >= 0 != dj >= 0 && m < 12) {
+                    float f = di / (di - dj);
+                    for (int c = 0; c < 4; c++) out[m * 4 + c] = in[i * 4 + c] + (in[j * 4 + c] - in[i * 4 + c]) * f;
+                    m++;
+                }
+                if (m >= 12) break;
+            }
+            float[] swap = in;
+            in = out;
+            out = swap;
+            n = m;
+        }
+        piece = in;
+        return n;
+    }
+
+    /** A cut piece ({@code n} corners from {@code base} in {@code poly}) on the stain's rectangle {@code r}, as a fan of quads. */
+    private static int fan(float[] poly, int base, int n, ImpactParticles.Debris p, int r, float x, float y, float z, int sa, int ta) {
+        // the real edges of this rectangle nearest the stain, one along each axis (or none)
+        int edges = p.edges == null ? 0 : p.edges[r];
+        int es = nearest(p.clip, r, edges, 0, 2), et = nearest(p.clip, r, edges, 1, 3);
+        int quads = 0;
+        // a fan from the first corner, two triangles a quad (the last one may be half empty)
+        for (int i = 1; i + 1 < n; i += 2) {
+            faceVertex(poly, base, 0, x, y, z, sa, ta, p.clip, r, es, et);
+            faceVertex(poly, base, i, x, y, z, sa, ta, p.clip, r, es, et);
+            faceVertex(poly, base, i + 1, x, y, z, sa, ta, p.clip, r, es, et);
+            faceVertex(poly, base, Math.min(i + 2, n - 1), x, y, z, sa, ta, p.clip, r, es, et);
+            quads++;
         }
         return quads;
     }
@@ -215,12 +303,13 @@ final class BloodStains {
         return ea ? a : eb ? b : -1;
     }
 
-    private static void faceVertex(float[] poly, int i, float x, float y, float z, int sa, int ta, float[] clip, int r, int es, int et) {
-        float s = poly[i * 4], t = poly[i * 4 + 1];
+    private static void faceVertex(float[] poly, int base, int i, float x, float y, float z, int sa, int ta, float[] clip, int r,
+                                   int es, int et) {
+        float s = poly[base + i * 4], t = poly[base + i * 4 + 1];
         float edgeS = es < 0 ? NO_EDGE : es == 0 ? s - clip[r * 4] : clip[r * 4 + 2] - s;
         float edgeT = et < 0 ? NO_EDGE : et == 1 ? t - clip[r * 4 + 1] : clip[r * 4 + 3] - t;
         float px = x + (sa == 0 ? s : 0), py = y + (sa == 1 ? s : ta == 1 ? t : 0), pz = z + (ta == 2 ? t : 0);
-        vertex(px, py, pz, poly[i * 4 + 2], poly[i * 4 + 3], edgeS, edgeT, anchorAtVertex ? px : ax, anchorAtVertex ? py : ay,
+        vertex(px, py, pz, poly[base + i * 4 + 2], poly[base + i * 4 + 3], edgeS, edgeT, anchorAtVertex ? px : ax, anchorAtVertex ? py : ay,
                 anchorAtVertex ? pz : az, -1, -1);
     }
 

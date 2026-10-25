@@ -1,6 +1,7 @@
 package com.blockland.client.movement;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.RenderClock;
 import com.blockland.common.Sounds;
 import com.blockland.movement.action.MovementAction;
 import com.blockland.movement.action.SlideRules;
@@ -100,7 +101,7 @@ public final class ClientSlide {
         cancelled = false;
         ticks = 0;
         airTicks = 0;
-        startNanos = System.nanoTime();
+        startNanos = RenderClock.nanos();
         endNanos = 0;
         player.setSprinting(false);
         player.setForcedPose(Pose.CROUCHING);
@@ -151,7 +152,7 @@ public final class ClientSlide {
         if (player.getForcedPose() == Pose.CROUCHING) player.setForcedPose(null);
         endAmount = amount();
         sliding = false;
-        endNanos = System.nanoTime();
+        endNanos = RenderClock.nanos();
         readyTick = ClientActions.tickCount() + SlideRules.get().cooldownTicks;
         if (!byServer) ClientActions.send(MovementAction.SLIDE, false, 0);
     }
@@ -233,7 +234,7 @@ public final class ClientSlide {
 
     /** 0..1 how far into a slide the local player is (eases in and out): camera, weapon tilt. */
     public static float amount() {
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         if (sliding) return ClientActions.rise(now - startNanos);
         if (endNanos == 0) return 0;
         return endAmount * (1 - ClientActions.fall(now - endNanos));

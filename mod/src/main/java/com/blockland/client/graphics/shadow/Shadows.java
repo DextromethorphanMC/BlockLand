@@ -27,6 +27,7 @@ public final class Shadows {
     }
 
     public static void init(BusGroup modBus) {
+        TerrainCache.init();
         Graphics.addStage(new Stage());
         Graphics.setShadows(map::info);
         Graphics.setWorldEffects(effects);
@@ -53,6 +54,11 @@ public final class Shadows {
     }
 
     private static final class Stage implements FrameStage {
+        @Override
+        public void restart() {
+            map.restart();
+        }
+
         @Override
         public void beginFrame(FrameContext frame) {
             effects.reset();

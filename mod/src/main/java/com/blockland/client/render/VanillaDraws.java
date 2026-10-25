@@ -2,6 +2,7 @@ package com.blockland.client.render;
 
 import com.blockland.BlockLand;
 import com.blockland.client.gltf.GltfModel;
+import com.blockland.client.perf.Optimization;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -13,6 +14,8 @@ import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -21,9 +24,13 @@ import java.util.Set;
  * The vanilla-render-type path of {@link DrawList}, for the sun shadow map's entity capture ({@link ShadowPass}): the
  * frame's triangles go through vanilla entity render types into the given buffers instead of BlockLand's pipeline —
  * transformed on the CPU, baked AO in the vertex colour, textures bound by id (cutout edges cast the right shadow).
+ * Into the shadow map's own capture ({@link ShadowPass.Capture}) only what its depth pass reads is built: nothing for
+ * what it discards, positions and texture coordinates for the rest.
  */
 final class VanillaDraws {
     private static final ResourceLocation WHITE = BlockLand.id("dynamic/white");
+    /** A vertex's transformed position on the capture path (render thread only). */
+    private static final Vector3f SCRATCH = new Vector3f();
     /** Resource textures already switched to linear filtering (vanilla loads them nearest-filtered). */
     private static final Set<ResourceLocation> filtered = new HashSet<>();
     private static boolean whiteRegistered;
@@ -32,6 +39,8 @@ final class VanillaDraws {
     }
 
     static void emit(DrawList.Entry[] entries, PoseStack base, MultiBufferSource buffers) {
+        // the shadow map's own capture: only what its depth pass reads is built (SHADOW_ENTITY_CAPTURE)
+        boolean lean = buffers instanceof ShadowPass.Capture && Optimization.SHADOW_ENTITY_CAPTURE.on();
         for (DrawList.Entry e : entries) {
             GltfModel.Primitive source = e.source;
             if (source == null || source.indices == null || source.indices.length < 3) continue;
@@ -44,10 +53,15 @@ final class VanillaDraws {
                 case EMISSIVE -> RenderType.eyes(texture);
             };
             VertexConsumer consumer = buffers.getBuffer(type);
+            if (lean && consumer == ShadowPass.DISCARD) continue;
             PoseStack.Pose pose = base.last().copy();
             pose.mulPose(e.modelView);
             int light = e.blend == DrawList.Blend.OPAQUE || e.blend == DrawList.Blend.TRANSLUCENT
                     ? LightTexture.pack(e.blockLight, e.skyLight) : LightTexture.FULL_BRIGHT;
+            if (lean) {
+                casters(consumer, pose.pose(), source, light, e.uvScale);
+                continue;
+            }
             float r = e.color.x, g = e.color.y, b = e.color.z, a = e.color.w;
             if (e.blend == DrawList.Blend.ADDITIVE) {
                 // additive blending ignores alpha: fade the colour instead
@@ -65,6 +79,26 @@ final class VanillaDraws {
                 vertex(consumer, pose, source, indices[t + 1], r, g, b, a, light, e.uvScale, decal);
                 vertex(consumer, pose, source, indices[t + 2], r, g, b, a, light, e.uvScale, decal);
                 vertex(consumer, pose, source, indices[t + 2], r, g, b, a, light, e.uvScale, decal);
+            }
+        }
+    }
+
+    /**
+     * One entry's triangles for the shadow map's capture ({@link ShadowPass.Capture}): the positions and texture
+     * coordinates exactly as {@link #vertex} makes them (the same matrix transform, the same products), everything its
+     * depth pass does not read — colour, normal — as constants instead of being worked out per vertex.
+     */
+    private static void casters(VertexConsumer consumer, Matrix4f pose, GltfModel.Primitive p, int light, float uvScale) {
+        int[] indices = p.indices;
+        float[] positions = p.positions, uvs = p.uvs;
+        Vector3f at = SCRATCH;
+        for (int t = 0; t + 2 < indices.length; t += 3) {
+            // entity render types draw quads: each triangle is a quad with its last corner doubled
+            for (int k = 0; k < 4; k++) {
+                int i = indices[t + Math.min(k, 2)];
+                pose.transformPosition(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2], at);
+                consumer.addVertex(at.x, at.y, at.z, -1, uvs[i * 2] * uvScale, uvs[i * 2 + 1] * uvScale,
+                        OverlayTexture.NO_OVERLAY, light, 0, 1, 0);
             }
         }
     }

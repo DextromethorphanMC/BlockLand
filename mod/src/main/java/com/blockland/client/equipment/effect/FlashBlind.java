@@ -1,6 +1,7 @@
 package com.blockland.client.equipment.effect;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.RenderClock;
 import com.blockland.network.packet.EffectPackets;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -60,7 +61,7 @@ final class FlashBlind {
         strength = Mth.clamp(flash.strength(), 0, 1);
         seconds = Math.max(0.2f, flash.seconds());
         deafen = flash.deafen();
-        startNanos = System.nanoTime();
+        startNanos = RenderClock.nanos();
         capturePending = strength > 0.3f;
         haveAfterimage = false;
         Minecraft mc = Minecraft.getInstance();
@@ -76,7 +77,7 @@ final class FlashBlind {
     }
 
     private static float elapsed() {
-        return (System.nanoTime() - startNanos) / 1e9f;
+        return (RenderClock.nanos() - startNanos) / 1e9f;
     }
 
     /** 0..1 white over the view at {@code t} seconds into the flash. */

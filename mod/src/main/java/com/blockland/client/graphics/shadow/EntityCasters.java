@@ -1,6 +1,7 @@
 package com.blockland.client.graphics.shadow;
 
 import com.blockland.BlockLand;
+import com.blockland.client.perf.Optimization;
 import com.blockland.client.render.ShadowPass;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -16,7 +17,6 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.EntityRenderer;
@@ -47,7 +47,7 @@ import java.util.Map;
  * player casts a whole shadow in first person too, head included; the first-person weapon does not take that shadow
  * (it looks past what is right behind it towards the sun: gun.fsh), so the head around the eye does not darken it.
  */
-final class EntityCasters implements MultiBufferSource {
+final class EntityCasters implements ShadowPass.Capture {
     static final float RANGE = 32f;
     private static final int MAX_ENTITIES = 24;
     private static final int MAX_MESHES = 64;
@@ -68,6 +68,9 @@ final class EntityCasters implements MultiBufferSource {
     private ByteBuffer staging;
     @Nullable
     private GpuBuffer vertices;
+    /** The vertex buffers of the frames before (SHADOW_ENTITY_CAPTURE): written again only once the GPU is done. */
+    private final GpuBuffer[] spare = new GpuBuffer[2];
+    private int spareIndex;
     private int vertexBytes;
     private int maxIndices;
     private int entities;
@@ -151,7 +154,7 @@ final class EntityCasters implements MultiBufferSource {
     public VertexConsumer getBuffer(RenderType type) {
         BufferBuilder builder = building.get(type);
         if (builder != null) return builder;
-        if (!casts(type) || building.size() >= MAX_MESHES) return Discard.INSTANCE;
+        if (!casts(type) || building.size() >= MAX_MESHES) return ShadowPass.DISCARD;
         ByteBufferBuilder bytes = free.isEmpty() ? new ByteBufferBuilder(64 * 1024) : free.poll();
         builder = new BufferBuilder(bytes, VertexFormat.Mode.QUADS, DefaultVertexFormat.NEW_ENTITY);
         building.put(type, builder);
@@ -195,6 +198,13 @@ final class EntityCasters implements MultiBufferSource {
         if (vertexBytes == 0) {
             meshes.clear();
             return;
+        }
+        if (Optimization.SHADOW_ENTITY_CAPTURE.on()) {
+            // the buffer the last frames' shadow draws read is left alone: this frame's go into the oldest of three
+            GpuBuffer oldest = spare[spareIndex];
+            spare[spareIndex] = vertices;
+            vertices = oldest;
+            spareIndex = (spareIndex + 1) % spare.length;
         }
         if (vertices == null || vertices.isClosed() || vertices.size() < vertexBytes) {
             if (vertices != null) vertices.close();
@@ -251,44 +261,13 @@ final class EntityCasters implements MultiBufferSource {
     void close() {
         if (vertices != null) vertices.close();
         vertices = null;
+        for (int i = 0; i < spare.length; i++) {
+            if (spare[i] != null) spare[i].close();
+            spare[i] = null;
+        }
         if (staging != null) MemoryUtil.memFree(staging);
         staging = null;
         free.forEach(ByteBufferBuilder::close);
         free.clear();
-    }
-
-    /** Takes and forgets the vertices of what casts nothing. */
-    private static final class Discard implements VertexConsumer {
-        static final Discard INSTANCE = new Discard();
-
-        @Override
-        public VertexConsumer addVertex(float x, float y, float z) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setColor(int r, int g, int b, int a) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setUv(float u, float v) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setUv1(int u, int v) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setUv2(int u, int v) {
-            return this;
-        }
-
-        @Override
-        public VertexConsumer setNormal(float x, float y, float z) {
-            return this;
-        }
     }
 }

@@ -13,6 +13,8 @@
 //   Params[0] = (input size, 1 / input size)
 //   Params[1] = (output size, 1 / output size)
 //   Params[2] = (jitter in uv xy, history valid, base blend factor of the current frame)
+// HAND_MOTION_IN_BRANCH (POST_DEAD_WORK): the hand motion is fetched only for hand pixels, the only ones that use it
+// (an explicit level 0: the motion texture has one level and the same filter for both directions, as texture() samples it).
 
 uniform sampler2D CurrentSampler;
 uniform sampler2D HistorySampler;
@@ -113,11 +115,21 @@ void main() {
     vec3 lo = mean - gamma * sigma;
     vec3 hi = mean + gamma * sigma;
 
+#ifdef HAND_MOTION_IN_BRANCH
+    vec2 previous;
+    if (hand < 0.5) {
+        vec4 clip = Matrix * vec4(texCoord * 2.0 - 1.0, closest * 2.0 - 1.0, 1.0);
+        previous = clip.w > 1e-5 ? clip.xy / clip.w * 0.5 + 0.5 : vec2(-1.0);
+    } else {
+        previous = texCoord - textureLod(HandVelocitySampler, texCoord + jitter, 0.0).rg;
+    }
+#else
     vec2 previous = texCoord - texture(HandVelocitySampler, texCoord + jitter).rg;
     if (hand < 0.5) {
         vec4 clip = Matrix * vec4(texCoord * 2.0 - 1.0, closest * 2.0 - 1.0, 1.0);
         previous = clip.w > 1e-5 ? clip.xy / clip.w * 0.5 + 0.5 : vec2(-1.0);
     }
+#endif
     bool valid = Params[2].z > 0.5 && previous.x >= 0.0 && previous.y >= 0.0 && previous.x <= 1.0 && previous.y <= 1.0;
     if (!valid) {
         fragColor = vec4(unsquash(fromYCoCg(current)), hand);

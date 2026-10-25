@@ -4,6 +4,7 @@ import com.blockland.BlockLand;
 import com.blockland.armor.ArmorContent;
 import com.blockland.armor.ArmorRules;
 import com.blockland.client.input.WeaponInput;
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.viewmodel.SwimPose;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.network.ArmorPacketListeners;
@@ -106,7 +107,7 @@ public final class ClientArmor {
     /** 0..1 through the insertion under way, 0 when there is none. */
     static float insertProgress() {
         if (insertNanos <= 0) return 0;
-        return Mth.clamp((System.nanoTime() - insertStart) / (float) insertNanos, 0, 1);
+        return Mth.clamp((RenderClock.nanos() - insertStart) / (float) insertNanos, 0, 1);
     }
 
     private static void clientTick() {
@@ -125,13 +126,13 @@ public final class ClientArmor {
             insertNanos = 0;
         }
         // an insertion the server never answered (a lost packet) gives up after a while
-        if (insertNanos > 0 && System.nanoTime() - insertStart > insertNanos * 3 + 2_000_000_000L) insertNanos = 0;
+        if (insertNanos > 0 && RenderClock.nanos() - insertStart > insertNanos * 3 + 2_000_000_000L) insertNanos = 0;
     }
 
     private static void frame() {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         float dt = lastFrame == 0 ? 0 : Math.min(0.1f, (now - lastFrame) / 1e9f);
         lastFrame = now;
         if (player == null || !equipped || !modelReady) return;
@@ -159,7 +160,7 @@ public final class ClientArmor {
     }
 
     private static void startInsert(float seconds) {
-        insertStart = System.nanoTime();
+        insertStart = RenderClock.nanos();
         insertNanos = (long) (Math.max(0.1f, seconds) * 1e9);
         viewmodel.insert(seconds);
     }

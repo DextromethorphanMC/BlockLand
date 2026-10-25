@@ -6,6 +6,7 @@ import com.blockland.client.decal.Decals;
 import com.blockland.client.hud.HitMarker;
 import com.blockland.client.impact.Impacts;
 import com.blockland.client.input.WeaponInput;
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.viewmodel.Holster;
 import com.blockland.client.viewmodel.SwimPose;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
@@ -176,14 +177,14 @@ public final class ClientKnives {
 
     /** 0..1 how far the knife is through its cooldown or draw (1 = ready). */
     static float readiness() {
-        long end = Math.max(readyAt, drawEnd), now = System.nanoTime();
+        long end = Math.max(readyAt, drawEnd), now = RenderClock.nanos();
         if (knife == null || now >= end) return 1;
         return Math.max(0, (now - cooldownFrom) / (float) Math.max(1, end - cooldownFrom));
     }
 
     private static boolean busy() {
         KnifeViewmodel.Action action = viewmodel.action();
-        return strikePending || System.nanoTime() < attackEnd || action == KnifeViewmodel.Action.INSPECT;
+        return strikePending || RenderClock.nanos() < attackEnd || action == KnifeViewmodel.Action.INSPECT;
     }
 
     // ---- ticking ------------------------------------------------------------------------------------
@@ -212,7 +213,7 @@ public final class ClientKnives {
         knife = held;
         strikePending = false;
         buffered = -1;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         modelReady = viewmodel.equip(held);
         viewmodel.setEventSink(name -> playUi("blockland:knife." + name, 0.97f + random.nextFloat() * 0.06f, 0.7f));
         drawEnd = now + (long) (held.drawTime * 1e9);
@@ -261,7 +262,7 @@ public final class ClientKnives {
         Ticker.global().tick();
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         float dt = lastFrame == 0 ? 0 : Math.min(0.1f, (now - lastFrame) / 1e9f);
         lastFrame = now;
         WatchedKnife.frame(dt);
@@ -308,7 +309,7 @@ public final class ClientKnives {
             if (click) KnifeHud.flash(tr("blockland.effect.slimed"));
             return;
         }
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         if (!ready(now)) {
             if (click) {
                 buffered = heavy ? 1 : 0;
@@ -338,7 +339,7 @@ public final class ClientKnives {
     }
 
     private static void inspect(LocalPlayer player) {
-        if (knife == null || System.nanoTime() < drawEnd || busy()) return;
+        if (knife == null || RenderClock.nanos() < drawEnd || busy()) return;
         SwimPose.stopRunning(player);
         viewmodel.play(KnifeViewmodel.Action.INSPECT, knife.anims.inspect, 0);
     }

@@ -15,14 +15,18 @@ gun_particle         | blockland:core/gun_particle | blockland:core/gun_particle
 # BlockLand post chain (client/graphics/post, upscale, frame)
 gfx_decode           | blockland:core/gfx_screen | blockland:core/gfx_decode | Position |
 gfx_taa              | blockland:core/gfx_screen | blockland:core/gfx_taa | Position |
+gfx_taa_hand_branch  | blockland:core/gfx_screen | blockland:core/gfx_taa | Position | HAND_MOTION_IN_BRANCH
 gfx_bloom_down       | blockland:core/gfx_screen | blockland:core/gfx_bloom_down | Position |
 gfx_bloom_up         | blockland:core/gfx_screen | blockland:core/gfx_bloom_up | Position |
 gfx_luminance        | blockland:core/gfx_screen | blockland:core/gfx_luminance | Position |
 gfx_motion_blur      | blockland:core/gfx_screen | blockland:core/gfx_motion_blur | Position |
 gfx_mb_velocity      | blockland:core/gfx_screen | blockland:core/gfx_mb_velocity | Position |
 gfx_mb_tile          | blockland:core/gfx_screen | blockland:core/gfx_mb_tile | Position |
+gfx_mb_tile_rows     | blockland:core/gfx_screen | blockland:core/gfx_mb_tile_rows | Position |
+gfx_mb_tile_columns  | blockland:core/gfx_screen | blockland:core/gfx_mb_tile_columns | Position |
 gfx_mb_neighbor      | blockland:core/gfx_screen | blockland:core/gfx_mb_neighbor | Position |
 gfx_final            | blockland:core/gfx_screen | blockland:core/gfx_final | Position |
+gfx_final_hud_coverage | blockland:core/gfx_screen | blockland:core/gfx_final | Position | HUD_COVERAGE
 gfx_fxaa             | blockland:core/gfx_screen | blockland:core/gfx_fxaa | Position |
 gfx_copy             | blockland:core/gfx_screen | blockland:core/gfx_copy | Position |
 # Lighting pack variants (client/graphics/light): every define set of a static pipeline using the overridden shaders
@@ -51,6 +55,7 @@ gfx_fg_frame         | blockland:core/gfx_screen | blockland:core/gfx_fg_frame |
 gfx_fg_hudless       | blockland:core/gfx_screen | blockland:core/gfx_fg_hudless | Position |
 gfx_fg_ui            | blockland:core/gfx_screen | blockland:core/gfx_fg_ui | Position |
 gfx_alpha_clear      | blockland:core/gfx_screen | blockland:core/gfx_alpha_clear | Position |
+gfx_alpha_one        | blockland:core/gfx_screen | blockland:core/gfx_alpha_one | Position |
 gfx_nr_input         | blockland:core/gfx_screen | blockland:core/gfx_nr_input | Position |
 gfx_nr_output        | blockland:core/gfx_screen | blockland:core/gfx_nr_output | Position |
 gfx_nr_depth         | blockland:core/gfx_screen | blockland:core/gfx_nr_depth | Position |

@@ -6,6 +6,8 @@ import com.blockland.client.graphics.GraphicsSettings;
 import com.blockland.client.hud.Crosshair;
 import com.blockland.client.hud.HitMarker;
 import com.blockland.client.impact.ImpactSettings;
+import com.blockland.client.perf.Perf;
+import com.blockland.client.perf.PerfSettings;
 import com.blockland.client.scope.ScopeQuality;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -50,6 +52,8 @@ public final class ClientSettings {
         public GraphicsSettings graphics = new GraphicsSettings();
         /** Bullet impacts (弹着效果): quality and switches. */
         public ImpactSettings impacts = new ImpactSettings();
+        /** The 性能 tab: which optimizations run, timings on the F3 screen. */
+        public PerfSettings performance = new PerfSettings();
     }
 
     private static Data data;
@@ -78,6 +82,8 @@ public final class ClientSettings {
         if (data.hitmarker == null) data.hitmarker = new HitMarker.Style();
         if (data.graphics == null) data.graphics = new GraphicsSettings();
         if (data.impacts == null) data.impacts = new ImpactSettings();
+        if (data.performance == null) data.performance = new PerfSettings();
+        data.performance.sanitize();
         data.impacts.sanitize();
         data.graphics.sanitize();
         data.adsSensitivity = clamp(data.adsSensitivity, 0.1f, 2f);
@@ -112,6 +118,7 @@ public final class ClientSettings {
         Crosshair.setStyle(data.crosshair);
         HitMarker.setStyle(data.hitmarker);
         CameraRig.setIntensity(data.cameraImpact, data.cameraMotion);
+        Perf.applySettings();
     }
 
     private static Path file() {

@@ -8,6 +8,8 @@ import com.blockland.client.graphics.frame.FrameContext;
 import com.blockland.client.graphics.gpu.Fullscreen;
 import com.blockland.client.graphics.gpu.RenderTexture;
 import com.blockland.client.graphics.gpu.Ubo;
+import com.blockland.client.perf.FrameTimings;
+import com.blockland.client.perf.Optimization;
 import com.blockland.client.render.SceneLighting;
 import com.mojang.blaze3d.buffers.Std140SizeCalculator;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
@@ -60,6 +62,12 @@ final class WorldFx implements WorldEffects {
     private final RenderTexture lightFull = new RenderTexture("BlockLand volumetric light", RenderTexture.Format.RGBA16F, FilterMode.LINEAR);
     @Nullable
     private Ubo aoInfo, lightInfo, blurH, blurV, upsample, volumetricInfo;
+    /**
+     * The volumetric light's own blur blocks ({@link Optimization#POST_UNIFORMS}); without them it rewrites the ambient
+     * occlusion's while that blur's draws may still be queued, and both are rewritten every frame.
+     */
+    @Nullable
+    private Ubo lightBlurH, lightBlurV;
     @Nullable
     private GpuTextureView ao, light;
     private final Vector3f sun = new Vector3f();
@@ -129,14 +137,18 @@ final class WorldFx implements WorldEffects {
             ensureUbos();
             fx(upsample, frame, w, h, 0, 0, 0, 0, 0, 0, 0, hw / (float) w);
             if (wantAo) {
-                ao = ambientOcclusion(frame, settings, w, h, hw, hh);
+                try (FrameTimings.Span ignored = FrameTimings.span("bl/world_fx/ao")) {
+                    ao = ambientOcclusion(frame, settings, w, h, hw, hh);
+                }
             } else {
                 aoHalf.close();
                 aoScratch.close();
                 aoFull.close();
             }
             if (wantLight) {
-                light = volumetric(frame, settings, shadows, w, h, hw, hh);
+                try (FrameTimings.Span ignored = FrameTimings.span("bl/world_fx/volumetric")) {
+                    light = volumetric(frame, settings, shadows, w, h, hw, hh);
+                }
             } else {
                 lightHalf.close();
                 lightScratch.close();
@@ -164,7 +176,7 @@ final class WorldFx implements WorldEffects {
         GpuTextureView depth = frame.worldDepth;
         Fullscreen.pass("BlockLand ambient occlusion", aoHalf.view(), AO).sampler("DepthSampler", depth)
                 .uniform("FxInfo", aoInfo.buffer().slice()).draw();
-        blur(frame, aoHalf, aoScratch, depth, 30f);
+        blur(frame, aoHalf, aoScratch, depth, 30f, blurH, blurV);
         Fullscreen.pass("BlockLand ambient occlusion: upsample", aoFull.view(), UPSAMPLE).sampler("DepthSampler", depth)
                 .sampler("InSampler", aoHalf.view()).uniform("FxInfo", upsample.buffer().slice()).draw();
         return aoFull.view();
@@ -227,14 +239,23 @@ final class WorldFx implements WorldEffects {
                 .uniform("FxInfo", lightInfo.buffer().slice())
                 .uniform("BlockLandScene", SceneLighting.uniforms())
                 .uniform("VolumetricInfo", volumetricInfo.buffer().slice()).draw();
-        blur(frame, lightHalf, lightScratch, depth, 12f);
+        if (Optimization.POST_UNIFORMS.on()) {
+            if (lightBlurH == null) {
+                lightBlurH = new Ubo("volumetric light blur H", FX_SIZE).skipUnchanged();
+                lightBlurV = new Ubo("volumetric light blur V", FX_SIZE).skipUnchanged();
+            }
+            blur(frame, lightHalf, lightScratch, depth, 12f, lightBlurH, lightBlurV);
+        } else {
+            blur(frame, lightHalf, lightScratch, depth, 12f, blurH, blurV);
+        }
         Fullscreen.pass("BlockLand volumetric light: upsample", lightFull.view(), UPSAMPLE).sampler("DepthSampler", depth)
                 .sampler("InSampler", lightHalf.view()).uniform("FxInfo", upsample.buffer().slice()).draw();
         return lightFull.view();
     }
 
     /** Depth-aware blur of a half-resolution effect, horizontally into the scratch and back vertically. */
-    private void blur(FrameContext frame, RenderTexture target, RenderTexture scratch, GpuTextureView depth, float sharpness) {
+    private void blur(FrameContext frame, RenderTexture target, RenderTexture scratch, GpuTextureView depth, float sharpness,
+                      Ubo blurH, Ubo blurV) {
         int hw = target.width(), hh = target.height();
         float ratio = hw / (float) Math.max(1, frame.internalWidth);
         fx(blurH, frame, hw, hh, 0, 0, 0, 0, 1f / hw, 0, sharpness, ratio);
@@ -259,12 +280,12 @@ final class WorldFx implements WorldEffects {
 
     private void ensureUbos() {
         if (aoInfo != null) return;
-        aoInfo = new Ubo("ambient occlusion", FX_SIZE);
-        lightInfo = new Ubo("volumetric light pass", FX_SIZE);
-        blurH = new Ubo("world effects blur H", FX_SIZE);
-        blurV = new Ubo("world effects blur V", FX_SIZE);
-        upsample = new Ubo("world effects upsample", FX_SIZE);
-        volumetricInfo = new Ubo("volumetric light", VOLUMETRIC_SIZE);
+        aoInfo = new Ubo("ambient occlusion", FX_SIZE).skipUnchanged();
+        lightInfo = new Ubo("volumetric light pass", FX_SIZE).skipUnchanged();
+        blurH = new Ubo("world effects blur H", FX_SIZE).skipUnchanged();
+        blurV = new Ubo("world effects blur V", FX_SIZE).skipUnchanged();
+        upsample = new Ubo("world effects upsample", FX_SIZE).skipUnchanged();
+        volumetricInfo = new Ubo("volumetric light", VOLUMETRIC_SIZE).skipUnchanged();
     }
 
     /** Frees the targets (both effects switched off). */

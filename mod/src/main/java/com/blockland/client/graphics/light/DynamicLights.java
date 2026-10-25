@@ -2,6 +2,8 @@ package com.blockland.client.graphics.light;
 
 import com.blockland.BlockLand;
 import com.blockland.client.graphics.GraphicsSettings;
+import com.blockland.client.perf.FrameTimings;
+import com.blockland.client.perf.Optimization;
 import com.blockland.client.render.LightSources;
 import com.blockland.client.render.SceneLighting;
 import com.google.gson.Gson;
@@ -11,6 +13,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -101,20 +104,8 @@ final class DynamicLights {
         }
         LightSources.collect(light -> offer(light, camX, camY, camZ));
         if (settings.heldItemLights) {
-            for (Entity entity : level.entitiesForRendering()) {
-                if (entity.isRemoved() || entity.distanceToSqr(camX, camY, camZ) > ENTITY_RANGE * ENTITY_RANGE) continue;
-                Vec3 at = entity.getPosition(partial);
-                if (entity instanceof LivingEntity living) {
-                    double y = at.y + living.getBbHeight() * 0.62;
-                    held(living.getMainHandItem(), at.x, y, at.z, camX, camY, camZ);
-                    held(living.getOffhandItem(), at.x, y, at.z, camX, camY, camZ);
-                } else if (entity instanceof ItemEntity item) {
-                    held(item.getItem(), at.x, at.y + 0.25, at.z, camX, camY, camZ);
-                }
-                if (entity.displayFireAnimation()) {
-                    offer(new LightSources.Light(at.x, at.y + entity.getBbHeight() * 0.5, at.z, FIRE.r(), FIRE.g(), FIRE.b(),
-                            FIRE.intensity(), FIRE.radius()), camX, camY, camZ);
-                }
+            try (FrameTimings.Span ignored = FrameTimings.span("bl/lights/entities")) {
+                entityLights(level, camX, camY, camZ, partial);
             }
         }
         candidates.sort((a, b) -> Double.compare(b.score, a.score));
@@ -144,6 +135,37 @@ final class DynamicLights {
             } else {
                 out.putVec4(0, 0, 0, 0);
                 out.putVec4(0, 0, 0, 0);
+            }
+        }
+    }
+
+    /** Light items held by the entities near the camera or lying there, and burning entities. */
+    private void entityLights(ClientLevel level, double camX, double camY, double camZ, float partial) {
+        boolean garbageFree = Optimization.FRAME_GARBAGE.on();
+        for (Entity entity : level.entitiesForRendering()) {
+            if (entity.isRemoved() || entity.distanceToSqr(camX, camY, camZ) > ENTITY_RANGE * ENTITY_RANGE) continue;
+            double atX, atY, atZ;
+            if (garbageFree) {
+                // Entity.getPosition(partial)'s own lerps, without its vector
+                atX = Mth.lerp(partial, entity.xo, entity.getX());
+                atY = Mth.lerp(partial, entity.yo, entity.getY());
+                atZ = Mth.lerp(partial, entity.zo, entity.getZ());
+            } else {
+                Vec3 at = entity.getPosition(partial);
+                atX = at.x;
+                atY = at.y;
+                atZ = at.z;
+            }
+            if (entity instanceof LivingEntity living) {
+                double y = atY + living.getBbHeight() * 0.62;
+                held(living.getMainHandItem(), atX, y, atZ, camX, camY, camZ);
+                held(living.getOffhandItem(), atX, y, atZ, camX, camY, camZ);
+            } else if (entity instanceof ItemEntity item) {
+                held(item.getItem(), atX, atY + 0.25, atZ, camX, camY, camZ);
+            }
+            if (entity.displayFireAnimation()) {
+                offer(new LightSources.Light(atX, atY + entity.getBbHeight() * 0.5, atZ, FIRE.r(), FIRE.g(), FIRE.b(),
+                        FIRE.intensity(), FIRE.radius()), camX, camY, camZ);
             }
         }
     }

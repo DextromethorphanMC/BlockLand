@@ -1,0 +1,22 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.blockland.mixin.gl",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [
+    "CompositeRenderTypeMixin",
+    "GlBufferMixin",
+    "GlCommandEncoderMixin",
+    "GlProgramMixin",
+    "GlRenderPassMixin",
+    "GlStateManagerMixin",
+    "GlTextureMixin",
+    "LevelRendererMixin",
+    "RenderSystemMixin",
+    "VertexFormatMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

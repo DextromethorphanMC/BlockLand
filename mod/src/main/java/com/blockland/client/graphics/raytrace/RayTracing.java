@@ -111,6 +111,11 @@ public final class RayTracing implements FrameStage, WorldEffects {
     }
 
     @Override
+    public void restart() {
+        historyValid = false;
+    }
+
+    @Override
     public void beginFrame(FrameContext frame) {
         output = null;
         frame.rayAlbedo = null;

@@ -1,6 +1,7 @@
 package com.blockland.client.scope;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.settings.ClientSettings;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.craft.CraftData;
@@ -60,7 +61,7 @@ public final class Optics {
     public static void init(BusGroup modBus) {
         TickEvent.RenderTickEvent.Pre.BUS.addListener(event -> frame++);
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> {
-            if (lastFocus != 0 && System.nanoTime() - lastFocus > 10_000_000_000L) {
+            if (lastFocus != 0 && RenderClock.nanos() - lastFocus > 10_000_000_000L) {
                 focus.release();
                 lastFocus = 0;
             }
@@ -76,7 +77,7 @@ public final class Optics {
                 && Scopes.stepZoom(event.getDeltaY() > 0 ? 1 : -1));
         net.minecraftforge.client.event.CustomizeGuiOverlayEvent.DebugText.BUS.addListener(event -> {
             if (event.getSide() == net.minecraftforge.client.event.CustomizeGuiOverlayEvent.DebugText.Side.Left
-                    && lastFocus != 0 && System.nanoTime() - lastFocus < 500_000_000L) {
+                    && lastFocus != 0 && RenderClock.nanos() - lastFocus < 500_000_000L) {
                 event.getText().add("[BlockLand] aim focus: " + focus.stats());
             }
             return false;
@@ -175,7 +176,7 @@ public final class Optics {
         float blur = ClientSettings.get().scopeBlurOutside ? sight.aimFocusBlur() * raised : 0;
         if (blur <= 0.01f && dim <= 0.01f) return;
         focus.render(x, y, radius, blur, dim);
-        lastFocus = System.nanoTime();
+        lastFocus = RenderClock.nanos();
     }
 
     /**

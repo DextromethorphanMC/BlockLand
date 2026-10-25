@@ -1,6 +1,7 @@
 package com.blockland.client.movement;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.RenderClock;
 import com.blockland.common.Sounds;
 import com.blockland.movement.action.MovementAction;
 import com.blockland.movement.action.ProneRules;
@@ -74,7 +75,7 @@ public final class ClientProne {
         lier = player;
         prone = true;
         cancelled = false;
-        startNanos = System.nanoTime();
+        startNanos = RenderClock.nanos();
         endNanos = 0;
         player.setSprinting(false);
         player.setForcedPose(Pose.SWIMMING);
@@ -133,7 +134,7 @@ public final class ClientProne {
         endAmount = amount();
         prone = false;
         landTicks = 0;
-        endNanos = System.nanoTime();
+        endNanos = RenderClock.nanos();
         readyTick = ClientActions.tickCount() + ProneRules.get().cooldownTicks;
         if (!byServer) {
             player.level().playLocalSound(player.getX(), player.getY(), player.getZ(), Sounds.byId(BlockLand.id("movement.prone_up")),
@@ -177,7 +178,7 @@ public final class ClientProne {
 
     /** 0..1 how far down the local player is (eases in over the drop, out over getting up). */
     public static float amount() {
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         ProneRules rules = ProneRules.get();
         if (prone) return ease((now - startNanos) / (rules.enterTicks * 50_000_000f));
         if (endNanos == 0) return 0;

@@ -1,6 +1,7 @@
 package com.blockland.client.parachute;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.RenderClock;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.ParachutePacketListeners;
 import com.blockland.network.packet.ParachutePackets;
@@ -74,10 +75,10 @@ public final class ClientParachute {
                 .addAbove(ForgeLayeredDraw.PRE_SLEEP_STACK, BlockLand.id("parachute_hud"), ForgeLayeredDraw.CROSSHAIR, ParachuteHud::render));
         ViewportEvent.ComputeCameraAngles.BUS.addListener(event -> {
             if (!Minecraft.getInstance().options.getCameraType().isFirstPerson()) return;
-            float a = amount(System.nanoTime());
+            float a = amount(RenderClock.nanos());
             if (a <= 0) return;
             ParachuteRules.Camera c = ParachuteRules.get().camera;
-            double t = System.nanoTime() / 1e9;
+            double t = RenderClock.nanos() / 1e9;
             event.setRoll(event.getRoll() + (float) (Math.sin(t * 1.15) * c.sway + bank * c.bank) * a);
             event.setPitch(event.getPitch() + (float) Math.sin(t * 0.8 + 1.3) * c.sway * 0.35f * a);
         });
@@ -140,7 +141,7 @@ public final class ClientParachute {
     private static void open(LocalPlayer player, boolean send) {
         open = true;
         openTicks = 0;
-        changedNanos = System.nanoTime();
+        changedNanos = RenderClock.nanos();
         readyTick = tickCount + ParachuteRules.get().cooldownTicks;
         play(player, "parachute.open", 1.1f);
         if (send) BLNetwork.sendToServer(new ParachutePackets.C2SToggle(true));
@@ -149,7 +150,7 @@ public final class ClientParachute {
     private static void close(LocalPlayer player, boolean send) {
         if (!open) return;
         open = false;
-        changedNanos = System.nanoTime();
+        changedNanos = RenderClock.nanos();
         readyTick = tickCount + ParachuteRules.get().cooldownTicks;
         play(player, "parachute.close", 0.8f);
         if (send) BLNetwork.sendToServer(new ParachutePackets.C2SToggle(false));
@@ -169,7 +170,7 @@ public final class ClientParachute {
             open = false;
             changedNanos = 0;
         }
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         remote.values().removeIf(r -> !r.open && now - r.since > (long) (CLOSE_SECONDS * 1e9));
         LocalPlayer player = mc.player;
         if (player == null) return;
@@ -192,7 +193,7 @@ public final class ClientParachute {
         }
         Remote before = remote.get(state.entityId());
         if (before != null && before.open == state.open()) return;
-        remote.put(state.entityId(), new Remote(state.open(), System.nanoTime()));
+        remote.put(state.entityId(), new Remote(state.open(), RenderClock.nanos()));
     }
 
     // ---- what the renderer, the HUD and other modules ask ---------------------------------------------

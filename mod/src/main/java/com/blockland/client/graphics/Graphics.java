@@ -101,6 +101,15 @@ public final class Graphics {
         return status;
     }
 
+    /**
+     * The next frame starts the pipeline from scratch: its screen-sized resources are made again, the frame count and
+     * every stage's history start over ({@link FrameStage#restart}). Two runs of the same frames after this render the
+     * same pictures (the benchmark's frame comparison).
+     */
+    public static void restartTemporalState() {
+        FrameHooks.requestRestart();
+    }
+
     // ---- wiring between the parts -----------------------------------------------------------------------------------
 
     /** Adds a stage; stages run in the order they were added. */

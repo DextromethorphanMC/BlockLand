@@ -43,17 +43,23 @@ import java.util.List;
  * gui key 256           key press in the open screen (GLFW code)
  * camera first|third
  * f3                    toggle the debug overlay
+ * window 1920 1080      resize the window
  * state                 log gun state, fps, look target
  * shot name.png         save a framebuffer screenshot into the automation dir
  * frames 12 name        save the next 12 rendered frames (name_000.png …; plus the scope picture and an optics line)
  * world                 the lobby's 进入世界 (OP; waits until the lobby is up)
  * scroll 1              the mouse wheel (a variable scope steps its power while aiming)
  * optics                log the raised optic's state (power, eyepiece, sway, breath, sight line)
- * setting scopeQuality high   set a field of the client settings (not saved)
+ * setting scopeQuality high   set a field of the client settings (not saved); dotted paths reach nested settings
+ *                       (setting graphics.shadows ultra)
+ * opt all|&lt;id&gt; on|off    switch optimizations (client/perf; all: every one), like the 性能 tab (not saved)
+ * bench [compare|&lt;id&gt;]  run the benchmark (client/perf), only its frame comparison, or one optimization alone (off
+ *                       and on, every other one on); the commands after it wait until it has finished, then its
+ *                       summary is logged
  * reload / quit         reload resources / close the client
  * </pre>
- * While it runs the desktop's mouse is ignored (no button presses, no grabbed cursor), so a script is not disturbed by
- * whatever happens on the desktop while its window has focus.
+ * While it runs the desktop's mouse and keyboard are ignored (no button presses, no grabbed cursor, no keys, no wheel), so
+ * a script is not disturbed by whatever happens on the desktop while its window has focus.
  */
 public final class DevAutomation {
     private static Path dir;
@@ -79,7 +85,24 @@ public final class DevAutomation {
             Minecraft mc = Minecraft.getInstance();
             mc.options.pauseOnLostFocus = false;
             if (mc.mouseHandler.isMouseGrabbed()) mc.mouseHandler.releaseMouse();
+            detachKeyboard(mc);
         });
+    }
+
+    private static boolean keyboardDetached;
+
+    /**
+     * Nor does the desktop's keyboard or wheel reach it: whatever is typed while its window has focus (Esc, M, a hotbar
+     * key) would change the scripted scene. Scripts press keys through {@code key} / {@code gui key} instead.
+     */
+    private static void detachKeyboard(Minecraft mc) {
+        if (keyboardDetached) return;
+        keyboardDetached = true;
+        long window = mc.getWindow().getWindow();
+        org.lwjgl.glfw.GLFW.glfwSetKeyCallback(window, null);
+        org.lwjgl.glfw.GLFW.glfwSetCharModsCallback(window, null);
+        org.lwjgl.glfw.GLFW.glfwSetScrollCallback(window, null);
+        BlockLand.LOGGER.warn("[BlockLand] Dev automation: the desktop's keyboard and mouse wheel are ignored");
     }
 
     private static void tick() {
@@ -89,6 +112,14 @@ public final class DevAutomation {
             releaseNext = null;
         }
         if (++pollCounter % 10 == 0) poll(mc);
+        // the benchmark drives the client itself: the script goes on once it has finished
+        boolean benchmarking = com.blockland.client.perf.Perf.benchmarkRunning();
+        if (benchmarkWatched && !benchmarking) {
+            benchmarkWatched = false;
+            log("bench: finished");
+            for (String summaryLine : com.blockland.client.perf.Perf.lastResult()) log("bench: " + summaryLine);
+        }
+        if (benchmarking) return;
         if (waitTicks > 0) {
             waitTicks--;
             return;
@@ -107,7 +138,9 @@ public final class DevAutomation {
         }
     }
 
-    private static final java.util.Set<String> LOBBY_COMMANDS = java.util.Set.of("wait", "world", "setting", "reload", "quit");
+    private static final java.util.Set<String> LOBBY_COMMANDS = java.util.Set.of("wait", "world", "setting", "opt", "reload", "quit");
+    /** A benchmark started by {@code bench} is running. */
+    private static boolean benchmarkWatched;
 
     /** Frames still to capture with {@code frames}, and their file name prefix. */
     private static int framesLeft;
@@ -171,13 +204,37 @@ public final class DevAutomation {
             }
             case "optics" -> log(com.blockland.client.scope.Optics.debugLine());
             case "setting" -> {
-                // setting <field of ClientSettings.Data> <value>
-                var data = com.blockland.client.settings.ClientSettings.get();
-                var field = data.getClass().getField(a[1]);
-                Object value = field.getType() == boolean.class ? (Object) Boolean.parseBoolean(a[2])
-                        : field.getType() == float.class ? (Object) Float.parseFloat(a[2]) : a[2];
-                field.set(data, value);
+                // setting <field of ClientSettings.Data, dotted for nested objects> <value>
+                Object target = com.blockland.client.settings.ClientSettings.get();
+                String[] path = a[1].split("\\.");
+                for (int i = 0; i < path.length - 1; i++) target = target.getClass().getField(path[i]).get(target);
+                var field = target.getClass().getField(path[path.length - 1]);
+                Class<?> type = field.getType();
+                Object value = type == boolean.class ? (Object) Boolean.parseBoolean(a[2])
+                        : type == float.class ? (Object) Float.parseFloat(a[2])
+                        : type == int.class ? (Object) Integer.parseInt(a[2])
+                        : type == double.class ? (Object) Double.parseDouble(a[2]) : a[2];
+                field.set(target, value);
+                com.blockland.client.graphics.Graphics.settingsChanged();
                 log("setting " + a[1] + " = " + value);
+            }
+            case "opt" -> {
+                // opt all|<optimization id> on|off
+                var perf = com.blockland.client.perf.Perf.settings();
+                boolean on = "on".equals(a[2]);
+                for (var o : com.blockland.client.perf.Optimization.values()) {
+                    if ("all".equals(a[1]) || o.id.equals(a[1])) perf.set(o, on);
+                }
+                com.blockland.client.perf.Perf.applySettings();
+                log("opt " + a[1] + " " + (on ? "on" : "off"));
+            }
+            case "bench" -> {
+                var only = a.length > 1 ? com.blockland.client.perf.Optimization.byId(a[1]) : null;
+                boolean started = a.length > 1 && "compare".equals(a[1]) ? com.blockland.client.perf.Perf.startFrameComparison()
+                        : only != null ? com.blockland.client.perf.Perf.startBenchmark(only)
+                        : com.blockland.client.perf.Perf.startBenchmark();
+                benchmarkWatched = started;
+                log(started ? "bench: started" : "bench: could not start (no world or already running)");
             }
             case "frames" -> {
                 framesLeft = Integer.parseInt(a[1]);
@@ -234,6 +291,12 @@ public final class DevAutomation {
                 if (mc.screen instanceof net.minecraft.client.gui.screens.PauseScreen
                         || mc.screen instanceof com.blockland.client.screen.pause.GameMenuScreen) mc.setScreen(null);
                 log("perf mode: unlimited fps, vsync off, no pause on lost focus");
+            }
+            case "window" -> {
+                // window <width> <height>: the window's size (the benchmark's resolution)
+                long handle = mc.getWindow().getWindow();
+                org.lwjgl.glfw.GLFW.glfwSetWindowSize(handle, Integer.parseInt(a[1]), Integer.parseInt(a[2]));
+                log("window " + a[1] + "x" + a[2]);
             }
             case "camera" -> mc.options.setCameraType("third".equals(a[1]) ? CameraType.THIRD_PERSON_BACK : CameraType.FIRST_PERSON);
             case "f3" -> mc.getDebugOverlay().toggleOverlay();
@@ -321,6 +384,7 @@ public final class DevAutomation {
     private static void state(Minecraft mc, LocalPlayer player) {
         GunStats stats = ClientGuns.stats();
         Entity target = mc.crosshairPickEntity;
+        log("screen=" + (mc.screen == null ? "-" : mc.screen.getClass().getName()) + " overlay=" + (mc.getOverlay() == null ? "-" : mc.getOverlay().getClass().getName()));
         log(String.format("fps=%d holding=%s gun=%s ammo=%d reserve=%d reloading=%s aim=%.2f spread=%.2f yaw=%.1f pitch=%.1f target=%s hp=%.1f",
                 mc.getFps(), ClientGuns.holdingGun(), stats == null ? "-" : stats.gun().id, ClientGuns.ammo(), ClientGuns.reserve(),
                 ClientGuns.isReloading(), ClientGuns.aim(), ClientGuns.currentSpread(), player.getYRot(), player.getXRot(),

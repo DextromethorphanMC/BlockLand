@@ -1,6 +1,7 @@
 package com.blockland.client.movement;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.RenderClock;
 import com.blockland.common.Sounds;
 import com.blockland.movement.action.DiveRules;
 import com.blockland.movement.action.MovementAction;
@@ -69,7 +70,7 @@ public final class ClientDive {
         airTicks = 0;
         yaw = ClientSlide.movedYaw();
         speed = rules.launchSpeed(ClientSlide.moved());
-        startNanos = System.nanoTime();
+        startNanos = RenderClock.nanos();
         endNanos = 0;
         player.setSprinting(false);
         player.setForcedPose(Pose.SWIMMING);
@@ -94,9 +95,9 @@ public final class ClientDive {
             // touchdown: on the chest, sliding on; prone takes the pose and the keys over
             diving = false;
             endAmount = amount();
-            endNanos = System.nanoTime();
+            endNanos = RenderClock.nanos();
             readyTick = ClientActions.tickCount() + rules.cooldownTicks;
-            landNanos = System.nanoTime();
+            landNanos = RenderClock.nanos();
             player.level().playLocalSound(player.getX(), player.getY(), player.getZ(), Sounds.byId(BlockLand.id("movement.dive_land")),
                     SoundSource.PLAYERS, 1.0F, 0.94F + player.getRandom().nextFloat() * 0.12F, false);
             ClientProne.land(player, yaw, speed * 0.8f, rules.landSlideTicks);
@@ -114,7 +115,7 @@ public final class ClientDive {
         if (player.getForcedPose() == Pose.SWIMMING) player.setForcedPose(null);
         endAmount = amount();
         diving = false;
-        endNanos = System.nanoTime();
+        endNanos = RenderClock.nanos();
         readyTick = ClientActions.tickCount() + DiveRules.get().cooldownTicks;
         if (!byServer) ClientActions.send(MovementAction.DIVE, false, 0);
     }
@@ -160,7 +161,7 @@ public final class ClientDive {
 
     /** 0..1 how far into the dive the local player is: the camera's tilt, the weapon thrown forward. */
     public static float amount() {
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         if (diving) return smooth((now - startNanos) / (float) BLEND_IN);
         if (endNanos == 0) return 0;
         return endAmount * (1 - smooth((now - endNanos) / (float) BLEND_OUT));
@@ -169,7 +170,7 @@ public final class ClientDive {
     /** First-person camera: looking down into the dive, and the landing's dip. */
     static float cameraPitch() {
         DiveRules.Camera c = DiveRules.get().camera;
-        float t = landNanos == 0 ? 1 : (System.nanoTime() - landNanos) / 450_000_000f;
+        float t = landNanos == 0 ? 1 : (RenderClock.nanos() - landNanos) / 450_000_000f;
         // the landing's dip: in quickly as the chest hits the ground, out slowly
         float dip = t >= 1 ? 0 : (float) Math.sin(Math.PI * Math.pow(t, 0.45)) * (1 - t);
         return c.pitch * amount() + c.landKick * dip;

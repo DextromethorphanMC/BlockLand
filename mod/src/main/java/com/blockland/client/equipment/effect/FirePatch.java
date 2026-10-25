@@ -2,6 +2,7 @@ package com.blockland.client.equipment.effect;
 
 import com.blockland.BlockLand;
 import com.blockland.client.render.LightSources;
+import com.blockland.client.render.RenderClock;
 import com.blockland.common.Sounds;
 import com.blockland.equipment.effect.FireSpread;
 import com.blockland.equipment.effect.Params;
@@ -100,7 +101,7 @@ final class FirePatch implements FxWorld.Fx {
     private LightSources.Light light() {
         float s = strength();
         if (s <= 0.01f || cells.isEmpty() || !FxWorld.all().contains(this)) return null;
-        double time = System.nanoTime() / 1e9;
+        double time = RenderClock.nanos() / 1e9;
         float flicker = 0.86f + 0.09f * (float) Math.sin(time * 11.3) + 0.05f * (float) Math.sin(time * 23.7 + 1.3);
         return new LightSources.Light(impact.x, cells.get(0).floorY() + 0.8, impact.z, 1f, 0.55f, 0.2f, 3.2f * s * flicker, radius + 5);
     }

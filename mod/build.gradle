@@ -15,6 +15,10 @@ base {
 // Mojang ships Java 21 to end users in 1.20.5+
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+// one Mixin config per area of vanilla it changes (client/perf, rendering spec §20)
+ext.MIXIN_CONFIGS = ['blockland.mixins.json', 'blockland.gl.mixins.json', 'blockland.terrain.mixins.json',
+                     'blockland.particles.mixins.json']
+
 minecraft {
     mappings channel: 'official', version: minecraft_version
 
@@ -22,6 +26,8 @@ minecraft {
         configureEach {
             workingDir = layout.projectDirectory.dir('run')
             systemProperty 'eventbus.api.strictRuntimeChecks', 'true'
+            // the jar names them in its manifest (MixinConfigs); dev runs load the classes from folders
+            MIXIN_CONFIGS.each { args '--mixin.config', it }
         }
 
         register('client') {
@@ -61,6 +67,13 @@ dependencies {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+}
+
+// performance hooks into vanilla (client/perf): official names at runtime, so no refmap
+tasks.named('jar', Jar) {
+    manifest {
+        attributes('MixinConfigs': MIXIN_CONFIGS.join(','))
+    }
 }
 
 tasks.named('processResources', ProcessResources) {

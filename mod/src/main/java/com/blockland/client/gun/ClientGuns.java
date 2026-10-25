@@ -11,6 +11,7 @@ import com.blockland.client.input.WeaponInput;
 import com.blockland.client.render.GpuModel;
 import com.blockland.client.render.LightSources;
 import com.blockland.client.render.ModelCache;
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.scope.Optics;
 import com.blockland.client.scope.ScopeOptics;
 import com.blockland.client.scope.SightPose;
@@ -192,7 +193,7 @@ public final class ClientGuns {
             if (!holdingGun() || event.getEntity().isSwimming()) return;
             Minecraft mc = Minecraft.getInstance();
             boolean busy = aim() > 0.05f || mc.options.keyAttack.isDown() && mc.screen == null
-                    || System.nanoTime() - lastShot < 300_000_000L
+                    || RenderClock.nanos() - lastShot < 300_000_000L
                     || viewmodel.action() == Viewmodel.Action.INSPECT;
             if (!busy) return;
             var keys = event.getInput().keyPresses;
@@ -300,7 +301,7 @@ public final class ClientGuns {
             return Mth.clamp((ammo - shellStartAmmo) / (float) (shellTarget - shellStartAmmo), 0, 1);
         }
         if (reloadEnd <= reloadStart) return 0;
-        return Mth.clamp((System.nanoTime() - reloadStart) / (float) (reloadEnd - reloadStart), 0, 1);
+        return Mth.clamp((RenderClock.nanos() - reloadStart) / (float) (reloadEnd - reloadStart), 0, 1);
     }
 
     /** A shell-by-shell reload is running (firing would interrupt it once a round is in). */
@@ -360,7 +361,7 @@ public final class ClientGuns {
     public static float currentSpread() {
         LocalPlayer player = Minecraft.getInstance().player;
         if (stats == null || player == null) return 0;
-        return stats.spread(aim(), player.getDeltaMovement().horizontalDistance(), !player.onGround(), bloom(System.nanoTime()));
+        return stats.spread(aim(), player.getDeltaMovement().horizontalDistance(), !player.onGround(), bloom(RenderClock.nanos()));
     }
 
     /** Rounds of this gun's ammo in the inventory. */
@@ -399,7 +400,7 @@ public final class ClientGuns {
         GunState current = GunContent.stateOf(stack);
         GunStats resolved = current == null ? null : GunStats.of(item.gunId(), current).orElse(null);
         if (resolved == null) return;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         if (selected != slot || !item.gunId().equals(gunId)) {
             holster(player);
             slot = selected;
@@ -476,7 +477,7 @@ public final class ClientGuns {
         Ticker.global().tick();
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         float dt = lastFrame == 0 ? 0 : Math.min(0.1f, (now - lastFrame) / 1e9f);
         lastFrame = now;
         WatchedGun.frame(dt);
@@ -570,7 +571,7 @@ public final class ClientGuns {
             if (click) GunHud.flashHint(tr("blockland.gun.hud.slimed"));
             return;
         }
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         if (now < drawEnd) return;
         if (reloading) {
             // a tube magazine's reload stops for a shot once a round is in (the server stops its own the same way)
@@ -774,7 +775,7 @@ public final class ClientGuns {
 
     private static void startReload(LocalPlayer player) {
         if (stats == null || reloading || slot < 0 || WeaponOverlays.busy()) return;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         if (now < drawEnd || ammo >= stats.capacity()) return;
         if (reserve() <= 0 && !player.isCreative()) {
             GunHud.flashHint(tr("blockland.gun.hud.no_ammo", tr("item.blockland." + stats.ammo().item)));
@@ -808,14 +809,14 @@ public final class ClientGuns {
         if (stats == null) return;
         int needed = stats.capacity() - ammo;
         ammo += player.isCreative() ? needed : Math.min(needed, reserve());
-        lastPrediction = System.nanoTime();
+        lastPrediction = RenderClock.nanos();
         nextLeft = false;
         viewmodel.setNextLeft(false);
     }
 
     /** Steps a shell reload along its parts (several in one frame after a hitch, each from where the last ended). */
     private static void advanceShells(LocalPlayer player) {
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         while (reloading && stats != null && now >= phaseEnd) {
             switch (shellPhase) {
                 case START -> nextShell();
@@ -853,7 +854,7 @@ public final class ClientGuns {
 
     /** Inspecting stops a sprint; the movement input keeps sprint off until the inspect ends. */
     private static void inspect() {
-        if (reloading || stats == null || System.nanoTime() < drawEnd || aim() > 0.05f || WeaponOverlays.busy()) return;
+        if (reloading || stats == null || RenderClock.nanos() < drawEnd || aim() > 0.05f || WeaponOverlays.busy()) return;
         if (viewmodel.action() == Viewmodel.Action.FIRE || viewmodel.action() == Viewmodel.Action.INSPECT) return;
         LocalPlayer player = Minecraft.getInstance().player;
         if (player != null) SwimPose.stopRunning(player);

@@ -26,11 +26,11 @@ final class Exposure implements AutoCloseable {
     private final RenderTexture[] adapted = {
             new RenderTexture("BlockLand exposure A", RenderTexture.Format.R16F, FilterMode.NEAREST),
             new RenderTexture("BlockLand exposure B", RenderTexture.Format.R16F, FilterMode.NEAREST)};
-    private final Ubo measure = Ubo.pass("exposure measure");
-    private final Ubo reduce16 = Ubo.pass("exposure 16");
-    private final Ubo reduce4 = Ubo.pass("exposure 4");
-    private final Ubo reduce1 = Ubo.pass("exposure 1");
-    private final Ubo adapt = Ubo.pass("exposure adapt");
+    private final Ubo measure = Ubo.pass("exposure measure").skipUnchanged();
+    private final Ubo reduce16 = Ubo.pass("exposure 16").skipUnchanged();
+    private final Ubo reduce4 = Ubo.pass("exposure 4").skipUnchanged();
+    private final Ubo reduce1 = Ubo.pass("exposure 1").skipUnchanged();
+    private final Ubo adapt = Ubo.pass("exposure adapt").skipUnchanged();
     private int current;
     private boolean valid;
 

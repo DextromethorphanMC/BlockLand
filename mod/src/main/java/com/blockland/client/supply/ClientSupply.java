@@ -2,6 +2,7 @@ package com.blockland.client.supply;
 
 import com.blockland.client.gun.ClientGuns;
 import com.blockland.client.input.WeaponInput;
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.viewmodel.WeaponOverlays;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.packet.SupplyPackets;
@@ -62,7 +63,7 @@ public final class ClientSupply {
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen != null || mc.player == null || overlay.active() || ClientGuns.isReloading()) return;
         BlockPos pos = crateInReach();
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         if (pos == null || now - lastRequest < REQUEST_NANOS) return;
         lastRequest = now;
         BLNetwork.sendToServer(new SupplyPackets.C2SUse(pos, mc.player.getInventory().getSelectedSlot()));

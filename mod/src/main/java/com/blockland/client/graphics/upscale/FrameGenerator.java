@@ -47,6 +47,8 @@ public final class FrameGenerator implements StreamlineHost.Client {
             .withSampler("FrameSampler").withSampler("SceneSampler").build();
     private static final RenderPipeline UI = Fullscreen.pipeline("gfx_fg_ui").withSampler("FrameSampler").withSampler("SceneSampler").build();
     private static final RenderPipeline ALPHA_CLEAR = Fullscreen.pipeline("gfx_alpha_clear").withColorWrite(false, true).build();
+    /** The alpha the final pass writes without a HUD capture (1), written alone. */
+    private static final RenderPipeline ALPHA_ONE = Fullscreen.pipeline("gfx_alpha_one").withColorWrite(false, true).build();
 
     @Nullable
     private FrameGeneration presenter;
@@ -117,12 +119,21 @@ public final class FrameGenerator implements StreamlineHost.Client {
         BlockLand.LOGGER.info("[BlockLand] DLSS Frame Generation presents through Vulkan");
     }
 
-    /** The finished frame is about to get its HUD: keep it as the HUD-less picture and let the HUD write its coverage. */
+    /**
+     * The finished frame is about to get its HUD: keep it as the HUD-less picture and let the HUD write its coverage. The
+     * post chain's final pass may have left the alpha at 0 for this already (POST_DEAD_WORK,
+     * {@link PostChain#takeCoverageCleared}).
+     */
     public void beforeHud(GpuTextureView main, int outW, int outH) {
-        if (presenter == null || !generating) return;
+        boolean cleared = PostChain.takeCoverageCleared(main);
+        if (presenter == null || !generating) {
+            // switched off since the frame started (a failure, the runtime given away): no capture, the usual alpha
+            if (cleared) Fullscreen.pass("BlockLand frame generation: restore alpha", main, ALPHA_ONE).draw();
+            return;
+        }
         scene.ensure(outW, outH);
         PostChain.copy(main, scene.view());
-        Fullscreen.pass("BlockLand frame generation: clear HUD alpha", main, ALPHA_CLEAR).draw();
+        if (!cleared) Fullscreen.pass("BlockLand frame generation: clear HUD alpha", main, ALPHA_CLEAR).draw();
         hudCaptured = true;
     }
 

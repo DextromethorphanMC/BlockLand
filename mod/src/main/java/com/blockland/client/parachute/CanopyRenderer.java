@@ -1,6 +1,7 @@
 package com.blockland.client.parachute;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.RenderClock;
 import com.blockland.parachute.ParachuteItem;
 import com.blockland.parachute.ParachuteRules;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -59,17 +60,17 @@ final class CanopyRenderer {
         PlayerRenderState state = event.getState();
         if (state.isInvisible) return;
         boolean wearing = state.chestEquipment.getItem() instanceof ParachuteItem;
-        float a = ClientParachute.amount(state.id, System.nanoTime());
+        float a = ClientParachute.amount(state.id, RenderClock.nanos());
         if (!wearing && a <= 0) return;
         draw(event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight(), state.bodyRot, state.scale,
-                state.isCrouching, wearing, a, System.nanoTime() / 1e9 + state.id * 0.37, false);
+                state.isCrouching, wearing, a, RenderClock.nanos() / 1e9 + state.id * 0.37, false);
     }
 
     /** The local canopy in first person: kept in the particle pass while it is shown. */
     private static void tick() {
         Minecraft mc = Minecraft.getInstance();
         if (!(mc.level instanceof ClientLevel level) || mc.player == null) return;
-        boolean shown = mc.options.getCameraType().isFirstPerson() && ClientParachute.amount(System.nanoTime()) > 0;
+        boolean shown = mc.options.getCameraType().isFirstPerson() && ClientParachute.amount(RenderClock.nanos()) > 0;
         if (shown && (batch == null || !batch.isAlive() || batch.level() != level)) {
             batch = new FirstPerson(level);
             mc.particleEngine.add(batch);
@@ -262,7 +263,7 @@ final class CanopyRenderer {
         @Override
         public void tick() {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.level != level || !mc.options.getCameraType().isFirstPerson() || ClientParachute.amount(System.nanoTime()) <= 0) remove();
+            if (mc.level != level || !mc.options.getCameraType().isFirstPerson() || ClientParachute.amount(RenderClock.nanos()) <= 0) remove();
         }
 
         @Override
@@ -273,7 +274,7 @@ final class CanopyRenderer {
         public void renderCustom(PoseStack pose, MultiBufferSource buffers, Camera camera, float partialTick) {
             Minecraft mc = Minecraft.getInstance();
             LocalPlayer player = mc.player;
-            float a = ClientParachute.amount(System.nanoTime());
+            float a = ClientParachute.amount(RenderClock.nanos());
             if (player == null || a <= 0 || camera.getEntity() != player || camera.isDetached()) return;
             Vec3 cam = camera.getPosition();
             double x = Mth.lerp(partialTick, player.xo, player.getX()), y = Mth.lerp(partialTick, player.yo, player.getY()),
@@ -283,7 +284,7 @@ final class CanopyRenderer {
             pose.pushPose();
             pose.translate(x - cam.x, y - cam.y, z - cam.z);
             draw(pose, buffers, light, Mth.rotLerp(partialTick, player.yBodyRotO, player.yBodyRot), player.getScale(), false,
-                    false, a, System.nanoTime() / 1e9 + player.getId() * 0.37, true);
+                    false, a, RenderClock.nanos() / 1e9 + player.getId() * 0.37, true);
             pose.popPose();
         }
 

@@ -1,5 +1,6 @@
 package com.blockland.client.impact;
 
+import com.blockland.client.perf.FrameTimings;
 import com.blockland.client.render.LightSources;
 import com.blockland.client.render.WeaponBlood;
 import com.blockland.client.render.WaterRipples;
@@ -676,6 +677,8 @@ public final class Impacts {
         ClientLevel world = level;
         if (world == null || pool.isEmpty()) return;
         float time = (float) ((world.getGameTime() % 24000L) + partialTick) / 20f;
-        ImpactRenderer.draw(pool, camera, pose.last().pose(), partialTick, time);
+        try (FrameTimings.Span ignored = FrameTimings.span("bl/impact/render")) {
+            ImpactRenderer.draw(pool, camera, pose.last().pose(), partialTick, time);
+        }
     }
 }

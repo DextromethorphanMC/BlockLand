@@ -1,8 +1,10 @@
 package com.blockland.client.graphics.upscale;
 
+import com.blockland.BlockLand;
 import com.blockland.client.graphics.gpu.Fullscreen;
 import com.blockland.client.graphics.gpu.RenderTexture;
 import com.blockland.client.graphics.gpu.Ubo;
+import com.blockland.client.perf.Optimization;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
@@ -21,13 +23,22 @@ public final class TemporalUpscaler implements Upscaler {
             .withSampler("WorldDepthSampler")
             .withSampler("HandVelocitySampler")
             .build();
+    /** The same pass reading the hand's motion only on hand pixels ({@link Optimization#POST_DEAD_WORK}). */
+    private static final RenderPipeline TAA_HAND_BRANCH = Fullscreen.pipeline("gfx_taa")
+            .withLocation(BlockLand.id("pipeline/gfx_taa_hand_branch"))
+            .withShaderDefine("HAND_MOTION_IN_BRANCH")
+            .withSampler("CurrentSampler")
+            .withSampler("HistorySampler")
+            .withSampler("WorldDepthSampler")
+            .withSampler("HandVelocitySampler")
+            .build();
     /** Share of the current frame in the blend (the history keeps the rest). */
     private static final float BLEND = 0.1f;
 
     private final RenderTexture[] history = {
             new RenderTexture("BlockLand TAA history A", RenderTexture.Format.RGBA16F, FilterMode.LINEAR),
             new RenderTexture("BlockLand TAA history B", RenderTexture.Format.RGBA16F, FilterMode.LINEAR)};
-    private final Ubo ubo = Ubo.pass("TAA");
+    private final Ubo ubo = Ubo.pass("TAA").skipUnchanged();
     private final RenderTexture still = new RenderTexture("BlockLand no motion", RenderTexture.Format.RG16F, FilterMode.NEAREST);
     private int current;
     private boolean valid;
@@ -80,7 +91,7 @@ public final class TemporalUpscaler implements Upscaler {
                 ctx.internalWidth, ctx.internalHeight, 1f / ctx.internalWidth, 1f / ctx.internalHeight,
                 outW, outH, 1f / outW, 1f / outH,
                 ctx.jitterX * 0.5f, ctx.jitterY * 0.5f, historyValid ? 1 : 0, BLEND);
-        Fullscreen.pass("BlockLand TAA", history[current].view(), TAA)
+        Fullscreen.pass("BlockLand TAA", history[current].view(), Optimization.POST_DEAD_WORK.on() ? TAA_HAND_BRANCH : TAA)
                 .sampler("CurrentSampler", frame.color())
                 .sampler("HistorySampler", history[previous].view())
                 .sampler("WorldDepthSampler", depth)

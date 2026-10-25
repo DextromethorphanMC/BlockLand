@@ -12,6 +12,8 @@
 //   Params[2] = (saturation, contrast, temperature -1..1, vignette 0..1)
 //   Params[3] = (film grain 0..1, frame seed, alpha = luma for FXAA (0/1), aspect)
 //   Params[4] = (auto exposure strength, lowest EV, highest EV, key value)
+// HUD_COVERAGE (POST_DEAD_WORK, Frame Generation capturing the HUD without FXAA): alpha 0, the coverage the HUD then adds
+// to (otherwise cleared by gfx_alpha_clear right after); the colour is the same.
 
 uniform sampler2D ColorSampler;
 uniform sampler2D BloomSampler;
@@ -129,5 +131,9 @@ void main() {
     }
     display += (gfx_noise(gl_FragCoord.xy + Params[3].y) - 0.5) / 255.0;
     display = clamp(display, 0.0, 1.0);
+#ifdef HUD_COVERAGE
+    fragColor = vec4(display, 0.0);
+#else
     fragColor = vec4(display, Params[3].z > 0.5 ? gfx_luminance(display) : 1.0);
+#endif
 }

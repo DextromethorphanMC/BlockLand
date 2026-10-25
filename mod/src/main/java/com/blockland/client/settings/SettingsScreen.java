@@ -14,6 +14,9 @@ import com.blockland.client.graphics.GraphicsStatus;
 import com.blockland.client.hud.Crosshair;
 import com.blockland.client.hud.HitMarker;
 import com.blockland.client.impact.ImpactSettings;
+import com.blockland.client.perf.Optimization;
+import com.blockland.client.perf.Perf;
+import com.blockland.client.perf.PerfSettings;
 import com.blockland.client.scope.ScopeQuality;
 import com.blockland.client.ui.Draw;
 import com.blockland.network.BLNetwork;
@@ -60,7 +63,8 @@ public final class SettingsScreen extends Screen {
 
     private enum Tab {
         GENERAL("blockland.settings.tab.general"), GRAPHICS("blockland.settings.tab.graphics"),
-        WEAPONS("blockland.settings.tab.weapons"), PRIVACY("blockland.settings.tab.privacy");
+        PERFORMANCE("blockland.settings.tab.performance"), WEAPONS("blockland.settings.tab.weapons"),
+        PRIVACY("blockland.settings.tab.privacy");
 
         final String key;
 
@@ -149,6 +153,7 @@ public final class SettingsScreen extends Screen {
                 rows.add(new Note("blockland.settings.language_note"));
             }
             case GRAPHICS -> graphicsRows(data.graphics);
+            case PERFORMANCE -> performanceRows(data.performance);
             case WEAPONS -> {
                 rows.add(new Header("blockland.settings.section.sensitivity"));
                 rows.add(new Slider("blockland.settings.look_sensitivity", 0, 1, 0.005,
@@ -249,6 +254,42 @@ public final class SettingsScreen extends Screen {
                 rows.add(new Note("blockland.settings.allow_invites_note"));
             }
         }
+    }
+
+    /**
+     * The 性能 tab: the benchmark and its last result, the frame timings on F3, then every {@link Optimization} by where
+     * it works (vanilla, BlockLand's pipeline). None of them changes the picture, so all are on unless the player says.
+     */
+    private void performanceRows(PerfSettings p) {
+        String perf = "blockland.settings.perf.";
+        rows.add(new Header(perf + "section.benchmark"));
+        // in a world only (the lobby has none); the screen closes and the camera turns by itself
+        rows.add(new Action(perf + "benchmark", () -> {
+            if (Perf.benchmarkRunning() || Minecraft.getInstance().level == null) return;
+            commit();
+            Perf.startBenchmark();
+        }).dim(() -> Minecraft.getInstance().level == null));
+        rows.add(new Note(perf + "benchmark.note"));
+        rows.add(new Note(() -> tr(perf + "benchmark.folder", Perf.reportFolder().toString())));
+        for (String line : Perf.lastResult()) rows.add(new Note(() -> line));
+
+        rows.add(new Header(perf + "section.timings"));
+        rows.add(new Toggle(perf + "show_timings", () -> p.showTimings, v -> p.showTimings = v));
+        rows.add(new Note(perf + "show_timings.note"));
+
+        for (Optimization.Group group : Optimization.Group.values()) {
+            rows.add(new Header(perf + "section." + group.name().toLowerCase(Locale.ROOT)));
+            for (Optimization o : Optimization.values()) {
+                if (o.group != group) continue;
+                rows.add(new Toggle(o.labelKey(), () -> p.enabled(o), v -> p.set(o, v)).then(Perf::applySettings));
+                rows.add(new Note(o.noteKey()));
+            }
+        }
+        rows.add(new Action(perf + "reset", () -> {
+            for (Optimization o : Optimization.values()) p.set(o, true);
+            Perf.applySettings();
+            rebuild();
+        }));
     }
 
     /** The 画质 tab: every {@link GraphicsSettings} value, grouped, then what the pipeline is doing. */

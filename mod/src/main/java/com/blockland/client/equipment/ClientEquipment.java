@@ -5,6 +5,7 @@ import com.blockland.anim.Ticker;
 import com.blockland.client.equipment.effect.ClientEquipmentEffects;
 import com.blockland.client.hud.HitMarker;
 import com.blockland.client.input.WeaponInput;
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.viewmodel.Holster;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.effect.ActionLocks;
@@ -177,14 +178,14 @@ public final class ClientEquipment {
     static float cookLeft() {
         if (item == null || !item.cookable || item.fuse <= 0) return -1;
         if (state != State.HOLDING && state != State.PULLING) return -1;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         if (now < pinAt) return item.fuse;
         return Math.max(0, item.fuse - (now - pinAt) / 1e9f);
     }
 
     /** 0..1 how far the hand is through its recovery or draw (1 = ready). */
     static float readiness() {
-        long end = Math.max(readyAt, drawEnd), now = System.nanoTime();
+        long end = Math.max(readyAt, drawEnd), now = RenderClock.nanos();
         if (item == null || now >= end) return 1;
         long from = Math.max(stateStart, end - (long) 2e9);
         return Math.max(0, (now - from) / (float) Math.max(1, end - from));
@@ -227,7 +228,7 @@ public final class ClientEquipment {
         itemId = held.id;
         item = held;
         state = State.IDLE;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         modelReady = viewmodel.equip(held);
         viewmodel.setEventSink(ClientEquipment::clipEvent);
         drawEnd = now + (long) (held.drawTime * 1e9);
@@ -283,7 +284,7 @@ public final class ClientEquipment {
         Ticker.global().tick();
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         float dt = lastFrame == 0 ? 0 : Math.min(0.1f, (now - lastFrame) / 1e9f);
         lastFrame = now;
         WatchedEquipment.frame(dt);
@@ -353,7 +354,7 @@ public final class ClientEquipment {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null || mc.screen != null || item == null || !holdingEquipment() || slot < 0) return;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         if (state != State.IDLE || now < drawEnd || now < readyAt) return;
         if (ActionLocks.isLocked(player)) {
             EquipmentHud.flash(net.minecraft.network.chat.Component.translatable("blockland.effect.slimed").getString());
@@ -401,7 +402,7 @@ public final class ClientEquipment {
     }
 
     private static void inspect(LocalPlayer player) {
-        if (item == null || System.nanoTime() < drawEnd || state != State.IDLE || viewmodel.action() != null) return;
+        if (item == null || RenderClock.nanos() < drawEnd || state != State.IDLE || viewmodel.action() != null) return;
         if (player.isSprinting()) player.setSprinting(false);
         viewmodel.play(EquipmentViewmodel.Action.INSPECT, item.anims.inspect, 0);
     }

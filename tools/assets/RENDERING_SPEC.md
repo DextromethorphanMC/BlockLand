@@ -231,6 +231,14 @@ shadows are not axis-aligned. Casters: terrain sections in range (solid, cutout,
 near the camera; slope-scaled depth bias at render time, normal offset at lookup. Far cascades may update every other
 frame. `ShadowInfo` hands the atlas and matrices to the uniforms and the volumetric light.
 
+The sun's time of day is interpolated between ticks only while the day clock runs (`SunPath.timeOfDay`: the client
+level's `tickDayTime` and an unfrozen tick rate); a stopped clock keeps the sun where it is. Two exact savings (§20):
+casters are drawn nearest the sun first (`SHADOW_SORTING`: every texel ends at the least depth covering it, whatever the
+order), and a cascade's terrain depth is kept in a texture of the atlas's size (`TerrainCache`, `SHADOW_REUSE`) while its
+placement, the light, the camera position, the meshes of the sections reaching it, the block atlas and the client tick are
+unchanged — the kept tile is copied in and the entities drawn over it each frame (the same least depths). Only frames
+whose camera and light held still since the last one take that path; moving, the cascades are drawn as before.
+
 Entities are captured by running their own renderers into a capturing buffer source; while that runs
 `client/render/ShadowPass.active()` is true, and renderers that would draw with their own pipeline (the third-person
 weapons) take their vanilla-render-type path instead, so they are captured and cast shadows like everything else.
@@ -855,3 +863,49 @@ weapon's blood is back when it is drawn again (until it has faded). Glass, effec
 Data (`impacts.json`, a material's `blood`): `poolMerge`, `poolMax`, `poolSpread`, `overflow`, `plants`, `bodyDecal`,
 `bodies`, `weaponRange`, `weaponBlade`, `weaponRound`, `weaponLife`, `weaponDry`, `deathPool`; the body decal in
 `decals.json`, its texture from `tools/assets/gen_decals.py`.
+
+## 20. Performance (`client/perf`, `com.blockland.mixin.*`)
+
+Optimizations do less work for the same output: the same pixels, the same game. Nothing here lowers a quality, drops a
+sample, skips an update that could leave something a frame stale, or reorders draws.
+
+* **Switches** (`perf/Optimization`): every optimization is an entry with a group (vanilla / BlockLand pipeline), a
+  label and note in the lang files (`blockland.settings.perf.opt.<id>`, `….note`), and `rebuildsSections` when its work
+  lives in the section meshes. Code asks `Optimization.X.on()` (one volatile read, any thread) exactly where it chooses
+  between the old path and the new one; off must be the old code path exactly, so the benchmark's off passes are
+  vanilla / the previous pipeline. The player's choice is `PerfSettings` (`ClientSettings.Data.performance`, the 性能
+  tab, all on by default); `Perf.applySettings` applies it and rebuilds the sections when a `rebuildsSections` entry
+  changed. Nothing else of the perf module is reached from other modules.
+* **Mixins**: one config per area of vanilla (`blockland.mixins.json` core, `blockland.gl.mixins.json`,
+  `blockland.terrain.mixins.json`, `blockland.particles.mixins.json`; packages `com.blockland.mixin.<area>`), listed in
+  `MIXIN_CONFIGS` in `build.gradle` (jar manifest `MixinConfigs`, `--mixin.config` for dev runs). Official names at
+  runtime, so no refmap; Mixin 0.8.7 comes with Forge 58 (no MixinExtras: `@Inject` / `@Redirect` / `@ModifyArg` /
+  `@Overwrite` only). A mixin stays thin: it checks its switch and calls a class of its area in `client/perf/<area>`.
+* **Timings** (`perf/FrameTimings`): `try (var s = FrameTimings.span("bl/…")) { … }` measures a stretch of render-thread
+  work on the CPU and on the GPU (timestamp queries read back 4 frames later — never a wait); spans nest, keys are paths.
+  Every pipeline stage's phases are spans by themselves (`bl/<Stage>/<phase>`, `FrameHooks`), and so are vanilla's own
+  profiler sections down to 5 levels (`mc/<path>`, through `Minecraft.constructProfiler`). A frame is one iteration of the
+  client loop (ticks, render, swap). Spans cost a field read while nothing records (timings off, no benchmark).
+* **Render clock** (`client/render/RenderClock`): everything on screen animates by `RenderClock.nanos()` (also the shared
+  `anim/Ticker`); durations that measure or budget work keep `System.nanoTime()`. Normally it is the real clock.
+* **Benchmark** (`perf/Benchmark`, the 性能 tab, in a world): the camera turns through 16 fixed views on the spot.
+  Frame-time passes with every optimization off and on in the order off, on, on, off, off, on (after a warm-up pass);
+  full section rebuilds off, on, on, off, timed until drained; then the frame comparison — the client's ticks are held
+  (`PerfHooks.ticksHeld`: `Minecraft.tick` skipped, the delta tracker's partial tick 1, no delta), the render clock is
+  pinned to fixed 1/60 s steps from the same origin, `Graphics.restartTemporalState()` starts the pipeline over
+  (resources, frame count, `FrameStage.restart`), and 24 frames are rendered per view three times: off, off again after a
+  rebuild (the control: it proves the scene and the pipeline are deterministic), on after a rebuild. Before each view's
+  frames the camera waits on that view until vanilla's culling has found every section in view and all are built (after
+  a turn it takes a few frames; a first frame without them would stay in the temporal history), and every temporal
+  state with its own frame counter restarts with the pipeline (e.g. the shadow map's cascade turns). The 24th frame of
+  each is read back right after the composite (before the HUD) and compared per pixel (RGB). Differing views save both
+  frames and a map of the differences. With OP rights the world is frozen by `/tick freeze` meanwhile. "Rebuilt" means:
+  the visible-section graph is complete, every visible section with loaded neighbours has a mesh, nothing is queued
+  (cancelled tasks do not count), nothing waits for upload, and the view's section count held for five frames.
+  `MeshCheck` compares vertex bytes the format uses (the block format's padding byte is never written and holds old
+  memory). A pass starts with a garbage collection (the switch's rebuild leaves garbage); the 1% low is taken over all
+  frames of a mode. The frame-time passes run twice: on the spot (the camera only turns), then with the camera circling
+  3 blocks around it at the same height (everything that waits for a still camera is redone every frame); the summary
+  gives both. `bench compare` (dev automation) runs the frame comparison alone, `bench <id>` compares one optimization
+  (off and on, every other one on). Reports:
+  `<game>/blockland/benchmarks/<time>.txt` (the player's language) and `.json` (every pass, every span).

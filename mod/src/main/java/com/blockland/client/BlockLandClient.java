@@ -74,6 +74,8 @@ public final class BlockLandClient {
     }
 
     public static void init(BusGroup modBus) {
+        // every animation runs on the render clock (the benchmark's frame comparison holds it)
+        com.blockland.anim.Ticker.setClock(com.blockland.client.render.RenderClock::nanos);
         RegisterKeyMappingsEvent.getBus(modBus).addListener(event -> event.register(OPEN_LOBBY));
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> {
             if (!settingsLoaded) {
@@ -120,6 +122,8 @@ public final class BlockLandClient {
         // the render pipeline (render scale, upscaling, anti-aliasing, HDR post, sun and shadows, dynamic lights): first,
         // so its frame hooks and HUD composite layer come before every feature's own
         Graphics.init(modBus);
+        // optimizations, frame timings and the benchmark (after the pipeline: its capture layer follows the composite)
+        com.blockland.client.perf.Perf.init(modBus);
         com.blockland.client.textures.FluidTextures.init(modBus);
         com.blockland.client.fluid.WaterInteractions.init();
         Holster.init();

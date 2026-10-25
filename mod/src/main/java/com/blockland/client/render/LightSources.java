@@ -50,7 +50,7 @@ public final class LightSources {
     public static void flash(double x, double y, double z, int rgb, float intensity, float radius, float seconds) {
         if (flashes.size() >= MAX_FLASHES) flashes.remove(0);
         Light light = new Light(x, y, z, (rgb >> 16 & 0xFF) / 255f, (rgb >> 8 & 0xFF) / 255f, (rgb & 0xFF) / 255f, intensity, radius);
-        flashes.add(new Flash(light, System.nanoTime(), Math.max(0.01f, Math.min(MAX_FLASH, seconds))));
+        flashes.add(new Flash(light, RenderClock.nanos(), Math.max(0.01f, Math.min(MAX_FLASH, seconds))));
     }
 
     /** A light read every frame until the supplier returns null (then it is dropped). */
@@ -65,7 +65,7 @@ public final class LightSources {
 
     /** Graphics side: every light of this moment (flashes already faded by their age). */
     public static void collect(Consumer<Light> out) {
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         for (Iterator<Flash> it = flashes.iterator(); it.hasNext(); ) {
             Flash flash = it.next();
             float age = (now - flash.start) / 1e9f;

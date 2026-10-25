@@ -44,6 +44,8 @@ final class Cascade {
     /** Camera-relative world → the cascade's tile of the atlas in clip space (what the casters are drawn with). */
     final Matrix4f render = new Matrix4f();
     private final Matrix4f tileTransform = new Matrix4f();
+    /** A padded section box's half extent along each light axis ({@link #prepareBox}). */
+    private float boxX, boxY, boxZ;
 
     Cascade(int index) {
         this.index = index;
@@ -112,5 +114,27 @@ final class Cascade {
         view.transformPosition(x, y, z, scratch);
         float r = half + radius;
         return Math.abs(scratch.x) <= r && Math.abs(scratch.y) <= r && scratch.z <= radius && scratch.z >= -depth - radius;
+    }
+
+    /**
+     * Sets up {@link #boxReaches} for this frame: a section's box grown by {@code pad} blocks on every side spans
+     * 8 + pad blocks around its centre along each world axis, so along each of the light's axes it spans that times the
+     * sum of the axis' absolute world components.
+     */
+    void prepareBox(float pad) {
+        float h = 8 + pad;
+        boxX = h * (Math.abs(view.m00()) + Math.abs(view.m10()) + Math.abs(view.m20()));
+        boxY = h * (Math.abs(view.m01()) + Math.abs(view.m11()) + Math.abs(view.m21()));
+        boxZ = h * (Math.abs(view.m02()) + Math.abs(view.m12()) + Math.abs(view.m22()));
+    }
+
+    /**
+     * Whether a section's padded box ({@link #prepareBox}) overlaps this box (SHADOW_CULLING): {@code centre} is the
+     * section's centre in light space, as {@link #touches} left it. Geometry outside the box on any light axis is
+     * clipped (scissored to the tile across the light, near and far planes along it), so a section that fails this
+     * draws nothing into the cascade.
+     */
+    boolean boxReaches(Vector3f centre) {
+        return Math.abs(centre.x) <= half + boxX && Math.abs(centre.y) <= half + boxY && centre.z <= boxZ && centre.z >= -depth - boxZ;
     }
 }

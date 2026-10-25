@@ -1,6 +1,7 @@
 package com.blockland.client.equipment.effect;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.RenderClock;
 import com.blockland.effect.BLEffects;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -108,7 +109,7 @@ final class AdrenalineRush {
 
     /** The HUD's first layer: advances the clock and draws the rush. */
     static void render(GuiGraphics g) {
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         float dt = lastFrame == 0 ? 0 : Math.min(0.1f, (now - lastFrame) / 1e9f);
         lastFrame = now;
         if (total <= 0) return;

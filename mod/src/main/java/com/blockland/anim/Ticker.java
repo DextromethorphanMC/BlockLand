@@ -16,6 +16,8 @@ public final class Ticker {
     }
 
     private static final Ticker GLOBAL = new Ticker();
+    /** Where time comes from: the real clock, or the client's render clock (which the benchmark can hold). */
+    private static java.util.function.LongSupplier clock = System::nanoTime;
     private static final double LAG_THRESHOLD = 0.1;
     private static final double LAG_STEP = 1.0 / 60.0;
 
@@ -29,9 +31,14 @@ public final class Ticker {
         return GLOBAL;
     }
 
+    /** The client hands its render clock over at start-up. */
+    public static void setClock(java.util.function.LongSupplier nanos) {
+        clock = nanos;
+    }
+
     /** Advances everything by the real time elapsed since the previous call. */
     public void tick() {
-        long now = System.nanoTime();
+        long now = clock.getAsLong();
         if (lastNanos < 0) {
             lastNanos = now;
             return;

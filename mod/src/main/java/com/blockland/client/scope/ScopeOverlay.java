@@ -2,6 +2,7 @@ package com.blockland.client.scope;
 
 import com.blockland.BlockLand;
 import com.blockland.client.font.UiFont;
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.ui.Draw;
 import com.blockland.craft.CraftData;
 import com.mojang.blaze3d.platform.NativeImage;
@@ -47,7 +48,7 @@ final class ScopeOverlay {
         if (blink > 0.01f) g.fill(0, 0, w, h, ARGB.color(Math.round(255 * blink), 0, 0, 0));
 
         boolean raised = sight != null && Scopes.aim() > 0.9f;
-        if (raised && !wasRaised) raisedAt = System.nanoTime();
+        if (raised && !wasRaised) raisedAt = RenderClock.nanos();
         wasRaised = raised;
         if (!raised) return;
         // readouts sit under the eyepiece (or the zoomed window)
@@ -61,7 +62,7 @@ final class ScopeOverlay {
         } else {
             return;
         }
-        float sinceRaised = (System.nanoTime() - raisedAt) / 1e9f;
+        float sinceRaised = (RenderClock.nanos() - raisedAt) / 1e9f;
         drawPower(g, cx, bottom, Math.min(sinceRaised, Scopes.sinceZoomChange()));
         if (sight.scope.holdBreath > 0) drawBreath(g, cx, Math.min(bottom + 6, h - 40), sinceRaised);
     }

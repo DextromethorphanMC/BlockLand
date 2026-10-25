@@ -29,11 +29,11 @@ final class Bloom implements AutoCloseable {
     Bloom() {
         for (int i = 0; i < LEVELS; i++) {
             down[i] = new RenderTexture("BlockLand bloom down " + i, RenderTexture.Format.RGBA16F, FilterMode.LINEAR);
-            downUbo[i] = Ubo.pass("bloom down " + i);
+            downUbo[i] = Ubo.pass("bloom down " + i).skipUnchanged();
         }
         for (int i = 0; i < LEVELS - 1; i++) {
             up[i] = new RenderTexture("BlockLand bloom up " + i, RenderTexture.Format.RGBA16F, FilterMode.LINEAR);
-            upUbo[i] = Ubo.pass("bloom up " + i);
+            upUbo[i] = Ubo.pass("bloom up " + i).skipUnchanged();
         }
     }
 

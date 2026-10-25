@@ -1,0 +1,20 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.blockland.mixin.core",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [
+    "CompileQueueAccess",
+    "CompileTaskStateAccess",
+    "DeltaTrackerMixin",
+    "FrustumMixin",
+    "LevelRendererAccess",
+    "MinecraftMixin",
+    "OcclusionGraphAccess",
+    "SectionDispatcherAccess"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

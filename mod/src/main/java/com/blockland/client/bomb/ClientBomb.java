@@ -10,6 +10,7 @@ import com.blockland.bomb.PlantedBomb;
 import com.blockland.client.bomb.fx.BombBlastFx;
 import com.blockland.client.input.WeaponInput;
 import com.blockland.client.render.LightSources;
+import com.blockland.client.render.RenderClock;
 import com.blockland.client.viewmodel.Holster;
 import com.blockland.client.viewmodel.ViewmodelRenderer;
 import com.blockland.network.BLNetwork;
@@ -213,7 +214,7 @@ public final class ClientBomb {
         if (bomb.secondsLeft(0) <= BombCatalog.get().beep.finalSeconds) return 1;
         Long at = lastBeep.get(bomb.getId());
         if (at == null) return 0;
-        float since = (System.nanoTime() - at) / 1e9f;
+        float since = (RenderClock.nanos() - at) / 1e9f;
         return Math.max(0, 1 - since / 0.14f);
     }
 
@@ -311,7 +312,7 @@ public final class ClientBomb {
         Ticker.global().tick();
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
-        long now = System.nanoTime();
+        long now = RenderClock.nanos();
         float dt = lastFrame == 0 ? 0 : Math.min(0.1f, (now - lastFrame) / 1e9f);
         lastFrame = now;
         WatchedBomb.frame(dt);
@@ -369,7 +370,7 @@ public final class ClientBomb {
         float k = Math.max(0, Math.min(1, left / Math.max(1, fuse)));
         float interval = beep.fastInterval + (beep.slowInterval - beep.fastInterval) * k * k;
         next[0] = left - interval;
-        lastBeep.put(id, System.nanoTime());
+        lastBeep.put(id, RenderClock.nanos());
         playAt(bomb, "bomb.beep", 1.4f, 1 + (1 - k) * 0.08f);
         Vec3 p = bomb.position();
         LightSources.flash(p.x, p.y + 0.2, p.z, 0xFF2A1A, 1.2f, 3.5f, 0.14f);

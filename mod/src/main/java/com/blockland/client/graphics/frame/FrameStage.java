@@ -28,4 +28,11 @@ public interface FrameStage {
     /** Frame end, also when it was not composited (clean-up, statistics). */
     default void endFrame(FrameContext frame) {
     }
+
+    /**
+     * Every temporal state starts over with the next frame (histories, accumulations), as after a camera cut — the
+     * benchmark renders the same frames twice and compares them ({@link Graphics#restartTemporalState}).
+     */
+    default void restart() {
+    }
 }

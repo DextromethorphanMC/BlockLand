@@ -90,6 +90,11 @@ public final class VolumetricClouds implements FrameStage, WorldEffects {
 
     /** Decided before the scene uniforms are written, so vanilla's clouds are hidden in exactly the frames these draw. */
     @Override
+    public void restart() {
+        historyValid = false;
+    }
+
+    @Override
     public void beginFrame(FrameContext frame) {
         output = null;
         Arrays.fill(frame.clouds, 0);

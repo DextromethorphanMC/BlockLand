@@ -11,8 +11,10 @@ import com.blockland.client.graphics.upscale.FrameGenerator;
 import com.blockland.client.graphics.upscale.NeuralRenderer;
 import com.blockland.client.graphics.upscale.TemporalUpscaler;
 import com.blockland.client.graphics.upscale.Upscalers;
+import com.blockland.client.perf.FrameTimings;
 import com.blockland.client.render.FrameJitter;
 import com.blockland.client.render.HandMotion;
+import com.blockland.client.render.RenderClock;
 import com.mojang.blaze3d.framegraph.FramePass;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -81,6 +83,7 @@ public final class FrameHooks {
     private static final FrameContext frame = new FrameContext();
     private static final float[] jitter = new float[2];
     private static final Set<FrameStage> failedStages = Collections.newSetFromMap(new IdentityHashMap<>());
+    private static final java.util.Map<FrameStage, String[]> spanKeys = new IdentityHashMap<>();
     private static Phase phase = Phase.IDLE;
     private static boolean active;
     @Nullable
@@ -100,7 +103,7 @@ public final class FrameHooks {
     private static Upscalers.Choice choice;
     private static final FrameGenerator frameGenerator = new FrameGenerator();
     private static final NeuralRenderer neuralRenderer = new NeuralRenderer();
-    private static boolean projectionsReplaced, projectionsFailed, passAdded, broken;
+    private static boolean projectionsReplaced, projectionsFailed, passAdded, broken, restartRequested;
     private static boolean historyValid, lastFrameComposited;
     @Nullable
     private static ClientLevel lastLevel;
@@ -158,6 +161,7 @@ public final class FrameHooks {
             return;
         }
         frameStart = System.nanoTime();
+        if (restartRequested) restart();
         try {
             ensurePass();
             ensureProjections(mc);
@@ -222,7 +226,7 @@ public final class FrameHooks {
             fail("frame start", t);
             return;
         }
-        stages(FrameStage::beginFrame);
+        stages(Phase.BEGUN, FrameStage::beginFrame);
     }
 
     private static void cameraReady(ViewportEvent.ComputeCameraAngles event) {
@@ -245,7 +249,7 @@ public final class FrameHooks {
         double dx = frame.camX - frame.prevCamX, dy = frame.camY - frame.prevCamY, dz = frame.camZ - frame.prevCamZ;
         if (dx * dx + dy * dy + dz * dz > CUT_DISTANCE * CUT_DISTANCE) historyValid = false;
         phase = Phase.CAMERA;
-        stages(FrameStage::cameraReady);
+        stages(Phase.CAMERA, FrameStage::cameraReady);
     }
 
     /** From the level's projection buffer: the frame's exact projection, without jitter. */
@@ -272,7 +276,7 @@ public final class FrameHooks {
         }
         phase = Phase.AFTER_LEVEL;
         scene.hand = SceneTarget.Hand.ARMED;
-        stages(FrameStage::afterLevel);
+        stages(Phase.AFTER_LEVEL, FrameStage::afterLevel);
     }
 
     private static void composite() {
@@ -282,16 +286,20 @@ public final class FrameHooks {
         FrameJitter.set(0, 0);
         HandMotion.setTarget(null);
         if (levelDrawn) {
-            stages(FrameStage::beforeComposite);
-            long now = System.nanoTime();
-            float seconds = lastComposite == 0 ? 1 / 60f : Math.min(0.25f, (now - lastComposite) / 1e9f);
+            stages(Phase.COMPOSITED, FrameStage::beforeComposite);
+            long now = RenderClock.nanos();
+            float seconds = lastComposite == 0 || now <= lastComposite ? 1 / 60f : Math.min(0.25f, (now - lastComposite) / 1e9f);
             lastComposite = now;
             try {
                 GraphicsStatus status = Graphics.status();
+                try (FrameTimings.Span ignored = FrameTimings.span("bl/post")) {
                 post.run(new PostChain.Inputs(frame, scene.getColorTextureView(), scene.getDepthTextureView(), frame.worldDepth,
                         reprojection(), historyValid, choice.upscaler(), choice.fxaa(), status.worldLightingActive,
                         Graphics.settings(), Graphics.worldEffects(), savedMain.getColorTextureView(), seconds, neuralRenderer::apply));
-                frameGenerator.beforeHud(savedMain.getColorTextureView(), frame.outputWidth, frame.outputHeight);
+                }
+                try (FrameTimings.Span ignored = FrameTimings.span("bl/frame_generation/before_hud")) {
+                    frameGenerator.beforeHud(savedMain.getColorTextureView(), frame.outputWidth, frame.outputHeight);
+                }
                 status.running = true;
             } catch (Throwable t) {
                 fail("post chain", t);
@@ -319,14 +327,16 @@ public final class FrameHooks {
                 restoreMain(mc);
                 lastFrameComposited = false;
             }
-            stages(FrameStage::endFrame);
+            stages(Phase.IDLE, FrameStage::endFrame);
             cpuMillis = cpuMillis * 0.9f + (System.nanoTime() - frameStart) / 1e6f * 0.1f;
             Graphics.status().cpuMillis = cpuMillis;
         } else if (savedMain != null && MAIN_TARGET != null && mainIsScene()) {
             restoreMain(mc);
         }
-        frameGenerator.endFrame(mc.getMainRenderTarget().getColorTextureView(), frame, gameFrame && post != null ? post.decoded() : null,
-                gameFrame ? reprojection() : null, historyValid);
+        try (FrameTimings.Span ignored = FrameTimings.span("bl/frame_generation/end")) {
+            frameGenerator.endFrame(mc.getMainRenderTarget().getColorTextureView(), frame, gameFrame && post != null ? post.decoded() : null,
+                    gameFrame ? reprojection() : null, historyValid);
+        }
         FrameJitter.set(0, 0);
         HandMotion.setTarget(null);
         active = false;
@@ -334,6 +344,27 @@ public final class FrameHooks {
     }
 
     // ---- helpers ----------------------------------------------------------------------------------------------------
+
+    public static void requestRestart() {
+        restartRequested = true;
+    }
+
+    /** {@link Graphics#restartTemporalState}: everything that carries over from frame to frame starts again. */
+    private static void restart() {
+        restartRequested = false;
+        release();
+        frame.frame = -1;
+        lastFrameComposited = false;
+        lastComposite = 0;
+        for (FrameStage stage : Graphics.stages()) {
+            if (failedStages.contains(stage)) continue;
+            try {
+                stage.restart();
+            } catch (Throwable t) {
+                BlockLand.LOGGER.warn("[BlockLand] Render stage {} could not restart", stage.getClass().getName(), t);
+            }
+        }
+    }
 
     /** While the pipeline does not run (switched off, the lobby) its screen-sized textures are given back. */
     private static void release() {
@@ -431,16 +462,32 @@ public final class FrameHooks {
                 .mul(current);
     }
 
-    private static void stages(BiConsumer<FrameStage, FrameContext> phaseCall) {
+    /** Runs one phase of every stage, each measured as {@code bl/<stage>/<phase>} ({@link FrameTimings}). */
+    private static void stages(Phase phase, BiConsumer<FrameStage, FrameContext> phaseCall) {
         for (FrameStage stage : Graphics.stages()) {
             if (failedStages.contains(stage)) continue;
-            try {
+            try (FrameTimings.Span ignored = FrameTimings.span(spanKey(stage, phase))) {
                 phaseCall.accept(stage, frame);
             } catch (Throwable t) {
                 failedStages.add(stage);
                 BlockLand.LOGGER.error("[BlockLand] Render stage {} failed and is switched off for this session", stage.getClass().getName(), t);
             }
         }
+    }
+
+    private static String spanKey(FrameStage stage, Phase phase) {
+        String[] keys = spanKeys.get(stage);
+        if (keys == null) {
+            keys = new String[Phase.values().length];
+            Class<?> type = stage.getClass();
+            // stages are often nested classes named Stage: their owner names them
+            String name = type.getEnclosingClass() != null && type.getSimpleName().equals("Stage")
+                    ? type.getEnclosingClass().getSimpleName() : type.getSimpleName();
+            String[] phases = {"compose", "begin", "camera", "after_level", "before_composite"};
+            for (Phase p : Phase.values()) keys[p.ordinal()] = "bl/" + name + "/" + (p == Phase.IDLE ? "end" : phases[p.ordinal()]);
+            spanKeys.put(stage, keys);
+        }
+        return keys[phase.ordinal()];
     }
 
     /** Anything going wrong inside the frame: the pipeline stays off for the session, the frame is put back as it is. */

@@ -1,6 +1,8 @@
 package com.blockland.client.render;
 
 import com.blockland.client.gltf.GltfModel;
+import com.blockland.client.perf.FrameTimings;
+import com.blockland.client.perf.Optimization;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.buffers.Std140Builder;
@@ -10,6 +12,9 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.client.renderer.DynamicUniforms;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceLocation;
@@ -26,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
+import java.util.function.BiConsumer;
 
 /**
  * Collects a frame's draws of retained models and submits them together: all per-draw transforms are written
@@ -37,7 +43,7 @@ import java.util.OptionalInt;
  * and store their emission in the target's alpha (rendering spec §3, §8).
  */
 public final class DrawList {
-    private static final long START = System.nanoTime();
+    private static final long START = RenderClock.nanos();
 
     private final List<Entry> pool = new ArrayList<>();
     private int size;
@@ -51,6 +57,22 @@ public final class DrawList {
     /** Last flush's model-view per draw key (see {@link #motionKey}), and this flush's (swapped every flush). */
     private Map<Long, Matrix4f> previous = new HashMap<>(), current = new HashMap<>();
     private final Map<Long, Integer> occurrences = new HashMap<>();
+    /**
+     * The same as {@link #previous} / {@link #current} / {@link #occurrences} without boxing, the matrices reused
+     * ({@link Optimization#VIEWMODEL_BATCHING}); {@link #motionFast} tells which pair holds the last flush's, and a switch
+     * carries them over, so the first flush after it still finds every draw's last model-view.
+     */
+    private Long2ObjectOpenHashMap<Matrix4f> previousFast = new Long2ObjectOpenHashMap<>(), currentFast = new Long2ObjectOpenHashMap<>();
+    private final Long2IntOpenHashMap occurrencesFast = new Long2IntOpenHashMap();
+    private final List<Matrix4f> freeMatrices = new ArrayList<>();
+    private boolean motionFast;
+    /** Reused per flush by the batched path. */
+    private final List<RenderPass.Draw<GpuBufferSlice[]>> batch = new ArrayList<>();
+    private final List<BiConsumer<GpuBufferSlice[], RenderPass.UniformUploader>> uploaders = new ArrayList<>();
+    private final List<Entry> opaqueScratch = new ArrayList<>();
+    private final List<DynamicUniforms.Transform> transformScratch = new ArrayList<>();
+    /** The one block that changes between the draws of a batch. */
+    private static final List<String> PER_DRAW = List.of("DynamicTransforms");
     @Nullable
     private GpuBuffer motionInfo;
     /** Draw calls and triangles of the last flush (shown on the F3 screen). */
@@ -155,6 +177,7 @@ public final class DrawList {
         if (unjittered == null) {
             motionProjection = null;
             previous.clear();
+            recycle(previousFast);
         } else {
             if (motionProjection == null) motionProjection = new Matrix4f();
             motionProjection.set(unjittered);
@@ -180,7 +203,7 @@ public final class DrawList {
 
     /** Seconds for animated effects (wraps every ~68 minutes to keep float precision). */
     public static float time() {
-        return (float) (((System.nanoTime() - START) / 1e9) % 4096.0);
+        return (float) (((RenderClock.nanos() - START) / 1e9) % 4096.0);
     }
 
     /** Queues a draw described the old way (no texture maps, no effect, no source triangles). */
@@ -295,6 +318,15 @@ public final class DrawList {
      */
     public void flush(GpuTextureView color, GpuTextureView depth, GpuTextureView lightmap, String label) {
         if (size == 0) return;
+        // the viewmodel is the list that records its motion
+        try (FrameTimings.Span ignored = FrameTimings.span(motionProjection != null ? "bl/viewmodel/draw" : "bl/draw_list")) {
+            submit(color, depth, lightmap, label);
+        }
+        clear();
+    }
+
+    /** {@link #flush}'s work: the transforms, the draws and (the viewmodel) its motion. */
+    private void submit(GpuTextureView color, GpuTextureView depth, GpuTextureView lightmap, String label) {
         Entry[] ordered = ordered();
         DynamicUniforms.Transform[] transforms = new DynamicUniforms.Transform[size];
         for (int i = 0; i < size; i++) {
@@ -316,16 +348,98 @@ public final class DrawList {
             pass.setUniform("BlockLandScene", SceneLighting.uniforms());
             pass.bindSampler("BlShadowMap", SceneLighting.shadowMap());
             pass.bindSampler("Sampler2", lightmap);
-            RenderPipeline pipeline = null;
-            GpuBuffer vertices = null;
-            GpuBuffer indices = null;
-            GpuTextureView albedo = null, normal = null, specular = null;
-            for (int i = 0; i < size; i++) {
-                Entry e = ordered[i];
-                if (e.pipeline != pipeline) {
-                    pass.setPipeline(e.pipeline);
-                    pipeline = e.pipeline;
+            if (Optimization.VIEWMODEL_BATCHING.on()) {
+                drawBatched(pass, ordered, slices, flatNormal, noSpecular);
+            } else {
+                RenderPipeline pipeline = null;
+                GpuBuffer vertices = null;
+                GpuBuffer indices = null;
+                GpuTextureView albedo = null, normal = null, specular = null;
+                for (int i = 0; i < size; i++) {
+                    Entry e = ordered[i];
+                    if (e.pipeline != pipeline) {
+                        pass.setPipeline(e.pipeline);
+                        pipeline = e.pipeline;
+                    }
+                    if (e.vertices != vertices) {
+                        pass.setVertexBuffer(0, e.vertices);
+                        vertices = e.vertices;
+                    }
+                    if (e.indices != indices) {
+                        pass.setIndexBuffer(e.indices, e.indexType);
+                        indices = e.indices;
+                    }
+                    if (e.albedo != albedo) {
+                        pass.bindSampler("Sampler0", e.albedo);
+                        albedo = e.albedo;
+                    }
+                    GpuTextureView n = e.normal != null ? e.normal : flatNormal;
+                    if (n != normal) {
+                        pass.bindSampler("NormalSampler", n);
+                        normal = n;
+                    }
+                    GpuTextureView s = e.specular != null ? e.specular : noSpecular;
+                    if (s != specular) {
+                        pass.bindSampler("SpecularSampler", s);
+                        specular = s;
+                    }
+                    pass.setUniform("DynamicTransforms", slices[i]);
+                    pass.drawIndexed(0, e.firstIndex, e.indexCount, 1);
                 }
+            }
+        }
+        if (motionProjection != null) {
+            try (FrameTimings.Span ignored = FrameTimings.span("bl/viewmodel/motion")) {
+                drawMotion(ordered, depth);
+            }
+        }
+    }
+
+    /**
+     * {@link #submit}'s draws with {@link Optimization#VIEWMODEL_BATCHING}: a run of consecutive draws sharing the pipeline
+     * and the three textures goes to Blaze3D as one {@link RenderPass#drawMultipleIndexed}, which sets the pass up once
+     * (program, blocks, every sampler's texture and level range) instead of before each draw; between the run's draws only
+     * what differs is set: the vertex and index buffers, the index range and the draw's transform block. Every draw comes
+     * in the same order with the same pipeline, textures, buffers, index type and blocks as {@link #submit}'s own loop gives
+     * it (Blaze3D's per-draw setup re-applies only what already holds within a run), so the GPU draws the same.
+     */
+    private void drawBatched(RenderPass pass, Entry[] ordered, GpuBufferSlice[] slices, GpuTextureView flatNormal,
+                             GpuTextureView noSpecular) {
+        RenderPipeline pipeline = null;
+        GpuBuffer vertices = null;
+        GpuBuffer indices = null;
+        // the pass draws with the type given with the last index buffer set (a render pass starts with INT)
+        VertexFormat.IndexType indexType = VertexFormat.IndexType.INT;
+        GpuTextureView albedo = null, normal = null, specular = null;
+        int i = 0;
+        while (i < size) {
+            Entry e = ordered[i];
+            if (e.pipeline != pipeline) {
+                pass.setPipeline(e.pipeline);
+                pipeline = e.pipeline;
+            }
+            if (e.albedo != albedo) {
+                pass.bindSampler("Sampler0", e.albedo);
+                albedo = e.albedo;
+            }
+            GpuTextureView n = e.normal != null ? e.normal : flatNormal;
+            if (n != normal) {
+                pass.bindSampler("NormalSampler", n);
+                normal = n;
+            }
+            GpuTextureView s = e.specular != null ? e.specular : noSpecular;
+            if (s != specular) {
+                pass.bindSampler("SpecularSampler", s);
+                specular = s;
+            }
+            int end = i + 1;
+            while (end < size) {
+                Entry next = ordered[end];
+                if (next.pipeline != pipeline || next.albedo != albedo || (next.normal != null ? next.normal : flatNormal) != normal
+                        || (next.specular != null ? next.specular : noSpecular) != specular) break;
+                end++;
+            }
+            if (end - i == 1) {
                 if (e.vertices != vertices) {
                     pass.setVertexBuffer(0, e.vertices);
                     vertices = e.vertices;
@@ -333,27 +447,35 @@ public final class DrawList {
                 if (e.indices != indices) {
                     pass.setIndexBuffer(e.indices, e.indexType);
                     indices = e.indices;
-                }
-                if (e.albedo != albedo) {
-                    pass.bindSampler("Sampler0", e.albedo);
-                    albedo = e.albedo;
-                }
-                GpuTextureView n = e.normal != null ? e.normal : flatNormal;
-                if (n != normal) {
-                    pass.bindSampler("NormalSampler", n);
-                    normal = n;
-                }
-                GpuTextureView s = e.specular != null ? e.specular : noSpecular;
-                if (s != specular) {
-                    pass.bindSampler("SpecularSampler", s);
-                    specular = s;
+                    indexType = e.indexType;
                 }
                 pass.setUniform("DynamicTransforms", slices[i]);
                 pass.drawIndexed(0, e.firstIndex, e.indexCount, 1);
+            } else {
+                batch.clear();
+                for (int j = i; j < end; j++) {
+                    Entry d = ordered[j];
+                    if (d.indices != indices) {
+                        indices = d.indices;
+                        indexType = d.indexType;
+                    }
+                    vertices = d.vertices;
+                    batch.add(new RenderPass.Draw<>(0, d.vertices, indices, indexType, d.firstIndex, d.indexCount, uploader(j)));
+                }
+                pass.drawMultipleIndexed(batch, null, null, PER_DRAW, slices);
+                batch.clear();
             }
+            i = end;
         }
-        if (motionProjection != null) drawMotion(ordered, depth);
-        clear();
+    }
+
+    /** Binds the {@code index}th draw's transform block of the flush ({@code DynamicTransforms}). */
+    private BiConsumer<GpuBufferSlice[], RenderPass.UniformUploader> uploader(int index) {
+        while (uploaders.size() <= index) {
+            int at = uploaders.size();
+            uploaders.add((slices, upload) -> upload.upload("DynamicTransforms", slices[at]));
+        }
+        return uploaders.get(index);
     }
 
     /**
@@ -361,6 +483,18 @@ public final class DrawList {
      * first time has not moved). Draws are matched across flushes by their mesh range and the order they come in.
      */
     private void drawMotion(Entry[] ordered, GpuTextureView depth) {
+        if (Optimization.VIEWMODEL_BATCHING.on()) {
+            drawMotionBatched(ordered, depth);
+            return;
+        }
+        if (motionFast) {
+            // the last flush kept its model-views in the unboxed map
+            current.clear();
+            for (Long2ObjectMap.Entry<Matrix4f> kept : currentFast.long2ObjectEntrySet()) {
+                current.put(kept.getLongKey(), new Matrix4f(kept.getValue()));
+            }
+            motionFast = false;
+        }
         GpuTextureView target = HandMotion.target();
         Map<Long, Matrix4f> swap = previous;
         previous = current;
@@ -409,11 +543,90 @@ public final class DrawList {
         }
     }
 
+    /**
+     * {@link #drawMotion} with {@link Optimization#VIEWMODEL_BATCHING}: the same keys, matrices and draws without boxed keys,
+     * fresh matrices or lists, and the draws (one pipeline, no samplers) submitted as one batch.
+     */
+    private void drawMotionBatched(Entry[] ordered, GpuTextureView depth) {
+        if (!motionFast) {
+            // the last flush kept its model-views in the boxed map
+            recycle(currentFast);
+            for (Map.Entry<Long, Matrix4f> kept : current.entrySet()) currentFast.put(kept.getKey().longValue(), matrix().set(kept.getValue()));
+            motionFast = true;
+        }
+        GpuTextureView target = HandMotion.target();
+        Long2ObjectOpenHashMap<Matrix4f> swap = previousFast;
+        previousFast = currentFast;
+        currentFast = swap;
+        recycle(currentFast);
+        occurrencesFast.clear();
+        opaqueScratch.clear();
+        transformScratch.clear();
+        for (int i = 0; i < size; i++) {
+            Entry e = ordered[i];
+            long key = motionKeyFast(e);
+            Matrix4f before = previousFast.get(key);
+            Matrix4f replaced = currentFast.put(key, matrix().set(e.modelView));
+            if (replaced != null) freeMatrices.add(replaced);
+            if (target == null || !GunPipelines.isOpaque(e.pipeline)) continue;
+            opaqueScratch.add(e);
+            transformScratch.add(new DynamicUniforms.Transform(e.modelView, e.color, e.offset, before != null ? before : e.modelView, 1.0F));
+        }
+        if (target == null || opaqueScratch.isEmpty()) return;
+        if (motionInfo == null || motionInfo.isClosed()) {
+            motionInfo = RenderSystem.getDevice().createBuffer(() -> "BlockLand hand motion", GpuBuffer.USAGE_UNIFORM | GpuBuffer.USAGE_COPY_DST, 64);
+        }
+        try (org.lwjgl.system.MemoryStack stack = org.lwjgl.system.MemoryStack.stackPush()) {
+            ByteBuffer data = Std140Builder.onStack(stack, 64).putMat4f(motionProjection).get();
+            RenderSystem.getDevice().createCommandEncoder().writeToBuffer(motionInfo.slice(), data);
+        }
+        GpuBufferSlice[] slices = RenderSystem.getDynamicUniforms().writeTransforms(transformScratch.toArray(new DynamicUniforms.Transform[0]));
+        transformScratch.clear();
+        try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder()
+                .createRenderPass(() -> "BlockLand hand motion", target, OptionalInt.empty(), depth, OptionalDouble.empty())) {
+            RenderSystem.bindDefaultUniforms(pass);
+            pass.setUniform("HandMotionInfo", motionInfo.slice());
+            pass.setPipeline(GunPipelines.VELOCITY);
+            // the index type as drawMotion's loop leaves it in the pass: the one set with the last different index buffer
+            GpuBuffer indices = null;
+            VertexFormat.IndexType indexType = VertexFormat.IndexType.INT;
+            batch.clear();
+            for (int i = 0; i < opaqueScratch.size(); i++) {
+                Entry e = opaqueScratch.get(i);
+                if (e.indices != indices) {
+                    indices = e.indices;
+                    indexType = e.indexType;
+                }
+                batch.add(new RenderPass.Draw<>(0, e.vertices, indices, indexType, e.firstIndex, e.indexCount, uploader(i)));
+            }
+            pass.drawMultipleIndexed(batch, null, null, PER_DRAW, slices);
+            batch.clear();
+        }
+        opaqueScratch.clear();
+    }
+
     /** A draw's identity across flushes: its buffer and index range, and how often that range came before this flush. */
     private long motionKey(Entry e) {
         long range = ((long) System.identityHashCode(e.vertices) << 32) ^ ((long) e.firstIndex << 8) ^ e.indexCount;
         int n = occurrences.merge(range, 1, Integer::sum);
         return range * 31 + n;
+    }
+
+    /** {@link #motionKey} without boxing (the same key). */
+    private long motionKeyFast(Entry e) {
+        long range = ((long) System.identityHashCode(e.vertices) << 32) ^ ((long) e.firstIndex << 8) ^ e.indexCount;
+        int n = occurrencesFast.addTo(range, 1) + 1;
+        return range * 31 + n;
+    }
+
+    private Matrix4f matrix() {
+        return freeMatrices.isEmpty() ? new Matrix4f() : freeMatrices.remove(freeMatrices.size() - 1);
+    }
+
+    /** Empties a map of kept model-views, its matrices free for reuse. */
+    private void recycle(Long2ObjectOpenHashMap<Matrix4f> kept) {
+        for (Matrix4f matrix : kept.values()) freeMatrices.add(matrix);
+        kept.clear();
     }
 
     /**

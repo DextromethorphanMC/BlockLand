@@ -137,6 +137,10 @@ final class ImpactParticles {
         int source;
         /** In {@link #stains} (landed blood other drops may run into). */
         boolean listed;
+        /** Counts every time {@link #clip}, {@link #clips} and {@link #edges} are worked out (keys the stains' cuts). */
+        int clipStamp;
+        /** The splat's and the run's quads as last cut to {@link #clip} ({@code IMPACT_POOLS}; made when first drawn). */
+        BloodStains.Cut splatCut, runCut;
     }
 
     /**
@@ -221,6 +225,13 @@ final class ImpactParticles {
     final Spark[] sparks = new Spark[CAPACITY];
     private int nextDebris, nextCloud, nextSplash, nextSpark;
     private int liveDebris, liveClouds, liveSplashes, liveSparks;
+    /**
+     * Index ranges holding every live debris piece and spark (empty while lo &gt; hi), for the renderer's
+     * {@code IMPACT_POOLS} walk: a piece only comes alive where it is handed out ({@link #debris(int)}, {@link #spark}),
+     * which widens its range; each tick's walk over the whole pool works the ranges out anew. Pieces dying only leave
+     * them wider than needed. Kept whatever the switch, so it can change at any frame.
+     */
+    int debrisLo = CAPACITY, debrisHi = -1, sparkLo = CAPACITY, sparkHi = -1;
     private final BlockPos.MutableBlockPos probe = new BlockPos.MutableBlockPos();
     /** Second collisions on (the setting): pieces bounce, otherwise they vanish where they touch a block. */
     private boolean bounce = true;
@@ -265,6 +276,8 @@ final class ImpactParticles {
             if (nextDebris >= Math.min(budget, CAPACITY)) nextDebris = 0;
             d = debris[nextDebris++];
         }
+        debrisLo = Math.min(debrisLo, nextDebris - 1);
+        debrisHi = Math.max(debrisHi, nextDebris - 1);
         if (!d.alive) liveDebris++;
         d.alive = true;
         d.resting = false;
@@ -364,6 +377,8 @@ final class ImpactParticles {
     Spark spark(int budget) {
         if (nextSpark >= Math.min(budget, CAPACITY)) nextSpark = 0;
         Spark s = sparks[nextSpark++];
+        sparkLo = Math.min(sparkLo, nextSpark - 1);
+        sparkHi = Math.max(sparkHi, nextSpark - 1);
         if (!s.alive) liveSparks++;
         s.alive = true;
         s.age = 0;
@@ -378,6 +393,16 @@ final class ImpactParticles {
         return liveDebris + liveClouds + liveSplashes + liveSparks;
     }
 
+    /** The live debris pieces in pool order into {@code out} (only the range that can hold any); returns how many. */
+    int liveDebris(Debris[] out) {
+        int n = 0;
+        for (int i = debrisLo; i <= debrisHi; i++) {
+            Debris d = debris[i];
+            if (d.alive) out[n++] = d;
+        }
+        return n;
+    }
+
     void clear() {
         for (int i = 0; i < CAPACITY; i++) {
             debris[i].alive = false;
@@ -386,6 +411,8 @@ final class ImpactParticles {
         for (Cloud c : clouds) c.alive = false;
         for (Splash s : splashes) s.alive = false;
         liveDebris = liveClouds = liveSplashes = liveSparks = 0;
+        debrisLo = sparkLo = CAPACITY;
+        debrisHi = sparkHi = -1;
     }
 
     // ---- ticking ------------------------------------------------------------------------------------
@@ -402,10 +429,18 @@ final class ImpactParticles {
         findBodies(level);
         flyingNext = false;
         liveDebris = 0;
-        for (Debris d : debris) {
+        // the ranges anew: pieces alive after their tick, and (through debris / spark) any handed out meanwhile
+        debrisLo = CAPACITY;
+        debrisHi = -1;
+        for (int i = 0; i < CAPACITY; i++) {
+            Debris d = debris[i];
             if (!d.alive) continue;
             tickDebris(level, d, windX, windZ);
-            if (d.alive) liveDebris++;
+            if (d.alive) {
+                liveDebris++;
+                debrisLo = Math.min(debrisLo, i);
+                debrisHi = Math.max(debrisHi, i);
+            }
         }
         flying = flyingNext;
         liveClouds = 0;
@@ -421,10 +456,17 @@ final class ImpactParticles {
             else liveSplashes++;
         }
         liveSparks = 0;
-        for (Spark s : sparks) {
+        sparkLo = CAPACITY;
+        sparkHi = -1;
+        for (int i = 0; i < CAPACITY; i++) {
+            Spark s = sparks[i];
             if (!s.alive) continue;
             tickSpark(level, s);
-            if (s.alive) liveSparks++;
+            if (s.alive) {
+                liveSparks++;
+                sparkLo = Math.min(sparkLo, i);
+                sparkHi = Math.max(sparkHi, i);
+            }
         }
     }
 
@@ -878,6 +920,7 @@ final class ImpactParticles {
         }
         if (d.clip == null) d.clip = new float[MAX_CLIPS * 4];
         if (d.edges == null) d.edges = new byte[MAX_CLIPS];
+        d.clipStamp++;
         double plane = coordinate(d, a);
         d.clips = (byte) BlockFaces.surface(level, face, plane, coordinate(d, sa), coordinate(d, ta), reachS + 0.01f, reachT + 0.01f, d.clip);
         for (int r = 0; r < d.clips; r++) {
