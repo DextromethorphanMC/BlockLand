@@ -46,6 +46,12 @@ public class BridgePracticeDefinition implements GameTypeDefinition {
         return "单人搭路：方块无限，跨过虚空搭到对面的终点平台，掉落自动回到起点并计时。无需地图。";
     }
 
+    /** Practice: lenient, setbacks only. */
+    @Override
+    public String antiCheatPreset() {
+        return "relaxed";
+    }
+
     @Override
     public ObjectNode defaultSettings() {
         ObjectNode node = mapper.createObjectNode();

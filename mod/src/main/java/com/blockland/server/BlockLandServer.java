@@ -54,6 +54,9 @@ import com.blockland.server.profile.OwnedCosmetics;
 import com.blockland.server.profile.ProfileService;
 import com.blockland.server.ranked.RankedService;
 import com.blockland.server.ranked.Ranks;
+import com.blockland.server.anticheat.AntiCheatService;
+import com.blockland.server.anticheat.api.Suspicion;
+import com.blockland.server.anticheat.net.NetHooks;
 import com.blockland.server.session.PlayerSessions;
 import com.blockland.server.shop.ShopRelay;
 import com.blockland.server.world.WorldJobScheduler;
@@ -129,6 +132,7 @@ public final class BlockLandServer {
     public final InventoryService inventory;
     public final ProfileService profilePages;
     public final RankedService ranked;
+    public final AntiCheatService antiCheat;
     private int tickCounter;
 
     private BlockLandServer(MinecraftServer server) {
@@ -196,7 +200,9 @@ public final class BlockLandServer {
             return game != null && game.mode().flag("allowGraffiti", true);
         }, profiles::hasEntitlement);
         this.arenas.setReleaseListener(graffiti::clearArea);
-        this.craft = new CraftService(server, profiles);
+        // skins that must be owned are entitlements (skin:<weapon>/<skin>); a status that arrives may unlock or expire one
+        this.craft = new CraftService(server, profiles, profiles::hasEntitlement);
+        this.profiles.setEntitlementListener(craft::entitlementsChanged);
         this.kills = new KillTracker(server, games);
         this.spectate = new com.blockland.server.spectate.SpectateService(server, games, profiles);
         // 库存 / 个人主页: what players own (entitlements + free items) and wear (cosmetics slots)
@@ -210,6 +216,20 @@ public final class BlockLandServer {
         this.games.setAbandonListener(ranked::abandoned);
         this.services.results().addListener(ranked::published);
         this.kits.setAfterApply(craft::applyBuilds);
+        // 反作弊: movement, packets and combat judged by the rules of the player's mode (anti-cheat spec); it knows the
+        // matches only through these functions, the modules' own mechanics only through their allowances
+        this.antiCheat = new AntiCheatService(server, backend, sessions, content::snapshot,
+                id -> {
+                    GameInstance game = games.gameOf(id);
+                    return game == null ? null : game.mode();
+                },
+                id -> {
+                    GameInstance game = games.gameOf(id);
+                    return game == null || game.map() == null ? null : game.map().id;
+                },
+                hitHistory::positionAgo);
+        this.antiCheat.addAllowance(new com.blockland.server.movement.ActionAllowance(actions));
+        this.antiCheat.addAllowance(new com.blockland.server.parachute.ParachuteAllowance());
         // the login status brings the player's read announcements and builds: show the real ones
         this.profiles.setPreferencesListener(id -> {
             if (!sessions.inLobby().contains(id)) return;
@@ -240,6 +260,7 @@ public final class BlockLandServer {
                 craft.forget(id);
                 cosmetics.forget(id);
                 ranked.forget(id);
+                antiCheat.forget(id);
                 lobby.left(id);
                 lobby.markDirty();
             }
@@ -282,6 +303,7 @@ public final class BlockLandServer {
                 instance.graffiti.forget(player);
                 instance.kills.forget(player);
                 instance.spectate.forget(player);
+                instance.antiCheat.leftWorld(player);
                 instance.sessions.leftWorld(player);
             }
         });
@@ -330,6 +352,23 @@ public final class BlockLandServer {
         // locked hands (粘液缠身): no vanilla attack, item use or block interaction either
         AttackEntityEvent.BUS.addListener(event -> {
             return ActionLocks.isLocked(event.getEntity());
+        });
+        // the anti-cheat judges vanilla melee attacks (reach, angle, several targets at once); a cancelled one does nothing
+        AttackEntityEvent.BUS.addListener(event -> instance != null && event.getEntity() instanceof ServerPlayer player
+                && instance.antiCheat.onAttack(player, event.getTarget()));
+        // pistons carry players along (and slime blocks launch them): the anti-cheat leaves those moves alone
+        net.minecraftforge.event.level.PistonEvent.Post.BUS.addListener(event -> {
+            if (instance != null && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
+                instance.antiCheat.onPiston(level, event.getPos());
+            }
+        });
+        // …and the face a block is placed against
+        PlayerInteractEvent.RightClickBlock.BUS.addListener(event -> {
+            if (instance != null && event.getEntity() instanceof ServerPlayer player
+                    && event.getItemStack().getItem() instanceof net.minecraft.world.item.BlockItem) {
+                instance.antiCheat.onPlace(player, event.getHitVec());
+            }
+            return false;
         });
         PlayerInteractEvent.RightClickItem.BUS.addListener(event -> {
             return ActionLocks.isLocked(event.getEntity());
@@ -380,6 +419,13 @@ public final class BlockLandServer {
         BLNetwork.setCombatServerListener(created.kills);
         InventoryCatalog.register(new CardItems());
         InventoryCatalog.register(new com.blockland.server.graffiti.GraffitiItems());
+        InventoryCatalog.register(new com.blockland.server.craft.SkinItems());
+        // a product that is an inventory item shows that item's icon when it has no image of its own
+        created.shop.setItemIcons(key -> {
+            InventoryCatalog.ItemType type = InventoryCatalog.typeOf(key);
+            InventoryCatalog.Display display = type == null ? null : type.display(key);
+            return display == null ? "" : display.icon();
+        });
         BLNetwork.setGraffitiServerListener(created.graffiti);
         BLNetwork.setSpectateServerListener(created.spectate);
         BLNetwork.setProfileServerListener(created.profilePages);
@@ -391,6 +437,10 @@ public final class BlockLandServer {
         BLNetwork.setParachuteServerListener(created.parachutes);
         BLNetwork.setSupplyServerListener(created.supply);
         BLNetwork.setArmorServerListener(created.armor);
+        NetHooks.setListener(created.antiCheat);
+        Suspicion.setSink(created.antiCheat);
+        BLNetwork.setInboundGuard(created.antiCheat::admit);
+        created.antiCheat.publishRegistry();
         Parachutes.setServerView(created.parachutes);
         BLNetwork.setInfectionServerListener(new InfectionActions(created.games::gameOf));
         BombActions bombActions = new BombActions(created.games::gameOf);
@@ -458,6 +508,10 @@ public final class BlockLandServer {
         current.hitHistory.clear();
         current.meleeService.clear();
         current.equipmentService.clear();
+        NetHooks.setListener(null);
+        Suspicion.setSink(null);
+        BLNetwork.setInboundGuard(null);
+        current.antiCheat.clear();
         instance = null;
     }
 
@@ -478,6 +532,8 @@ public final class BlockLandServer {
         graffiti.tick();
         kills.tick();
         spectate.tick();
+        // after the worlds ticked: the velocities of this tick are sent, the pings that acknowledge them follow
+        antiCheat.tick();
         lobby.tick();
         profiles.tick();
         if (++tickCounter % (BlockLandConfig.SYNC_INTERVAL_SECONDS.get() * 20) == 0) content.refresh();

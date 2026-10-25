@@ -909,3 +909,11 @@ sample, skips an update that could leave something a frame stale, or reorders dr
   gives both. `bench compare` (dev automation) runs the frame comparison alone, `bench <id>` compares one optimization
   (off and on, every other one on). Reports:
   `<game>/blockland/benchmarks/<time>.txt` (the player's language) and `.json` (every pass, every span).
+* **Freezes** (`perf/Hitches`): a frame over 100 ms in a world is logged with its garbage collections, heap, window state
+  and the time vanilla's frame flip spent in the buffer swap and in the window's event polls (`RenderSystemMixin` →
+  `PerfHooks.displayStep`); the timings then record for a minute, so the next one is also logged span by span.
+* **Background frame rate** (`perf/BackgroundLimit`, `PerfSettings.backgroundFrameLimit`, the 性能 tab, default 60 fps):
+  while the window is not focused, vanilla's frame limiter (`FramerateLimitTracker.getFramerateLimit`) returns at most
+  this (260 = no cap; never during a benchmark). Vanilla only slows a minimized window or an idle player: a covered
+  window kept drawing flat out and, with two clients on one GPU, made the one in front wait in its buffer swap for up
+  to 2 s. Not an `Optimization` (it changes how often the background window draws, nothing in a frame).

@@ -31,6 +31,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Textures used by retained models: fallbacks (white, a flat normal), PNGs from resource packs (skin patterns,
@@ -39,6 +42,12 @@ import java.util.Set;
  * without one) and kept until the next resource reload. A set's {@code _s} mips are roughened by the normal detail they
  * average over (Toksvig), every mipmapped texture is filtered anisotropically, and their mip bias follows the frame's
  * ({@link FrameJitter#mipBias}, kept by {@link #syncSampling}).
+ * <p>
+ * Texture sets are big (a weapon brings several 1–2K sets): their PNGs are decoded and their mip chains built on loader
+ * threads, started when a model loads or a weapon is prefetched ({@link #prefetch}); the render thread only uploads what
+ * is ready, within a small budget per frame. Until then {@link #set} answers null and the part draws with its material's
+ * own look; once uploaded a set is exactly what the old synchronous path made. The benchmark loads synchronously
+ * ({@link #setBlocking}) so every pass sees the same textures.
  */
 public final class Textures {
     /** How a mip level is averaged from the one above. */
@@ -80,6 +89,22 @@ public final class Textures {
     private static final Map<GpuTextureView, ResourceLocation> locations = new IdentityHashMap<>();
     private static final List<Owned> setTextures = new ArrayList<>();
     private static final Set<String> warned = new HashSet<>();
+    /** Texture sets being decoded off the render thread (PNGs and whole mip chains), by base path. */
+    private static final Map<String, CompletableFuture<Prepared>> pending = new HashMap<>();
+    private static final ExecutorService loader = Executors.newFixedThreadPool(
+            Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() / 4)), runnable -> {
+                Thread thread = new Thread(runnable, "BlockLand texture loader");
+                thread.setDaemon(true);
+                thread.setPriority(Thread.NORM_PRIORITY - 1);
+                return thread;
+            });
+    /** Upload time of this frame; past the budget, ready sets wait for the next frame. */
+    private static final long UPLOAD_BUDGET_NANOS = 4_000_000L;
+    private static long uploadNanos;
+    /** Sets finished so far: a cached picture of a model redraws when it changes. */
+    private static int loads;
+    /** Load sets at once on the render thread (the benchmark). */
+    private static boolean blocking;
     /** Every mipmapped texture uploaded here (sets, resource PNGs, models' own images), for {@link #syncSampling}. */
     private static final List<GpuTexture> mipmapped = new ArrayList<>();
     private static float appliedBias;
@@ -158,40 +183,109 @@ public final class Textures {
     @Nullable
     public static TextureSet set(@Nullable String base) {
         if (base == null || base.isEmpty()) return null;
-        return sets.computeIfAbsent(base, Textures::loadSet).orElse(null);
+        Optional<TextureSet> done = sets.get(base);
+        if (done != null) return done.orElse(null);
+        CompletableFuture<Prepared> job = pending.computeIfAbsent(base, Textures::start);
+        if (!blocking && (!job.isDone() || uploadNanos > UPLOAD_BUDGET_NANOS)) return null;
+        pending.remove(base);
+        Prepared prepared = job.handle((p, e) -> {
+            if (e != null) warnOnce(base, e instanceof Exception ex ? ex : new RuntimeException(e));
+            return p;
+        }).join();
+        long start = System.nanoTime();
+        Optional<TextureSet> result = prepared == null ? Optional.empty() : Optional.of(finish(prepared));
+        uploadNanos += System.nanoTime() - start;
+        if (result.isEmpty()) warnOnce(base, null);
+        sets.put(base, result);
+        loads++;
+        return result.orElse(null);
     }
 
-    private static Optional<TextureSet> loadSet(String base) {
-        ResourceLocation albedo, normal, specular;
-        try {
-            albedo = BlockLand.id(base + ".png");
-            normal = BlockLand.id(base + "_n.png");
-            specular = BlockLand.id(base + "_s.png");
-        } catch (RuntimeException e) {
-            warnOnce(base, e);
-            return Optional.empty();
+    /** Starts decoding a texture set in the background so it is ready when first drawn (no-op when known). */
+    public static void prefetch(@Nullable String base) {
+        if (base == null || base.isEmpty() || sets.containsKey(base)) return;
+        pending.computeIfAbsent(base, Textures::start);
+    }
+
+    /** Texture sets finished so far (changes whenever one becomes ready). */
+    public static int loads() {
+        return loads;
+    }
+
+    /** Whether sets load at once on the render thread instead of in the background (the benchmark's passes). */
+    public static void setBlocking(boolean value) {
+        blocking = value;
+    }
+
+    /** Start of a frame: a fresh upload budget. */
+    public static void beginFrame() {
+        uploadNanos = 0;
+    }
+
+    private static CompletableFuture<Prepared> start(String base) {
+        return CompletableFuture.supplyAsync(() -> prepare(base), loader);
+    }
+
+    /** One image with its whole mip chain, level 0 first. */
+    private record Chain(ResourceLocation location, NativeImage[] levels) {
+        void close() {
+            for (NativeImage level : levels) if (level != null) level.close();
         }
-        Owned a = load(albedo, Kind.COLOR);
-        if (a == null) {
-            warnOnce(base, null);
-            return Optional.empty();
+    }
+
+    /** A texture set decoded and filtered off the render thread, waiting for its upload. */
+    private record Prepared(Chain albedo, @Nullable Chain normal, @Nullable Chain specular, float[] mean) {
+        void close() {
+            albedo.close();
+            if (normal != null) normal.close();
+            if (specular != null) specular.close();
         }
-        Owned n = null, s = null;
-        NativeImage normals = exists(normal) ? read(normal) : null;
+    }
+
+    /** Loader thread: the set's PNGs and their mip chains; null when the albedo is missing. */
+    @Nullable
+    private static Prepared prepare(String base) {
+        ResourceLocation albedo = BlockLand.id(base + ".png");
+        ResourceLocation normal = BlockLand.id(base + "_n.png");
+        ResourceLocation specular = BlockLand.id(base + "_s.png");
+        NativeImage a = read(albedo);
+        if (a == null) return null;
+        NativeImage n = null, s = null;
         try {
-            if (normals != null) n = own(normal, normals, Kind.DATA, null);
+            n = read(normal);
+            s = read(specular);
+            float[] mean = mean(a.getPixelsABGR());
+            Chain albedoChain = new Chain(albedo, chain(a, Kind.COLOR, null));
+            Chain normalChain = n == null ? null : new Chain(normal, chain(n, Kind.DATA, null));
             // the specular map's mips take the normal map's averaged-away detail as roughness
-            s = exists(specular) ? load(specular, Kind.SPECULAR, normals) : null;
-        } finally {
-            if (normals != null) normals.close();
+            Chain specularChain = s == null ? null : new Chain(specular, chain(s, Kind.SPECULAR, n));
+            return new Prepared(albedoChain, normalChain, specularChain, mean);
+        } catch (RuntimeException e) {
+            a.close();
+            if (n != null) n.close();
+            if (s != null) s.close();
+            throw e;
         }
-        for (Owned owned : new Owned[]{a, n, s}) if (owned != null) setTextures.add(owned);
-        locations.put(a.view(), albedo);
-        return Optional.of(new TextureSet(albedo, a.view(), n == null ? null : n.view(), s == null ? null : s.view(), a.mean()));
     }
 
-    private static boolean exists(ResourceLocation location) {
-        return Minecraft.getInstance().getResourceManager().getResource(location).isPresent();
+    /** Render thread: uploads a prepared set and frees its images. */
+    private static TextureSet finish(Prepared prepared) {
+        try {
+            Owned a = upload(prepared.albedo(), prepared.mean());
+            Owned n = prepared.normal() == null ? null : upload(prepared.normal(), new float[]{1, 1, 1});
+            Owned s = prepared.specular() == null ? null : upload(prepared.specular(), new float[]{1, 1, 1});
+            for (Owned owned : new Owned[]{a, n, s}) if (owned != null) setTextures.add(owned);
+            locations.put(a.view(), prepared.albedo().location());
+            return new TextureSet(prepared.albedo().location(), a.view(), n == null ? null : n.view(), s == null ? null : s.view(),
+                    a.mean());
+        } finally {
+            prepared.close();
+        }
+    }
+
+    private static Owned upload(Chain chain, float[] mean) {
+        GpuTexture texture = upload(chain.location().toString(), chain.levels(), true);
+        return new Owned(texture, RenderSystem.getDevice().createTextureView(texture), mean);
     }
 
     @Nullable
@@ -265,15 +359,46 @@ public final class Textures {
      *                  relief still breaks up its highlight at a distance instead of turning mirror-flat.
      */
     private static GpuTexture upload(String label, NativeImage image, boolean repeat, Kind kind, @Nullable NativeImage normalMap) {
-        int width = image.getWidth(), height = image.getHeight();
-        // Blaze3D sizes level n as size >> n without clamping to 1, so the chain stops where the short side would vanish
-        int levels = 1;
-        while ((Math.min(width, height) >> levels) > 0) levels++;
+        NativeImage[] levels = chain(image, kind, normalMap);
+        try {
+            return upload(label, levels, repeat);
+        } finally {
+            // level 0 is the caller's image
+            for (int level = 1; level < levels.length; level++) levels[level].close();
+        }
+    }
+
+    /** Uploads a mip chain (level 0 first) into one texture (render thread). */
+    private static GpuTexture upload(String label, NativeImage[] chain, boolean repeat) {
+        int width = chain[0].getWidth(), height = chain[0].getHeight();
+        int levels = chain.length;
         GpuDevice device = RenderSystem.getDevice();
         GpuTexture texture = device.createTexture(label, GpuTexture.USAGE_TEXTURE_BINDING | GpuTexture.USAGE_COPY_DST,
                 TextureFormat.RGBA8, width, height, 1, levels);
         CommandEncoder encoder = device.createCommandEncoder();
-        encoder.writeToTexture(texture, image, 0, 0, 0, 0, width, height, 0, 0);
+        for (int level = 0; level < levels; level++) {
+            NativeImage image = chain[level];
+            encoder.writeToTexture(texture, image, level, 0, 0, 0, image.getWidth(), image.getHeight(), 0, 0);
+        }
+        texture.setAddressMode(repeat ? AddressMode.REPEAT : AddressMode.CLAMP_TO_EDGE);
+        texture.setTextureFilter(FilterMode.LINEAR, levels > 1);
+        if (levels > 1) {
+            mipmapped.add(texture);
+            sampling(texture);
+        }
+        return texture;
+    }
+
+    /**
+     * An image's full mip chain, level 0 being the image itself (any thread: CPU only). Blaze3D sizes level n as
+     * {@code size >> n} without clamping to 1, so the chain stops where the short side would vanish.
+     */
+    private static NativeImage[] chain(NativeImage image, Kind kind, @Nullable NativeImage normalMap) {
+        int width = image.getWidth(), height = image.getHeight();
+        int levels = 1;
+        while ((Math.min(width, height) >> levels) > 0) levels++;
+        NativeImage[] chain = new NativeImage[levels];
+        chain[0] = image;
         int[] pixels = image.getPixelsABGR();
         float[] normals = kind == Kind.SPECULAR && normalMap != null && normalMap.getWidth() == width
                 && normalMap.getHeight() == height ? Mipmaps.normals(normalMap.getPixelsABGR()) : null;
@@ -288,22 +413,15 @@ public final class Textures {
                 written = pixels.clone();
                 Mipmaps.roughen(written, normals);
             }
-            try (NativeImage mip = new NativeImage(nw, nh, false)) {
-                for (int y = 0; y < nh; y++) {
-                    for (int x = 0; x < nw; x++) mip.setPixelABGR(x, y, written[y * nw + x]);
-                }
-                encoder.writeToTexture(texture, mip, level, 0, 0, 0, nw, nh, 0, 0);
+            NativeImage mip = new NativeImage(nw, nh, false);
+            for (int y = 0; y < nh; y++) {
+                for (int x = 0; x < nw; x++) mip.setPixelABGR(x, y, written[y * nw + x]);
             }
+            chain[level] = mip;
             w = nw;
             h = nh;
         }
-        texture.setAddressMode(repeat ? AddressMode.REPEAT : AddressMode.CLAMP_TO_EDGE);
-        texture.setTextureFilter(FilterMode.LINEAR, levels > 1);
-        if (levels > 1) {
-            mipmapped.add(texture);
-            sampling(texture);
-        }
-        return texture;
+        return chain;
     }
 
     // ---- sampling -----------------------------------------------------------------------------------
@@ -344,6 +462,13 @@ public final class Textures {
 
     /** Resource reload: drop everything, it is reloaded on demand. */
     public static void clear() {
+        // work in flight belongs to the old packs: its images are freed when it finishes
+        for (CompletableFuture<Prepared> job : pending.values()) {
+            job.whenComplete((prepared, error) -> {
+                if (prepared != null) prepared.close();
+            });
+        }
+        pending.clear();
         resources.values().forEach(o -> o.ifPresent(Owned::close));
         setTextures.forEach(Owned::close);
         resources.clear();

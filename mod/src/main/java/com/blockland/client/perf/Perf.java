@@ -28,7 +28,11 @@ public final class Perf {
         // first of the frame: the benchmark places the camera and steps the render clock before anything reads them
         TickEvent.RenderTickEvent.Pre.BUS.addListener(Priority.HIGHEST, event -> {
             if (!applied) applySettings();
-            FrameTimings.setRecording(settings().showTimings || Benchmark.running());
+            Hitches.frame();
+            com.blockland.client.render.Textures.beginFrame();
+            // every benchmark pass must draw with the same textures: none may still be loading in the background
+            com.blockland.client.render.Textures.setBlocking(Benchmark.running());
+            FrameTimings.setRecording(settings().showTimings || Benchmark.running() || Hitches.armed());
             Benchmark.beforeFrame();
         });
         Benchmark.init(modBus);

@@ -51,6 +51,12 @@ public class BombDefinition implements GameTypeDefinition {
         return "进攻方携带炸药包在包点安放，防守方阻止安放或拆除炸弹；炸弹爆炸则进攻方获胜。";
     }
 
+    /** Competitive rounds: stricter tolerance and auto-bans allowed. */
+    @Override
+    public String antiCheatPreset() {
+        return "strict";
+    }
+
     @Override
     public ObjectNode defaultSettings() {
         ObjectNode node = mapper.createObjectNode();

@@ -4,6 +4,7 @@ import { CoverPicker } from '../components/CoverPicker'
 import { emptyGroup, GroupEditor } from '../components/GroupEditor'
 import { KitEditor } from '../components/KitEditor'
 import { uiFor } from '../gametypes'
+import { AntiCheatField } from '../gametypes/common/AntiCheatField'
 import {
   confirmAction,
   Empty,
@@ -109,6 +110,9 @@ export function GameModes() {
         <div className="row wrap">
           <span className="tag">{typeName(mode.type)}</span>
           {mode.settings.ranked === true && <span className="badge badge-ranked">排位</span>}
+          {(mode.settings.antiCheat as { enabled?: boolean } | undefined)?.enabled === false && (
+            <span className="badge badge-warn">反作弊关闭</span>
+          )}
           {availabilityBadge(mode.availableUntil)}
         </div>
         <label className="switch" title={mode.enabled ? '已启用' : '已停用'}>
@@ -469,6 +473,13 @@ function GameModeEditor({
             onChange={(v) => set({ settings: { ...mode.settings, spectateSeconds: v } })}
           />
         </Field>
+
+        <AntiCheatField
+          settings={mode.settings}
+          typeId={mode.type}
+          typeDefaults={type?.defaultSettings}
+          onChange={(settings) => set({ settings })}
+        />
 
         <SettingsForm settings={mode.settings} maps={maps} onChange={(settings) => set({ settings })} />
 

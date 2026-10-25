@@ -2,6 +2,8 @@ package com.blockland.server.parachute;
 
 import com.blockland.BlockLand;
 import com.blockland.parachute.ParachuteRules;
+import com.blockland.server.anticheat.api.AntiCheatSignals;
+import com.blockland.server.anticheat.api.Suspicion;
 import com.blockland.server.util.FloatingCheck;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -148,6 +150,7 @@ final class ParachuteFlightCheck {
         flight.strikes++;
         BlockLand.LOGGER.warn("[BlockLand] {} {} while wearing a parachute (strike {}/{})", player.getName().getString(), failure,
                 flight.strikes, KICK_STRIKES);
+        Suspicion.report(player, AntiCheatSignals.PARACHUTE, 1, failure);
         enforcer.closeCanopy(player);
         if (flight.strikes >= KICK_STRIKES) {
             flights.remove(player.getUUID());

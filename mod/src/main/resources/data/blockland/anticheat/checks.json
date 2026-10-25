@@ -1,0 +1,148 @@
+{
+  "checks": {
+    "packet.rate": {
+      "category": "packet",
+      "name": "数据包频率",
+      "description": "BlockLand 自定义数据包超过 packets.json 规定的频率（刷包）。超出的包直接丢弃，严重刷包踢出。",
+      "latencySensitive": false,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 200, "decay": 2.0, "weight": 0.3, "punish": false }
+    },
+    "packet.invalid": {
+      "category": "packet",
+      "name": "非法数值",
+      "description": "原版客户端不可能发出的数值，例如俯仰角超出 ±90°。",
+      "latencySensitive": false,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 5, "decay": 0.05, "weight": 1.0, "punish": true }
+    },
+    "packet.transaction": {
+      "category": "packet",
+      "name": "应答异常",
+      "description": "ping/pong 应答乱序、应答了没发过的 ping，或长时间扣住应答（拖延击退生效）。",
+      "latencySensitive": false,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 20, "decay": 0.2, "weight": 0.6, "punish": true }
+    },
+    "packet.timer": {
+      "category": "packet",
+      "name": "计时器加速",
+      "description": "客户端 tick 快于每秒 20 次（按到达时间的计时余额，网络卡顿攒下的余额可以抵消），或一个 tick 内发出多个移动包。",
+      "latencySensitive": true,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 10, "kickVl": 120, "decay": 0.5, "weight": 0.8, "punish": true }
+    },
+    "movement.speed": {
+      "category": "movement",
+      "name": "移动速度",
+      "description": "水平位移超出按原版物理、效果、地面摩擦、服务端击退与模组动作（滑铲、飞扑）推算的上限。",
+      "latencySensitive": true,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 3, "kickVl": 60, "decay": 0.4, "weight": 0.7, "punish": true }
+    },
+    "movement.vertical": {
+      "category": "movement",
+      "name": "飞行 / 高跳",
+      "description": "上升超出跳跃、台阶与重力的上限，或在空中悬停。",
+      "latencySensitive": true,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 2, "kickVl": 50, "decay": 0.4, "weight": 0.8, "punish": true }
+    },
+    "movement.ground": {
+      "category": "movement",
+      "name": "伪造着地",
+      "description": "声称站在地面上但脚下没有任何碰撞（无摔落、水上行走）。服务端改用自己判定的着地状态，摔落伤害照算。",
+      "latencySensitive": false,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 4, "kickVl": 60, "decay": 0.3, "weight": 0.6, "punish": true }
+    },
+    "movement.velocity": {
+      "category": "movement",
+      "name": "反击退",
+      "description": "客户端确认收到服务端的击退或爆炸冲击后，下一次移动没有按该速度移动。",
+      "latencySensitive": true,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 40, "decay": 0.15, "weight": 0.8, "punish": true }
+    },
+    "movement.parachute": {
+      "category": "movement",
+      "name": "降落伞飞行",
+      "description": "降落伞模块的飞行检查失败（开伞后不下降、横向过快、空中上升）。",
+      "latencySensitive": true,
+      "signal": true,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 0, "decay": 0.1, "weight": 0.6, "punish": true }
+    },
+    "combat.reach": {
+      "category": "combat",
+      "name": "攻击距离",
+      "description": "原版近战攻击（剑、拳头等）距离超出交互距离；按攻击者延迟回溯目标当时的位置。超出过多时取消该次攻击。",
+      "latencySensitive": true,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 1, "kickVl": 40, "decay": 0.1, "weight": 0.8, "punish": true }
+    },
+    "combat.attack_angle": {
+      "category": "combat",
+      "name": "攻击角度",
+      "description": "攻击视野之外（身后、侧后方）的目标。",
+      "latencySensitive": true,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 1, "kickVl": 40, "decay": 0.1, "weight": 0.6, "punish": true }
+    },
+    "combat.multi_target": {
+      "category": "combat",
+      "name": "多目标攻击",
+      "description": "同一个客户端 tick 内攻击了多个不同的目标（原版一个 tick 内的多次点击只会打到准星上的同一个目标）。",
+      "latencySensitive": false,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 1, "kickVl": 20, "decay": 0.05, "weight": 0.9, "punish": true }
+    },
+    "combat.cps": {
+      "category": "combat",
+      "name": "攻击频率",
+      "description": "每秒攻击次数超过人类上限（连点器）。",
+      "latencySensitive": false,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 0, "decay": 0.5, "weight": 0.3, "punish": false }
+    },
+    "combat.fire_rate": {
+      "category": "combat",
+      "name": "射速",
+      "description": "射击快于枪械数据允许的射速（枪械模块已丢弃多出的子弹）。",
+      "latencySensitive": true,
+      "signal": true,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 60, "decay": 0.3, "weight": 0.5, "punish": true }
+    },
+    "combat.aim_mismatch": {
+      "category": "combat",
+      "name": "射击方向",
+      "description": "射击方向与玩家当前朝向相差过大（静默瞄准）。",
+      "latencySensitive": true,
+      "signal": true,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 0, "decay": 0.2, "weight": 0.3, "punish": false }
+    },
+    "combat.hit_claim": {
+      "category": "combat",
+      "name": "虚假命中",
+      "description": "客户端声称命中的目标，按延迟回溯后子弹并没有穿过它。",
+      "latencySensitive": true,
+      "signal": true,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 0, "decay": 0.2, "weight": 0.4, "punish": false }
+    },
+    "combat.melee_rate": {
+      "category": "combat",
+      "name": "出刀频率",
+      "description": "刀具冷却尚未结束就再次出刀。",
+      "latencySensitive": true,
+      "signal": true,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 60, "decay": 0.3, "weight": 0.4, "punish": false }
+    },
+    "world.place_face": {
+      "category": "world",
+      "name": "放置朝向",
+      "description": "放置方块时点击的面背对玩家的视线（自动搭路）。",
+      "latencySensitive": false,
+      "signal": false,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 0, "decay": 0.1, "weight": 0.5, "punish": true }
+    }
+  }
+}

@@ -26,12 +26,12 @@ Forge 服务器 ◀──SimpleChannel──▶ 客户端大厅界面
 | 模组 · 团队竞技场 | `games/common/TeamArenaGame` | 地图粘贴、玻璃笼倒计时、淘汰、胜负/限时、计分板队伍等通用流程；`games/skywars`、`games/fastpvp` 只通过钩子添加各自逻辑 |
 | 模组 · 开局装备 | `server/kit/KitService` + `KitLayoutStore` | 任何游戏类型都可使用的开局装备。布局由客户端保存，排队时随请求发送；服务端只校验它是预设的重新排列（物品相同、盔甲不动），发放的永远是服务端预设的物品 |
 | 玩家 / 权益 | 后端 `player/PlayerService`，模组 `server/player/PlayerProfiles` | 在线时长（服务器每 15 秒上报）、封禁、禁言、权益。商店只「授予权益」，匹配只「询问权益」，两者互不依赖 |
-| 商店 / 支付 | 后端 `shop/ShopService` + `payment/PaymentProvider`，模组 `server/shop/ShopRelay` | 支付走 `PaymentProvider` 接口（当前 `MockPaymentProvider` 直接成功），接入真实支付只需新增实现；客户端不直接访问后端，商品由游戏服务器转发 |
+| 商店 / 支付 | 后端 `shop/ShopService` + `payment/PaymentProvider`，模组 `server/shop/ShopRelay` | 支付走 `PaymentProvider` 接口（当前 `MockPaymentProvider` 直接成功），接入真实支付只需新增实现；客户端不直接访问后端，商品由游戏服务器转发；权益标识是库存物品（如皮肤 `skin:usp_dual/cerberus`）的商品没有图片时，游戏内显示该物品自己的图标 |
 | 图片 / 封面 | 后端 `media/MediaService`，模组 `server/media/MediaRelay` + 客户端 `ClientMedia` | 商品图片、模式封面、分组封面共用一套「命名空间 + id + 版本」存储与转发；业务模块只保存版本号，客户端按版本缓存纹理 |
 | 模式分组 | 后端 `modegroup/*`，模组 `ModeGroupDef` / `LobbyGroupEntry` | 分组只引用模式 id，不改变模式本身；删除模式时自动从分组中移除；在后台「小游戏管理」中维护 |
 | 组队 | 模组 `server/party/PartyService` + `PartyPackets` | 组队只管成员与邀请（按玩家 id，经 `PlayerDirectory` 找人、发提示），邀请前查询被邀请者的隐私设置；通过监听器通知变化；匹配只接收「必须同队的一组玩家」，对局只接收 `MatchRoster`（已分好的队伍 + 想要的地图），三者互不依赖 |
 | 大厅 / 会话 | 模组 `server/session/*`（`PlayerSessions`、`LobbyGate`、`PlayerDirectory`）、`server/game/PlayerTransit` | **大厅就是连接的配置阶段（configuration phase）**：登录时加入的 `LobbyGate` 任务不会自己结束，玩家停在配置阶段，客户端与服务端都不加载任何世界；匹配到的对局准备好地图后通过 `PlayerTransit.bring` 让玩家进入世界（首次结束 `LobbyGate`，之后 `returnToWorld()`），结束后 `switchToConfig()` 送回大厅。Forge 的登录/登出事件因此只表示「进入/离开世界」，加入/离开服务器由 `PlayerSessions.Listener` 通知；大厅服务（组队、匹配、个人资料、商店、图片）只按玩家 id 工作，配置阶段的包由 `BLNetwork.anyToServer/anyToClient` 注册、按连接识别发送者 |
-| 工匠 | 通用 `craft/*`（`Build`、`Craftable`、`CraftCatalog`、`Spray` + `SprayCatalog`），数据 `data/blockland/craft/attachments.json` + `sprays.json` + 各武器 `slots`，服务端 `server/craft/CraftService`，客户端 `client/craft/*`（逻辑 `CraftSession`；大厅分页 `CraftPanel`（经 `LobbyTab` 装进大厅，大厅不依赖工匠模块）；游戏内 `HeldCraftScreen` + `MountCallouts` / `OptionPicker` / `SkinCarousel`；`SprayEditor`）与 `client/spray/*` | 枪械与刀具共用：武器声明自己的槽位（挂点节点、默认、可选项、装上后隐藏的节点），配件只定义一次、任何武器都能用（瞄准镜、激光、枪管、枪托、挂件）；**喷漆**是改装方案的一部分：每处喷漆只存「喷漆 id + 哪一侧 + 侧视图中的 (u, v) + 尺寸 + 角度」，服务端不需要模型就能校验（id 存在且适用于该武器、坐标在 0..1、尺寸/角度在 `sprays.json` 的范围内、数量不超过上限），客户端按武器根节点的静止姿态把它投影到表面（`VIEWMODEL_SPEC.md` §29）；改装方案按玩家保存在**服务端**（后端玩家数据 `builds`，后端再检查一次格式），服务端校验每一项后保存，发放开局装备时自动套用；客户端只负责编辑与显示 |
+| 工匠 | 通用 `craft/*`（`Build`、`Craftable`、`CraftCatalog`、`Spray` + `SprayCatalog`），数据 `data/blockland/craft/attachments.json` + `sprays.json` + 各武器 `slots`，服务端 `server/craft/CraftService`，客户端 `client/craft/*`（逻辑 `CraftSession`；大厅分页 `CraftPanel`（经 `LobbyTab` 装进大厅，大厅不依赖工匠模块）；游戏内 `HeldCraftScreen` + `MountCallouts` / `OptionPicker` / `SkinCarousel`；`SprayEditor`）与 `client/spray/*` | 枪械与刀具共用：武器声明自己的槽位（挂点节点、默认、可选项、装上后隐藏的节点），配件只定义一次、任何武器都能用（瞄准镜、激光、枪管、枪托、挂件）；**喷漆**是改装方案的一部分：每处喷漆只存「喷漆 id + 哪一侧 + 侧视图中的 (u, v) + 尺寸 + 角度」，服务端不需要模型就能校验（id 存在且适用于该武器、坐标在 0..1、尺寸/角度在 `sprays.json` 的范围内、数量不超过上限），客户端按武器根节点的静止姿态把它投影到表面（`VIEWMODEL_SPEC.md` §29）；改装方案按玩家保存在**服务端**（后端玩家数据 `builds`，后端再检查一次格式），服务端校验每一项后保存，发放开局装备时自动套用；客户端只负责编辑与显示；**需要拥有的皮肤**（特殊皮肤默认如此，任何皮肤写 `"free": false` 即可）是库存物品（`craft/SkinKeys`：`skin:<武器>/<皮肤>`，共享皮肤另有 `skin:<皮肤>`，库存类型 `server/craft/SkinItems`），工匠只问「是否拥有这个键」：服务端拒绝保存未拥有的皮肤、权益过期后发放默认皮肤，客户端显示锁并允许试穿（`VIEWMODEL_SPEC.md` §30） |
 | 设置 | 客户端 `client/settings/*`，准心 / 命中标记 `client/hud/Crosshair` + `HitMarker` | 语言与视角灵敏度是原版选项；瞄准灵敏度倍率、准心与命中标记样式只影响本机表现，保存在客户端（`config/blockland-settings.json`）；隐私（是否允许被邀请组队）保存在后端玩家数据，由服务端在邀请时执行 |
 | 公告 | 后端 `announcement/*`（随 `/bootstrap` 同步），模组 `LobbyService` 转发，客户端 `ClientAnnouncements` + `client/screen/lobby/Announcement*` | 后台发布/编辑/删除；每名玩家的已读状态保存在后端（跟随账号），客户端标记已读后立即更新本地并通知服务器 |
 | 枪械 · 数据 | `data/blockland/guns/guns.json` + `gun/GunCatalog` / `GunStats` | 弹药、弹匣、槽位、皮肤、枪械全部是数据（通用配件在 `craft/attachments.json`）；伤害/散布/后坐力/换弹时间/射程等有效数值（含配件的倍率）只在 `GunStats` 计算，客户端与服务端共用同一份 |
@@ -66,6 +66,8 @@ Forge 服务器 ◀──SimpleChannel──▶ 客户端大厅界面
 | 模组 · 网络 | `network/ServerPacketListener` / `ClientPacketListener` | 网络层不引用服务端或客户端逻辑；客户端代码不会在专用服务器加载 |
 | 后端 · 游戏类型 | `gametype/GameTypeDefinition` | 每种游戏类型负责校验自己的模式 `settings` 与地图 `settings`，定义、示例数据与升级都在自己的包里：`gametype/skywars`（SKYWARS）、`gametype/fastpvp`（FASTPVP）、`gametype/infection`（INFECTION 枪战感染，地图出生点带角色）、`gametype/bomb`（BOMB 枪战爆破，地图包点为方块范围）。启动时 `GameModeSettingsUpgrade` 把已保存的模式设置整理成各类型当前的格式（删除不再使用的键、补默认值） |
 | 游戏类型注册表 | 后端 `registry/GameTypeRegistryData`；`POST /api/server/registry/game-types/{TYPE}`（游戏服务器）、`GET /api/admin/registry/game-types/{TYPE}`（后台） | 游戏服务器按类型发布自己提供的内容（任意 JSON，例如枪战感染的怪物列表），后端保存最后一次发布；类型定义（警告）与后台表单只从这里读取，不写死内容 |
+| 模组 · 反作弊 | `server/anticheat/*`（`AntiCheatService` 组装：`net` 数据包安全层、`track` 玩家状态跟踪、`predict` 物理预测、`rules` 模式规则、`check` 各检测、`evidence` 证据与置信度、`enforce` 执行），`mixin/anticheat`，数据 `data/blockland/anticheat/checks.json` + `packets.json`，契约 `tools/anticheat/ANTICHEAT_SPEC.md` | 服务端权威、客户端零改动：mixin 只把原版移动包、tick 结束包、pong 与发出的速度包转给 `NetHooks`；BlockLand 自定义包经 `BLNetwork.InboundGuard` 限流。移动按原版物理推算每个包的上界（摩擦、加速度、跳跃、效果、服务端击退 / 爆炸、模组动作），宽限不累积；延迟用原版 ping/pong 应答实测（客户端按包顺序回应，所以「收到 pong」= 之前的包都已执行），状态变化在玩家的延迟窗口内两种都算合法。每个模式用预设 + 覆盖决定严格程度（`settings.antiCheat`），违规累积 VL（随时间衰减），合成置信度后回退 / 踢出 / 提醒管理员 / 请求后端自动封禁；证据批量上报后端案件。其他模块只经 `api/Suspicion`（武器射速、虚假命中、刀具冷却、降落伞）与 `api/MotionAllowance`（滑铲 / 飞扑、降落伞）接入 |
+| 后端 · 反作弊 | `anticheat/*`（`AntiCheatConfigStore`、`AntiCheatRegistryService`、`AntiCheatCaseService`）；`/api/server/anticheat/*`、`/api/admin/anticheat/*` | 全局配置与预设（`anticheat-config.json`，随 `/bootstrap` 的 `antiCheat` 下发，保存即递增内容版本）；每个模式的 `settings.antiCheat`（预设 + 宽限倍率 + 按检测覆盖）由 `GenericModeSettings` 规范化，默认预设由游戏类型的 `antiCheatPreset()` 决定（爆破 `strict`，开放世界 / 练习 `relaxed`）；检测目录由游戏服务器发布；证据汇成每名玩家一个进行中的案件（可疑度按半衰期衰减，达到阈值转人工复核），自动封禁只在全局开启时执行，封禁统一走 `PlayerService.ban`（契约见 `tools/anticheat/ANTICHEAT_SPEC.md`） |
 | 后端 · 存储 | `storage/Repository<T>` | 当前为 JSON 文件实现，可替换为数据库 |
 | 前端 · 游戏类型 | `src/gametypes/index.tsx` | 每种类型一个设置表单，可选地图编辑面板与俯视图标记（`gametypes/skywars` 箱子、`gametypes/infection` 角色出生点、`gametypes/fastpvp`），地图池选择共用 `gametypes/common/MapPoolField`；未知类型自动退化为 JSON 编辑 |
 
@@ -100,7 +102,7 @@ Forge 服务器 ◀──SimpleChannel──▶ 客户端大厅界面
     - 配件是**通用**的：每个配件是独立的模型，挂在每把枪自己的挂点上，任何枪都能装任何瞄准镜、激光、消音器、枪托和挂件。
     - 刀具：迷彩（标准 / 暗影 / 猩红 / 深海 / 鎏金 / 大马士革 / 虎牙 / 渐变）、特效皮肤（星河 / 多普勒 / 霓虹回路）、喷漆与草方块挂件。
     - **喷漆**（枪械与刀具都有）：12 款原创喷漆（BlockLand 方块、骷髅、火焰、闪电、星星、爱心、GG、王冠、猫爪、靶心，传说 羽翼 / 龙纹），每把武器最多 4 处。在「喷漆」页选好喷漆和左侧 / 右侧，预览转到该侧，点击或拖动放到武器上，滚轮调大小、Shift+滚轮转角度；喷漆投影到武器表面（含装上的配件），跟随零件运动（贴在弹匣上的会随换弹离开）。
-    - **特殊皮肤**（工匠的「特殊皮肤」页，标注「特殊皮肤」）：除材质外还会改变模型或射击效果——双持 USP「地狱犬」（独立模型、深红三叉枪口火焰、红色曳光、专属枪声）、KS-3「龙息」（熔岩材质、巨大橙色火焰与燃烧曳光）、汤姆逊「芝加哥」（鎏金金属、金色火焰与曳光）、AWP「雷霆」（淡蓝火焰与曳光）；其他玩家看到的火焰与曳光也随之改变。
+    - **特殊皮肤**（工匠的「特殊皮肤」页，标注「特殊皮肤」）：除材质外还会改变模型或射击效果——双持 USP「地狱犬」（独立模型、深红三叉枪口火焰、红色曳光、专属枪声）、KS-3「龙息」（熔岩材质、巨大橙色火焰与燃烧曳光）、汤姆逊「芝加哥」（鎏金金属、金色火焰与曳光）、AWP「雷霆」（淡蓝火焰与曳光）；其他玩家看到的火焰与曳光也随之改变。特殊皮肤是玩家**拥有的物品**：在商店购买（示例商品「双持 USP | 地狱犬」等，永久）或由管理员授予后出现在「库存」的「皮肤」分类里；没有的特殊皮肤在工匠里带锁显示，可以试穿预览，但不能保存（服务端同样拒绝）。
     - **霓虹回路**（「特效皮肤」页，所有枪械与刀具）：动态着色器绘制的发光电路纹路，光脉冲沿纹路流向枪口、色相缓慢漂移，覆盖枪身每个区域与所有装上的配件，图案跨配件无缝相接。
     - **分区**：迷彩与特效皮肤按区域（枪身 / 枪管 / 弹匣 / 枪托 / 握把 / 护木 / 瞄具 / 激光 / 细节件，刀具为刀身 / 刀柄 / 五金）替换材质，同一款皮肤适用于每把枪和装上的配件。**特效皮肤**（动态着色器材质，工匠中标注「特效皮肤」）：枪械「极光」（随视角变色的钛金属薄膜涂层 + 流动的青色光纹）、「熔岩」（玄武岩与发光流动的熔岩裂纹）；刀具「星河」（刀身深处有视差的星空与星云）、「多普勒」（缓慢流转的彩色漩涡）。
     - 改装方案保存在**服务器**（跟随账号），服务端逐项校验（配件属于该槽位且该武器允许、迷彩/皮肤存在、喷漆合法），对局发放的武器自动套用。
@@ -161,7 +163,8 @@ Forge 服务器 ◀──SimpleChannel──▶ 客户端大厅界面
 - **开局装备 / 装备布局**：支持开局装备的游戏类型（目前为快速PVP、枪战感染、枪战爆破）在后台按背包格子配置装备；玩家在大厅选中模式后点「装备布局」可自行调整物品位置（盔甲固定），每个模式可保存多个命名预设（最多 8 个，当前使用的预设随排队提交），保存在**客户端**（`config/blockland-kit-layouts.json`），排队时发送给服务器校验；管理员修改装备后旧布局自动失效。
 - **快速PVP（FASTPVP）**：自定义开局装备、是否允许破坏/放置方块（服务端以 Forge 破坏事件的 DENY 结果拒绝；两者都不允许时玩家处于冒险模式，客户端连挖掘都不会开始）、可选限时、每队人数 × 队伍数、自定义地图；淘汰后不掉落装备。示例模式 **ClassPVP**（1v1，铁套 + 铁剑，示例竞技场地图）。
 - **用户（后台）**：玩家列表、在线状态、总在线时间、最后在线；封禁 / 禁言（原因 + 时长或永久，在线玩家 15 秒内被踢出或禁止聊天）；手动授予 / 收回权益。
-- **商店（后台）**：商品包含名称、图片（自动转 PNG ≤256px，游戏内同步显示）、介绍、价格、分类、权益标识与有效期；订单列表。首个商品 **优先匹配排队**（¥9.90 / 30 天，授予 `PRIORITY_QUEUE`，重复购买顺延）。
+- **商店（后台）**：商品包含名称、图片（自动转 PNG ≤256px，游戏内同步显示）、介绍、价格、分类、权益标识与有效期；订单列表。首个商品 **优先匹配排队**（¥9.90 / 30 天，授予 `PRIORITY_QUEUE`，重复购买顺延）；示例皮肤商品（分类「皮肤」，永久）：双持 USP「地狱犬」¥38、KS-3「龙息」/ 汤姆逊「芝加哥」/ AWP「雷霆」各 ¥28，权益标识即皮肤的库存物品键（如 `skin:usp_dual/cerberus`，在「权益标识」下拉中可选）。
+- **反作弊（后台）**：「反作弊」页的案件列表（待复核优先）与详情（各检测统计、证据时间线、处罚与备注；封禁 / 确认误判 / 不予处理 / 继续观察），设置页编辑全局开关、自动封禁、提醒、证据保留与预设（严格 / 标准 / 宽松 / 仅记录，可按检测调整）；每个模式在「小游戏管理」里选预设并可按检测覆盖；用户页标出有进行中案件的玩家（契约见 `tools/anticheat/ANTICHEAT_SPEC.md`）。
 - **优先匹配排队**：拥有 `PRIORITY_QUEUE` 权益的玩家在所有队列中排在最前面（同类按加入顺序）；大厅匹配面板显示「★ 优先匹配」，OP 可用 `/bl queue <模式ID>` 查看队列顺序。
 - **空岛战争**
   - 导入地图：上传 `.nbt` / `.schem`，自动识别尺寸、所有箱子/木桶坐标，可选「出生点标记方块」自动生成出生岛（相邻标记归为同一队）。
@@ -251,6 +254,7 @@ syncIntervalSeconds = 30
 | `/bl reload` (OP) | 立即同步后端配置 |
 | `/bl status` / `/bl games` / `/bl stopall` (OP) | 状态、进行中对局、中止全部对局 |
 | `/bl start <模式ID>` (OP) | 用队列中的玩家立即开局（可单人测试） |
+| `/bl ac status [玩家]` / `alerts` / `exempt <玩家> <秒>` / `reset <玩家>` / `stats` (OP) | 反作弊：玩家的预设、延迟、补偿窗口、置信度与各检测 VL；开关自己的提醒；临时豁免移动检测；清空违规；反作弊每 tick 的耗时 |
 | `/bl map preview <地图ID>` / `/bl map here` / `/bl map close` (OP) | 预览地图并查询脚下/准星方块的**相对坐标**，用于填写出生点与箱子 |
 
 ## 坐标约定

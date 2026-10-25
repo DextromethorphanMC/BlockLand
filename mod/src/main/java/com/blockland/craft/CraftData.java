@@ -319,10 +319,22 @@ public final class CraftData {
          */
         @Nullable
         public SkinInspect inspect;
+        /**
+         * Whether every player may use the skin (asset spec §30); otherwise it is an inventory item a player must own
+         * ({@link SkinKeys}). Null = the default rule: special skins are owned items, all others are free.
+         */
+        @Nullable
+        public Boolean free;
 
         /** A special skin: it changes the model, the shots or the inspect, not only the materials (the craft list says so). */
         public boolean isSpecial() {
             return fx != null || inspect != null || model != null && !model.isBlank();
+        }
+
+        /** Usable by everyone; the {@code default} skin always is. */
+        public boolean isFree() {
+            if ("default".equals(id)) return true;
+            return free != null ? free : !isSpecial();
         }
 
         public boolean hasModel() {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { getToken, setToken } from './api'
 import { ToastProvider } from './components/ui'
+import { AntiCheat } from './pages/AntiCheat'
 import { Announcements } from './pages/Announcements'
 import { Dashboard } from './pages/Dashboard'
 import { GameModes } from './pages/GameModes'
@@ -39,6 +40,7 @@ export function App() {
                 <NavLink to="/maps">地图管理</NavLink>
                 <NavLink to="/announcements">公告</NavLink>
                 <NavLink to="/users">用户</NavLink>
+                <NavLink to="/anticheat">反作弊</NavLink>
                 <NavLink to="/ranked">排位</NavLink>
                 <NavLink to="/shop">商店</NavLink>
                 {allTypePages().map((p) => (
@@ -59,6 +61,7 @@ export function App() {
                 <Route path="/maps/:id" element={<MapEditor />} />
                 <Route path="/announcements" element={<Announcements />} />
                 <Route path="/users" element={<Users />} />
+                <Route path="/anticheat" element={<AntiCheat />} />
                 <Route path="/ranked" element={<Ranked />} />
                 <Route path="/shop" element={<Shop />} />
                 {allTypePages().map((p) => (

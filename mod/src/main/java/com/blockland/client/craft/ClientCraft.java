@@ -1,6 +1,8 @@
 package com.blockland.client.craft;
 
+import com.blockland.client.profile.ItemIcons;
 import com.blockland.client.spray.SprayDecals;
+import com.blockland.craft.SkinKeys;
 import com.blockland.network.BLNetwork;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
@@ -17,7 +19,8 @@ import net.minecraftforge.eventbus.api.bus.BusGroup;
 /**
  * Client module of the 工匠 (craft) system: the craft key (opens {@link HeldCraftScreen} for the held weapon), the
  * saved builds the server pushes ({@link ClientBuilds}) and the weapon preview renderer. The lobby's 工匠 tab is a
- * {@link CraftPanel}, installed into the lobby at start-up.
+ * {@link CraftPanel}, installed into the lobby at start-up. Skins that must be owned show as items in the inventory and
+ * the shop through {@link SkinIcons}.
  */
 public final class ClientCraft {
     public static final KeyMapping KEY = new KeyMapping("key.blockland.craft", InputConstants.KEY_G, "key.categories.blockland");
@@ -33,8 +36,14 @@ public final class ClientCraft {
                 (ResourceManagerReloadListener) manager -> {
                     SprayDecals.clear();
                     SkinSwatches.clear();
+                    SkinIcons.clear();
+                    WeaponPrefetch.clear();
                 }));
+        // skins players own are inventory items: drawn as the weapon in that skin
+        ItemIcons.register(SkinKeys.PREFIX, new SkinIcons());
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> tick());
+        // the weapons the player carries start loading their models and textures before they are first drawn
+        TickEvent.ClientTickEvent.Post.BUS.addListener(event -> WeaponPrefetch.tick());
         ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(event -> ClientBuilds.clear());
         BLNetwork.setCraftClientListener(ClientBuilds::update);
     }

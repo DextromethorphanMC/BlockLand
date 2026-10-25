@@ -57,6 +57,14 @@ public interface GameTypeDefinition {
         return raw != null && raw.isObject() ? (ObjectNode) raw : JsonNodeFactory.instance.objectNode();
     }
 
+    /**
+     * The anti-cheat preset a mode of this type uses unless it picks another ({@code settings.antiCheat.preset}, see
+     * ANTICHEAT_SPEC §4): competitive types are stricter, casual ones more lenient.
+     */
+    default String antiCheatPreset() {
+        return "standard";
+    }
+
     /** Extra type specific content sent to Minecraft servers (e.g. loot tables); null when there is none. */
     default Object syncData() {
         return null;

@@ -250,3 +250,157 @@ export interface RankedPlayer {
   name: string | null
   modes: RankedPlayerMode[]
 }
+
+// ---- 反作弊 (mirrors tools/anticheat/ANTICHEAT_SPEC.md §4 / §9) ----------------------------------
+
+/** One check's settings; in presets and mode overrides every field is optional (missing = inherited). */
+export interface AntiCheatCheckSettings {
+  enabled?: boolean
+  /** 0.1–5, multiplies the check's grace margins (> 1 = more lenient) */
+  tolerance?: number
+  /** VL at which the violating action is undone (0 = always / never, depending on the check) */
+  setbackVl?: number
+  /** VL at which the player is kicked (0 = never) */
+  kickVl?: number
+  /** VL lost per second without violations */
+  decay?: number
+  /** 0–1, share of the check in the confidence */
+  weight?: number
+  /** may lead to an automatic ban (otherwise only to manual review) */
+  punish?: boolean
+}
+
+export type AntiCheatCheckField = keyof AntiCheatCheckSettings
+
+export type AntiCheatCategory = 'packet' | 'movement' | 'combat' | 'world' | string
+
+/** A check as the game server published it (checks.json). */
+export interface AntiCheatCheckInfo {
+  id: string
+  category: AntiCheatCategory
+  name: string
+  description: string
+  latencySensitive: boolean
+  /** reported by another module through Suspicion */
+  signal: boolean
+  defaults: Required<AntiCheatCheckSettings>
+}
+
+export interface AntiCheatPreset {
+  name: string
+  description: string
+  toleranceScale: number
+  ping: { maxCompensationMs: number; jitterMultiplier: number; extraTicks: number; highPingMs: number }
+  confidence: { alert: number; review: number; autoBan: number }
+  actions: { setback: boolean; kick: boolean; autoBan: boolean }
+  checks: Record<string, AntiCheatCheckSettings>
+}
+
+export interface AntiCheatConfig {
+  enabled: boolean
+  defaultPreset: string
+  presets: Record<string, AntiCheatPreset>
+  autoBan: { enabled: boolean; durationMinutes: number; reason: string }
+  alerts: { staff: boolean; cooldownSeconds: number }
+  evidence: { maxPerCase: number; retentionDays: number; reportCooldownSeconds: number }
+  suspicion: { halfLifeDays: number; reviewScore: number }
+}
+
+/** A mode's `settings.antiCheat`. */
+export interface AntiCheatModeSettings {
+  enabled?: boolean
+  /** missing = the game type's default preset */
+  preset?: string
+  /** null = the preset's */
+  toleranceScale?: number | null
+  checks?: Record<string, AntiCheatCheckSettings>
+}
+
+export type AntiCheatCaseStatus = 'OPEN' | 'REVIEW' | 'BANNED' | 'CLEARED' | 'DISMISSED'
+
+export type AntiCheatAction = 'none' | 'setback' | 'cancel' | 'kick' | 'ban'
+
+/** One piece of evidence (a report from a game server). */
+export interface AntiCheatReport {
+  uuid: string
+  name: string
+  modeId: string | null
+  modeTitle: string | null
+  mapId: string | null
+  check: string
+  category: AntiCheatCategory
+  vl: number
+  confidence: number
+  review: boolean
+  action: AntiCheatAction
+  detail: string
+  ping: number
+  jitter: number
+  world: string | null
+  x: number
+  y: number
+  z: number
+  at: string
+}
+
+export interface AntiCheatCheckStats {
+  count: number
+  maxVl: number
+  maxConfidence: number
+  lastAt: string
+}
+
+export interface AntiCheatPunishment {
+  type: string
+  by: string
+  minutes: number | null
+  reason: string
+  at: string
+}
+
+export interface AntiCheatNote {
+  text: string
+  by: string
+  at: string
+}
+
+export interface AntiCheatCase {
+  id: string
+  playerUuid: string
+  playerName: string
+  status: AntiCheatCaseStatus
+  openedAt: string
+  updatedAt: string
+  closedAt: string | null
+  suspicion: number
+  maxConfidence: number
+  watched: boolean
+  checks: Record<string, AntiCheatCheckStats>
+  modes: Record<string, number>
+  /** only in the detail view */
+  evidence?: AntiCheatReport[] | null
+  punishments: AntiCheatPunishment[]
+  notes: AntiCheatNote[]
+  decision: string | null
+  reviewedAt: string | null
+}
+
+/** ACTIVE = OPEN + REVIEW, CLOSED = BANNED + CLEARED + DISMISSED */
+export type AntiCheatCaseFilter = 'ACTIVE' | 'OPEN' | 'REVIEW' | 'CLOSED' | 'ALL'
+
+export type AntiCheatDecision = 'BAN' | 'CLEAR' | 'DISMISS' | 'WATCH'
+
+export interface AntiCheatReview {
+  decision: AntiCheatDecision
+  /** BAN only: 0 = permanent */
+  minutes?: number
+  reason?: string
+  note?: string
+}
+
+export interface AntiCheatSummary {
+  open: number
+  review: number
+  bannedLast7Days: number
+  reportsLast24h: number
+}

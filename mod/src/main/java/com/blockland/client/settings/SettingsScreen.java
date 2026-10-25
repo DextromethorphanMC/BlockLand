@@ -257,7 +257,8 @@ public final class SettingsScreen extends Screen {
     }
 
     /**
-     * The 性能 tab: the benchmark and its last result, the frame timings on F3, then every {@link Optimization} by where
+     * The 性能 tab: the benchmark and its last result, the frame timings on F3, the background frame rate, then every
+     * {@link Optimization} by where
      * it works (vanilla, BlockLand's pipeline). None of them changes the picture, so all are on unless the player says.
      */
     private void performanceRows(PerfSettings p) {
@@ -276,6 +277,11 @@ public final class SettingsScreen extends Screen {
         rows.add(new Header(perf + "section.timings"));
         rows.add(new Toggle(perf + "show_timings", () -> p.showTimings, v -> p.showTimings = v));
         rows.add(new Note(perf + "show_timings.note"));
+
+        rows.add(new Header(perf + "section.frame_rate"));
+        rows.add(new Slider(perf + "background_fps", 10, 260, 10, () -> p.backgroundFrameLimit, v -> p.backgroundFrameLimit = (int) Math.round(v),
+                v -> v >= 260 ? tr(perf + "background_fps.unlimited") : Math.round(v) + " fps"));
+        rows.add(new Note(perf + "background_fps.note"));
 
         for (Optimization.Group group : Optimization.Group.values()) {
             rows.add(new Header(perf + "section." + group.name().toLowerCase(Locale.ROOT)));

@@ -56,12 +56,21 @@ import java.util.function.Function;
  * never references server or client logic directly.
  */
 public final class BLNetwork {
-    private static final int PROTOCOL_VERSION = 16;
+    private static final int PROTOCOL_VERSION = 17;
 
     public static final SimpleChannel CHANNEL = ChannelBuilder.named(BlockLand.id("main"))
             .networkProtocolVersion(PROTOCOL_VERSION)
             .simpleChannel();
 
+    /** Server side: a gate every packet from a client passes before its handler (the anti-cheat's rate limits). */
+    public interface InboundGuard {
+        InboundGuard OPEN = (player, packet) -> true;
+
+        /** @return false to drop the packet unhandled */
+        boolean admit(UUID player, Object packet);
+    }
+
+    private static volatile InboundGuard inboundGuard = InboundGuard.OPEN;
     private static volatile ServerPacketListener serverListener = ServerPacketListener.NOOP;
     private static volatile ClientPacketListener clientListener = ClientPacketListener.NOOP;
     private static volatile GunPacketListeners.Server gunServerListener = GunPacketListeners.Server.NOOP;
@@ -299,7 +308,7 @@ public final class BLNetwork {
                 .encoder(encoder::accept).decoder(decoder::apply)
                 .consumerMainThread((msg, ctx) -> {
                     ServerPlayer sender = ctx.getSender();
-                    if (sender != null) handler.accept(msg, sender);
+                    if (sender != null && inboundGuard.admit(sender.getUUID(), msg)) handler.accept(msg, sender);
                     ctx.setPacketHandled(true);
                 })
                 .add();
@@ -328,7 +337,7 @@ public final class BLNetwork {
                 .consumerMainThread((msg, ctx) -> {
                     ServerPlayer sender = ctx.getSender();
                     UUID id = sender != null ? sender.getUUID() : senderResolver.apply(ctx.getConnection());
-                    if (id != null) handler.accept(msg, id);
+                    if (id != null && inboundGuard.admit(id, msg)) handler.accept(msg, id);
                     ctx.setPacketHandled(true);
                 })
                 .add();
@@ -381,6 +390,10 @@ public final class BLNetwork {
             clientConnection = null;
             connection.handleDisconnection();
         }
+    }
+
+    public static void setInboundGuard(@Nullable InboundGuard guard) {
+        inboundGuard = guard == null ? InboundGuard.OPEN : guard;
     }
 
     public static void setServerListener(ServerPacketListener listener) {

@@ -1,5 +1,7 @@
 package com.blockland.server.melee;
 
+import com.blockland.server.anticheat.api.AntiCheatSignals;
+import com.blockland.server.anticheat.api.Suspicion;
 import com.blockland.server.spectate.Watchers;
 import com.blockland.network.packet.ViewmodelPackets;
 import com.blockland.BlockLand;
@@ -28,6 +30,7 @@ import net.minecraft.world.phys.Vec3;
 import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -66,7 +69,14 @@ public final class MeleeService implements MeleePacketListeners.Server {
         if (knife == null) return;
         Fighter fighter = fighters.computeIfAbsent(player.getUUID(), id -> new Fighter());
         long now = System.nanoTime();
-        if (fighter.strike != null || now < fighter.readyAt - EARLY_NANOS) return;
+        if (fighter.strike != null || now < fighter.readyAt - EARLY_NANOS) {
+            // the client times the cooldown itself: an attack well before it is over did not come from its timing
+            if (now < fighter.readyAt - 2 * EARLY_NANOS) {
+                Suspicion.report(player, AntiCheatSignals.MELEE_RATE, 1, () -> String.format(Locale.ROOT, "%s 冷却还剩 %.0f 毫秒时出刀",
+                        knife.id, (fighter.readyAt - now) / 1e6));
+            }
+            return;
+        }
         MeleeData.Attack data = knife.attack(attack.heavy());
         fighter.readyAt = now + (long) (data.cooldown * 1e9);
         int ticks = Math.max(1, Math.round(data.impact * 20));

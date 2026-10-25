@@ -291,3 +291,18 @@ a.stat:hover { border-color: var(--accent); }
 .inventory-list { display: flex; flex-direction: column; gap: 6px; }
 .inventory-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
 .badge-ended { background: var(--bg); border-color: var(--line); color: var(--muted); }
+
+/* ---- anti-cheat (反作弊) ---- */
+.text-danger { color: #ff8a8a; }
+.ac-review td { background: rgba(242, 201, 76, 0.06); }
+.ac-review td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+.ac-bar { position: relative; width: 120px; height: 18px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.ac-bar span { position: absolute; inset: 0 auto 0 0; opacity: 0.55; }
+.ac-bar em { position: relative; display: block; text-align: center; font-style: normal; font-size: 11.5px; line-height: 16px; }
+.ac-checks select { min-width: 92px; }
+.ac-checks .num { width: 72px; }
+.ac-category td { background: var(--panel-2); color: #4fc3f7; font-weight: 700; font-size: 12px; }
+.ac-signal { margin-left: 6px; color: var(--muted); }
+.ac-details summary { cursor: pointer; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
+.ac-stats { margin: 16px 0 0; }
+.ac-savebar { position: sticky; bottom: 0; padding: 12px 0; background: linear-gradient(transparent, var(--bg) 40%); }

@@ -101,7 +101,8 @@ public class GameModeService {
         for (GameMode mode : modes.findAll()) {
             GameTypeDefinition type = types.find(mode.type()).orElse(null);
             if (type == null) continue;
-            ObjectNode settings = GenericModeSettings.apply(mode.settings(), type.normalizeSettings(mode.settings(), context(), new ArrayList<>()));
+            ObjectNode settings = GenericModeSettings.apply(mode.settings(), type.normalizeSettings(mode.settings(), context(), new ArrayList<>()),
+                    type.antiCheatPreset());
             if (!settings.equals(mode.settings())) {
                 modes.save(mode.withSettings(settings, Instant.now()));
                 changed++;
@@ -131,7 +132,8 @@ public class GameModeService {
         if (type == null) {
             errors.add("未知的游戏类型: " + request.type());
         } else {
-            settings = GenericModeSettings.apply(request.settings(), type.normalizeSettings(request.settings(), context(), errors));
+            settings = GenericModeSettings.apply(request.settings(), type.normalizeSettings(request.settings(), context(), errors),
+                    type.antiCheatPreset());
             if (type.usesKit()) kit = kits.normalize(request.kit(), errors, allowUnknownItems ? new ArrayList<>() : errors);
         }
         if (!errors.isEmpty()) throw ApiException.invalid(errors);

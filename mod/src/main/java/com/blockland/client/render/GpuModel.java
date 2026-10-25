@@ -363,6 +363,11 @@ public final class GpuModel implements AutoCloseable {
                 cutoff, uvScale, emissive, effect, params, effectColor, effect == MaterialLayer.NONE ? 0 : surge);
     }
 
+    /** Starts loading the texture sets of the model's own materials in the background ({@link Textures#prefetch}). */
+    public void prefetchTextures() {
+        for (GltfModel.Material material : source.materials) Textures.prefetch(material.pbr);
+    }
+
     /** Freed by {@link #close} (a resource reload clears {@link ModelCache}); holders must not draw it any more. */
     public boolean isClosed() {
         return vertices.isClosed();

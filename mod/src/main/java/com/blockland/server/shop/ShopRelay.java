@@ -16,6 +16,7 @@ import java.lang.reflect.Type;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 /**
  * The in-game shop on the server: relays catalogue and purchases between the client
@@ -30,6 +31,8 @@ public final class ShopRelay {
     private final BackendClient backend;
     private final PlayerProfiles profiles;
     private final PlayerDirectory players;
+    /** The inventory icon of an entitlement key that is an item, "" otherwise (shown when a product has no image). */
+    private Function<String, String> itemIcon = key -> "";
     private volatile CompletableFuture<List<ProductJson>> catalogue;
     private volatile long catalogueFetchedAt;
 
@@ -61,6 +64,11 @@ public final class ShopRelay {
         this.players = players;
     }
 
+    /** How an entitlement that is an inventory item looks (its icon), so products without an image can show it. */
+    public void setItemIcons(Function<String, String> itemIcon) {
+        this.itemIcon = itemIcon;
+    }
+
     public void sendCatalogue(UUID player) {
         catalogue().whenComplete((products, error) -> server.execute(() -> {
             if (error != null) {
@@ -70,7 +78,8 @@ public final class ShopRelay {
             }
             List<ShopPackets.Product> list = products.stream().map(p -> new ShopPackets.Product(p.id, p.name,
                     nullToEmpty(p.description), nullToEmpty(p.category), p.priceCents, p.currency == null ? "CNY" : p.currency,
-                    p.durationDays, nullToEmpty(p.imageVersion), profiles.entitlementUntil(player, p.entitlement))).toList();
+                    p.durationDays, nullToEmpty(p.imageVersion), profiles.entitlementUntil(player, p.entitlement),
+                    p.entitlement == null ? "" : nullToEmpty(itemIcon.apply(p.entitlement)))).toList();
             BLNetwork.sendTo(player, new ShopPackets.S2CData(list, ""));
         }));
     }

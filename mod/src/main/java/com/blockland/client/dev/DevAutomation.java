@@ -288,9 +288,11 @@ public final class DevAutomation {
                 mc.options.framerateLimit().set(260);
                 mc.getWindow().updateVsync(false);
                 mc.options.pauseOnLostFocus = false;
+                // automation clients run behind the user's windows: no background cap either
+                com.blockland.client.perf.Perf.settings().backgroundFrameLimit = 260;
                 if (mc.screen instanceof net.minecraft.client.gui.screens.PauseScreen
                         || mc.screen instanceof com.blockland.client.screen.pause.GameMenuScreen) mc.setScreen(null);
-                log("perf mode: unlimited fps, vsync off, no pause on lost focus");
+                log("perf mode: unlimited fps (also in the background), vsync off, no pause on lost focus");
             }
             case "window" -> {
                 // window <width> <height>: the window's size (the benchmark's resolution)

@@ -36,6 +36,8 @@ public final class WeaponPreviewRenderer extends PictureInPictureRenderer<Weapon
     private State rendered;
     /** The rendered skin has shader effects (the cached image would freeze them). */
     private boolean animated;
+    /** Texture sets finished when it was rendered: one finishing later (loaded in the background) shows on a redraw. */
+    private int renderedLoads = -1;
 
     /**
      * @param orientation the view rotation to use instead of {@code pitch} / {@code yaw} (e.g. a weapon side seen square
@@ -121,7 +123,7 @@ public final class WeaponPreviewRenderer extends PictureInPictureRenderer<Weapon
     @Override
     protected boolean textureIsReadyToBlit(State state) {
         // shader skins move (iridescence, flowing light, stars): those re-render every frame
-        return state.equals(rendered) && !animated;
+        return state.equals(rendered) && !animated && renderedLoads == com.blockland.client.render.Textures.loads();
     }
 
     @Override
@@ -138,6 +140,7 @@ public final class WeaponPreviewRenderer extends PictureInPictureRenderer<Weapon
         Matrix4f view = viewFor(assembly, state.yaw(), state.pitch(), state.zoom(), state.orientation());
         if (view == null) return;
         animated = assembly.animated();
+        renderedLoads = com.blockland.client.render.Textures.loads();
         assembly.draw(draws, view, 15, 15, true);
         // the build's sprays, projected at this same rest pose (spec §29)
         assembly.drawSprays(draws, view, 15, 15);

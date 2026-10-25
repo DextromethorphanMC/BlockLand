@@ -6,6 +6,8 @@ import com.blockland.BlockLand;
 import com.blockland.combat.Ballistics;
 import com.blockland.combat.HitRecords;
 import com.blockland.combat.HitShapes;
+import com.blockland.server.anticheat.api.AntiCheatSignals;
+import com.blockland.server.anticheat.api.Suspicion;
 import com.blockland.server.combat.HitHistory;
 import com.blockland.effect.ActionLocks;
 import com.blockland.entity.BLEntities;
@@ -41,6 +43,7 @@ import net.minecraft.world.phys.Vec3;
 import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -188,13 +191,19 @@ public final class GunService implements GunPacketListeners.Server {
         double refill = shooter.creditNanos == 0 ? RATE_BURST : (now - shooter.creditNanos) / (gun.fireInterval() * 1e9);
         shooter.shotCredit = Math.min(RATE_BURST, shooter.shotCredit + refill);
         shooter.creditNanos = now;
-        if (shooter.shotCredit < cost) return;
+        if (shooter.shotCredit < cost) {
+            Suspicion.report(player, AntiCheatSignals.FIRE_RATE, 1, () -> String.format(Locale.ROOT, "%s 射速超出（剩余额度 %.2f，需要 %.1f）",
+                    gun.id, shooter.shotCredit, cost));
+            return;
+        }
         shooter.shotCredit -= cost;
         GunContent.setState(stack, state.withAmmo(state.ammo() - shots));
 
         // trust the client's aim within reason (its rotation is a tick ahead of ours)
         float yaw = fire.yaw(), pitch = Mth.clamp(fire.pitch(), -90, 90);
         if (Math.abs(Mth.wrapDegrees(yaw - player.getYRot())) > MAX_ANGLE_ERROR || Math.abs(pitch - player.getXRot()) > MAX_ANGLE_ERROR) {
+            Suspicion.report(player, AntiCheatSignals.AIM_MISMATCH, 0.5, String.format(Locale.ROOT, "射击方向 %.0f°/%.0f°，朝向 %.0f°/%.0f°",
+                    yaw, pitch, player.getYRot(), player.getXRot()));
             yaw = player.getYRot();
             pitch = player.getXRot();
         }
@@ -307,6 +316,9 @@ public final class GunService implements GunPacketListeners.Server {
             if (then != null && from.distanceToSqr(then.point()) < bestDistance) {
                 best = claimed;
                 bestHit = then;
+            } else if (then == null && rewind.first() < HitHistory.TICKS - 1) {
+                // within the history's reach the round never crossed what the client says it hit
+                Suspicion.report(shooter, AntiCheatSignals.HIT_CLAIM, 0.5, () -> "声称命中 " + claimed.getName().getString() + "，回溯后子弹未穿过目标");
             }
         }
         if (best != null) return new Shot(bestHit.point(), best, false, -1, bestHit.head(), path.energyAt(from.distanceTo(bestHit.point())));

@@ -1,6 +1,8 @@
 package com.blockland.backend.sync;
 
 import com.blockland.backend.announcement.Announcement;
+import com.blockland.backend.anticheat.AntiCheatConfig;
+import com.blockland.backend.anticheat.AntiCheatConfigStore;
 import com.blockland.backend.announcement.AnnouncementService;
 import com.blockland.backend.common.ApiException;
 import com.blockland.backend.gamemode.GameMode;
@@ -50,10 +52,12 @@ public class ServerSyncController {
     private final ItemRegistryService items;
     private final GameTypeRegistryData typeRegistry;
     private final AnnouncementService announcements;
+    private final AntiCheatConfigStore antiCheat;
 
     public ServerSyncController(ContentVersion version, Repository<GameMode> modes, Repository<GameMap> maps,
                                 GameTypeRegistry types, MapService mapService, ItemRegistryService items,
-                                ModeGroupService groups, GameTypeRegistryData typeRegistry, AnnouncementService announcements) {
+                                ModeGroupService groups, GameTypeRegistryData typeRegistry, AnnouncementService announcements,
+                                AntiCheatConfigStore antiCheat) {
         this.version = version;
         this.modes = modes;
         this.maps = maps;
@@ -63,14 +67,16 @@ public class ServerSyncController {
         this.items = items;
         this.typeRegistry = typeRegistry;
         this.announcements = announcements;
+        this.antiCheat = antiCheat;
     }
 
     /**
      * @param typeData      per game type id, whatever that type needs on the server (e.g. SkyWars loot tables)
      * @param announcements lobby announcements, oldest first
+     * @param antiCheat     the global anti-cheat config (presets, auto-ban, alerts; ANTICHEAT_SPEC §4)
      */
     public record Bootstrap(long version, List<GameMode> modes, List<ModeGroup> groups, List<GameMap> maps, Map<String, Object> typeData,
-                            List<Announcement> announcements) {
+                            List<Announcement> announcements, AntiCheatConfig antiCheat) {
     }
 
     @GetMapping("/bootstrap")
@@ -83,7 +89,8 @@ public class ServerSyncController {
             Object data = type.syncData();
             if (data != null) typeData.put(type.id(), data);
         }
-        Bootstrap body = new Bootstrap(current, modes.findAll(), groups.list(), maps.findAll(), typeData, announcements.published());
+        Bootstrap body = new Bootstrap(current, modes.findAll(), groups.list(), maps.findAll(), typeData, announcements.published(),
+                antiCheat.get());
         return ResponseEntity.ok().eTag(etag).body(body);
     }
 

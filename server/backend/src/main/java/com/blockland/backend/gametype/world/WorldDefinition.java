@@ -52,6 +52,12 @@ public class WorldDefinition implements GameTypeDefinition {
         return "直接进入一个所有人共享的开放世界，随时进出，背包与位置由服务器保存。";
     }
 
+    /** A casual open world: lenient, setbacks only. */
+    @Override
+    public String antiCheatPreset() {
+        return "relaxed";
+    }
+
     @Override
     public ObjectNode defaultSettings() {
         ObjectNode node = mapper.createObjectNode();

@@ -43,6 +43,12 @@ public class AimPracticeDefinition implements GameTypeDefinition {
         return "单人靶场：发放全部枪械并提供无限弹药，对移动的假人练习瞄准与压枪。无需地图。";
     }
 
+    /** Practice: lenient, setbacks only. */
+    @Override
+    public String antiCheatPreset() {
+        return "relaxed";
+    }
+
     @Override
     public ObjectNode defaultSettings() {
         ObjectNode node = mapper.createObjectNode();

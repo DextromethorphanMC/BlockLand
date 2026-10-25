@@ -6,6 +6,7 @@ import com.blockland.server.content.model.GameModeDef;
 import com.blockland.server.content.model.MapDef;
 import com.blockland.server.content.model.ModeGroupDef;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,6 +29,8 @@ public final class ContentSnapshot {
     public List<AnnouncementDef> announcements = new ArrayList<>();
     /** Lobby activities, in no particular order (reserved: the backend does not publish them yet). */
     public List<ActivityDef> activities = new ArrayList<>();
+    /** The anti-cheat's global config (presets, auto-ban, alerts; anti-cheat spec §4), read by its rule engine only. */
+    public JsonObject antiCheat = new JsonObject();
 
     private transient Map<String, GameModeDef> modeIndex;
     private transient Map<String, MapDef> mapIndex;

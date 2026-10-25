@@ -172,6 +172,78 @@ class ServerContractTest {
         call(server(get("/api/server/media/map/cover_test")), null, 404);
     }
 
+    @Test
+    void antiCheatChecksReportsCasesAndConfig() throws Exception {
+        // ---- the bootstrap carries the global config; saving it changes the ETag -------------------
+        MvcResult boot = call(server(get("/api/server/bootstrap")), null, 200);
+        JsonNode antiCheat = json(boot).path("antiCheat");
+        assertThat(fieldNames(antiCheat)).containsExactlyInAnyOrder("enabled", "defaultPreset", "presets", "autoBan", "alerts",
+                "evidence", "suspicion");
+        assertThat(fieldNames(antiCheat.path("presets"))).contains("strict", "standard", "relaxed", "observe");
+        assertThat(fieldNames(antiCheat.path("presets").path("standard"))).containsExactlyInAnyOrder("name", "description",
+                "toleranceScale", "ping", "confidence", "actions", "checks");
+        JsonNode saved = json(call(admin(put("/api/admin/anticheat/config")), "{\"alerts\":{\"staff\":false}}", 200));
+        assertThat(saved.path("alerts").path("staff").asBoolean()).isFalse();
+        assertThat(call(server(get("/api/server/bootstrap")), null, 200).getResponse().getHeader("ETag"))
+                .isNotEqualTo(boot.getResponse().getHeader("ETag"));
+        JsonNode invalid = json(call(admin(put("/api/admin/anticheat/config")), "{\"presets\":{\"strict\":{}}}", 400));
+        assertThat(texts(invalid.path("details"))).anyMatch(d -> d.contains("standard"));
+
+        // ---- the registry the mod publishes, as the admin reads it ---------------------------------
+        JsonNode published = json(call(server(post("/api/server/registry/anticheat")), "{\"checks\":[{\"id\":\"movement.speed\","
+                + "\"category\":\"movement\",\"name\":\"移动速度\",\"description\":\"…\",\"latencySensitive\":true,\"signal\":false,"
+                + "\"defaults\":{\"enabled\":true,\"tolerance\":1.0,\"setbackVl\":3,\"kickVl\":60,\"decay\":0.4,\"weight\":0.7,"
+                + "\"punish\":true}}]}", 200));
+        assertThat(published.path("count").asInt()).isEqualTo(1);
+        JsonNode registry = json(call(admin(get("/api/admin/registry/anticheat")), null, 200));
+        assertThat(registry.path("checks").get(0).path("id").asText()).isEqualTo("movement.speed");
+        assertThat(fieldNames(registry.path("checks").get(0).path("defaults"))).containsExactlyInAnyOrder("enabled", "tolerance",
+                "setbackVl", "kickVl", "decay", "weight", "punish");
+
+        // ---- reports open a case; the admin reviews it ---------------------------------------------
+        String player = "0a1b2c3d-0000-4000-8000-0000000000ac";
+        call(server(post("/api/server/players/login")), "{\"uuid\":\"" + player + "\",\"name\":\"Cheater\"}", 200);
+        JsonNode accepted = json(call(server(post("/api/server/anticheat/reports")), "{\"reports\":[{\"uuid\":\"" + player
+                + "\",\"name\":\"Cheater\",\"modeId\":\"bomb_5v5\",\"modeTitle\":\"枪战爆破 5v5\",\"mapId\":null,\"check\":"
+                + "\"movement.speed\",\"category\":\"movement\",\"vl\":12.5,\"confidence\":0.82,\"review\":true,\"action\":\"setback\","
+                + "\"detail\":\"水平 0.612 > 上限 0.338\",\"ping\":85,\"jitter\":12,\"world\":\"blockland:arena\",\"x\":12.5,\"y\":64.0,"
+                + "\"z\":-3.2,\"at\":\"2026-10-25T08:00:00Z\"}]}", 200));
+        assertThat(accepted.path("accepted").asInt()).isEqualTo(1);
+        JsonNode list = json(call(admin(get("/api/admin/anticheat/cases?status=ACTIVE&q=cheat")), null, 200));
+        assertThat(list).hasSize(1);
+        JsonNode summary = list.get(0);
+        assertThat(summary.path("status").asText()).isEqualTo("REVIEW");
+        assertThat(summary.has("evidence")).isFalse();
+        assertThat(summary.path("evidenceCount").asInt()).isEqualTo(1);
+        String caseId = summary.path("id").asText();
+        JsonNode detail = json(call(admin(get("/api/admin/anticheat/cases/" + caseId)), null, 200));
+        assertThat(fieldNames(detail)).containsExactlyInAnyOrder("id", "playerUuid", "playerName", "status", "openedAt", "updatedAt",
+                "closedAt", "suspicion", "maxConfidence", "watched", "checks", "modes", "evidence", "punishments", "notes", "decision",
+                "reviewedAt");
+        assertThat(detail.path("evidence").get(0).path("at").asText()).isEqualTo("2026-10-25T08:00:00Z");
+        assertThat(detail.path("checks").path("movement.speed").path("count").asInt()).isEqualTo(1);
+        assertThat(json(call(admin(get("/api/admin/anticheat/summary")), null, 200)).path("review").asInt()).isEqualTo(1);
+
+        // auto-ban is off by default: refused, the case stays in review
+        JsonNode punish = json(call(server(post("/api/server/anticheat/punish")), "{\"uuid\":\"" + player + "\",\"name\":\"Cheater\","
+                + "\"modeId\":\"bomb_5v5\",\"checks\":[\"movement.speed\"],\"confidence\":0.99,\"detail\":\"…\"}", 200));
+        assertThat(fieldNames(punish)).containsExactlyInAnyOrder("banned", "caseId", "message");
+        assertThat(punish.path("banned").asBoolean()).isFalse();
+        assertThat(punish.path("caseId").asText()).isEqualTo(caseId);
+
+        JsonNode banned = json(call(admin(post("/api/admin/anticheat/cases/" + caseId + "/review")),
+                "{\"decision\":\"BAN\",\"minutes\":0,\"reason\":\"加速\",\"note\":\"录像确认\"}", 200));
+        assertThat(banned.path("status").asText()).isEqualTo("BANNED");
+        JsonNode status = json(call(server(post("/api/server/players/heartbeat")),
+                "{\"players\":[{\"uuid\":\"" + player + "\",\"name\":\"Cheater\",\"seconds\":1}]}", 200));
+        assertThat(status.get(0).path("ban").path("reason").asText()).isEqualTo("加速 #" + caseId);
+        assertThat(json(call(admin(get("/api/admin/anticheat/players/" + player + "/cases")), null, 200))).hasSize(1);
+        call(admin(post("/api/admin/anticheat/cases/" + caseId + "/notes")), "{\"text\":\"\"}", 400);
+        call(admin(delete("/api/admin/anticheat/cases/" + caseId)), null, 204);
+        call(admin(get("/api/admin/anticheat/cases/" + caseId)), null, 404);
+        call(post("/api/server/anticheat/reports").contentType(MediaType.APPLICATION_JSON), "{\"reports\":[]}", 401);
+    }
+
     // ---- helpers ----------------------------------------------------------------------------------
 
     private static MockHttpServletRequestBuilder admin(MockHttpServletRequestBuilder request) {

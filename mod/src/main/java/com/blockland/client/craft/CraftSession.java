@@ -6,6 +6,7 @@ import com.blockland.craft.Build;
 import com.blockland.craft.CraftCatalog;
 import com.blockland.craft.CraftData;
 import com.blockland.craft.Craftable;
+import com.blockland.craft.SkinKeys;
 import com.blockland.equipment.EquipmentContent;
 import com.blockland.equipment.EquipmentItem;
 import com.blockland.gun.GunContent;
@@ -15,7 +16,9 @@ import com.blockland.melee.KnifeItem;
 import com.blockland.melee.MeleeContent;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.packet.CraftPackets;
+import com.blockland.client.ui.Draw;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvent;
@@ -50,6 +53,8 @@ final class CraftSession {
     static final String SPRAY = "spray";
     /** Colour of special skins (their own model or shot effects, spec §30). */
     static final int SPECIAL = 0xFFFF4D5E;
+    /** Colour of what marks a skin the player does not own. */
+    static final int LOCKED = 0xFFB8C0CC;
 
     /** One choice of a slot or a skin tab. */
     record Option(String id, Component name, Component description, String rarity) {
@@ -176,8 +181,10 @@ final class CraftSession {
         if (isSkinCategory(category)) {
             for (CraftData.Skin skin : weapon.skins().values()) {
                 if (!skinKind(skin).equals(category)) continue;
-                // special skins (own model / shot effects) and shader skins (animated materials) say so under their name
-                Component tag = skin.isSpecial() ? Component.translatable("blockland.craft.special_skin")
+                // special skins (own model / shot effects) and shader skins (animated materials) say so under their name;
+                // a skin the player does not own says where to get it (it can still be tried on)
+                Component tag = locked(skin.id) ? Component.translatable("blockland.craft.skin.locked_hint")
+                        : skin.isSpecial() ? Component.translatable("blockland.craft.special_skin")
                         : skin.hasEffects() ? Component.translatable("blockland.craft.shader_skin") : Component.empty();
                 list.add(new Option(skin.id, CraftCatalog.skinName(weapon, skin), tag, skin.rarity));
             }
@@ -191,6 +198,16 @@ final class CraftSession {
             }
         });
         return list;
+    }
+
+    /**
+     * Whether a skin of the edited weapon must be owned and the player does not own it (asset spec §30): it is listed and
+     * can be previewed, but not saved.
+     */
+    boolean locked(String skinId) {
+        if (weapon == null) return false;
+        CraftData.Skin skin = weapon.skins().get(skinId);
+        return skin != null && !SkinKeys.owned(weapon, skin, ClientBuilds::owns);
     }
 
     /** What {@code category} holds in {@code build}. */
@@ -240,6 +257,12 @@ final class CraftSession {
 
     void save() {
         if (weapon == null || waiting() || !changed()) return;
+        if (locked(edited.skin())) {
+            // the server would refuse it: say why right away
+            showToast(Component.translatable("blockland.craft.error.skin_locked"), ERROR);
+            playUi(0.6f, 0.5f);
+            return;
+        }
         awaitingVersion = ClientBuilds.version();
         BLNetwork.sendToServer(new CraftPackets.C2SSave(weapon.id(), edited, fitSlot));
         playUi(1.0f, 0.6f);
@@ -273,9 +296,10 @@ final class CraftSession {
         return chosen ? ACCENT : INFO;
     }
 
-    /** The tag an option card shows (equipped / saved, legendary, special), or null. */
+    /** The tag an option card shows (not owned, equipped / saved, legendary, special), or null. */
     @Nullable
     String tag(String category, Option option) {
+        if (isSkinCategory(category) && locked(option.id())) return Component.translatable("blockland.craft.skin.locked").getString();
         if (weapon != null && option.id().equals(selected(category, baseline(weapon)))) {
             return Component.translatable(isHeldMode() ? "blockland.craft.equipped" : "blockland.craft.saved_tag").getString();
         }
@@ -285,8 +309,20 @@ final class CraftSession {
     }
 
     int tagColor(String category, Option option) {
+        if (isSkinCategory(category) && locked(option.id())) return LOCKED;
         if (weapon != null && option.id().equals(selected(category, baseline(weapon)))) return OK;
         return "special".equals(option.rarity()) ? SPECIAL : GOLD;
+    }
+
+    /** A small padlock (7 × 9 px) at {@code x, y}: marks a skin the player does not own. */
+    static void lockIcon(GuiGraphics g, int x, int y, int color) {
+        // the shackle: an arch of three bars over the body
+        g.fill(x + 1, y + 1, x + 2, y + 4, color);
+        g.fill(x + 5, y + 1, x + 6, y + 4, color);
+        g.fill(x + 2, y, x + 5, y + 1, color);
+        Draw.rect(g, x, y + 4, 7, 5, color);
+        // the keyhole
+        g.fill(x + 3, y + 5, x + 4, y + 7, 0xC0101722);
     }
 
     static void playUi(float pitch, float volume) {

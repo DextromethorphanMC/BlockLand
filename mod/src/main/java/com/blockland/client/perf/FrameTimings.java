@@ -71,6 +71,8 @@ public final class FrameTimings {
     static void setRecording(boolean value) {
         if (value == recording) return;
         recording = value;
+        // a new stretch of recording starts its totals afresh (a benchmark resets them again once it settled)
+        if (value) window.reset();
         if (!value) {
             current = null;
             depth = 0;
@@ -222,6 +224,7 @@ public final class FrameTimings {
                 if (gpu) sums[1] += Math.max(0, timestamp(2 * i + 1) - timestamp(2 * i));
             }
             window.addFrame(interval, frameCpuEnd - frameCpuStart, gpuFrame, scratch);
+            Hitches.frameSpans(frameCpuEnd - frameCpuStart, gpuFrame, scratch);
             float k = 0.05f;
             for (Map.Entry<Integer, long[]> e : scratch.entrySet()) {
                 int id = e.getKey();

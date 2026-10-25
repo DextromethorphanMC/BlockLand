@@ -1,6 +1,7 @@
 package com.blockland.server.command;
 
 import com.blockland.server.BlockLandServer;
+import com.blockland.server.anticheat.enforce.AntiCheatCommands;
 import com.blockland.server.config.BlockLandConfig;
 import com.blockland.server.content.ContentSnapshot;
 import com.blockland.server.content.model.MapDef;
@@ -107,6 +108,11 @@ public final class BlockLandCommands {
                             ctx.getSource().sendSuccess(() -> Component.literal(text.toString()), false);
                             return order.size();
                         })))
+                // 反作弊 (anti-cheat spec §8)
+                .then(AntiCheatCommands.node(() -> {
+                    BlockLandServer s = server.get();
+                    return s == null ? null : s.antiCheat;
+                }))
                 .then(Commands.literal("stopall").requires(src -> src.hasPermission(2)).executes(ctx -> {
                     BlockLandServer s = require(ctx, server);
                     int count = s.games.games().size();

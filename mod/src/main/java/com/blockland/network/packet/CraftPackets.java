@@ -3,7 +3,9 @@ package com.blockland.network.packet;
 import com.blockland.craft.Build;
 import net.minecraft.network.FriendlyByteBuf;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -49,9 +51,15 @@ public final class CraftPackets {
     /**
      * The player's saved builds, weapon id → build (weapons without an entry use their defaults).
      *
-     * @param error translation key of why the last save was refused, "" when it was not
+     * @param error    translation key of why the last save was refused, "" when it was not
+     * @param unlocked the keys of skins that must be owned which this player owns ({@code SkinKeys}); free skins are
+     *                 everyone's and not listed
      */
-    public record S2CBuilds(Map<String, Build> builds, String error) {
+    public record S2CBuilds(Map<String, Build> builds, String error, List<String> unlocked) {
+        /** Most owned skin keys sent (also caps what a client decodes). */
+        public static final int MAX_UNLOCKED = 512;
+        private static final int MAX_KEY = 100;
+
         public static void encode(S2CBuilds msg, FriendlyByteBuf buf) {
             buf.writeVarInt(msg.builds.size());
             msg.builds.forEach((weapon, build) -> {
@@ -59,6 +67,9 @@ public final class CraftPackets {
                 build.write(buf);
             });
             buf.writeUtf(msg.error, 128);
+            int count = Math.min(MAX_UNLOCKED, msg.unlocked.size());
+            buf.writeVarInt(count);
+            for (int i = 0; i < count; i++) buf.writeUtf(msg.unlocked.get(i), MAX_KEY);
         }
 
         public static S2CBuilds decode(FriendlyByteBuf buf) {
@@ -66,7 +77,12 @@ public final class CraftPackets {
             if (size < 0 || size > MAX_BUILDS) throw new IllegalArgumentException("too many builds: " + size);
             Map<String, Build> builds = new LinkedHashMap<>();
             for (int i = 0; i < size; i++) builds.put(buf.readUtf(Build.MAX_ID), Build.read(buf));
-            return new S2CBuilds(builds, buf.readUtf(128));
+            String error = buf.readUtf(128);
+            int count = buf.readVarInt();
+            if (count < 0 || count > MAX_UNLOCKED) throw new IllegalArgumentException("too many skin keys: " + count);
+            List<String> unlocked = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) unlocked.add(buf.readUtf(MAX_KEY));
+            return new S2CBuilds(builds, error, unlocked);
         }
     }
 }

@@ -254,7 +254,12 @@ public final class CraftPanel implements LobbyTab {
                         ColorMath.fade(CraftSession.rarityColor(option.rarity(), chosen), a * (0.4f + 0.6f * Math.max(hv, sel))));
                 if (sel > 0.01f) Draw.outline(g, ox, cy, w, ch, ColorMath.fade(ACCENT, a * 0.6f * sel));
                 int textX = x + 10 + Math.round(hv * 3);
-                Draw.text(g, Draw.fit(option.name().getString(), w - 60), textX, cy + 6, 1f, ColorMath.fade(TEXT, a), false);
+                // a skin the player does not own: a padlock before its name (it can still be tried on)
+                boolean locked = CraftSession.isSkinCategory(category) && session.locked(option.id());
+                if (locked) CraftSession.lockIcon(g, textX, cy + 5, ColorMath.fade(CraftSession.LOCKED, a));
+                int nameX = locked ? textX + 10 : textX;
+                Draw.text(g, Draw.fit(option.name().getString(), w - 60 - (nameX - textX)), nameX, cy + 6, 1f,
+                        ColorMath.fade(locked ? MUTED : TEXT, a), false);
                 if (!description.isEmpty()) {
                     Draw.text(g, Draw.fit(description, w - 18), textX, cy + 20, 1f, ColorMath.fade(MUTED, a), false);
                 }

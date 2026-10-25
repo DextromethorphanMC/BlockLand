@@ -6,6 +6,7 @@ import com.blockland.network.packet.CraftPackets;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The player's saved 工匠 builds as last received from the server (the server keeps them). Client thread only; cleared
@@ -13,6 +14,8 @@ import java.util.Optional;
  */
 public final class ClientBuilds {
     private static Map<String, Build> builds = Map.of();
+    /** Keys of skins that must be owned which the player owns ({@code SkinKeys}). */
+    private static Set<String> unlocked = Set.of();
     private static boolean received;
     /** Bumped on every update, so screens can tell a reply to their save from older state. */
     private static int version;
@@ -23,6 +26,7 @@ public final class ClientBuilds {
 
     static void update(CraftPackets.S2CBuilds packet) {
         builds = Map.copyOf(packet.builds());
+        unlocked = Set.copyOf(packet.unlocked());
         received = true;
         lastError = packet.error();
         version++;
@@ -30,6 +34,7 @@ public final class ClientBuilds {
 
     public static void clear() {
         builds = Map.of();
+        unlocked = Set.of();
         received = false;
         lastError = "";
         version++;
@@ -43,6 +48,11 @@ public final class ClientBuilds {
     /** The saved build of a weapon; empty = the weapon's default. */
     public static Optional<Build> get(String weaponId) {
         return Optional.ofNullable(builds.get(weaponId));
+    }
+
+    /** Whether the player owns the skin item with this key (free skins are not items: ask {@code SkinKeys}). */
+    public static boolean owns(String skinKey) {
+        return unlocked.contains(skinKey);
     }
 
     public static boolean received() {

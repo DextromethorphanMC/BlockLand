@@ -1068,6 +1068,16 @@ Examples: Thompson `chicago` (gold metal, golden flash and tracer), KS-3 `dragon
 burning tracers), AWP `thunder` (pale blue flash and tracer), dual USP `cerberus` (its own model, crimson flame,
 red tracers, its own report).
 
+**Ownership.** `free` (bool, optional) says whether every player may use a skin; left out, special skins are **owned
+items** and every other skin is free (`default` is always free; `CraftData.Skin#isFree`). A skin that is not free is an
+inventory item with an entitlement key (`craft/SkinKeys`, backend item pattern `<type>:<id>`): `skin:<weapon>/<skin>`
+owns it on that weapon (e.g. `skin:usp_dual/cerberus`); a shared skin (`craft/skins.json`) is also owned on every weapon
+it joins through `skin:<skin>`. Players get the keys from the shop (a product whose entitlement is the key) or an
+admin grant; the 库存 lists them (category 皮肤, icon = the weapon's skin icon `textures/item/<weapon>_<skin>.png`).
+The server refuses a 工匠 save with a skin the player does not own and hands a saved skin out as `default` once the
+entitlement has run out; the 工匠 still lists such skins with a padlock and lets them be tried on, but not saved.
+Making any skin a paid item is data only: `"free": false`.
+
 **Effect `circuit`** (shader effect id 4, §21's table): neon circuit traces laid out in the weapon's rest-pose space,
 glowing in `effectColor`, with light pulses running along them and the hue drifting. Params: pulse speed (m/s),
 trace density (cells per metre), glow 0–1, hue drift (cycles/s); defaults 0.25, 40, 0.8, 0.05. The shared skin `neon`

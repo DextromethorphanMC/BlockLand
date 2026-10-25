@@ -1,5 +1,6 @@
 package com.blockland.backend.gamemode;
 
+import com.blockland.backend.anticheat.AntiCheatSettings;
 import com.blockland.backend.gametype.common.TeamArenaSettings;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -10,7 +11,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * {@code allowGraffiti} (players may spray graffiti in its matches; default on) and the spectator rules for eliminated
  * players: {@code spectate} (watch the match; default on), {@code spectateFreeCam} (a free camera over the match;
  * default on) and {@code spectateSeconds} (0–600, 0 = until the match ends; players who respawn always watch only until
- * their respawn). Must stay in sync with the mod, which reads them with {@code GameModeDef.flag(...)} / the settings.
+ * their respawn), and {@code antiCheat} (the mode's anti-cheat preset and overrides, {@link AntiCheatSettings}; the
+ * type picks the default preset). Must stay in sync with the mod, which reads them with {@code GameModeDef.flag(...)} /
+ * the settings.
  */
 public final class GenericModeSettings {
     public static final String RANKED = "ranked";
@@ -22,8 +25,17 @@ public final class GenericModeSettings {
     private GenericModeSettings() {
     }
 
-    /** Writes the generic keys from {@code raw} into the type's normalised {@code settings} (which it returns). */
+    /** {@link #apply(JsonNode, ObjectNode, String)} with the {@code standard} anti-cheat preset as the default. */
     public static ObjectNode apply(JsonNode raw, ObjectNode settings) {
+        return apply(raw, settings, AntiCheatSettings.DEFAULT_PRESET);
+    }
+
+    /**
+     * Writes the generic keys from {@code raw} into the type's normalised {@code settings} (which it returns).
+     *
+     * @param antiCheatPreset the type's default anti-cheat preset (used when the mode names none)
+     */
+    public static ObjectNode apply(JsonNode raw, ObjectNode settings, String antiCheatPreset) {
         JsonNode in = raw == null || !raw.isObject() ? settings : raw;
         settings.put(RANKED, TeamArenaSettings.boolField(in, RANKED, false));
         settings.put(ALLOW_GRAFFITI, TeamArenaSettings.boolField(in, ALLOW_GRAFFITI, true));
@@ -32,6 +44,7 @@ public final class GenericModeSettings {
         JsonNode seconds = in.get(SPECTATE_SECONDS);
         int value = seconds != null && seconds.canConvertToInt() ? seconds.asInt() : 0;
         settings.put(SPECTATE_SECONDS, Math.max(0, Math.min(600, value)));
+        settings.set(AntiCheatSettings.KEY, AntiCheatSettings.normalizeMode(in.get(AntiCheatSettings.KEY), antiCheatPreset));
         return settings;
     }
 

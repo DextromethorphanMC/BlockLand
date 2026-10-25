@@ -4,6 +4,8 @@ import { ErrorBox, PageHeader, useLoad } from '../components/ui'
 
 export function Dashboard() {
   const { data, error } = useLoad(api.overview)
+  // older backends have no anti-cheat yet: the card is simply left out
+  const antiCheat = useLoad(api.antiCheatSummary)
 
   return (
     <>
@@ -29,6 +31,15 @@ export function Dashboard() {
             </span>
             <span className="stat-label">在线 / 全部玩家</span>
           </Link>
+          {antiCheat.data && (
+            <Link to="/anticheat" className="stat" title={`收集中 ${antiCheat.data.open} · 近 7 天封禁 ${antiCheat.data.bannedLast7Days} · 近 24 小时上报 ${antiCheat.data.reportsLast24h} 条`}>
+              <span className={`stat-value ${antiCheat.data.review > 0 ? 'text-warn' : ''}`}>
+                {antiCheat.data.review}
+                <small>/{antiCheat.data.review + antiCheat.data.open}</small>
+              </span>
+              <span className="stat-label">待复核 / 进行中的反作弊案件</span>
+            </Link>
+          )}
           <div className="stat">
             <span className="stat-value">v{data.contentVersion}</span>
             <span className="stat-label">配置版本</span>

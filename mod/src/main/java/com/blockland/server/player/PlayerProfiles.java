@@ -42,6 +42,7 @@ public final class PlayerProfiles implements BuildStore {
     private final PlayerDirectory players;
     private Runnable onChanged = () -> { };
     private Consumer<UUID> onPreferences = id -> { };
+    private Consumer<UUID> onEntitlements = id -> { };
     private final Map<UUID, Profile> profiles = new ConcurrentHashMap<>();
     private int tickCounter;
 
@@ -119,6 +120,14 @@ public final class PlayerProfiles implements BuildStore {
         this.onPreferences = listener;
     }
 
+    /**
+     * Called on the server thread when a status arrived for a player whose status was known before (a heartbeat, the
+     * answer after a purchase): their entitlements may have changed — what depends on owning items can look again.
+     */
+    public void setEntitlementListener(Consumer<UUID> listener) {
+        this.onEntitlements = listener;
+    }
+
     // ---- lifecycle --------------------------------------------------------------------------------
 
     /** The player connected (they are in the lobby). */
@@ -192,6 +201,7 @@ public final class PlayerProfiles implements BuildStore {
     private void apply(UUID id, Status status, boolean preferences) {
         Profile profile = profiles.get(id);
         if (profile == null || status == null) return;
+        boolean known = profile.status != null;
         profile.status = status;
         boolean preferencesArrived = preferences || !profile.preferencesLoaded;
         if (preferencesArrived) {
@@ -209,6 +219,7 @@ public final class PlayerProfiles implements BuildStore {
             return;
         }
         if (preferencesArrived) onPreferences.accept(id);
+        if (known) onEntitlements.accept(id);
         onChanged.run();
     }
 

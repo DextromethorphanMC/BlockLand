@@ -126,6 +126,13 @@ final class SkinCarousel {
                 int sx = cx + 4 + Math.round(shimmer * (sw - 6));
                 g.fill(sx, cy + 4, sx + 6, cy + 4 + sh, ColorMath.fade(0x40FFFFFF, a));
             }
+            boolean locked = session.locked(skin.id);
+            if (locked) {
+                // not owned: the swatch dims under a padlock (it can still be tried on, not saved)
+                g.fill(cx + 4, cy + 4, cx + 4 + sw, cy + 4 + sh, ColorMath.fade(0x80101722, a));
+                Draw.rect(g, cx + 6, cy + 6, 11, 13, ColorMath.fade(0xC0101722, a));
+                CraftSession.lockIcon(g, cx + 8, cy + 8, ColorMath.fade(CraftSession.LOCKED, a));
+            }
             Draw.text(g, Draw.fit(CraftCatalog.skinName(weapon, skin).getString(), CARD_W - 8), cx + 4, cy + CARD_H - 13, 0.75f,
                     ColorMath.fade(chosen ? TEXT : MUTED, a), false);
             g.fill(cx, cy + CARD_H - 2, cx + CARD_W, cy + CARD_H, ColorMath.fade(rarity, a * (0.5f + 0.5f * Math.max(hv, sel))));
@@ -155,7 +162,10 @@ final class SkinCarousel {
             int color = CraftSession.rarityColor(shown.rarity, true);
             Draw.text(g, name, x + w / 2f - UiFont.width(name) * scale / 2f, y - 2, scale, ColorMath.fade(color, a), true);
             String kind = CraftSession.categoryName(CraftSession.skinKind(shown)).getString();
-            Draw.text(g, kind, x + w / 2f - UiFont.width(kind) * 0.75f / 2f, y + 13, 0.75f, ColorMath.fade(DIM, a), false);
+            // a skin the player does not own says where to get it
+            if (session.locked(shown.id)) kind += " · " + Component.translatable("blockland.craft.skin.locked_hint").getString();
+            Draw.text(g, kind, x + w / 2f - UiFont.width(kind) * 0.75f / 2f, y + 13, 0.75f,
+                    ColorMath.fade(session.locked(shown.id) ? CraftSession.LOCKED : DIM, a), false);
         }
     }
 

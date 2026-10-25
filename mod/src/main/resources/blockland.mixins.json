@@ -8,6 +8,7 @@
     "CompileQueueAccess",
     "CompileTaskStateAccess",
     "DeltaTrackerMixin",
+    "FramerateLimitTrackerMixin",
     "FrustumMixin",
     "LevelRendererAccess",
     "MinecraftMixin",

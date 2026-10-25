@@ -15,9 +15,9 @@ base {
 // Mojang ships Java 21 to end users in 1.20.5+
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
-// one Mixin config per area of vanilla it changes (client/perf, rendering spec §20)
+// one Mixin config per area of vanilla it changes (client/perf, rendering spec §20; server/anticheat, anti-cheat spec §2)
 ext.MIXIN_CONFIGS = ['blockland.mixins.json', 'blockland.gl.mixins.json', 'blockland.terrain.mixins.json',
-                     'blockland.particles.mixins.json']
+                     'blockland.particles.mixins.json', 'blockland.anticheat.mixins.json']
 
 minecraft {
     mappings channel: 'official', version: minecraft_version

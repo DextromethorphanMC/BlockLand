@@ -217,6 +217,8 @@ public final class InventoryPanel {
             case "rare" -> 0xFF4FA3FF;
             case "epic" -> 0xFFB46CFF;
             case "legendary" -> 0xFFFFB02E;
+            // special skins (their own model or shot effects), as in the 工匠
+            case "special" -> 0xFFFF4D5E;
             default -> 0xFF9AA4B5;
         };
     }

@@ -39,6 +39,8 @@ public final class ModelCache {
             long start = System.nanoTime();
             GltfModel model = GlbReader.read(in.readAllBytes());
             GpuModel gpu = GpuModel.upload(location.toString(), model);
+            // its texture sets decode in the background meanwhile: ready (or nearly) by the time it is drawn
+            gpu.prefetchTextures();
             BlockLand.LOGGER.info("[BlockLand] Loaded {}: {} nodes, {} meshes, {} animations in {} ms", location,
                     model.nodes.size(), model.meshes.size(), model.animations.size(), (System.nanoTime() - start) / 1_000_000);
             return Optional.of(gpu);

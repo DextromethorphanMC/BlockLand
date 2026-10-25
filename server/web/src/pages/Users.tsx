@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { Empty, ErrorBox, Field, Modal, NumberInput, PageHeader, useLoad, useToast } from '../components/ui'
 import { TierBadge, categoryLabel, expiryText, modeTitle } from '../components/Ranks'
-import type { Entitlement, GameMode, InventoryItem, PlayerAccount, RankedLeaderEntry } from '../types'
+import type { AntiCheatCase, Entitlement, GameMode, InventoryItem, PlayerAccount, RankedLeaderEntry } from '../types'
 
 /** A player's line in one mode's ladder. */
 type ModeRank = { mode: string; entry: RankedLeaderEntry }
@@ -38,6 +39,9 @@ export function Users() {
     return Promise.all(modes.map(async (mode) => ({ mode, entries: await api.rankedLeaderboard(mode, 500) })))
   })
   const registry = new Map((registryLoad.data ?? []).map((i) => [i.key, i]))
+  // players with an open anti-cheat case get a badge (one request for everyone; older backends simply show none)
+  const activeCases = useLoad(() => api.antiCheatCases('ACTIVE').catch(() => [] as AntiCheatCase[]))
+  const caseOf = new Map((activeCases.data ?? []).map((c) => [(c.playerUuid ?? '').toLowerCase(), c]))
   const ranks = new Map<string, ModeRank[]>()
   for (const { mode, entries } of ladders.data ?? []) {
     for (const entry of entries) ranks.set(entry.uuid, [...(ranks.get(entry.uuid) ?? []), { mode, entry }])
@@ -108,7 +112,10 @@ export function Users() {
                   <div className="badges">
                     {u.banned && <span className="badge badge-danger" title={`${u.ban?.reason} · 至 ${formatTime(u.ban?.until)}`}>封禁中</span>}
                     {u.muted && <span className="badge badge-warn" title={`${u.mute?.reason} · 至 ${formatTime(u.mute?.until)}`}>禁言中</span>}
-                    {!u.banned && !u.muted && <span className="muted small">正常</span>}
+                    {!u.banned && !u.muted && !caseOf.has(u.uuid.toLowerCase()) && <span className="muted small">正常</span>}
+                    {caseOf.has(u.uuid.toLowerCase()) && (
+                      <AntiCheatBadge kase={caseOf.get(u.uuid.toLowerCase())!} />
+                    )}
                     {u.preferences?.allowPartyInvites === false && (
                       <span className="badge" title="玩家在游戏设置「隐私」中关闭了「允许被邀请组队」">
                         拒绝组队邀请
@@ -301,6 +308,7 @@ function DetailDialog({
   const r = rank.data
   return (
     <Modal title={`${user.name} · 库存与排位`} onClose={onClose} wide>
+      <AntiCheatCases uuid={user.uuid} />
       <div className="grid-2">
         <section>
           <h3>库存</h3>
@@ -384,6 +392,49 @@ function DetailDialog({
         </section>
       </div>
     </Modal>
+  )
+}
+
+/** An open anti-cheat case, linking to it. */
+function AntiCheatBadge({ kase }: { kase: AntiCheatCase }) {
+  const review = kase.status === 'REVIEW'
+  return (
+    <Link
+      to={`/anticheat?case=${encodeURIComponent(kase.id)}`}
+      className={`badge ${review ? 'badge-warn' : ''}`}
+      title={`可疑度 ${(kase.suspicion ?? 0).toFixed(2)} · 最高置信度 ${Math.round(kase.maxConfidence * 100)}%`}
+    >
+      反作弊 · {review ? '待复核' : '收集中'}
+    </Link>
+  )
+}
+
+const CASE_STATUS: Record<string, string> = { OPEN: '收集中', REVIEW: '待复核', BANNED: '已封禁', CLEARED: '确认误判', DISMISSED: '不予处理' }
+
+/** The player's anti-cheat cases (loaded when the dialog opens), each linking to the 反作弊 page. */
+function AntiCheatCases({ uuid }: { uuid: string }) {
+  const cases = useLoad(() => api.antiCheatPlayerCases(uuid), [uuid])
+  if (!cases.data || cases.data.length === 0) return null
+  return (
+    <section>
+      <h3>反作弊案件</h3>
+      <div className="inventory-list">
+        {cases.data.map((c) => (
+          <div key={c.id} className="inventory-row">
+            <div>
+              <strong>{CASE_STATUS[c.status] ?? c.status}</strong>
+              <span className="small muted">
+                {' '}
+                · 可疑度 {(c.suspicion ?? 0).toFixed(2)} · 最高置信度 {Math.round(c.maxConfidence * 100)}% · 开案 {formatTime(c.openedAt)}
+              </span>
+            </div>
+            <Link className="btn btn-small" to={`/anticheat?case=${encodeURIComponent(c.id)}`}>
+              查看
+            </Link>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 

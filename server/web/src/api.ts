@@ -1,4 +1,10 @@
 import type {
+  AntiCheatCase,
+  AntiCheatCaseFilter,
+  AntiCheatCheckInfo,
+  AntiCheatConfig,
+  AntiCheatReview,
+  AntiCheatSummary,
   Announcement,
   GameMap,
   GameMode,
@@ -130,6 +136,29 @@ export const api = {
   rankedLeaderboard: (mode: string, limit = 100) =>
     request<RankedLeaderEntry[]>(`/api/admin/ranked/leaderboard?mode=${encodeURIComponent(mode)}&limit=${limit}`),
   rankedPlayer: (uuid: string) => request<RankedPlayer>(`/api/admin/ranked/players/${uuid}`),
+
+  /** 反作弊 cases, without their evidence; REVIEW first, then the most recently updated. */
+  antiCheatCases: (status: AntiCheatCaseFilter = 'ACTIVE', query = '') =>
+    request<AntiCheatCase[]>(
+      `/api/admin/anticheat/cases?status=${status}${query ? `&q=${encodeURIComponent(query)}` : ''}`,
+    ),
+  antiCheatCase: (id: string) => request<AntiCheatCase>(`/api/admin/anticheat/cases/${encodeURIComponent(id)}`),
+  reviewAntiCheatCase: (id: string, review: AntiCheatReview) =>
+    request<AntiCheatCase>(`/api/admin/anticheat/cases/${encodeURIComponent(id)}/review`, { method: 'POST', body: json(review) }),
+  addAntiCheatNote: (id: string, text: string) =>
+    request<AntiCheatCase>(`/api/admin/anticheat/cases/${encodeURIComponent(id)}/notes`, { method: 'POST', body: json({ text }) }),
+  deleteAntiCheatCase: (id: string) => request<void>(`/api/admin/anticheat/cases/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  /** Every case of one player, newest first (the users page links to them). */
+  antiCheatPlayerCases: (uuid: string) => request<AntiCheatCase[]>(`/api/admin/anticheat/players/${uuid}/cases`),
+  antiCheatSummary: () => request<AntiCheatSummary>('/api/admin/anticheat/summary'),
+  antiCheatConfig: () => request<AntiCheatConfig>('/api/admin/anticheat/config'),
+  saveAntiCheatConfig: (c: AntiCheatConfig) =>
+    request<AntiCheatConfig>('/api/admin/anticheat/config', { method: 'PUT', body: json(c) }),
+  /** The checks as the game server published them (empty until a server started). */
+  antiCheatRegistry: async () => {
+    const body = await request<AntiCheatCheckInfo[] | { checks?: AntiCheatCheckInfo[] } | null>('/api/admin/registry/anticheat')
+    return Array.isArray(body) ? body : (body?.checks ?? [])
+  },
 }
 
 export interface AnnouncementInput {

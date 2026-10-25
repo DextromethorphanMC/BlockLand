@@ -36,9 +36,11 @@ public final class ShopPackets {
     /**
      * @param imageVersion empty when the product has no image
      * @param ownedUntil   -1 = not owned, 0 = owned permanently, otherwise epoch millis it expires
+     * @param icon         when the product is an inventory item: that item's icon ({@code InventoryCatalog.Display#icon},
+     *                     drawn by the client's {@code ItemIcons} when there is no image); empty otherwise
      */
     public record Product(String id, String name, String description, String category, int priceCents, String currency,
-                          int durationDays, String imageVersion, long ownedUntil) {
+                          int durationDays, String imageVersion, long ownedUntil, String icon) {
         void encode(FriendlyByteBuf buf) {
             buf.writeUtf(id, 64);
             buf.writeUtf(name);
@@ -49,11 +51,12 @@ public final class ShopPackets {
             buf.writeVarInt(durationDays);
             buf.writeUtf(imageVersion, 64);
             buf.writeLong(ownedUntil);
+            buf.writeUtf(icon, 256);
         }
 
         static Product decode(FriendlyByteBuf buf) {
             return new Product(buf.readUtf(64), buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readVarInt(),
-                    buf.readUtf(8), buf.readVarInt(), buf.readUtf(64), buf.readLong());
+                    buf.readUtf(8), buf.readVarInt(), buf.readUtf(64), buf.readLong(), buf.readUtf(256));
         }
     }
 

@@ -4,6 +4,7 @@ import com.blockland.BlockLand;
 import com.blockland.craft.Build;
 import com.blockland.craft.CraftCatalog;
 import com.blockland.craft.Craftable;
+import com.blockland.craft.SkinKeys;
 import com.blockland.gun.GunCatalog;
 import com.blockland.gun.GunContent;
 import com.blockland.gun.GunData;
@@ -25,16 +26,21 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.BiPredicate;
 
 /**
  * Server authority for the 工匠 (craft) system: validates and saves builds (sent from the lobby or in game), fits them
  * to the weapons in a player's inventory and pushes the saved builds to the client. Weapon items only change here;
- * clients merely ask.
+ * clients merely ask. Skins that must be owned (asset spec §30, {@link SkinKeys}) are checked against what the player
+ * owns: a save with someone else's skin is refused, and a saved skin the player no longer owns (an expired entitlement)
+ * is handed out as the weapon's default.
  */
 public final class CraftService implements CraftPacketListeners.Server {
     /** Saves a player may send back to back; the bucket refills one save per second. */
@@ -42,12 +48,18 @@ public final class CraftService implements CraftPacketListeners.Server {
 
     private final MinecraftServer server;
     private final BuildStore store;
+    /** Whether a player owns an inventory item key (the skins' {@code skin:…} keys). */
+    private final BiPredicate<UUID, String> owns;
     /** player → [credits, last refill nanos] */
     private final Map<UUID, double[]> saveCredits = new HashMap<>();
+    /** player → the owned skin keys they were last sent (to resend only on a change) */
+    private final Map<UUID, List<String>> sentUnlocked = new HashMap<>();
 
-    public CraftService(MinecraftServer server, BuildStore store) {
+    /** @param owns whether a player owns an item key (an entitlement): decides the skins that must be owned */
+    public CraftService(MinecraftServer server, BuildStore store, BiPredicate<UUID, String> owns) {
         this.server = server;
         this.store = store;
+        this.owns = owns;
     }
 
     // ---- requests -------------------------------------------------------------------------------------
@@ -74,6 +86,10 @@ public final class CraftService implements CraftPacketListeners.Server {
             send(player, "blockland.craft.error.invalid");
             return;
         }
+        if (!SkinKeys.owned(weapon.get(), save.build().skin(), key -> owns.test(player, key))) {
+            send(player, "blockland.craft.error.skin_locked");
+            return;
+        }
         Build build = CraftCatalog.complete(weapon.get(), save.build());
         // the default build needs no entry: weapons without one are handed out as they are
         store.save(player, weapon.get().id(), build.equals(weapon.get().defaultBuild()) ? null : build);
@@ -90,6 +106,15 @@ public final class CraftService implements CraftPacketListeners.Server {
     }
 
     /**
+     * The player's entitlements may have changed (a purchase, a grant, an expiry): their client learns about skins they
+     * now own (or no longer do).
+     */
+    public void entitlementsChanged(UUID player) {
+        List<String> sent = sentUnlocked.get(player);
+        if (sent != null && !sent.equals(unlocked(player))) send(player, "");
+    }
+
+    /**
      * Fits the player's saved builds to every craftable weapon in their inventory. Call after weapons were handed out
      * (match kits); weapons without a saved build keep their defaults.
      */
@@ -102,16 +127,21 @@ public final class CraftService implements CraftPacketListeners.Server {
             Craftable weapon = weaponOf(stack);
             if (weapon == null) continue;
             Build build = saved.get(weapon.id());
-            if (build != null) fit(player, stack, weapon, CraftCatalog.complete(weapon, build));
+            if (build == null) continue;
+            // a skin the player no longer owns (an expired entitlement) is not handed out
+            if (!SkinKeys.owned(weapon, build.skin(), key -> owns.test(player.getUUID(), key))) build = build.withSkin("default");
+            fit(player, stack, weapon, CraftCatalog.complete(weapon, build));
         }
     }
 
     public void forget(UUID player) {
         saveCredits.remove(player);
+        sentUnlocked.remove(player);
     }
 
     public void clear() {
         saveCredits.clear();
+        sentUnlocked.clear();
     }
 
     // ---- internals ------------------------------------------------------------------------------------
@@ -119,10 +149,21 @@ public final class CraftService implements CraftPacketListeners.Server {
     private void send(UUID player, String error) {
         Map<String, Build> builds = new LinkedHashMap<>(store.builds(player));
         while (builds.size() > CraftPackets.MAX_BUILDS) builds.remove(builds.keySet().iterator().next());
-        CraftPackets.S2CBuilds packet = new CraftPackets.S2CBuilds(builds, error);
+        List<String> unlocked = unlocked(player);
+        sentUnlocked.put(player, unlocked);
+        CraftPackets.S2CBuilds packet = new CraftPackets.S2CBuilds(builds, error, unlocked);
         ServerPlayer online = server.getPlayerList().getPlayer(player);
         if (online != null) BLNetwork.sendTo(online, packet);
         else BLNetwork.sendTo(player, packet);
+    }
+
+    /** The keys of skins that must be owned which the player owns (every key such a skin answers to). */
+    private List<String> unlocked(UUID player) {
+        List<String> keys = new ArrayList<>();
+        for (String key : SkinKeys.allKeys()) {
+            if (owns.test(player, key)) keys.add(key);
+        }
+        return keys;
     }
 
     private boolean takeCredit(UUID player) {

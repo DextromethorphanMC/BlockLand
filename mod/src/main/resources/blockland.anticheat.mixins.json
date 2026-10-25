@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.blockland.mixin.anticheat",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ServerCommonPacketListenerMixin",
+    "ServerGamePacketListenerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

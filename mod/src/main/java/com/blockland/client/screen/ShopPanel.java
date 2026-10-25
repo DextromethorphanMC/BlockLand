@@ -1,8 +1,10 @@
 package com.blockland.client.screen;
 
+import com.blockland.anim.Ticker;
 import com.blockland.client.ClientMedia;
 import com.blockland.client.ClientShopState;
 import com.blockland.client.font.UiFont;
+import com.blockland.client.profile.ItemIcons;
 import com.blockland.client.ui.Tr;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.packet.MediaPackets;
@@ -191,6 +193,8 @@ final class ShopPanel {
                     image.width(), image.height(), image.width(), image.height());
         } else {
             g.fill(ix, iy, ix + IMAGE, iy + IMAGE, 0xFF0E1420);
+            // no image of its own: an inventory item (a skin, a card…) shows the item itself
+            if (!p.icon().isEmpty()) ItemIcons.draw(g, p.icon(), p.name(), ix + 2, iy + 2, IMAGE - 4, IMAGE - 4, (float) Ticker.global().time());
         }
 
         int tx = ix + IMAGE + 10;

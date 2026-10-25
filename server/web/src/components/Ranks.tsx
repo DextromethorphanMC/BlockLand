@@ -40,6 +40,7 @@ export function expiryText(until: string | null | undefined) {
 const CATEGORIES: Record<string, string> = {
   graffiti: '喷漆',
   card: '名片',
+  skin: '皮肤',
 }
 
 export function categoryLabel(item: Pick<InventoryItem, 'category' | 'key'> | { key: string; category?: string }) {

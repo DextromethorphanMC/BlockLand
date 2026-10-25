@@ -58,6 +58,8 @@ public final class ActionService implements MovementPacketListeners.Server, Body
         final int[] lastEndTick = {Integer.MIN_VALUE / 2, Integer.MIN_VALUE / 2, Integer.MIN_VALUE / 2};
         /** When each action was last requested (spam). */
         final int[] lastRequestTick = {Integer.MIN_VALUE / 2, Integer.MIN_VALUE / 2, Integer.MIN_VALUE / 2};
+        /** The request tick the anti-cheat last let a refused prediction run for, per action. */
+        final int[] graceTick = {Integer.MIN_VALUE / 2, Integer.MIN_VALUE / 2, Integer.MIN_VALUE / 2};
         int lastSprintTick = Integer.MIN_VALUE / 2;
         int lastGroundTick = Integer.MIN_VALUE / 2;
         /** Horizontal speed of the last ticks (blocks per tick), newest first. */
@@ -240,6 +242,39 @@ public final class ActionService implements MovementPacketListeners.Server, Body
     public ActionState state(Player player) {
         Mover mover = movers.get(player.getUUID());
         return mover != null && mover.action != null ? new ActionState(mover.action, mover.yaw) : null;
+    }
+
+    // ---- what the anti-cheat asks (ActionAllowance) ---------------------------------------------------
+
+    /** Ticks since the player's action of this kind ended; huge when it never ran. */
+    public int ticksSinceEnd(Player player, MovementAction action) {
+        Mover mover = movers.get(player.getUUID());
+        return mover == null ? Integer.MAX_VALUE / 2 : server.getTickCount() - mover.lastEndTick[action.ordinal()];
+    }
+
+    /**
+     * Whether the client may still be predicting a request of this kind that was refused within the last {@code window}
+     * ticks (it slides on until it hears back). Granted once per request and at most once per the action's cooldown, so
+     * refused requests cannot be spammed into a lasting allowance.
+     */
+    public boolean predictingRefused(Player player, MovementAction action, int window) {
+        Mover mover = movers.get(player.getUUID());
+        if (mover == null) return false;
+        int i = action.ordinal();
+        int requested = mover.lastRequestTick[i];
+        if (server.getTickCount() - requested > window) return false;
+        if (mover.graceTick[i] == requested) return true;
+        if (requested - mover.graceTick[i] < cooldown(action) + window) return false;
+        mover.graceTick[i] = requested;
+        return true;
+    }
+
+    private static int cooldown(MovementAction action) {
+        return switch (action) {
+            case SLIDE -> SlideRules.get().cooldownTicks;
+            case PRONE -> ProneRules.get().cooldownTicks;
+            case DIVE -> DiveRules.get().cooldownTicks;
+        };
     }
 
     /** The player left the world (lobby, disconnect). */
