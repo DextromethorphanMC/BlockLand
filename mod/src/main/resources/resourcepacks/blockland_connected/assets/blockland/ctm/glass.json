@@ -1,0 +1,10 @@
+{
+  "blocks": [
+    "minecraft:glass"
+  ],
+  "textures": [
+    "minecraft:block/glass"
+  ],
+  "method": "ctm",
+  "tiles": "blockland:block/connected_glass"
+}

@@ -349,6 +349,11 @@ public final class FrameHooks {
         restartRequested = true;
     }
 
+    /** The target is this frame's scene target (the main view's level render, not a scope's picture). */
+    public static boolean isSceneTarget(RenderTarget target) {
+        return active && scene != null && target == scene;
+    }
+
     /** {@link Graphics#restartTemporalState}: everything that carries over from frame to frame starts again. */
     private static void restart() {
         restartRequested = false;

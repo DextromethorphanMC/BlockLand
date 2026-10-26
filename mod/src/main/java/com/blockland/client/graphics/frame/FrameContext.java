@@ -50,11 +50,20 @@ public final class FrameContext {
     @Nullable
     public GpuTextureView rayAlbedo, rayNormals;
     /**
-     * The cloud layer this frame (scene.glsl {@code BlClouds}, {@code BlCloudShape}): the camera's cloud noise position x
-     * and z, the layer's bottom and top relative to the camera, coverage, density, shadow strength (0 = no clouds) and
-     * drift time. Filled at {@code cameraReady} by the volumetric clouds (zero while they do not run).
+     * The clouds' inputs this frame (scene.glsl {@code BlClouds}, {@code BlCloudShape}; Bliss's, spec §14): the camera's
+     * world position (y shifted to Bliss's overworld cloud heights), Bliss's clock in ticks, the coverage setting, rain,
+     * shadow strength (0 = no clouds) and an unused slot. Filled at {@code cameraReady} by the volumetric clouds (zero
+     * while they do not run).
      */
     public final float[] clouds = new float[8];
+    /**
+     * The far terrain's own depth this frame (rendering spec §22: drawn before the level, its own projection — the level's
+     * with {@link #farNear} / {@link #farFar} as planes; scene depth is 1 where it shows), or null when none was drawn.
+     * Valid from {@code afterLevel} on.
+     */
+    @Nullable
+    public GpuTextureView farDepth;
+    public float farNear = 64, farFar = 50000;
     /** DLSS Frame Generation generates frames around this one (motion blur is halved for it). */
     public boolean frameGenerating;
 

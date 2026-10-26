@@ -24,6 +24,17 @@ public final class BlockLandConfig {
     public static final ForgeConfigSpec.IntValue ARENA_BASE_Y;
     public static final ForgeConfigSpec.IntValue BLOCK_OPERATIONS_PER_TICK;
 
+    public static final ForgeConfigSpec.BooleanValue FAR_TERRAIN_ENABLED;
+    public static final ForgeConfigSpec.IntValue FAR_TERRAIN_MAX_DISTANCE;
+    public static final ForgeConfigSpec.IntValue FAR_TERRAIN_THREADS;
+    public static final ForgeConfigSpec.IntValue FAR_TERRAIN_BYTES_PER_SECOND;
+    public static final ForgeConfigSpec.BooleanValue FAR_TERRAIN_ESTIMATE;
+    public static final ForgeConfigSpec.BooleanValue FAR_TERRAIN_IMPORT_SAVED;
+    public static final ForgeConfigSpec.IntValue FAR_TERRAIN_GENERATE_RADIUS;
+    public static final ForgeConfigSpec.IntValue FAR_TERRAIN_GENERATE_CONCURRENCY;
+    public static final ForgeConfigSpec.IntValue FAR_TERRAIN_COLUMN_DISTANCE;
+    public static final ForgeConfigSpec.IntValue FAR_TERRAIN_COLUMN_BYTES_PER_SECOND;
+
     static {
         BUILDER.push("backend");
         BACKEND_URL = BUILDER.comment("BlockLand 后端地址").define("url", "http://127.0.0.1:8080");
@@ -57,6 +68,27 @@ public final class BlockLandConfig {
         ARENA_SPACING = BUILDER.comment("竞技场维度中每个对局槽位的 X 间隔").defineInRange("spacing", 1024, 256, 100000);
         ARENA_BASE_Y = BUILDER.comment("地图粘贴的基准 Y").defineInRange("baseY", 80, 1, 300);
         BLOCK_OPERATIONS_PER_TICK = BUILDER.comment("每 tick 最多放置/清理的方块数").defineInRange("blockOperationsPerTick", 20000, 500, 1000000);
+        BUILDER.pop();
+
+        // 远景地平线 (rendering spec §22): the server streams compact terrain tiles to clients that show far terrain
+        BUILDER.push("farTerrain");
+        FAR_TERRAIN_ENABLED = BUILDER.comment("向客户端提供远景地平线（超远距离地形）").define("enabled", true);
+        FAR_TERRAIN_MAX_DISTANCE = BUILDER.comment("客户端可请求的最远距离（格）").defineInRange("maxDistance", 32768, 1024, 65536);
+        FAR_TERRAIN_THREADS = BUILDER.comment("计算远景地形的后台线程数（估算、读取存档区块、写磁盘缓存）；0 = 按 CPU 核数自动").defineInRange("threads", 0, 0, 32);
+        FAR_TERRAIN_BYTES_PER_SECOND = BUILDER.comment("每位玩家每秒最多发送的远景数据（字节）").defineInRange("bytesPerSecond", 393216, 16384, 16777216);
+        FAR_TERRAIN_ESTIMATE = BUILDER.comment("尚未生成的区块由世界生成器估算地形（关闭则只显示已存在的区块）").define("estimate", true);
+        FAR_TERRAIN_IMPORT_SAVED = BUILDER.comment("读取存档中已生成的区块（未加载时）作为真实地形").define("importSaved", true);
+        FAR_TERRAIN_GENERATE_RADIUS = BUILDER.comment("在玩家周围这个距离（格）内于后台真实生成尚不存在的区块（地形、地表、洞穴、树木全部），远景在此范围内就是真实地形；0 = 不生成。"
+                        + "玩家客户端的「真实远景区块」距离更远时，生成范围随之扩大到该距离（不超过 columnDistance）。会增大存档体积；"
+                        + "生成 1000 区块以上的范围第一次要数小时、占用数十 GB 磁盘")
+                .defineInRange("generateRadius", 1536, 0, 8192);
+        FAR_TERRAIN_GENERATE_CONCURRENCY = BUILDER.comment("同时在后台生成的区块数（服务器卡顿时自动暂停）").defineInRange("generateConcurrency", 8, 1, 64);
+        FAR_TERRAIN_COLUMN_DISTANCE = BUILDER.comment("客户端可请求的真实远景区块最远距离（区块，以玩家所在区块为中心）。远处的区块按距离合并成"
+                        + "粗一级的单元（2×2、4×4……64×64 个区块，每个方块代表 2、4……64 格），都由真实区块生成，合并结果缓存在存档的 blockland/farchunks 下。"
+                        + "后台生成会跟随玩家请求的距离：第一次生成 1000 区块以上的范围要数小时、占用数十 GB 磁盘（区块本身加合并缓存）")
+                .defineInRange("columnDistance", 1024, 8, 4096);
+        FAR_TERRAIN_COLUMN_BYTES_PER_SECOND = BUILDER.comment("每位玩家每秒最多发送的真实远景区块数据（字节）")
+                .defineInRange("columnBytesPerSecond", 8 << 20, 65536, 268435456);
         BUILDER.pop();
     }
 

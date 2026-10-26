@@ -133,6 +133,7 @@ public final class BlockLandServer {
     public final ProfileService profilePages;
     public final RankedService ranked;
     public final AntiCheatService antiCheat;
+    public final com.blockland.server.farterrain.FarTerrainService farTerrain;
     private int tickCounter;
 
     private BlockLandServer(MinecraftServer server) {
@@ -229,6 +230,25 @@ public final class BlockLandServer {
                 },
                 hitHistory::positionAgo);
         this.antiCheat.addAllowance(new com.blockland.server.movement.ActionAllowance(actions));
+        // 远景地平线: terrain tiles for the clients' far terrain (rendering spec §22); a player in an arena match only sees
+        // their own arena, never the neighbouring matches; pasted and cleared arenas are captured again
+        this.farTerrain = new com.blockland.server.farterrain.FarTerrainService(server, () -> new com.blockland.server.farterrain.FarTerrainSettings(
+                BlockLandConfig.FAR_TERRAIN_ENABLED.get(), BlockLandConfig.FAR_TERRAIN_MAX_DISTANCE.get(), BlockLandConfig.FAR_TERRAIN_THREADS.get(),
+                BlockLandConfig.FAR_TERRAIN_BYTES_PER_SECOND.get(), BlockLandConfig.FAR_TERRAIN_ESTIMATE.get(),
+                BlockLandConfig.FAR_TERRAIN_IMPORT_SAVED.get(), BlockLandConfig.FAR_TERRAIN_GENERATE_RADIUS.get(),
+                BlockLandConfig.FAR_TERRAIN_GENERATE_CONCURRENCY.get(), BlockLandConfig.FAR_TERRAIN_COLUMN_DISTANCE.get(),
+                BlockLandConfig.FAR_TERRAIN_COLUMN_BYTES_PER_SECOND.get()));
+        this.farTerrain.setViewLimit(player -> {
+            if (player.level().dimension() != ArenaService.ARENA_DIMENSION) return null;
+            GameInstance game = games.gameOf(player);
+            if (game == null) return null;
+            net.minecraft.world.phys.AABB bounds = game.spectateBounds();
+            // a match whose arena is not there yet sees nothing (a box far away)
+            if (bounds == null) return new net.minecraft.world.level.levelgen.structure.BoundingBox(29_000_000, 0, 29_000_000, 29_000_000, 0, 29_000_000);
+            return new net.minecraft.world.level.levelgen.structure.BoundingBox((int) Math.floor(bounds.minX), (int) Math.floor(bounds.minY),
+                    (int) Math.floor(bounds.minZ), (int) Math.ceil(bounds.maxX) - 1, (int) Math.ceil(bounds.maxY) - 1, (int) Math.ceil(bounds.maxZ) - 1);
+        });
+        this.jobs.addCompletionListener(farTerrain::areaChanged);
         this.antiCheat.addAllowance(new com.blockland.server.parachute.ParachuteAllowance());
         // the login status brings the player's read announcements and builds: show the real ones
         this.profiles.setPreferencesListener(id -> {
@@ -304,12 +324,32 @@ public final class BlockLandServer {
                 instance.kills.forget(player);
                 instance.spectate.forget(player);
                 instance.antiCheat.leftWorld(player);
+                instance.farTerrain.forget(player);
                 instance.sessions.leftWorld(player);
             }
         });
 
         PlayerEvent.StartTracking.BUS.addListener(event -> {
             if (instance != null && event.getEntity() instanceof ServerPlayer viewer) instance.gunService.startTracking(viewer, event.getTarget());
+        });
+        // far terrain captures full chunks as they load, change (are saved) and unload
+        net.minecraftforge.event.level.ChunkEvent.Load.BUS.addListener(event -> {
+            if (instance != null && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
+                    && event.getChunk() instanceof net.minecraft.world.level.chunk.LevelChunk chunk) {
+                instance.farTerrain.chunkLoaded(level, chunk.getPos());
+            }
+        });
+        net.minecraftforge.event.level.ChunkDataEvent.Save.BUS.addListener(event -> {
+            if (instance != null && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
+                    && event.getChunk() instanceof net.minecraft.world.level.chunk.LevelChunk chunk) {
+                instance.farTerrain.chunkSaved(level, chunk.getPos());
+            }
+        });
+        net.minecraftforge.event.level.ChunkEvent.Unload.BUS.addListener(event -> {
+            if (instance != null && event.getLevel() instanceof net.minecraft.server.level.ServerLevel level
+                    && event.getChunk() instanceof net.minecraft.world.level.chunk.LevelChunk chunk) {
+                instance.farTerrain.chunkUnloaded(level, chunk);
+            }
         });
         PlayerEvent.StartTracking.BUS.addListener(event -> {
             if (instance != null && event.getEntity() instanceof ServerPlayer viewer) instance.parachutes.startTracking(viewer, event.getTarget());
@@ -437,6 +477,7 @@ public final class BlockLandServer {
         BLNetwork.setParachuteServerListener(created.parachutes);
         BLNetwork.setSupplyServerListener(created.supply);
         BLNetwork.setArmorServerListener(created.armor);
+        BLNetwork.setFarTerrainServerListener(created.farTerrain);
         NetHooks.setListener(created.antiCheat);
         Suspicion.setSink(created.antiCheat);
         BLNetwork.setInboundGuard(created.antiCheat::admit);
@@ -470,6 +511,8 @@ public final class BlockLandServer {
         current.games.abortAll();
         current.previews.closeAll();
         current.jobs.drain();
+        BLNetwork.setFarTerrainServerListener(null);
+        current.farTerrain.stop();
         current.sessions.clear();
         BLNetwork.setServerListener(null);
         BLNetwork.setSenderResolver(null);
@@ -530,6 +573,7 @@ public final class BlockLandServer {
         supply.tick();
         armor.tick();
         graffiti.tick();
+        farTerrain.tick();
         kills.tick();
         spectate.tick();
         // after the worlds ticked: the velocities of this tick are sent, the pings that acknowledge them follow

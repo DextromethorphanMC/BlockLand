@@ -2352,3 +2352,91 @@ Items in the creative tab "防具" (an empty carrier, a plate, and a carrier wit
 `gen_armor.py`, `gen_armor_items.py`, `gen_armor_sounds.py`, `build_armor.py` (steps `armor`, `armor_items`,
 `armor_sounds`), `pbr_sets_armor.py` (`armor/nylon`, `armor/webbing`, `armor/polyurea`), `pbr_models_armor.py`; checks
 `check_armor.py` (claims `models/armor/vest.glb` and `plate.glb`).
+
+## 51. Revive antenna (`models/block/revive_antenna.glb`, block `blockland:revive_antenna`, 复活天线)
+
+An original procedural military field relay standing on the floor of its block and rising into the one above (for now
+only decoration): a rugged olive polymer case holding the radio and its battery (three moulded ribs round the shell, a
+lid with two draw latches at the front and hinges at the back, folding side handles with rubber grips, rubber feet, a
+white medic panel with a red cross on the front, a black control box on the lid with a dim green screen and two knobs),
+a three-stage telescopic mast clamped to the lid (locking collars between the stages), a coiled lead from the control
+box to the mast, and on top the radio head (cooling fins at the back) with a small dish looking forward on an arm (three
+feed struts to a horn at its focus), a whip antenna on a spring base and a red beacon in a wire guard. 0.63 × 0.42 m,
+1.98 m high (two blocks), front towards −Z (north). 7.1k triangles.
+
+```
+antenna                   root at the middle of the lower block's floor (identity)
+├─ base (mesh)            case, latches, hinges, handles, feet, medic panel, control box, mast mount, coiled lead
+├─ mast (mesh)            the three stages and collars, the head, the dish and its feed, the whip, the beacon's guard
+├─ beacon (mesh)          the lit lens (emissive red), origin at its centre
+├─ beacon_off (mesh)      the same lens dark, at the same place (the renderer draws one of the two)
+```
+
+No clips. Materials `case`, `case_dark`, `rubber` (region `body`), `hardware` (`hardware`), `mast`, `head`, `dish`,
+`whip` (`detail`), `panel_white`, `panel_red`, `screen` (emissive), `beacon` (emissive), `beacon_off` (`none`, glTF
+colours); sets `equipment/olive`, `common/anodized_black`, `common/rubber`, `common/parkerized`; AO together under
+`antenna` (the parts shade each other; the glowing parts carry none).
+
+Block (`revive/ReviveAntennaBlock`, `ReviveAntennaBlockEntity`, `ReviveContent`; creative tab 复活): `FACING`
+horizontal (the front towards the player who placed it) and `HALF` lower / upper like a door — placed only where the
+block above can be replaced (and on a sturdy top), the upper half set right after; a half whose other half is gone
+goes too; in creative, breaking the upper half removes the lower one without drops; the loot table drops the item from
+the lower half only (survival breaks of either half drop one). Collision / outline boxes per half (case and mast below,
+mast and head above; the whip is left out), checked against the model within a pixel. Render shape invisible: the
+lower half's block entity renderer (`client/revive/ReviveAntennaRenderer`) draws the whole GLB with the weapon pipeline,
+lit like third-person weapons, through vanilla render types in the shadow pass; its render box covers both blocks and it
+renders off screen (the lower block's section may be out of sight while the mast is not). The beacon
+(`client/revive/Beacon`): a double flash (0–0.11 s and 0.24–0.35 s) every 1.8 s at a phase of its own per antenna, the
+lit node while it flashes, and a red dynamic light (`client/render/LightSources`, intensity 1.5, radius 7) at its centre
+following the flash with 20 ms soft edges. It reports its two blocks to the placement preview
+(`MultiBlockFootprint`, rendering spec §26). Mineable with a pickaxe, metal sounds, destroyed by pistons.
+
+The item shows the rendered icon in the GUI and a cuboid antenna (two blocks tall at block scale) elsewhere; the block
+model only carries the break particles (olive case).
+
+Files: `revive_antenna_model.py`, `gen_revive_antenna.py`, `gen_revive_antenna_items.py`, `build_revive.py` (steps
+`revive_antenna`, `revive_antenna_items`), `pbr_models_revive.py`; checks `check_revive_antenna.py` (claims
+`revive_antenna.glb`: nodes and pivots, materials, regions, sets and glow, inside its two blocks, the block's boxes, the
+beacon centre in `Beacon.java`, the blockstate, item definition, loot table, mineable tag and both languages, budget).
+
+## 52. Binoculars (item `blockland:binoculars`, 望远镜)
+
+A rangefinding roof-prism pair, raised to the eyes while the use button is held. Not a weapon: no viewmodel rig — the
+held model is cuboids (as the parachute's), and looking through it is the optics' view.
+
+* **Item** (`binoculars/BinocularsItem`, `BinocularsContent`): stack 1, listed in the equipment creative tab, kit key
+  `blockland:binoculars`. Use = `startUsingInstantly` for an hour, use animation `NONE` (vanilla syncs the use, so every
+  client knows who has them up; the use slows the walk as any use does). Sounds `binoculars.raise` on use and
+  `binoculars.lower` on release, played on both sides (this client at once, the server to everyone else).
+* **Third person** (the item's client extension → `client/binoculars/ClientBinoculars.armPose`): while in use a two-handed
+  arm pose `BLOCKLAND_BINOCULARS` brings both upper arms forward and up (head pitch − 1.95 rad), turned in 0.62 rad, so the
+  hands meet before the face; otherwise the ordinary item hold. The held model's third-person display turns it 180° about
+  y so the objectives lie along the hand: forward at the eyes, pointing down when carried.
+* **First person** (`ClientBinoculars`): the raise eases 0 → 1 over `raiseSeconds` (back over `lowerSeconds`) while the
+  item is in use and no screen is open; meanwhile the item's hand transform carries the pair from vanilla's hold to the
+  middle of the screen and up to the eyes (smoothstep of the raise), and the screen darkens. Every frame
+  `Optics.raiseHandOptic(optic, raise, dt)` (null when no pair is held).
+* **The optics** (`client/scope/HandOptic` data, `HandOptics` runtime, `HandOpticOverlay` view — the generic hand-held
+  optic entry of `Optics`, AGENTS.md): from a raise of 0.88 (first person only, as vanilla's spyglass) the player looks
+  through it: the world's vertical field of view becomes `2·atan(tan(fov/2) / power)`; the wheel steps through `powers`
+  (eased in log space by `zoomEase`, the step remembered per optic id for the session; `zoomSound` on every step, the wheel
+  belongs to the optic at either end); the turning slows by the scopes' sensitivity for that power
+  (`ScopeSensitivity.scopeScale`, the same 设置 · 灵敏度 classes as scopes; `AimSensitivity` treats it as aiming); the view
+  sways (`ScopeOptics.sway`, `sway` degrees at the highest power, scaled by the power's share of it, × `swaySneaking`
+  while sneaking, up to × `swayMoving` at walking speed); the hands, the held item and the crosshair are not drawn. The
+  switch to and from the view is a 0.14 s black blink, which hides the jump of the field of view.
+* **The view** (`HandOpticOverlay`, a HUD layer below the scope overlay): black round the two apertures of `overlay.radius` ×
+  screen height whose centres sit `overlay.separation` × height either side of the middle, overlapping there (one
+  generated mask: soft edge `softness` × radius tinted by the lens coating `fringe` going to black, rim darkening
+  `vignette`); a mil scale (1 mil = 1/1000 rad, at its true angle for the current field of view: a horizontal line of
+  ±`span` mils with a mark every 5 mils — every 10 when they would crowd — longer and numbered in tens every 10, a stadia
+  down to `stadia` mils, a gap in the middle; `reticle.color` / `alpha`); above it the power ("8×", bright for 1.2 s after
+  a step) and the compass bearing of the view (0° = north); below it the laser rangefinder's distance in red (whole
+  blocks, "---" when nothing is within `rangefinder.max`). The rangefinder measures from the camera along the view every
+  `rangefinder.refresh` s: blocks (outline shapes, fluids included), then anything pickable nearer.
+* **Data**: `assets/blockland/binoculars/binoculars.json` (`raiseSeconds`, `lowerSeconds`, `optic`: `id`, `powers`
+  4 / 8 / 12, `startPower`, `zoomEase`, `sway`, `swayMoving`, `swaySneaking`, `zoomSound`, `overlay`, `reticle`,
+  `rangefinder`); resource packs can override it, F3+T reloads it.
+
+Files: `gen_binoculars_items.py` (icon, held cuboid model + palette, item definition), `gen_binoculars_sounds.py`,
+`build_binoculars.py` (steps `binoculars_items`, `binoculars_sounds`).

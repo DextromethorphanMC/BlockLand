@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.blockland.mixin.level",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [
+    "LevelRendererPassMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

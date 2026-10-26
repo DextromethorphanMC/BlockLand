@@ -1,0 +1,31 @@
+{
+  "rules": [
+    {
+      "blocks": [
+        "blockland:container_green"
+      ],
+      "faces": [
+        "sides"
+      ],
+      "textures": [
+        "blockland:block/container/green/side/0"
+      ],
+      "method": "ctm",
+      "tiles": "blockland:block/container/green/side"
+    },
+    {
+      "blocks": [
+        "blockland:container_green"
+      ],
+      "faces": [
+        "top",
+        "bottom"
+      ],
+      "textures": [
+        "blockland:block/container/green/top/0"
+      ],
+      "method": "ctm",
+      "tiles": "blockland:block/container/green/top"
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 package com.blockland.client.graphics;
 
+import com.blockland.client.graphics.display.Display;
+import com.blockland.client.graphics.far.FarTerrain;
 import com.blockland.client.graphics.frame.FrameHooks;
 import com.blockland.client.graphics.frame.FrameStage;
 import com.blockland.client.graphics.light.WorldLighting;
@@ -83,9 +85,14 @@ public final class Graphics {
         // before the light module: the cloud layer is in the frame when the scene uniforms are written
         VolumetricClouds.init();
         ScreenReflections.init();
+        // before the light module: the world is still lit (the scene block's world state) when it runs after the level
+        com.blockland.client.graphics.water.UnderwaterCaustics.init();
         WorldLighting.init(modBus);
         FogSwitch.init();
         Wind.init(modBus);
+        // after the fog switch: the far terrain stretches whatever fog the switch left
+        FarTerrain.init(modBus);
+        Display.init();
     }
 
     public static GraphicsSettings settings() {

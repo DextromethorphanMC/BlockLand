@@ -165,6 +165,10 @@ public final class BlockLandClient {
         com.blockland.client.parachute.ClientParachute.init(modBus);
         com.blockland.client.supply.ClientSupply.init(modBus);
         com.blockland.client.armor.ClientArmor.init(modBus);
+        com.blockland.client.ctm.ConnectedTextures.init(modBus);
+        com.blockland.client.placement.PlacementPreview.init(modBus);
+        com.blockland.client.revive.ClientRevive.init(modBus);
+        com.blockland.client.binoculars.ClientBinoculars.init(modBus);
         ViewmodelMotion.setBodyMotion(ClientActions.BODY);
         com.blockland.client.dev.DevAutomation.init();
     }

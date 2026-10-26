@@ -374,6 +374,10 @@ public final class AntiCheatService implements NetHooks.Listener, Suspicion.Sink
         RuleResolver.Global global = rules.global();
         String action = kick ? "kick" : outcome == Outcome.MITIGATE ? (isMovement(entry) ? "setback" : "cancel") : "none";
 
+        if (t.trace) {
+            BlockLand.LOGGER.info("[BlockLand] Anti-cheat trace: {} {} +{} VL {} {} — {} ‖ {}", name, entry.id(), round(amount), round(vl),
+                    action, detail, isMovement(entry) ? t.history.describe() : "");
+        }
         if (kick || t.ledger.shouldReport(check, vl, settings.setbackVl(), now, global.reportCooldownSeconds() * 1_000_000_000L)) {
             reporter.add(new EvidenceReporter.Report(id.toString(), name, mode == null ? null : mode.id, mode == null ? null : mode.title,
                     mapOf.apply(id), entry.id(), entry.category(), round(vl), round(confidence.value()), confidence.value() >= r.review,
@@ -468,6 +472,13 @@ public final class AntiCheatService implements NetHooks.Listener, Suspicion.Sink
     /** Exempts a player from the movement checks for {@code seconds}. */
     public void exempt(UUID player, int seconds) {
         track(player).exemptUntil = server.getTickCount() + Math.max(0, seconds) * 20;
+    }
+
+    /** Logs every flag of a player with their last moves ({@code /bl ac trace}); returns whether it is now on. */
+    public boolean toggleTrace(UUID player) {
+        PlayerTrack t = track(player);
+        t.trace = !t.trace;
+        return t.trace;
     }
 
     public void reset(UUID player) {

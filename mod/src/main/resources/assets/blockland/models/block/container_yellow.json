@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "side": "blockland:block/container/yellow/side/0",
+    "top": "blockland:block/container/yellow/top/0",
+    "bottom": "blockland:block/container/yellow/top/0"
+  }
+}

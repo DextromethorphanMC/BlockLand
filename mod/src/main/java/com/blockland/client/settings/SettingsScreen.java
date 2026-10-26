@@ -11,6 +11,7 @@ import com.blockland.client.font.UiFont;
 import com.blockland.client.graphics.Graphics;
 import com.blockland.client.graphics.GraphicsSettings;
 import com.blockland.client.graphics.GraphicsStatus;
+import com.blockland.client.graphics.display.Display;
 import com.blockland.client.hud.Crosshair;
 import com.blockland.client.hud.HitMarker;
 import com.blockland.client.impact.ImpactSettings;
@@ -315,6 +316,12 @@ public final class SettingsScreen extends Screen {
             rebuild();
         }).dim(this::graphicsDimmed));
 
+        // ---- display: the picture's shape and size (rendering spec §21)
+        displayRows(g);
+
+        // ---- Minecraft's own video settings (render distance, chunk updates …), here instead of vanilla's screen
+        vanillaRows();
+
         // ---- resolution and anti-aliasing
         rows.add(new Header(gfx + "section.resolution"));
         rows.add(custom(new Choice(gfx + "upscaler", () -> g.upscalerMode().ordinal(),
@@ -477,6 +484,9 @@ public final class SettingsScreen extends Screen {
                     SettingsScreen::percent)));
         }
 
+        // ---- far terrain (rendering spec §22)
+        farTerrainRows(g);
+
         // ---- rain and water
         rows.add(new Header(gfx + "section.water"));
         rows.add(custom(new Slider(gfx + "rain_wetness", 0, 1, 0.05, () -> g.rainWetness, v -> g.rainWetness = (float) v,
@@ -490,6 +500,8 @@ public final class SettingsScreen extends Screen {
         rows.add(new Note(() -> tr(gfx + "water_ripples.note")));
         rows.add(custom(new Toggle(gfx + "soaking", () -> g.soaking, v -> g.soaking = v)));
         rows.add(new Note(() -> tr(gfx + "soaking.note")));
+        rows.add(custom(new Toggle(gfx + "lens_water", () -> g.lensWater, v -> g.lensWater = v)));
+        rows.add(new Note(() -> tr(gfx + "lens_water.note")));
         rows.add(custom(new Toggle(gfx + "fluid_textures", () -> g.fluidTextures, v -> g.fluidTextures = v)));
         rows.add(new Note(() -> tr(gfx + "fluid_textures.note")));
 
@@ -565,6 +577,7 @@ public final class SettingsScreen extends Screen {
                 : join(reason(status.dlssReason, gfx + "status.unavailable"), status.dlssDetail), () -> status.dlssAvailable ? OK : MUTED));
         rows.add(new Info(gfx + "status.ray_tracing", this::rayTracingStatus,
                 () -> status.rayTracingActive ? OK : MUTED));
+        rows.add(new Info(gfx + "status.far_terrain", this::farTerrainLine, () -> status.farTilesDrawn > 0 ? OK : MUTED));
         rows.add(new Info(gfx + "status.neural", this::neuralStatus,
                 () -> status.neuralActive ? OK : status.neuralAvailable ? TEXT : MUTED));
         rows.add(new Info(gfx + "status.frame_generation", this::frameGenStatus,
@@ -580,6 +593,186 @@ public final class SettingsScreen extends Screen {
             ClientSettings.save();
             rebuild();
         }));
+    }
+
+    /** The 显示 section of the 画质 tab (rendering spec §21): aspect ratio, how it fills the window, resolution. */
+    private void displayRows(GraphicsSettings g) {
+        String d = "blockland.settings.graphics.display.";
+        rows.add(new Header("blockland.settings.graphics.section.display"));
+        GraphicsSettings.AspectRatio[] ratios = GraphicsSettings.AspectRatio.values();
+        String[] ratioNames = new String[ratios.length];
+        for (int i = 0; i < ratios.length; i++) {
+            ratioNames[i] = ratios[i] == GraphicsSettings.AspectRatio.NATIVE ? tr(d + "native") : ratios[i].name().substring(1).replace('_', ':');
+        }
+        rows.add(live(new Choice(d + "aspect", () -> g.aspectRatioMode().ordinal(), i -> {
+            g.aspectRatio = GraphicsSettings.id(ratios[i]);
+            // a preset of the old shape no longer fits it: back to native; a custom size keeps its width at the new shape
+            if (!"custom".equals(g.resolution)) g.resolution = "native";
+            else if (ratios[i].ratio() > 0) g.customHeight = Display.heightFor(g.customWidth, ratios[i].ratio());
+        }, ratioNames)).then(this::rebuild));
+
+        float ratio = Display.ratio(g);
+        List<String> presets = new ArrayList<>(Display.presets(ratio));
+        if (!"custom".equals(g.resolution) && g.resolutionSize() != null && !presets.contains(g.resolution)) presets.add(g.resolution);
+        String[] sizes = new String[presets.size() + 2];
+        sizes[0] = tr(d + "native");
+        for (int i = 0; i < presets.size(); i++) sizes[i + 1] = presets.get(i).replace('x', '×');
+        sizes[sizes.length - 1] = tr(d + "custom");
+        rows.add(live(new Choice(d + "resolution", () -> {
+            if ("custom".equals(g.resolution)) return sizes.length - 1;
+            return presets.indexOf(g.resolution) + 1;
+        }, i -> {
+            if (i == 0) {
+                g.resolution = "native";
+            } else if (i == sizes.length - 1) {
+                g.resolution = "custom";
+                if (g.aspectRatioMode().ratio() > 0) g.customHeight = Display.heightFor(g.customWidth, ratio);
+            } else {
+                g.resolution = presets.get(i - 1);
+            }
+        }, sizes)).then(this::rebuild));
+        if ("custom".equals(g.resolution)) {
+            boolean locked = g.aspectRatioMode().ratio() > 0;
+            rows.add(live(new Slider(d + "width", GraphicsSettings.MIN_WIDTH, GraphicsSettings.MAX_WIDTH, 8, () -> g.customWidth, v -> {
+                g.customWidth = (int) Math.round(v);
+                if (locked) g.customHeight = Display.heightFor(g.customWidth, ratio);
+            }, v -> String.valueOf(Math.round(v)))));
+            if (locked) {
+                rows.add(new Note(() -> tr(d + "height_locked", g.customHeight)));
+            } else {
+                rows.add(live(new Slider(d + "height", GraphicsSettings.MIN_HEIGHT, GraphicsSettings.MAX_HEIGHT, 8, () -> g.customHeight,
+                        v -> g.customHeight = (int) Math.round(v), v -> String.valueOf(Math.round(v)))));
+            }
+        }
+        // stretched over the window or kept whole with black bars: only when the picture's shape can differ from it
+        if (g.aspectRatioMode() != GraphicsSettings.AspectRatio.NATIVE || g.resolutionSize() != null) {
+            rows.add(live(new Choice(d + "fit", () -> g.aspectFitMode().ordinal(),
+                    i -> g.aspectFit = GraphicsSettings.id(GraphicsSettings.AspectFit.values()[i]),
+                    tr(d + "fit.stretch"), tr(d + "fit.bars"))));
+        }
+        rows.add(new Note(() -> {
+            int[] picture = Display.virtualSize(g);
+            int[] window = Display.windowSize();
+            return tr(d + "current", picture[0] + "×" + picture[1], window[0] + "×" + window[1]);
+        }));
+        rows.add(new Note(d + "note"));
+    }
+
+    /**
+     * Minecraft's own video settings that shape the world's rendering, on the 画质 tab: each row reads and sets the game's
+     * option (its own range and reactions: a render distance change rebuilds the visible sections, the graphics mode or the
+     * mipmaps reload what they must) and saves options.txt.
+     */
+    private void vanillaRows() {
+        String v = "blockland.settings.graphics.vanilla.";
+        net.minecraft.client.Options o = Minecraft.getInstance().options;
+        Runnable save = o::save;
+        rows.add(new Header("blockland.settings.graphics.section.vanilla"));
+        rows.add(new Slider(v + "render_distance", 2, 32, 1, () -> o.renderDistance().get(), x -> o.renderDistance().set((int) Math.round(x)),
+                x -> tr("blockland.settings.graphics.chunks", Math.round(x))).then(save));
+        rows.add(new Slider(v + "simulation_distance", 5, 32, 1, () -> o.simulationDistance().get(),
+                x -> o.simulationDistance().set((int) Math.round(x)), x -> tr("blockland.settings.graphics.chunks", Math.round(x))).then(save));
+        rows.add(new Note(v + "distance.note"));
+        rows.add(new Choice(v + "chunk_updates", () -> o.prioritizeChunkUpdates().get().ordinal(),
+                i -> o.prioritizeChunkUpdates().set(net.minecraft.client.PrioritizeChunkUpdates.values()[i]),
+                tr(v + "chunk_updates.none"), tr(v + "chunk_updates.player_affected"), tr(v + "chunk_updates.nearby")).then(save));
+        rows.add(new Note(v + "chunk_updates.note"));
+        rows.add(new Choice(v + "graphics", () -> o.graphicsMode().get().ordinal(),
+                i -> o.graphicsMode().set(net.minecraft.client.GraphicsStatus.values()[i]),
+                tr(v + "graphics.fast"), tr(v + "graphics.fancy"), tr(v + "graphics.fabulous")).then(save).then(this::rebuild));
+        rows.add(new Toggle(v + "smooth_lighting", () -> o.ambientOcclusion().get(), x -> o.ambientOcclusion().set(x)).then(save));
+        rows.add(new Slider(v + "biome_blend", 0, 7, 1, () -> o.biomeBlendRadius().get(), x -> o.biomeBlendRadius().set((int) Math.round(x)),
+                x -> Math.round(x) == 0 ? tr("blockland.settings.off") : (Math.round(x) * 2 + 1) + "×" + (Math.round(x) * 2 + 1)).then(save));
+        rows.add(new Slider(v + "entity_distance", 0.5, 5, 0.25, () -> o.entityDistanceScaling().get(), x -> o.entityDistanceScaling().set(x),
+                x -> Math.round(x * 100) + "%").then(save));
+        rows.add(new Toggle(v + "entity_shadows", () -> o.entityShadows().get(), x -> o.entityShadows().set(x)).then(save));
+        rows.add(new Choice(v + "clouds", () -> o.cloudStatus().get().ordinal(), i -> o.cloudStatus().set(net.minecraft.client.CloudStatus.values()[i]),
+                tr("blockland.settings.off"), tr(v + "clouds.fast"), tr(v + "clouds.fancy")).then(save));
+        rows.add(new Slider(v + "cloud_range", 2, 128, 1, () -> o.cloudRange().get(), x -> o.cloudRange().set((int) Math.round(x)),
+                x -> tr("blockland.settings.graphics.chunks", Math.round(x))).then(save));
+        rows.add(new Choice(v + "particles", () -> o.particles().get().ordinal(),
+                i -> o.particles().set(net.minecraft.server.level.ParticleStatus.values()[i]),
+                tr(v + "particles.all"), tr(v + "particles.decreased"), tr(v + "particles.minimal")).then(save));
+        rows.add(new Slider(v + "mipmaps", 0, 4, 1, () -> o.mipmapLevels().get(), x -> o.mipmapLevels().set((int) Math.round(x)),
+                x -> Math.round(x) == 0 ? tr("blockland.settings.off") : String.valueOf(Math.round(x))).then(save));
+        rows.add(new Slider(v + "max_fps", 10, 260, 10, () -> o.framerateLimit().get(), x -> o.framerateLimit().set((int) Math.round(x)),
+                x -> x >= 260 ? tr("blockland.settings.perf.background_fps.unlimited") : Math.round(x) + " fps").then(save));
+        rows.add(new Toggle(v + "vsync", () -> o.enableVsync().get(), x -> o.enableVsync().set(x)).then(save));
+        rows.add(new Toggle(v + "fullscreen", () -> o.fullscreen().get(), x -> o.fullscreen().set(x)).then(save));
+        rows.add(new Slider(v + "fov", 30, 110, 1, () -> o.fov().get(), x -> o.fov().set((int) Math.round(x)), x -> Math.round(x) + "°").then(save));
+        rows.add(new Slider(v + "brightness", 0, 1, 0.05, () -> o.gamma().get(), x -> o.gamma().set(x), SettingsScreen::percent).then(save));
+        rows.add(new Toggle(v + "view_bobbing", () -> o.bobView().get(), x -> o.bobView().set(x)).then(save));
+    }
+
+    /** The 远景地平线 section of the 画质 tab (rendering spec §22). */
+    private void farTerrainRows(GraphicsSettings g) {
+        String gfx = "blockland.settings.graphics.";
+        rows.add(new Header(gfx + "section.far_terrain"));
+        rows.add(custom(new Toggle(gfx + "far_terrain", () -> g.farTerrain, v -> g.farTerrain = v)).then(this::rebuild));
+        rows.add(new Note(this::farTerrainLine));
+        if (g.farTerrain) {
+            rows.add(custom(new Slider(gfx + "far_terrain_distance", GraphicsSettings.FAR_MIN, GraphicsSettings.FAR_MAX, 512,
+                    () -> g.farTerrainDistance, v -> g.farTerrainDistance = (int) Math.round(v), v -> tr(gfx + "blocks", Math.round(v)))));
+            rows.add(custom(new Choice(gfx + "far_terrain_quality", () -> g.farTerrainQualityMode().ordinal(),
+                    i -> g.farTerrainQuality = GraphicsSettings.id(GraphicsSettings.FarTerrainQuality.values()[i]),
+                    tr(gfx + "quality.low"), tr(gfx + "quality.medium"), tr(gfx + "quality.high"), tr(gfx + "quality.ultra"))));
+            rows.add(new Note(gfx + "far_terrain_quality.note"));
+            rows.add(custom(new Slider(gfx + "far_terrain_full_detail", 0, 64, 1, () -> g.farTerrainFullDetail,
+                    v -> g.farTerrainFullDetail = (int) Math.round(v), v -> tr(gfx + "chunks", Math.round(v)))));
+            rows.add(new Note(gfx + "far_terrain_full_detail.note"));
+            rows.add(custom(new Toggle(gfx + "far_chunks", () -> g.farChunks, v -> g.farChunks = v)).then(this::rebuild));
+            if (g.farChunks) {
+                rows.add(custom(new Slider(gfx + "far_chunk_distance", GraphicsSettings.FAR_CHUNKS_MIN, GraphicsSettings.FAR_CHUNKS_MAX, 32,
+                        () -> g.farChunkDistance, v -> g.farChunkDistance = (int) Math.round(v), v -> tr(gfx + "chunks", Math.round(v)))));
+                rows.add(custom(new Slider(gfx + "far_chunk_full_detail", GraphicsSettings.FAR_CHUNKS_FULL_MIN,
+                        GraphicsSettings.FAR_CHUNKS_FULL_MAX, 8, () -> g.farChunkFullDetail, v -> g.farChunkFullDetail = (int) Math.round(v),
+                        v -> tr(gfx + "chunks", Math.round(v)))));
+                rows.add(new Note(gfx + "far_chunk_full_detail.note"));
+                rows.add(new Note(this::farChunksLine));
+            }
+            rows.add(new Note(gfx + "far_chunks.note"));
+            rows.add(custom(new Slider(gfx + "far_terrain_haze", 0, 2, 0.05, () -> g.farTerrainHaze, v -> g.farTerrainHaze = (float) v,
+                    SettingsScreen::percentOrOff)));
+            rows.add(new Note(gfx + "far_terrain_haze.note"));
+        }
+        rows.add(new Note(gfx + "far_terrain.note"));
+        atmosphereRows(g);
+    }
+
+    /** The distant atmosphere (rendering spec §24): how far land looks to the eye. */
+    private void atmosphereRows(GraphicsSettings g) {
+        String gfx = "blockland.settings.graphics.";
+        rows.add(custom(new Toggle(gfx + "far_atmosphere", () -> g.farAtmosphere, v -> g.farAtmosphere = v)).then(this::rebuild));
+        if (g.farAtmosphere) {
+            rows.add(custom(new Slider(gfx + "aerial_perspective", 0, 2, 0.05, () -> g.aerialPerspective,
+                    v -> g.aerialPerspective = (float) v, SettingsScreen::percentOrOff)));
+            rows.add(custom(new Slider(gfx + "far_blur", 0, 1, 0.05, () -> g.farBlur, v -> g.farBlur = (float) v,
+                    SettingsScreen::percentOrOff)));
+            rows.add(custom(new Slider(gfx + "heat_shimmer", 0, 1, 0.05, () -> g.heatShimmer, v -> g.heatShimmer = (float) v,
+                    SettingsScreen::percentOrOff)));
+        }
+        rows.add(new Note(gfx + "far_atmosphere.note"));
+    }
+
+    /** What the far terrain is doing: why it is not drawn, loading, or how much of it is drawn. */
+    private String farTerrainLine() {
+        GraphicsStatus status = Graphics.status();
+        String gfx = "blockland.settings.graphics.";
+        if (!ClientSettings.get().graphics.farTerrain) return tr("blockland.graphics.status.far.off");
+        if (!status.running) return reason(status.blockedReason, gfx + "status.idle");
+        if (status.farTerrainReason != null) return tr(status.farTerrainReason);
+        if (status.farTerrainReach <= 0) return reason(null, gfx + "status.idle");
+        if (status.farTilesDrawn == 0) return tr(gfx + "far_terrain.loading", Math.round(status.farTerrainReach));
+        return tr(gfx + "far_terrain.status", Math.round(status.farTerrainReach), status.farTilesDrawn, status.farTilesWanted,
+                status.farCells, String.format(Locale.ROOT, "%.1f", status.farGpuBytes / 1048576.0));
+    }
+
+    /** The real far chunks (rendering spec §23): drawn, held, waiting, video memory. */
+    private String farChunksLine() {
+        GraphicsStatus status = Graphics.status();
+        return tr("blockland.settings.graphics.far_chunks.status", status.farChunksDrawn, status.farChunksPlaced, status.farChunksHeld,
+                status.farChunksPending,
+                String.format(Locale.ROOT, "%.1f", status.farChunkGpuBytes / 1048576.0));
     }
 
     /** A graphics row whose change makes the preset 自定义. */

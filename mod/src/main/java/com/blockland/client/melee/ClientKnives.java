@@ -4,6 +4,7 @@ import com.blockland.BlockLand;
 import com.blockland.anim.Ticker;
 import com.blockland.client.decal.Decals;
 import com.blockland.client.hud.HitMarker;
+import com.blockland.client.impact.HurtConfirm;
 import com.blockland.client.impact.Impacts;
 import com.blockland.client.input.WeaponInput;
 import com.blockland.client.render.RenderClock;
@@ -153,6 +154,7 @@ public final class ClientKnives {
                 if (backstab) KnifeHud.flash(tr("blockland.knife.hud.backstab"));
                 MeleeData.Sounds sounds = knife != null ? knife.sounds : new MeleeData.Sounds();
                 playUi(kill ? sounds.kill : backstab ? sounds.critical : sounds.hitMarker, 1.0f, 0.9f);
+                woundConfirmed(hit);
             }
 
             @Override
@@ -357,8 +359,13 @@ public final class ClientKnives {
         Vec3 motion = bladeMotion(cut, player.getViewVector(1));
         switch (hit.type()) {
             case ENTITY -> {
-                Decals.onEntity(attack.bodyDecal, hit.entity(), eye, hit.point(), cut);
-                Impacts.slashEntity(level, hit.point(), hit.entity(), eye, motion, attack.impactProfile);
+                Runnable effects = () -> {
+                    Decals.onEntity(attack.bodyDecal, hit.entity(), eye, hit.point(), cut);
+                    Impacts.slashEntity(level, hit.point(), hit.entity(), eye, motion, attack.impactProfile);
+                };
+                // a body bleeds only once the server says the blade really hurt it (woundConfirmed)
+                if (Impacts.bleeds(hit.entity())) HurtConfirm.await(hit.entity(), effects);
+                else effects.run();
                 playUi(knife.sounds.hitFlesh, 0.95f + random.nextFloat() * 0.1f, 0.9f);
                 viewmodel.impact(strikeHeavy ? 1.5f : 1f, attack.punch, swing.slashAngle);
             }
@@ -373,6 +380,25 @@ public final class ClientKnives {
             }
             case MISS -> { }
         }
+    }
+
+    /**
+     * The server's word on this knife's cut into something: the held blood of that cut plays if the target really lost
+     * health ({@link HurtConfirm}); with nothing held for it the cut's blood plays at the server's spot.
+     */
+    private static void woundConfirmed(MeleePackets.S2CHit hit) {
+        HurtConfirm.settle(hit.target(), hit.wounded(), () -> {
+            Minecraft mc = Minecraft.getInstance();
+            Entity target = mc.level == null ? null : mc.level.getEntity(hit.target());
+            if (mc.player == null || target == null || knife == null || !Impacts.bleeds(target)) return;
+            MeleeData.Attack attack = knife.attack(strikeHeavy);
+            Vec3 at = new Vec3(hit.x(), hit.y(), hit.z());
+            Vec3 eye = BodyActions.eyePosition(mc.player);
+            Vec3 cut = cutDirection(mc.player.getViewYRot(1), mc.player.getViewXRot(1), attack.swing(strikeCombo).slashAngle);
+            Vec3 motion = bladeMotion(cut, mc.player.getViewVector(1));
+            Decals.onEntity(attack.bodyDecal, target, eye, at, cut);
+            Impacts.slashEntity(mc.level, at, target, eye, motion, attack.impactProfile);
+        });
     }
 
     // ---- other players --------------------------------------------------------------------------------
@@ -394,7 +420,8 @@ public final class ClientKnives {
         Vec3 motion = cut == null ? look : bladeMotion(cut, look);
         if (impact.target() == MeleePackets.Target.ENTITY) {
             Entity target = level.getEntity(impact.targetId());
-            if (target != null) {
+            // a body bleeds only when the server says the blade really hurt it
+            if (target != null && (impact.wounded() || !Impacts.bleeds(target))) {
                 Decals.onEntity(attack.bodyDecal, target, from, point, cut);
                 Impacts.slashEntity(level, point, target, from, motion, attack.impactProfile);
             }

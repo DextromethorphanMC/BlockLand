@@ -1124,5 +1124,23 @@
       "blockland:gun/handcannon_dud_2"
     ],
     "subtitle": "subtitles.blockland.gun.handcannon.dud"
+  },
+  "binoculars.raise": {
+    "sounds": [
+      "blockland:binoculars/raise"
+    ],
+    "subtitle": "subtitles.blockland.binoculars.raise"
+  },
+  "binoculars.lower": {
+    "sounds": [
+      "blockland:binoculars/lower"
+    ],
+    "subtitle": "subtitles.blockland.binoculars.lower"
+  },
+  "binoculars.zoom": {
+    "sounds": [
+      "blockland:binoculars/zoom"
+    ],
+    "subtitle": "subtitles.blockland.binoculars.zoom"
   }
 }

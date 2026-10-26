@@ -5,6 +5,7 @@ import com.blockland.anim.Ease;
 import com.blockland.anim.Ticker;
 import com.blockland.client.craft.WeaponLook;
 import com.blockland.client.decal.Decals;
+import com.blockland.client.impact.HurtConfirm;
 import com.blockland.client.impact.Impacts;
 import com.blockland.client.gltf.GltfModel;
 import com.blockland.client.input.WeaponInput;
@@ -256,6 +257,7 @@ public final class ClientGuns {
                     case KILL, HEAD_KILL -> "gun.kill";
                 };
                 playUi(sound, 1.0f, 0.9f);
+                woundConfirmed(hit);
             }
 
             @Override
@@ -755,8 +757,16 @@ public final class ClientGuns {
         Impacts.path(level, path, from.distanceTo(stop), ammo);
         if (point != null) {
             float energy = path.energyAt(from.distanceTo(point));
-            Impacts.entity(level, point, struck, dir, ammo, energy);
-            if (stats != null && energy > 0.3f) Decals.onEntity(stats.ammo().bodyDecal, struck, from, point, null);
+            Entity target = struck;
+            Vec3 at = point;
+            String wound = stats != null && energy > 0.3f ? stats.ammo().bodyDecal : null;
+            Runnable effects = () -> {
+                Impacts.entity(level, at, target, dir, ammo, energy);
+                if (wound != null) Decals.onEntity(wound, target, from, at, null);
+            };
+            // a body bleeds only once the server says the round really hurt it (woundConfirmed)
+            if (Impacts.bleeds(target)) HurtConfirm.await(target, effects);
+            else effects.run();
             return new LocalHit(point, struck.getId());
         }
         if (hitBlock) {
@@ -765,6 +775,24 @@ public final class ClientGuns {
             if (stats != null && energy > 0.3f) Decals.onBlock(stats.ammo().decal, block.getLocation(), block.getDirection(), block.getBlockPos(), null);
         }
         return new LocalHit(end, GunPackets.C2SFire.NONE);
+    }
+
+    /**
+     * The server's word on one of this gun's rounds that struck something: the held blood of that hit plays if the target
+     * really lost health ({@link HurtConfirm}); with nothing held for it (the server's trace struck someone else, or the
+     * hold ran out) the round's impact plays at the server's spot.
+     */
+    private static void woundConfirmed(GunPackets.S2CHit hit) {
+        HurtConfirm.settle(hit.target(), hit.wounded(), () -> {
+            Minecraft mc = Minecraft.getInstance();
+            Entity target = mc.level == null ? null : mc.level.getEntity(hit.target());
+            if (mc.player == null || target == null || !Impacts.bleeds(target)) return;
+            Vec3 at = new Vec3(hit.x(), hit.y(), hit.z());
+            Vec3 eye = BodyActions.eyePosition(mc.player);
+            if (at.distanceToSqr(eye) < 1e-6) return;
+            Impacts.entity(mc.level, at, target, at.subtract(eye).normalize(), stats == null ? null : stats.ammo().id);
+            if (stats != null) Decals.onEntity(stats.ammo().bodyDecal, target, eye, at, null);
+        });
     }
 
     /** Starts a reload as the reload key does (another module's action ending in one, e.g. a resupply). */
@@ -1019,7 +1047,8 @@ public final class ClientGuns {
             // a round that stopped short of any block struck someone (or was spent in a fluid): the shot does not say
             // whom, the spot does
             Entity struck = Impacts.entityAt(level, end, shooter);
-            if (struck != null) {
+            // a body bleeds only when the server says the round really hurt it
+            if (struck != null && (shot.wounded() || !Impacts.bleeds(struck))) {
                 Impacts.entity(level, end, struck, dir, ammo, energy);
                 if (energy > 0.3f && eye != null) Decals.onEntity(used == null ? "bullet_wound" : used.ammo().bodyDecal, struck, eye, end, null);
             }

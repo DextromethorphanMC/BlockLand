@@ -24,6 +24,8 @@ public final class PlayerTrack {
     public double x, y, z;
     public float yaw, pitch;
     public double prevDx, prevDy, prevDz;
+    /** The last accepted move's horizontal step as the client made it (vanilla looks for the support behind it). */
+    public double lastDx, lastDz;
     public boolean groundPrev;
     /** The last move started on the ground, on this slipperiness: the friction that carried its step into the next. */
     public boolean carryGround;
@@ -68,6 +70,9 @@ public final class PlayerTrack {
     // ---- judging ------------------------------------------------------------------------------------------
     public final ViolationLedger ledger;
     public final Surroundings around = new Surroundings();
+    /** The last moves as judged; every flag is logged with them while {@link #trace} is on ({@code /bl ac trace}). */
+    public final MoveHistory history = new MoveHistory();
+    public boolean trace;
     public final MoveInput input = new MoveInput();
     public final MoveEnvelope envelope = new MoveEnvelope();
 
@@ -97,6 +102,7 @@ public final class PlayerTrack {
         y = py;
         z = pz;
         prevDx = prevDy = prevDz = 0;
+        lastDx = lastDz = 0;
         groundPrev = onGround;
         carryGround = onGround;
         carrySlip = 0.6;

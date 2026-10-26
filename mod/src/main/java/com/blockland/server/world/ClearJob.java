@@ -27,6 +27,16 @@ public final class ClearJob implements WorldJob {
     }
 
     @Override
+    public ServerLevel level() {
+        return level;
+    }
+
+    @Override
+    public BoundingBox area() {
+        return box;
+    }
+
+    @Override
     public int step(int budget) {
         if (!entitiesRemoved) {
             AABB area = AABB.of(box);

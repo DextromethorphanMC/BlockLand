@@ -67,6 +67,14 @@ public final class AntiCheatCommands {
                                 return 1;
                             }).orElse(0);
                         }))))
+                // every flag of the player goes to the server log with their last moves (following a false positive)
+                .then(Commands.literal("trace").then(Commands.argument("player", StringArgumentType.word()).suggests(names)
+                        .executes(ctx -> player(ctx, service).map(id -> {
+                            boolean on = require(service).toggleTrace(id);
+                            ctx.getSource().sendSuccess(() -> Component.translatable(on ? "blockland.anticheat.cmd.trace_on"
+                                    : "blockland.anticheat.cmd.trace_off", StringArgumentType.getString(ctx, "player")), true);
+                            return on ? 1 : 0;
+                        }).orElse(0))))
                 .then(Commands.literal("reset").then(Commands.argument("player", StringArgumentType.word()).suggests(names)
                         .executes(ctx -> player(ctx, service).map(id -> {
                             require(service).reset(id);

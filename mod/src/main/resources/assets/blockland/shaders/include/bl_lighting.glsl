@@ -89,25 +89,6 @@ vec3 bl_pointLightsDisplay(vec3 pos, vec3 normal) {
     return bl_display(bl_pointLights(pos, normal));
 }
 
-// Slope of small world-anchored waves at a horizontal world position (blocks): four travelling directional waves,
-// steepness from BlWater.x (1 = default), speed from BlWater.y.
-vec2 bl_waveSlope(vec2 p, float t) {
-    const vec3 WAVES[4] = vec3[4](vec3(0.8, 0.6, 2.3), vec3(-0.5, 0.866, 1.35), vec3(0.2, -0.98, 0.72), vec3(-0.9, -0.436, 0.43));
-    vec2 slope = vec2(0.0);
-    for (int i = 0; i < 4; i++) {
-        vec2 d = WAVES[i].xy;
-        float k = 6.2831853 / WAVES[i].z;
-        float phase = dot(d, p) * k + t * BlWater.y * sqrt(9.8 * k) * 0.5;
-        slope += d * cos(phase);
-    }
-    return slope * (0.05 * BlWater.x);
-}
-
-vec3 bl_waterNormal(vec3 worldPos, float t) {
-    vec2 s = bl_waveSlope(worldPos.xz, t);
-    return normalize(vec3(-s.x, 1.0, -s.y));
-}
-
 // ---- water and rain (spec §15) ------------------------------------------------------------------------------------
 
 // Rain drops landing on water or a puddle: every cell of two offset grids holds a drop that lands at its own moment of
@@ -169,12 +150,6 @@ vec2 bl_rippleSlope(vec3 pos) {
         slope += dir * amp * sin(x * 14.0) * 0.6;
     }
     return slope;
-}
-
-// The water surface's slope at a camera-relative position: waves, rain drops, ripples.
-vec2 bl_waterSlope(vec3 pos, float t) {
-    vec2 world = pos.xz + BlCamera.xz;
-    return bl_waveSlope(world, t) + bl_rainSlope(world, t) + bl_rippleSlope(pos);
 }
 
 // What a reflection on water or a wet surface shows (display colours): the sky above, the horizon's fog colour towards

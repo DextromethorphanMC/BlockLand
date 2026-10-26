@@ -26,6 +26,7 @@ import javax.annotation.Nullable;
  *   <li>the upscaler — TAA / TAAU to the output resolution (or nothing at native resolution);</li>
  *   <li>relighting — DLSS 5 neural rendering on the upscaled picture, when it is on ({@link Relight});</li>
  *   <li>motion blur — a real shutter: the camera's and the entities' motion, the weapon's own ({@link MotionBlur});</li>
+ *   <li>water on the lens — drops after the camera leaves water, a wavering under it ({@link LensWater});</li>
  *   <li>bloom and auto exposure — measured on that picture;</li>
  *   <li>final — sharpening, chromatic aberration, bloom, exposure, white balance, tone mapping, grading, vignette, grain;
  *   straight into the window's target, or through FXAA.</li>
@@ -36,6 +37,7 @@ public final class PostChain implements AutoCloseable {
     private static final RenderPipeline DECODE = Fullscreen.pipeline("gfx_decode")
             .withSampler("SceneSampler").withSampler("WorldDepthSampler").withSampler("HandDepthSampler")
             .withSampler("AoSampler").withSampler("VolumetricSampler").withSampler("RayTracedSampler").withSampler("CloudSampler")
+            .withSampler("FarDepthSampler")
             .build();
     private static final RenderPipeline FINAL = Fullscreen.pipeline("gfx_final")
             .withSampler("ColorSampler").withSampler("BloomSampler").withSampler("ExposureSampler")
@@ -68,6 +70,8 @@ public final class PostChain implements AutoCloseable {
     private final Bloom bloom = new Bloom();
     private final Exposure exposure = new Exposure();
     private final MotionBlur motionBlur = new MotionBlur();
+    private final FarAtmosphere atmosphere = new FarAtmosphere();
+    private final LensWater lensWater = new LensWater();
     private final Ubo decodeUbo = Ubo.pass("decode").skipUnchanged();
     private final Ubo finalUbo = Ubo.pass("final").skipUnchanged();
     private final Ubo fxaaUbo = Ubo.pass("FXAA").skipUnchanged();
@@ -116,8 +120,10 @@ public final class PostChain implements AutoCloseable {
             GpuTextureView volumetric = in.effects().volumetricLight();
             GpuTextureView traced = in.effects().rayTraced();
             GpuTextureView clouds = in.effects().clouds();
+            // the far terrain (rendering spec §22) lies where the scene's depth is 1, like the sky: its own depth tells them apart
+            GpuTextureView far = ctx.farDepth;
             decodeUbo.pass(NONE, EMISSION_BOOST * s.emission, s.ambientOcclusion, ao != null ? 1 : 0, volumetric != null ? 1 : 0,
-                    in.emissionEncoded() ? 1 : 0, traced != null ? 1 : 0, clouds != null ? 1 : 0);
+                    in.emissionEncoded() ? 1 : 0, traced != null ? 1 : 0, clouds != null ? 1 : 0, far != null ? 1 : 0);
             Fullscreen.pass("BlockLand post: decode", hdr.view(), DECODE)
                     .sampler("SceneSampler", in.scene())
                     .sampler("WorldDepthSampler", worldDepth)
@@ -126,12 +132,19 @@ public final class PostChain implements AutoCloseable {
                     .sampler("VolumetricSampler", volumetric != null ? volumetric : none)
                     .sampler("RayTracedSampler", traced != null ? traced : none)
                     .sampler("CloudSampler", clouds != null ? clouds : none)
+                    .sampler("FarDepthSampler", far != null ? far : worldDepth)
                     .uniform(decodeUbo)
                     .draw();
         }
 
+        // 1b. the distant atmosphere (rendering spec §24): aerial perspective, far detail blurring out, heat shimmer
+        GpuTextureView decoded = hdr.view();
+        try (FrameTimings.Span ignored = FrameTimings.span("bl/post/far_atmosphere")) {
+            decoded = atmosphere.apply(ctx, s, decoded, worldDepth, in.handDepth());
+        }
+
         // 2. anti-aliasing / upscaling
-        Upscaler.Frame resolve = new Upscaler.Frame(ctx, hdr.view(), in.worldDepth(), in.reprojection(), in.historyValid());
+        Upscaler.Frame resolve = new Upscaler.Frame(ctx, decoded, in.worldDepth(), in.reprojection(), in.historyValid());
         GpuTextureView color;
         try (FrameTimings.Span ignored = FrameTimings.span("bl/post/upscale")) {
             color = in.upscaler().resolve(resolve);
@@ -150,6 +163,11 @@ public final class PostChain implements AutoCloseable {
             }
         } else {
             motionBlur.invalidate();
+        }
+
+        // 3b. water on the lens (rendering spec §27): drops after leaving water, a wavering under it
+        try (FrameTimings.Span ignored = FrameTimings.span("bl/post/lens_water")) {
+            color = lensWater.apply(ctx, s, color);
         }
 
         // 4. bloom and exposure, measured on that picture
@@ -227,6 +245,7 @@ public final class PostChain implements AutoCloseable {
     /** Forgets the time-based state (exposure); the upscaler's history is the caller's. */
     public void invalidate() {
         exposure.invalidate();
+        lensWater.invalidate();
     }
 
     private GpuTextureView black() {
@@ -238,6 +257,8 @@ public final class PostChain implements AutoCloseable {
     public void close() {
         hdr.close();
         motionBlur.close();
+        atmosphere.close();
+        lensWater.close();
         ldr.close();
         black.close();
         bloom.close();

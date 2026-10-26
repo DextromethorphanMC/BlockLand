@@ -22,7 +22,11 @@ import net.minecraft.world.phys.AABB;
  * can stand on: blocks, and the entities their client collides with ({@link #platform}).
  */
 public final class Surroundings {
-    /** Slipperiness of the block vanilla takes as the support, and of the block under the centre. */
+    /**
+     * The most and the least slippery block the client may take as its support: vanilla uses the block that actually holds
+     * the player up, which at an edge can be any block under the box (slime or ice under one corner, the centre over
+     * air or a lower block). The most slippery bounds the speed carried, the least slippery the acceleration.
+     */
     public double slip = 0.6;
     public double slipAlt = 0.6;
     public boolean water;
@@ -42,6 +46,8 @@ public final class Surroundings {
     private static final double MAX_PLATFORM_SLACK = 0.6;
     /** Ticks the client interpolates an entity it is sent (boats: 3), on top of the latency. */
     private static final int INTERPOLATION_TICKS = 3;
+    /** Widest margin around a pushing entity (a mob sprinting at the player over a long latency window). */
+    public static final double MAX_PUSH_SLACK = 1.5;
     /** A shulker opening its lid lifts what stands on it by up to half a block, at its own pace on each side. */
     private static final double SHULKER_LID = 0.5;
 
@@ -50,11 +56,22 @@ public final class Surroundings {
     /**
      * Samples around the player standing at {@code x, y, z} (their feet). {@code support} is the block vanilla's
      * movement uses below them (their position at the start of the tick), null to take the one under the centre only.
+     * {@code backX, backZ} is the horizontal step that brought them here: with nothing under the box, vanilla takes the
+     * block under the box moved back by it as the support ({@code Entity.checkSupportingBlock}) — a landing on a slime
+     * block's edge that slides off it in the same tick still bounces and keeps the slime's friction.
      */
-    public void sample(ServerLevel level, ServerPlayer player, double x, double y, double z, BlockPos support) {
-        cursor.set(x, y - 0.5000001, z);
-        slipAlt = friction(level, player, cursor);
-        slip = support != null ? friction(level, player, support) : slipAlt;
+    public void sample(ServerLevel level, ServerPlayer player, double x, double y, double z, BlockPos support, double backX, double backZ) {
+        double below = y - 0.5000001;
+        cursor.set(x, below, z);
+        double centre = friction(level, player, cursor);
+        slip = centre;
+        slipAlt = centre;
+        if (support != null) widen(friction(level, player, support));
+        // the corners' columns: the block that holds the box up at an edge, here and where the step came from
+        double half = player.getBbWidth() * 0.5;
+        corners(level, player, x, below, z, half);
+        boolean sideways = backX * backX + backZ * backZ > 1e-8;
+        if (sideways) corners(level, player, x - backX, below, z - backZ, half);
         water = false;
         lava = false;
         climbable = false;
@@ -65,12 +82,20 @@ public final class Surroundings {
         probe(level, x, y + height * 0.5, z);
         probe(level, x, y + Math.max(0.1, height - 0.1), z);
         honey = honey(level, player, x, y, z);
-        bouncy = bouncy(level, x, y - 0.2, z);
-        if (!bouncy) {
-            double half = player.getBbWidth() * 0.5;
-            bouncy = bouncy(level, x - half, y - 0.2, z - half) || bouncy(level, x + half, y - 0.2, z - half)
-                    || bouncy(level, x - half, y - 0.2, z + half) || bouncy(level, x + half, y - 0.2, z + half);
-        }
+        bouncy = bouncy(level, x, y - 0.2, z) || bouncyCorners(level, x, y - 0.2, z, half)
+                || sideways && bouncyCorners(level, x - backX, y - 0.2, z - backZ, half);
+    }
+
+    private void corners(ServerLevel level, ServerPlayer player, double x, double y, double z, double half) {
+        corner(level, player, x - half, y, z - half);
+        corner(level, player, x + half, y, z - half);
+        corner(level, player, x - half, y, z + half);
+        corner(level, player, x + half, y, z + half);
+    }
+
+    private boolean bouncyCorners(ServerLevel level, double x, double y, double z, double half) {
+        return bouncy(level, x - half, y, z - half) || bouncy(level, x + half, y, z - half)
+                || bouncy(level, x - half, y, z + half) || bouncy(level, x + half, y, z + half);
     }
 
     /**
@@ -92,6 +117,17 @@ public final class Surroundings {
             }
         }
         return false;
+    }
+
+    private void corner(ServerLevel level, ServerPlayer player, double x, double y, double z) {
+        cursor.set(x, y, z);
+        BlockState state = level.getBlockState(cursor);
+        if (!state.isAir()) widen(state.getFriction(level, cursor, player));
+    }
+
+    private void widen(double friction) {
+        slip = Math.max(slip, friction);
+        slipAlt = Math.min(slipAlt, friction);
     }
 
     private boolean bouncy(ServerLevel level, double x, double y, double z) {
@@ -179,6 +215,16 @@ public final class Surroundings {
         double slack = PLATFORM_SLACK + speed * (lagTicks + INTERPOLATION_TICKS);
         if (entity instanceof Shulker) slack = Math.max(slack, SHULKER_LID + PLATFORM_SLACK);
         return Math.min(MAX_PLATFORM_SLACK, slack);
+    }
+
+    /**
+     * How far the client's copy of a pushing entity may be off the server's: what it moves in the latency window and its
+     * interpolation, plus vanilla's own push reach (boxes that touch push each other).
+     */
+    public static double pushSlack(Entity entity, int lagTicks) {
+        double moved = Math.sqrt(entity.distanceToSqr(entity.xo, entity.yo, entity.zo));
+        double speed = Math.max(moved, entity.getDeltaMovement().length());
+        return Math.min(MAX_PUSH_SLACK, PLATFORM_SLACK + speed * (lagTicks + INTERPOLATION_TICKS));
     }
 
     private static boolean isPlatform(ServerPlayer player, Entity entity) {

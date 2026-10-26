@@ -35,6 +35,9 @@ import java.util.function.Function;
  * apply, which of the optic's surfaces it draws itself and where a shot goes. The sight line is what the player sees
  * through the sight, so shots follow it once aimed: the reticle is the point of impact, whatever the sway and recoil.
  * Everything here is this client's presentation; the server times aiming and checks every shot itself.
+ * <p>
+ * Hand-held optics that are not on a weapon (binoculars, {@link HandOptic}) come in through {@link #raiseHandOptic}:
+ * the same zoom, sensitivity and sway, their own view ({@link HandOptics}, {@link HandOpticOverlay}).
  */
 public final class Optics {
     /** Shots follow the sight line from this aim amount (fully from 1). */
@@ -70,11 +73,17 @@ public final class Optics {
             if (event.usedConfiguredFov()) worldFov = (float) event.getFOV();
         });
         // below the gun HUD: ammo and hit markers stay visible over the scope's mask
-        AddGuiOverlayLayersEvent.getBus(modBus).addListener(event -> event.getLayeredDraw().addBelow(ForgeLayeredDraw.PRE_SLEEP_STACK,
-                BlockLand.id("scope_overlay"), BlockLand.id("gun_hud"), ScopeOverlay::render));
-        // the mouse wheel steps a variable scope's power while aiming (instead of the hotbar)
+        AddGuiOverlayLayersEvent.getBus(modBus).addListener(event -> {
+            event.getLayeredDraw().addBelow(ForgeLayeredDraw.PRE_SLEEP_STACK,
+                    BlockLand.id("scope_overlay"), BlockLand.id("gun_hud"), ScopeOverlay::render);
+            // a hand-held optic's view, and no crosshair over its reticle
+            event.getLayeredDraw().addBelow(ForgeLayeredDraw.PRE_SLEEP_STACK,
+                    BlockLand.id("hand_optic_overlay"), BlockLand.id("scope_overlay"), HandOpticOverlay::render);
+            event.getLayeredDraw().addConditionTo(ForgeLayeredDraw.PRE_SLEEP_STACK, ForgeLayeredDraw.CROSSHAIR, () -> !HandOptics.viewing());
+        });
+        // the mouse wheel steps a variable scope's (or a hand-held optic's) power while aiming (instead of the hotbar)
         InputEvent.MouseScrollingEvent.BUS.addListener(event -> Minecraft.getInstance().screen == null && event.getDeltaY() != 0
-                && Scopes.stepZoom(event.getDeltaY() > 0 ? 1 : -1));
+                && (Scopes.stepZoom(event.getDeltaY() > 0 ? 1 : -1) || HandOptics.stepZoom(event.getDeltaY() > 0 ? 1 : -1)));
         net.minecraftforge.client.event.CustomizeGuiOverlayEvent.DebugText.BUS.addListener(event -> {
             if (event.getSide() == net.minecraftforge.client.event.CustomizeGuiOverlayEvent.DebugText.Side.Left
                     && lastFocus != 0 && RenderClock.nanos() - lastFocus < 500_000_000L) {
@@ -84,6 +93,7 @@ public final class Optics {
         });
         Scopes.init(modBus);
         ScopeGlints.init();
+        HandOptics.init();
     }
 
     // ---- fed by the weapon each frame -----------------------------------------------------------------------------
@@ -115,9 +125,24 @@ public final class Optics {
         return Scopes.hidesViewmodel();
     }
 
-    /** Multiplier on the look sensitivity for the raised optic (1 otherwise). */
+    /** Multiplier on the look sensitivity for the raised optic (a weapon's or a hand-held one; 1 otherwise). */
     public static float sensitivityScale() {
-        return Scopes.sensitivityScale();
+        return HandOptics.viewing() ? HandOptics.sensitivityScale() : Scopes.sensitivityScale();
+    }
+
+    // ---- fed by a hand-held optic's module each frame ---------------------------------------------------------------
+
+    /**
+     * A hand-held optic that is not on a weapon (binoculars; null = none held) and how far it is raised (0 lowered … 1
+     * at the eyes). From {@link HandOptics#VIEW_FROM} the player looks through it: zoom, slower turning, sway, its view.
+     */
+    public static void raiseHandOptic(@Nullable HandOptic optic, float raised, float dt) {
+        HandOptics.update(optic, raised, dt);
+    }
+
+    /** The player is looking through a hand-held optic (its view replaces the hands and the crosshair). */
+    public static boolean lookingThroughHandOptic() {
+        return HandOptics.viewing();
     }
 
     /** How far the aimed pose moves a scope's eye point towards its eyepiece (see {@link Scopes#adsEyeShift}). */

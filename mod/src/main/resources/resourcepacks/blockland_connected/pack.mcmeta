@@ -1,0 +1,9 @@
+{
+  "pack": {
+    "description": {
+      "translate": "blockland.graphics.connected_pack.description",
+      "fallback": "BlockLand 连接玻璃"
+    },
+    "pack_format": 64
+  }
+}

@@ -29,6 +29,13 @@ final class GlSlots {
     static final int REFLECTION_UNIT = 14;
     /** Texture unit of {@code BlPlantColumns} (the wind's plant columns, rendering spec §18; read by the vertex shader). */
     static final int COLUMNS_UNIT = 15;
+    /**
+     * Texture unit of {@code noisetex} (Bliss's noise texture for the ported water, rendering spec §15): 16, past Blaze3D's
+     * and the guaranteed 16 fragment units; where the driver has no unit 16 the uniform points at the material map instead
+     * (always a valid texture; the water's waves are then wrong, never an invalid draw).
+     */
+    private static final int NOISE_UNIT = 16;
+    private static int noiseUnit = -1;
 
     @Nullable
     private static final Field BUFFER_HANDLE = handleField();
@@ -60,6 +67,22 @@ final class GlSlots {
 
     static void bindColumns(GpuTexture texture) {
         bindTexture(COLUMNS_UNIT, texture);
+    }
+
+    /** The unit {@code noisetex} is patched to: 16 when the driver has it, else the material map's. */
+    static int noiseUnit() {
+        if (noiseUnit < 0) {
+            int units = GL11.glGetInteger(org.lwjgl.opengl.GL20.GL_MAX_TEXTURE_IMAGE_UNITS);
+            noiseUnit = units > NOISE_UNIT ? NOISE_UNIT : MATERIAL_UNIT;
+            if (noiseUnit != NOISE_UNIT) {
+                BlockLand.LOGGER.warn("[BlockLand] only {} fragment texture units: the water's noise texture is not bound", units);
+            }
+        }
+        return noiseUnit;
+    }
+
+    static void bindNoise(GpuTexture texture) {
+        if (noiseUnit() == NOISE_UNIT) bindTexture(NOISE_UNIT, texture);
     }
 
     private static void bindTexture(int unit, GpuTexture texture) {

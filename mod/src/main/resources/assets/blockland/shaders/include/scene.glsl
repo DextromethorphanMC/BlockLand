@@ -42,9 +42,9 @@ layout(std140) uniform BlockLandScene {
     vec4 BlFog;            // BlockLand's haze (spec §14): x extinction at the camera's height (1/blocks), y height falloff
                            // (1/blocks), z sun in-scatter strength, w 0 vanilla's fog alone, 1 haze and soft edge, 2 soft
                            // edge only (the volumetric fog pass is the haze)
-    vec4 BlClouds;         // the cloud layer (spec §14): xy cloud noise position of the camera (wraps at 4096), zw layer
-                           // bottom and top relative to the camera (blocks)
-    vec4 BlCloudShape;     // x coverage 0..1, y density, z shadow strength 0..1 (0 = no clouds), w drift time (s, wrapped)
+    vec4 BlClouds;         // the clouds (spec §14, Bliss' cameraPosition and clock): xyz the camera's world position, y
+                           // shifted by 192 - the dimension's cloud height; w game time in ticks modulo 100 days
+    vec4 BlCloudShape;     // x the 云量 setting 0..1, y rain 0..1, z shadow strength 0..1 (0 = no clouds), w unused
     vec4 BlWeather;        // spec §15: x wetness 0..1 (rain where the biome rains, built up and dried over time, × the
                            // setting), y rain falling now 0..1, z how open the camera stands to the sky, w ripple count
     vec4 BlRipples[BL_MAX_RIPPLES * 2]; // ripple i: [2i] (camera-relative x, surface y, z, age s),
@@ -142,7 +142,7 @@ float bl_shadowCascade(int c, vec3 pos, vec3 normal, float noise) {
     return lit * 0.125;
 }
 
-// ---- clouds (spec §14): the volumetric clouds' coverage map, here so their shadows fall where they are ----------
+// ---- clouds (spec §14): Bliss' cloud layers, here so their shadows fall where the clouds are ----------------------
 
 uint bl_cloudHash(uvec3 v) {
     uint h = v.x * 1597334677u ^ v.y * 3812015801u ^ v.z * 2798796415u;
@@ -166,29 +166,28 @@ float bl_cloudNoise2(vec2 p, float cell) {
     return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y) / 65535.0;
 }
 
-// Where clouds are, 0..1, at a horizontal position in cloud noise space: weather-scale patches against the coverage.
-float bl_cloudCoverage(vec2 xz) {
-    float n = bl_cloudNoise2(xz, 2048.0) * 0.45 + bl_cloudNoise2(xz, 1024.0) * 0.3 + bl_cloudNoise2(xz, 512.0) * 0.17
-            + bl_cloudNoise2(xz, 256.0) * 0.08;
-    float c = BlCloudShape.x;
-    return clamp((n - (1.0 - c) * 0.95) / max(0.12 + 0.5 * c, 1e-3), 0.0, 1.0);
+// The clouds themselves are Bliss' code (bliss_clouds.glsl, ported): every program gets its densities and cloud
+// shadows; only the clouds' own pass (gfx_clouds, which defines BLISS_CLOUDS_FULL) gets the lighting and the march.
+#ifndef BLISS_CLOUDS_FULL
+#define CLOUDSHADOWSONLY
+#endif
+#moj_import <blockland:bliss_clouds.glsl>
+
+// Sunlight let through the clouds to a camera-relative position on a surface (Bliss' GetCloudShadow). 1 without clouds.
+float bl_cloudShadow(vec3 pos) {
+    // BlockLand: no clouds this frame, or the light on the horizon (Bliss divides by its height)
+    if (BlCloudShape.z <= 0.0 || BlSunDir.y <= 0.001) {
+        return 1.0;
+    }
+    return GetCloudShadow(pos);
 }
 
-// Sunlight let through the clouds to a camera-relative position: the coverage where the ray towards the sun crosses the
-// layer's lower third, as the optical depth of a cloud that thick. 1 without clouds.
-float bl_cloudShadow(vec3 pos) {
-    if (BlCloudShape.z <= 0.0 || BlSunDir.y <= 0.03) {
+// The same for a point of the air (Bliss' GetCloudShadow_VLFOG, what its volumetric fog takes).
+float bl_cloudShadowFog(vec3 pos) {
+    if (BlCloudShape.z <= 0.0 || BlSunDir.y <= 0.001) {
         return 1.0;
     }
-    float through = mix(BlClouds.z, BlClouds.w, 0.3) - pos.y;
-    if (through <= 0.0) {
-        return 1.0;
-    }
-    vec2 xz = BlClouds.xy + pos.xz + BlSunDir.xz * (through / BlSunDir.y);
-    float c = bl_cloudCoverage(xz);
-    float depth = 7.0 * c * c * BlCloudShape.y;
-    // a low sun reaches the ground past the cloud bases: the shadows fade out towards the horizon
-    return mix(1.0, exp(-depth), BlCloudShape.z * smoothstep(0.03, 0.2, BlSunDir.y));
+    return GetCloudShadow_VLFOG(pos + BlClouds.xyz, BlSunDir.xyz);
 }
 
 // The sun's (or moon's) shadow map alone at a camera-relative position with its surface normal: 1 lit .. 0 shadowed.

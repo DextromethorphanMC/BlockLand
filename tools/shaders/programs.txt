@@ -20,6 +20,8 @@ gfx_bloom_down       | blockland:core/gfx_screen | blockland:core/gfx_bloom_down
 gfx_bloom_up         | blockland:core/gfx_screen | blockland:core/gfx_bloom_up | Position |
 gfx_luminance        | blockland:core/gfx_screen | blockland:core/gfx_luminance | Position |
 gfx_motion_blur      | blockland:core/gfx_screen | blockland:core/gfx_motion_blur | Position |
+gfx_lens_water       | blockland:core/gfx_screen | blockland:core/gfx_lens_water | Position |
+gfx_underwater_caustics | blockland:core/gfx_screen | blockland:core/gfx_underwater_caustics | Position |
 gfx_mb_velocity      | blockland:core/gfx_screen | blockland:core/gfx_mb_velocity | Position |
 gfx_mb_tile          | blockland:core/gfx_screen | blockland:core/gfx_mb_tile | Position |
 gfx_mb_tile_rows     | blockland:core/gfx_screen | blockland:core/gfx_mb_tile_rows | Position |
@@ -70,7 +72,6 @@ rt_guides            | blockland:core/gfx_screen | blockland:core/rt_guides | Po
 # Fog and sky (client/graphics/sky)
 gfx_clouds           | blockland:core/gfx_screen | blockland:core/gfx_clouds | Position |
 gfx_clouds_temporal  | blockland:core/gfx_screen | blockland:core/gfx_clouds_temporal | Position |
-gfx_cloud_noise      | blockland:core/gfx_screen | blockland:core/gfx_cloud_noise | Position |
 # Screen-space reflections (client/graphics/reflect)
 gfx_ssr_capture      | blockland:core/gfx_screen | blockland:core/gfx_ssr_capture | Position |
 gun_velocity         | blockland:core/gun_velocity | blockland:core/gun_velocity | Position,UV0,Normal |
@@ -89,3 +90,8 @@ name_card            | blockland:core/name_card | blockland:core/name_card | Pos
 # Wall graffiti (client/graffiti)
 graffiti_paint       | blockland:core/graffiti_paint | blockland:core/graffiti_paint | Position,Color,UV0,UV2,Normal |
 graffiti_glow        | blockland:core/graffiti_glow | blockland:core/graffiti_glow | Position,UV0,Color,UV2 |
+# Far terrain (client/graphics/far, rendering spec §22)
+far_terrain          | blockland:core/far_terrain | blockland:core/far_terrain | Packed |
+far_terrain_masked   | blockland:core/far_terrain | blockland:core/far_terrain | Packed | MASKED
+far_depth            | blockland:core/gfx_screen | blockland:core/far_depth | Position |
+gfx_far_atmosphere   | blockland:core/gfx_screen | blockland:core/gfx_far_atmosphere | Position |

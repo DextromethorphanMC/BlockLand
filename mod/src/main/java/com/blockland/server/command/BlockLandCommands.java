@@ -7,6 +7,7 @@ import com.blockland.server.content.ContentSnapshot;
 import com.blockland.server.content.model.MapDef;
 import com.blockland.server.game.GameInstance;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
@@ -73,6 +74,16 @@ public final class BlockLandCommands {
                             s.games.games().size(), s.arenas.activeSlots())), false);
                     return 1;
                 }))
+                // far terrain (远景地平线): what the service holds, and how good and fast the generator estimate is here
+                .then(Commands.literal("far").requires(src -> src.hasPermission(2))
+                        .then(Commands.literal("status").executes(ctx -> {
+                            BlockLandServer s = require(ctx, server);
+                            for (String line : s.farTerrain.status()) ctx.getSource().sendSuccess(() -> Component.literal("§7" + line), false);
+                            return 1;
+                        }))
+                        .then(Commands.literal("probe").executes(ctx -> probe(ctx, server, 200))
+                                .then(Commands.argument("columns", IntegerArgumentType.integer(10, 5000))
+                                        .executes(ctx -> probe(ctx, server, IntegerArgumentType.getInteger(ctx, "columns"))))))
                 .then(Commands.literal("start").requires(src -> src.hasPermission(2))
                         .then(Commands.argument("mode", StringArgumentType.word()).suggests(modeIds).executes(ctx -> {
                             BlockLandServer s = require(ctx, server);
@@ -148,6 +159,20 @@ public final class BlockLandCommands {
 
         dispatcher.register(root);
         dispatcher.register(Commands.literal("blockland").redirect(dispatcher.getRoot().getChild("bl")));
+    }
+
+    private static int probe(CommandContext<CommandSourceStack> ctx, Supplier<BlockLandServer> server, int columns) {
+        BlockLandServer s = require(ctx, server);
+        CommandSourceStack source = ctx.getSource();
+        source.sendSuccess(() -> Component.literal("§7测量中…"), false);
+        s.farTerrain.probe(source.getLevel(), columns).thenAccept(lines -> s.server.execute(() -> {
+            for (String line : lines) {
+                // also in the server log: the console and RCON have left by the time the measurement is done
+                com.blockland.BlockLand.LOGGER.info("[BlockLand] far terrain probe: {}", line);
+                source.sendSuccess(() -> Component.literal("§7" + line), false);
+            }
+        }));
+        return 1;
     }
 
     private interface PlayerAction {

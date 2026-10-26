@@ -93,6 +93,25 @@ public final class GraphicsStatus {
     /** CPU milliseconds of the pipeline's own work last frame (smoothed). */
     public volatile float cpuMillis;
 
+    /**
+     * Far terrain (rendering spec §22): how far it reaches this frame in blocks, 0 while it is not drawn. The fog and the
+     * haze (the light module) follow it; written by the far terrain at frame start.
+     */
+    public volatile float farTerrainReach;
+    /** Why far terrain is not drawn although it is on (key), or null. */
+    @Nullable
+    public volatile String farTerrainReason;
+    /** Tiles drawn / wanted / held in memory, cells drawn, GPU bytes of the meshes, what the server offers (blocks, 0 = none). */
+    public volatile int farTilesDrawn, farTilesWanted, farTilesHeld, farServerDistance;
+    public volatile long farCells, farGpuBytes;
+    /** Real far chunks (rendering spec §23): columns drawn / held, GPU bytes of their meshes, columns waiting for the server. */
+    public volatile int farChunksDrawn, farChunksPlaced, farChunksHeld, farChunksPending;
+    public volatile long farChunkGpuBytes;
+    public volatile float farMillis;
+
+    /** Display (rendering spec §21): the virtual framebuffer and the window's real one. */
+    public volatile int displayWidth, displayHeight, windowWidth, windowHeight;
+
     /** The GPU / driver line ("NVIDIA GeForce RTX … / 4.6.0 NVIDIA …"). */
     public volatile String renderer = "";
 
@@ -108,6 +127,13 @@ public final class GraphicsStatus {
                     rayVolume, rayVoxelsReady * 100, rayMillis));
         }
         if (neuralActive) lines.add("[BlockLand] DLSS 5 neural rendering on");
+        if (farTerrainReach > 0) {
+            lines.add(String.format("[BlockLand] far terrain %d blocks: %d/%d tiles, %d held, %d cells, %.1f MB GPU, %.2f ms CPU",
+                    Math.round(farTerrainReach), farTilesDrawn, farTilesWanted, farTilesHeld, farCells, farGpuBytes / 1048576.0, farMillis));
+        }
+        if (displayWidth > 0 && (displayWidth != windowWidth || displayHeight != windowHeight)) {
+            lines.add(String.format("[BlockLand] display %dx%d in a %dx%d window", displayWidth, displayHeight, windowWidth, windowHeight));
+        }
         if (frameGenPresenting) {
             lines.add(String.format("[BlockLand] DLSS frame generation %s, %.2f frames shown per frame (max %d×)",
                     frameGenActive ? "on" : "paused", frameGenPresented, frameGenMax));

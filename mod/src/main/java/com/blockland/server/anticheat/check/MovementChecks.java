@@ -16,6 +16,7 @@ import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.AABB;
 
 import java.util.Iterator;
 import java.util.List;
@@ -89,6 +90,7 @@ public final class MovementChecks {
         int window = judge.window(player, t, rules);
         boolean exempt = exempt(player, t, serverTick, window);
         if (exempt || !rules.enabled) {
+            t.history.add(ticks, nx, ny, nz, dx, dy, dz, claimed, claimed, t.groundPrev, t.around.slip, false, true);
             t.velocities.clear();
             accept(t, nx, ny, nz, dx, dy, dz, claimed, false, false, false, Double.MAX_VALUE, Double.MAX_VALUE);
             t.wasExempt = exempt;
@@ -115,10 +117,11 @@ public final class MovementChecks {
         // what the physics assumes, whatever the ground check's setting: only a ground the server sees under the feet
         boolean groundNow = claimed && supported;
         t.groundVerified = verified;
-        t.around.sample(level, player, t.x, t.y, t.z, player.getBlockPosBelowThatAffectsMyMovement());
-        end.sample(level, player, nx, ny, nz, null);
+        t.around.sample(level, player, t.x, t.y, t.z, player.getBlockPosBelowThatAffectsMyMovement(), t.lastDx, t.lastDz);
+        end.sample(level, player, nx, ny, nz, null, dx, dz);
         boolean liquid = t.around.water || t.around.lava || end.water || end.lava;
         boolean heldUp = end.water || end.lava || end.climbable || end.stuck || end.bubbleColumn;
+        t.history.add(ticks, nx, ny, nz, dx, dy, dz, claimed, groundNow, t.groundPrev, t.around.slip, end.bouncy, t.settleMoves > 0);
         if (t.settleMoves > 0) {
             t.settleMoves--;
             accept(t, nx, ny, nz, dx, dy, dz, groundNow, liquid, heldUp, end.bouncy, Double.MAX_VALUE, Double.MAX_VALUE);
@@ -147,7 +150,7 @@ public final class MovementChecks {
                 MovePredictor.envelope(in, env);
                 over = env.horizontalExcess();
             }
-            int pushers = over > 0 ? pushers(level, player) : 0;
+            int pushers = over > 0 ? pushers(level, player, t, dx, dy, dz, window) : 0;
             if (pushers > 0) {
                 in.pushSlack = Physics.ENTITY_PUSH * Math.min(3, pushers);
                 MovePredictor.envelope(in, env);
@@ -342,6 +345,8 @@ public final class MovementChecks {
         t.x = nx;
         t.y = ny;
         t.z = nz;
+        t.lastDx = dx;
+        t.lastDz = dz;
         double step = Math.sqrt(dx * dx + dz * dz);
         double scale = step > rawHorizontal && step > 0 ? rawHorizontal / step : 1;
         t.prevDx = dx * scale;
@@ -384,8 +389,18 @@ public final class MovementChecks {
                 || t.window.any(StateWindow.EXEMPT, window);
     }
 
-    private static int pushers(ServerLevel level, ServerPlayer player) {
-        return level.getEntities(player, player.getBoundingBox().inflate(0.35), e -> e.isPushable() && !e.isSpectator()).size();
+    /**
+     * Entities that may have pushed the player this move: anything pushable whose box touches the box's path, as the
+     * client may have seen it — a moving mob or player is shown some ticks late, so its box is widened by how far it
+     * moves in the latency window ({@link Surroundings#pushSlack}).
+     */
+    private static int pushers(ServerLevel level, ServerPlayer player, PlayerTrack t, double dx, double dy, double dz, int window) {
+        AABB path = player.getBoundingBox().move(t.x - player.getX(), t.y - player.getY(), t.z - player.getZ()).expandTowards(dx, dy, dz);
+        int count = 0;
+        for (Entity e : level.getEntities(player, path.inflate(Surroundings.MAX_PUSH_SLACK), e -> e.isPushable() && !e.isSpectator())) {
+            if (e.getBoundingBox().inflate(Surroundings.pushSlack(e, window)).intersects(path)) count++;
+        }
+        return count;
     }
 
     /** One clear violation is 1; every 0.1 blocks beyond adds 1, up to 5. */

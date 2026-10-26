@@ -35,7 +35,7 @@ public final class AimSensitivity {
         Minecraft mc = Minecraft.getInstance();
         // through a magnified scope the turning also slows down with the magnification
         float multiplier = ClientSettings.get().adsSensitivity * Optics.sensitivityScale();
-        boolean aiming = mc.player != null && mc.screen == null && ClientGuns.aim() > 0.5f;
+        boolean aiming = mc.player != null && mc.screen == null && (ClientGuns.aim() > 0.5f || Optics.lookingThroughHandOptic());
         if (!aiming || Math.abs(multiplier - 1f) < 0.01f) {
             restore();
             return;

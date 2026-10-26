@@ -2,7 +2,8 @@
 
 // BlockLand lighting pack (tools/assets/RENDERING_SPEC.md §3): vanilla's terrain fragment shader with the sun, its
 // shadows, dynamic lights, emissive blocks and water / glass / metal shading on top, rain wetness and puddles (§15), and
-// BlockLand's fog (§14). Unpatched (BlRole 0) or without world lighting and emission encoding, the result is exactly
+// BlockLand's fog (§14). The water surface is Bliss's (Chocapic13' Shaders edit, by Xonk, based on Chocapic13's shaders),
+// ported: see blockland:bliss_water.glsl and assets/blockland/shaders/include/bliss/LICENSE.md. Unpatched (BlRole 0) or without world lighting and emission encoding, the result is exactly
 // vanilla's.
 
 #moj_import <minecraft:fog.glsl>
@@ -11,6 +12,7 @@
 #moj_import <blockland:bl_lighting.glsl>
 #moj_import <blockland:bl_fog.glsl>
 #moj_import <blockland:bl_ssr.glsl>
+#moj_import <blockland:bliss_water.glsl>
 
 uniform sampler2D Sampler0;
 
@@ -36,10 +38,13 @@ void main() {
 #endif
     // the face's true normal: fluids come with an up normal on every face (LiquidBlockRenderer), so a waterfall's sheet
     // or the slope of flowing water would otherwise be shaded as a level surface seen edge-on (a glaring Fresnel)
-    vec3 faceNormal = normalize(cross(dFdx(worldPos), dFdy(worldPos)) + vec3(0.0, 1e-9, 0.0));
+    vec3 dx = dFdx(worldPos), dy = dFdy(worldPos);
+    vec3 faceNormal = normalize(cross(dx, dy) + vec3(0.0, 1e-9, 0.0));
     if (dot(faceNormal, worldPos) > 0.0) {
         faceNormal = -faceNormal;
     }
+    // how many blocks this pixel covers (the water's waves fade before they get finer than that)
+    float footprint = max(length(dx), length(dy));
     if (BlRole == 0 || !(bl_worldLit() || bl_encodeEmission())) {
         fragColor = apply_fog(color, sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart, FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd, FogColor);
         return;
@@ -68,41 +73,84 @@ void main() {
             float fres = bl_fresnel(max(dot(n, v), 0.0), 0.5);
             color.rgb += (BlSunColor.rgb * spec * 0.55 + bl_display(BlSkyColor.rgb) * fres * outdoors * 0.12) * material.w;
         } else if (water) {
-            // water (spec §15): level surfaces carry waves, rain drops and the rings of whatever disturbed them; a falling
-            // sheet streaks downwards and churns white. The environment (sky above, horizon below, darker where the sky is
-            // hidden) is reflected by Fresnel against the face's true normal, and the sun glints off it.
-            float t = bl_time();
-            vec3 wn;
-            float foam = 0.0;
-            if (n.y > 0.45) {
-                vec2 s = bl_waterSlope(worldPos, t) * smoothstep(0.45, 0.9, n.y);
-                wn = normalize(n + vec3(-s.x, 0.0, -s.y));
-            } else {
-                vec3 w = worldPos + BlCamera.xyz;
-                vec3 across = normalize(vec3(-n.z, 0.0, n.x) + vec3(1e-4, 0.0, 0.0));
-                float u = dot(w, across);
-                float fall = w.y + t * 4.5;
-                float streak = sin(u * 11.0 + sin(fall * 0.9) * 1.7) * 0.6 + sin(u * 23.0 - fall * 0.35) * 0.4;
-                float churn = bl_cloudNoise2(vec2(u * 2.5, fall * 1.2), 1.0) * 0.65 + bl_cloudNoise2(vec2(u * 6.0, fall * 3.0), 1.0) * 0.35;
-                wn = normalize(n + across * streak * 0.14 + vec3(0.0, (churn - 0.5) * 0.25, 0.0));
-                foam = smoothstep(0.5, 0.8, churn) * 0.55 * (1.0 - abs(n.y));
-            }
-            float fres = bl_fresnel(max(dot(wn, v), 0.0), 0.02);
-            vec3 r = reflect(-v, wn);
-            vec3 env = bl_reflection(r, outdoors, FogColor.rgb);
-            // what is really there (spec §17), where last frame's picture shows it
-            vec4 seen = bl_ssr(worldPos + n * 0.03, r, gl_FragCoord.xy);
-            env = mix(env, seen.rgb, seen.a);
-            float reflection = clamp(fres * BlWater.z * max(material.w, 0.5), 0.0, 0.9);
-            color.rgb = mix(color.rgb, env, reflection);
-            color.a = mix(color.a, 1.0, reflection * 0.55);
-            // aerated water scatters light like snow: white, lit like the world around it
-            color.rgb = mix(color.rgb, min(light, vec3(1.0)) * 0.92, foam);
-            color.a = mix(color.a, 0.92, foam);
-            float spec = bl_sunSpecular(wn, v, 0.07 + foam * 0.5) * BlWater.z * outdoors * step(0.0, BlSunDir.y)
-                    * bl_shadow(worldPos, n, gl_FragCoord.xy);
-            color.rgb += BlSunColor.rgb * spec * 0.6;
-            color.a = max(color.a, min(spec * 0.35, 1.0));
+            // ---- ported from Bliss (Chocapic13' Shaders edit) by Xonk, based on Chocapic13's shaders; see
+            // assets/blockland/shaders/include/bliss/LICENSE.md. The water parts of Bliss's dimensions/all_translucent.fsh
+            // (NORMALS, ALBEDO with Vanilla_like_water, SPECULAR LIGHTING); BlockLand: positions camera-relative world
+            // space instead of view space, colours from the lit vanilla colour (display → linear and back), the sky from
+            // bl_reflection instead of colortex4, the screen-space part from bl_ssr (spec §17), BlWater.z switches
+            // reflections. Spec §15.
+            vec3 viewPos = worldPos;
+            vec2 lightmap = lightLevel;
+            float UnchangedAlpha = color.a;
+
+            // ALBEDO (Vanilla_like_water: the water keeps its texture and biome colour, a little darker)
+            vec3 Albedo = bl_linear(texel.rgb * vertexShade);
+            float albedoDim = sqrt(luma(Albedo));
+            vec3 FinalColor = bl_linear(color.rgb) * albedoDim;
+
+            // NORMALS
+            vec3 normal = bliss_waterNormal(worldPos, n, footprint);
+
+            // DIFFUSE LIGHTING (the direct light the sun specular uses)
+            vec3 DirectLightColor = BlSunColor.rgb;
+            float NdotL = clamp(dot(normal, BlSunDir.xyz),0.0,1.0); NdotL = clamp((-15 + NdotL*255.0) / 240.0  ,0.0,1.0);
+            int cascades = int(BlShadowParams.w + 0.5);
+            float shadowDistance = cascades > 0 ? BlShadowSplits[cascades - 1] : 0.0;
+            float shadowMapFalloff2 = smoothstep(0.0, 1.0, min(max(1.0 - length(viewPos) / max(shadowDistance, 1e-3),0.0)*5.0,1.0));
+            float LM_shadowMapFallback = min(max(lightmap.y-0.8, 0.0) * 25,1.0);
+            float Shadows = bl_shadowMap(worldPos, n, gl_FragCoord.xy);
+            Shadows = mix(LM_shadowMapFallback, Shadows, shadowMapFalloff2);
+            Shadows *= pow(bl_cloudShadow(worldPos),3);
+            vec3 Direct_lighting = DirectLightColor * NdotL * Shadows;
+
+            // SPECULAR LIGHTING
+            vec2 specularValues = vec2(1.0, 0.02);
+            float roughness = pow(1.0-specularValues.r,2.0);
+            float f0 = max(specularValues.g, 0.02);
+            vec3 Metals = vec3(1.0);
+
+            vec3 Reflections_Final = vec3(0.0);
+            vec4 Reflections = vec4(0.0);
+            vec3 BackgroundReflection = FinalColor;
+            vec3 SunReflection = vec3(0.0);
+            float indoors = pow(1.0-pow(1.0-min(max(lightmap.y-0.6,0.0)*3.0,1.0),0.5),2.0);
+
+            vec3 reflectedVector = reflect(normalize(viewPos), normal);
+            float normalDotEye = dot(normal, normalize(viewPos));
+
+            float fresnel =  pow(clamp(1.0 + normalDotEye, 0.0, 1.0),5.0);
+
+            #ifdef SNELLS_WINDOW
+                // snells window looking thing
+                if(BlCamera.w > 0.5) fresnel = pow(clamp(1.5 + normalDotEye,0.0,1.0), 25.0);
+            #endif
+
+            fresnel = mix(f0, 1.0, fresnel);
+
+            // Sun, Sky, and screen-space reflections
+            SunReflection = Direct_lighting * GGX(normal, -normalize(viewPos), BlSunDir.xyz, max(roughness,0.035), f0) * Metals;
+            if(BlCamera.w < 0.5) BackgroundReflection = bl_linear(bl_reflection(reflectedVector, 1.0, FogColor.rgb)) * Metals;
+            if(BlCamera.w > 0.5) BackgroundReflection.rgb = exp(-8.0 * vec3(Water_Absorb_R, Water_Absorb_G, Water_Absorb_B)) * clamp(BlSunDir.y*bliss_lightSign(),0,1);
+
+            vec4 seen = bl_ssr(worldPos + n * 0.03, reflectedVector, gl_FragCoord.xy);
+            Reflections = vec4(bl_linear(seen.rgb) * Metals, seen.a);
+
+            float visibilityFactor = clamp(exp2((pow(roughness,3.0) / f0) * -4),0,1);
+
+            // BlockLand: the reflections setting
+            fresnel *= BlWater.z;
+            SunReflection *= BlWater.z;
+
+            Reflections_Final = mix(mix(FinalColor, BackgroundReflection, indoors), Reflections.rgb, Reflections.a) * fresnel * visibilityFactor;
+            Reflections_Final += SunReflection;
+
+            //correct alpha channel with fresnel
+            float alpha0 = UnchangedAlpha;
+            float alpha = -alpha0 * fresnel + alpha0 + fresnel;
+
+            // prevent reflections from being darkened by buffer blending
+            vec3 rgb = clamp(FinalColor / alpha*alpha0*(1.0-fresnel) + Reflections_Final / alpha, 0.0, 65100.0);
+            color = vec4(bl_display(rgb), clamp(alpha, 0.0, 1.0));
         }
         if (!water) {
             // rain (spec §15): porous blocks soak up water and darken, a film of water reflects the sky and the sun,

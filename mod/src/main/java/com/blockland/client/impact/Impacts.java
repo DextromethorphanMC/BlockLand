@@ -103,6 +103,7 @@ public final class Impacts {
                 (ResourceManagerReloadListener) ImpactCatalog::reload));
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> tick());
         ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(event -> clear());
+        HurtConfirm.init();
         // in the air: over the bullet holes and graffiti on the faces behind
         WorldFx.register(WorldFx.Layer.VOLUME, Impacts::render);
         CustomizeGuiOverlayEvent.DebugText.BUS.addListener(event -> {
@@ -162,6 +163,14 @@ public final class Impacts {
      */
     public static void entity(ClientLevel world, Vec3 at, Entity target, Vec3 dir, @Nullable String ammo) {
         entity(world, at, target, dir, ammo, 1);
+    }
+
+    /**
+     * Whether a hit on {@code target} would bleed (its material has {@code blood}): such a hit's effects wait for the
+     * server's word that the target was really hurt ({@link HurtConfirm}), the others play at once.
+     */
+    public static boolean bleeds(Entity target) {
+        return ImpactCatalog.entity(target).blood != null;
     }
 
     /** {@link #entity} for a round that arrives with only {@code energy} (0..1) of its own left (slowed by water). */

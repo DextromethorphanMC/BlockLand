@@ -1,0 +1,31 @@
+{
+  "raiseSeconds": 0.32,
+  "lowerSeconds": 0.22,
+  "optic": {
+    "id": "binoculars",
+    "powers": [4, 8, 12],
+    "startPower": 1,
+    "zoomEase": 12,
+    "sway": 0.1,
+    "swayMoving": 3,
+    "swaySneaking": 0.4,
+    "zoomSound": "blockland:binoculars.zoom",
+    "overlay": {
+      "radius": 0.44,
+      "separation": 0.3,
+      "softness": 0.06,
+      "vignette": 0.35,
+      "fringe": [40, 70, 100]
+    },
+    "reticle": {
+      "color": [12, 12, 12],
+      "alpha": 0.85,
+      "span": 40,
+      "stadia": 20
+    },
+    "rangefinder": {
+      "max": 1000,
+      "refresh": 0.15
+    }
+  }
+}

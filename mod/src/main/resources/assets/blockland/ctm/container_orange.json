@@ -1,0 +1,31 @@
+{
+  "rules": [
+    {
+      "blocks": [
+        "blockland:container_orange"
+      ],
+      "faces": [
+        "sides"
+      ],
+      "textures": [
+        "blockland:block/container/orange/side/0"
+      ],
+      "method": "ctm",
+      "tiles": "blockland:block/container/orange/side"
+    },
+    {
+      "blocks": [
+        "blockland:container_orange"
+      ],
+      "faces": [
+        "top",
+        "bottom"
+      ],
+      "textures": [
+        "blockland:block/container/orange/top/0"
+      ],
+      "method": "ctm",
+      "tiles": "blockland:block/container/orange/top"
+    }
+  ]
+}

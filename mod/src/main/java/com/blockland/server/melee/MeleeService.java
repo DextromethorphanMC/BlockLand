@@ -6,6 +6,7 @@ import com.blockland.server.spectate.Watchers;
 import com.blockland.network.packet.ViewmodelPackets;
 import com.blockland.BlockLand;
 import com.blockland.combat.HitRecords;
+import com.blockland.combat.HurtCheck;
 import com.blockland.effect.ActionLocks;
 import com.blockland.melee.MeleeContent;
 import com.blockland.melee.MeleeData;
@@ -114,23 +115,24 @@ public final class MeleeService implements MeleePacketListeners.Server {
         MeleeTrace.Hit hit = MeleeTrace.trace(level, player, BodyActions.eyePosition(player), player.getLookAngle(), attack);
         switch (hit.type()) {
             case ENTITY -> {
-                damage(level, player, knife, attack, hit.entity());
+                boolean wounded = damage(level, player, knife, attack, hit.entity(), hit.point());
                 play(level, player, hit.point(), knife.sounds.hitFlesh, 1.0F);
                 BLNetwork.sendToTracking(player, new MeleePackets.S2CImpact(player.getId(), strike.heavy, strike.combo,
-                        MeleePackets.Target.ENTITY, hit.entity().getId(), hit.point().x, hit.point().y, hit.point().z, -1));
+                        MeleePackets.Target.ENTITY, hit.entity().getId(), hit.point().x, hit.point().y, hit.point().z, -1, wounded));
             }
             case BLOCK -> {
                 BlockState state = level.getBlockState(hit.pos());
                 play(level, player, hit.point(), knife.sounds.hitBlock, 0.8F);
                 level.playSound(player, hit.pos(), state.getSoundType(level, hit.pos(), player).getHitSound(), SoundSource.BLOCKS, 0.5F, 0.8F);
                 BLNetwork.sendToTracking(player, new MeleePackets.S2CImpact(player.getId(), strike.heavy, strike.combo,
-                        MeleePackets.Target.BLOCK, -1, hit.point().x, hit.point().y, hit.point().z, hit.face().ordinal()));
+                        MeleePackets.Target.BLOCK, -1, hit.point().x, hit.point().y, hit.point().z, hit.face().ordinal(), false));
             }
             case MISS -> { }
         }
     }
 
-    private void damage(ServerLevel level, ServerPlayer attacker, MeleeData.Knife knife, MeleeData.Attack attack, Entity target) {
+    /** Hurts what the blade struck at {@code at}; returns whether it really took something off it (only then does a body bleed). */
+    private boolean damage(ServerLevel level, ServerPlayer attacker, MeleeData.Knife knife, MeleeData.Attack attack, Entity target, Vec3 at) {
         boolean backstab = attack.backstabMultiplier > 1 && MeleeTrace.isBehind(attacker, target);
         float amount = attack.damage * (backstab ? attack.backstabMultiplier : 1);
         DamageSource source = new DamageSource(level.registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE).getOrThrow(MeleeContent.KNIFE),
@@ -141,7 +143,8 @@ public final class MeleeService implements MeleePacketListeners.Server {
             HitRecords.record(living, attacker, BlockLand.id(knife.id).toString(), backstab);
         }
         boolean wasSpectator = target.isSpectator();
-        if (!target.hurtServer(level, source, amount)) return;
+        float before = HurtCheck.vitality(target);
+        if (!target.hurtServer(level, source, amount)) return false;
         if (target instanceof LivingEntity living && attack.knockback > 0) {
             living.knockback(attack.knockback, attacker.getX() - target.getX(), attacker.getZ() - target.getZ());
         }
@@ -150,8 +153,10 @@ public final class MeleeService implements MeleePacketListeners.Server {
                 || !wasSpectator && target.isSpectator();
         MeleePackets.HitKind kind = killed ? (backstab ? MeleePackets.HitKind.BACKSTAB_KILL : MeleePackets.HitKind.KILL)
                 : backstab ? MeleePackets.HitKind.BACKSTAB : MeleePackets.HitKind.BODY;
-        BLNetwork.sendTo(attacker, new MeleePackets.S2CHit(kind, amount));
+        boolean wounded = HurtCheck.hurt(target, before, killed);
+        BLNetwork.sendTo(attacker, new MeleePackets.S2CHit(kind, amount, target.getId(), wounded, at.x, at.y, at.z));
         if (backstab) BlockLand.LOGGER.debug("[BlockLand] Backstab: {} -> {} ({})", attacker.getGameProfile().getName(), target.getName().getString(), amount);
+        return wounded;
     }
 
     /** A sound for everyone near {@code at} except the attacker, who plays it locally without delay. */

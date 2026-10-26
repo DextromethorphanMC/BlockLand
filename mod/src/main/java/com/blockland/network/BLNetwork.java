@@ -4,6 +4,8 @@ import com.blockland.BlockLand;
 import com.blockland.network.packet.ActivityPackets;
 import com.blockland.network.packet.BattleRoyalePackets;
 import com.blockland.network.packet.BombPackets;
+import com.blockland.network.packet.FarChunkPackets;
+import com.blockland.network.packet.FarTerrainPackets;
 import com.blockland.network.packet.GraffitiPackets;
 import com.blockland.network.packet.SpectatePackets;
 import com.blockland.network.packet.ViewmodelPackets;
@@ -56,7 +58,7 @@ import java.util.function.Function;
  * never references server or client logic directly.
  */
 public final class BLNetwork {
-    private static final int PROTOCOL_VERSION = 17;
+    private static final int PROTOCOL_VERSION = 21;
 
     public static final SimpleChannel CHANNEL = ChannelBuilder.named(BlockLand.id("main"))
             .networkProtocolVersion(PROTOCOL_VERSION)
@@ -107,6 +109,8 @@ public final class BLNetwork {
     private static volatile SupplyPacketListeners.Client supplyClientListener = SupplyPacketListeners.Client.NOOP;
     private static volatile ArmorPacketListeners.Server armorServerListener = ArmorPacketListeners.Server.NOOP;
     private static volatile ArmorPacketListeners.Client armorClientListener = ArmorPacketListeners.Client.NOOP;
+    private static volatile FarTerrainPacketListeners.Server farTerrainServerListener = FarTerrainPacketListeners.Server.NOOP;
+    private static volatile FarTerrainPacketListeners.Client farTerrainClientListener = FarTerrainPacketListeners.Client.NOOP;
     private static volatile Function<Connection, UUID> senderResolver = connection -> null;
     private static volatile Function<UUID, Connection> connectionResolver = id -> null;
     @Nullable
@@ -300,6 +304,19 @@ public final class BLNetwork {
                 msg -> armorClientListener.onInsert(msg));
         toClient(ArmorPackets.S2CHit.class, ArmorPackets.S2CHit::encode, ArmorPackets.S2CHit::decode,
                 msg -> armorClientListener.onHit(msg));
+
+        // far terrain (远景地平线, rendering spec §22): only in the world
+        toServer(FarTerrainPackets.C2SRequest.class, FarTerrainPackets.C2SRequest::encode, FarTerrainPackets.C2SRequest::decode,
+                (msg, player) -> farTerrainServerListener.onRequest(player, msg));
+        toClient(FarTerrainPackets.S2CHello.class, FarTerrainPackets.S2CHello::encode, FarTerrainPackets.S2CHello::decode,
+                msg -> farTerrainClientListener.onHello(msg));
+        toClient(FarTerrainPackets.S2CTiles.class, FarTerrainPackets.S2CTiles::encode, FarTerrainPackets.S2CTiles::decode,
+                msg -> farTerrainClientListener.onTiles(msg));
+        // real far chunks (rendering spec §23): the same session as the far terrain
+        toServer(FarChunkPackets.C2SRequest.class, FarChunkPackets.C2SRequest::encode, FarChunkPackets.C2SRequest::decode,
+                (msg, player) -> farTerrainServerListener.onColumns(player, msg));
+        toClient(FarChunkPackets.S2CColumns.class, FarChunkPackets.S2CColumns::encode, FarChunkPackets.S2CColumns::decode,
+                msg -> farTerrainClientListener.onColumns(msg));
     }
 
     private static <M> void toServer(Class<M> type, BiConsumer<M, FriendlyByteBuf> encoder, Function<FriendlyByteBuf, M> decoder,
@@ -514,6 +531,14 @@ public final class BLNetwork {
 
     public static void setArmorClientListener(ArmorPacketListeners.Client listener) {
         armorClientListener = listener == null ? ArmorPacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setFarTerrainServerListener(FarTerrainPacketListeners.Server listener) {
+        farTerrainServerListener = listener == null ? FarTerrainPacketListeners.Server.NOOP : listener;
+    }
+
+    public static void setFarTerrainClientListener(FarTerrainPacketListeners.Client listener) {
+        farTerrainClientListener = listener == null ? FarTerrainPacketListeners.Client.NOOP : listener;
     }
 
     public static void setSupplyClientListener(SupplyPacketListeners.Client listener) {

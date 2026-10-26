@@ -29,6 +29,14 @@ vec3 fx_viewPosition(vec2 uv, float depth) {
     return vec3(ndc.x * -z / FxProj.x, ndc.y * -z / FxProj.y, z);
 }
 
+// Distance from the camera of a point of the far terrain's depth (rendering spec §22): the same projection as the level's
+// with other near and far planes.
+float fx_farDistance(vec2 uv, float depth, float near, float far) {
+    float z = 2.0 * far * near / ((far + near) - (depth * 2.0 - 1.0) * (far - near));
+    vec2 ndc = uv * 2.0 - 1.0;
+    return length(vec3(ndc.x * z / FxProj.x, ndc.y * z / FxProj.y, z));
+}
+
 // Interleaved gradient noise, shifted every frame (temporal anti-aliasing averages the pattern away).
 float fx_noise(vec2 pixel, float frame) {
     pixel += frame * vec2(5.588238, 5.588238);

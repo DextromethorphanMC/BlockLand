@@ -1,0 +1,28 @@
+{
+  "variants": {
+    "facing=north,half=lower": {
+      "model": "blockland:block/revive_antenna"
+    },
+    "facing=north,half=upper": {
+      "model": "blockland:block/revive_antenna"
+    },
+    "facing=east,half=lower": {
+      "model": "blockland:block/revive_antenna"
+    },
+    "facing=east,half=upper": {
+      "model": "blockland:block/revive_antenna"
+    },
+    "facing=south,half=lower": {
+      "model": "blockland:block/revive_antenna"
+    },
+    "facing=south,half=upper": {
+      "model": "blockland:block/revive_antenna"
+    },
+    "facing=west,half=lower": {
+      "model": "blockland:block/revive_antenna"
+    },
+    "facing=west,half=upper": {
+      "model": "blockland:block/revive_antenna"
+    }
+  }
+}

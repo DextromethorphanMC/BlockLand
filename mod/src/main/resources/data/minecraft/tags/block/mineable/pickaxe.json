@@ -1,0 +1,14 @@
+{
+  "replace": false,
+  "values": [
+    "blockland:container_red",
+    "blockland:container_orange",
+    "blockland:container_yellow",
+    "blockland:container_green",
+    "blockland:container_blue",
+    "blockland:container_white",
+    "blockland:container_gray",
+    "blockland:container_brown",
+    "blockland:revive_antenna"
+  ]
+}

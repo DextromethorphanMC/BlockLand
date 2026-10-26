@@ -134,6 +134,52 @@ public final class GraphicsSettings {
         }
     }
 
+    /**
+     * The picture's shape (rendering spec §21): native = the window's; otherwise the virtual framebuffer takes this ratio
+     * ({@code w : h}; 21:9 is 64:27, the 2560×1080 panels).
+     */
+    public enum AspectRatio {
+        NATIVE(0, 0), R4_3(4, 3), R5_4(5, 4), R3_2(3, 2), R16_10(16, 10), R16_9(16, 9), R21_9(64, 27), R32_9(32, 9);
+
+        public final int w, h;
+
+        AspectRatio(int w, int h) {
+            this.w = w;
+            this.h = h;
+        }
+
+        /** Width over height, or 0 for the window's own. */
+        public float ratio() {
+            return h == 0 ? 0 : w / (float) h;
+        }
+    }
+
+    /** How a picture of another shape than the window is shown: stretched over the window, or whole with black bars. */
+    public enum AspectFit { STRETCH, BARS }
+
+    /**
+     * Far terrain detail (rendering spec §22): a tile of cell size c is drawn from {@code detail × c} blocks away on, so its
+     * cells cover about the same number of pixels at every distance.
+     */
+    public enum FarTerrainQuality {
+        LOW(96), MEDIUM(128), HIGH(192), ULTRA(256);
+
+        public final int detail;
+
+        FarTerrainQuality(int detail) {
+            this.detail = detail;
+        }
+    }
+
+    /** Smallest and largest custom resolution per axis (rendering spec §21). */
+    public static final int MIN_WIDTH = 640, MIN_HEIGHT = 360, MAX_WIDTH = 7680, MAX_HEIGHT = 4320;
+    /** Far terrain distance range in blocks. */
+    public static final int FAR_MIN = 1024, FAR_MAX = 32768;
+    /** Real far chunk distance range (chunks from the camera). */
+    public static final int FAR_CHUNKS_MIN = 8, FAR_CHUNKS_MAX = 4096;
+    /** Real far chunks drawn block for block out to this many chunks (coarser cubes of real blocks beyond). */
+    public static final int FAR_CHUNKS_FULL_MIN = 16, FAR_CHUNKS_FULL_MAX = 256;
+
     /** {@link #motionBlur} / {@link #motionBlurViewmodel} are shutters (current meaning, see {@link #migrateMotionBlur}). */
     private static final int MOTION_BLUR_MODEL = 2;
     /** Exposure of a fully open shutter (1 = 360° at a 30 fps reference: 1/30 s), in seconds. */
@@ -143,6 +189,45 @@ public final class GraphicsSettings {
     /** The whole BlockLand render pipeline (off = vanilla rendering, the weapons keep their studio lighting). */
     public boolean enabled = true;
     public String preset = "high";
+
+    // ---- display: the picture's shape and size (rendering spec §21; not part of the presets) --------------------------
+    /** {@link AspectRatio} id. */
+    public String aspectRatio = "native";
+    /** {@link AspectFit} id. */
+    public String aspectFit = "stretch";
+    /** {@code native}, a preset {@code WIDTHxHEIGHT}, or {@code custom} ({@link #customWidth} × {@link #customHeight}). */
+    public String resolution = "native";
+    public int customWidth = 1920, customHeight = 1080;
+
+    // ---- far terrain (远景地平线, rendering spec §22) ------------------------------------------------------------------
+    /** Distant terrain beyond the loaded chunks, streamed from the server. */
+    public boolean farTerrain = true;
+    /** How far it reaches, in blocks ({@link #FAR_MIN} … {@link #FAR_MAX}). */
+    public int farTerrainDistance = 16384;
+    /** {@link FarTerrainQuality} id. */
+    public String farTerrainQuality = "medium";
+    /** Out to this many chunks from the camera the far terrain keeps every block (1-block cells); coarser only beyond. */
+    public int farTerrainFullDetail = 24;
+    /**
+     * Real far chunks (rendering spec §23): beyond the render distance the real chunks out to {@link #farChunkDistance}
+     * chunks, drawn as Minecraft draws its own (its block models, textures, light) — block for block out to
+     * {@link #farChunkFullDetail} chunks, beyond that as cubes of 2, 4, 8 … real blocks that double with the distance (each
+     * still the real block there); the far terrain only beyond them, or where the server has no real chunk yet.
+     */
+    public boolean farChunks = true;
+    public int farChunkDistance = 1024;
+    public int farChunkFullDetail = 48;
+
+    // ---- the distant atmosphere (rendering spec §24): how far things look to the eye --------------------------------
+    public boolean farAtmosphere = true;
+    /** Air between the eye and far land: blue-shifted, lower contrast, lighter, 0..2 (1 = natural). */
+    public float aerialPerspective = 1f;
+    /** Heat haze over far ground in warm, sunny air, 0..1. */
+    public float heatShimmer = 0.5f;
+    /** Far detail blurring out (the eye no longer resolves it), 0..1. */
+    public float farBlur = 0.5f;
+    /** How hazy the horizon gets, 0..2 (1 = 95 % haze at the far distance; 0 = none). */
+    public float farTerrainHaze = 1f;
 
     // ---- resolution and anti-aliasing -------------------------------------------------------------------------------
     public String upscaler = "none";
@@ -246,6 +331,11 @@ public final class GraphicsSettings {
      * wet and beaded with water (rendering spec §15, soaking).
      */
     public boolean soaking = true;
+    /**
+     * Water on the lens (rendering spec §27): out of the water, drops on the screen that refract the picture, slide down
+     * and dry within a few seconds; under water the picture wavers gently.
+     */
+    public boolean lensWater = true;
     /**
      * Wind (rendering spec §18, needs world lighting): gusts bend and shake grass, flowers, crops, vines and leaves, and
      * creatures walking through plants push them aside.
@@ -376,6 +466,37 @@ public final class GraphicsSettings {
         return parse(Tonemap.class, tonemap, Tonemap.VANILLA);
     }
 
+    public AspectRatio aspectRatioMode() {
+        return parse(AspectRatio.class, aspectRatio, AspectRatio.NATIVE);
+    }
+
+    public AspectFit aspectFitMode() {
+        return parse(AspectFit.class, aspectFit, AspectFit.STRETCH);
+    }
+
+    /**
+     * The chosen render resolution as {width, height}, or null for native (the window's size, or the largest box of the
+     * chosen ratio it holds).
+     */
+    @javax.annotation.Nullable
+    public int[] resolutionSize() {
+        if (resolution == null || resolution.equals("native")) return null;
+        if (resolution.equals("custom")) return new int[]{customWidth, customHeight};
+        int x = resolution.indexOf('x');
+        if (x <= 0) return null;
+        try {
+            int w = Integer.parseInt(resolution.substring(0, x).trim()), h = Integer.parseInt(resolution.substring(x + 1).trim());
+            if (w < MIN_WIDTH || h < MIN_HEIGHT || w > MAX_WIDTH || h > MAX_HEIGHT) return null;
+            return new int[]{w, h};
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    public FarTerrainQuality farTerrainQualityMode() {
+        return parse(FarTerrainQuality.class, farTerrainQuality, FarTerrainQuality.MEDIUM);
+    }
+
     /** Lower-case id of a choice, as stored. */
     public static String id(Enum<?> value) {
         return value.name().toLowerCase(Locale.ROOT);
@@ -413,6 +534,8 @@ public final class GraphicsSettings {
                 volumetricClouds = false;
                 cloudQuality = id(CloudQuality.LOW);
                 fogQuality = id(FogQuality.LOW);
+                farTerrain = false;
+                farAtmosphere = false;
             }
             case MEDIUM -> {
                 upscaler = id(Upscaler.TAAU);
@@ -431,6 +554,13 @@ public final class GraphicsSettings {
                 volumetricClouds = false;
                 cloudQuality = id(CloudQuality.LOW);
                 fogQuality = id(FogQuality.LOW);
+                farTerrain = true;
+                farTerrainDistance = 8192;
+                farChunks = true;
+                farChunkDistance = 512;
+                farChunkFullDetail = 32;
+                farTerrainQuality = id(FarTerrainQuality.LOW);
+                farAtmosphere = true;
             }
             case HIGH -> {
                 upscaler = id(Upscaler.NONE);
@@ -449,6 +579,13 @@ public final class GraphicsSettings {
                 volumetricClouds = true;
                 cloudQuality = id(CloudQuality.MEDIUM);
                 fogQuality = id(FogQuality.MEDIUM);
+                farTerrain = true;
+                farTerrainDistance = 16384;
+                farChunks = true;
+                farChunkDistance = 1024;
+                farChunkFullDetail = 48;
+                farTerrainQuality = id(FarTerrainQuality.MEDIUM);
+                farAtmosphere = true;
             }
             case ULTRA -> {
                 upscaler = id(Upscaler.NONE);
@@ -467,6 +604,13 @@ public final class GraphicsSettings {
                 volumetricClouds = true;
                 cloudQuality = id(CloudQuality.HIGH);
                 fogQuality = id(FogQuality.HIGH);
+                farTerrain = true;
+                farTerrainDistance = 32768;
+                farChunks = true;
+                farChunkDistance = 2048;
+                farChunkFullDetail = 64;
+                farTerrainQuality = id(FarTerrainQuality.HIGH);
+                farAtmosphere = true;
             }
             case CUSTOM -> {
             }
@@ -526,6 +670,20 @@ public final class GraphicsSettings {
         saturation = clamp(saturation, 0, 2);
         contrast = clamp(contrast, 0.5f, 1.5f);
         temperature = clamp(temperature, -1, 1);
+        aspectRatio = id(aspectRatioMode());
+        aspectFit = id(aspectFitMode());
+        customWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, customWidth));
+        customHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, customHeight));
+        if (resolution == null || !resolution.equals("custom") && resolutionSize() == null) resolution = "native";
+        farTerrainDistance = Math.max(FAR_MIN, Math.min(FAR_MAX, farTerrainDistance));
+        farTerrainQuality = id(farTerrainQualityMode());
+        farTerrainFullDetail = Math.max(0, Math.min(64, farTerrainFullDetail));
+        farChunkDistance = Math.max(FAR_CHUNKS_MIN, Math.min(FAR_CHUNKS_MAX, farChunkDistance));
+        farChunkFullDetail = Math.max(FAR_CHUNKS_FULL_MIN, Math.min(FAR_CHUNKS_FULL_MAX, farChunkFullDetail));
+        aerialPerspective = clamp(aerialPerspective, 0, 2);
+        heatShimmer = clamp(heatShimmer, 0, 1);
+        farBlur = clamp(farBlur, 0, 1);
+        farTerrainHaze = clamp(farTerrainHaze, 0, 2);
     }
 
     /**

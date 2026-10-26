@@ -29,7 +29,7 @@ Rules that hold everywhere:
 | (level) | vanilla | terrain, entities, particles, weather — lit by the lighting pack; third-person weapons drawn in place |
 | `afterLevel` | Forge frame pass added last (`AddFramePassEvent`) | world depth copied to `FrameContext.worldDepth`; ambient occlusion and volumetric light; scene uniforms switched to the hand state (world lighting off, emission encoding on) |
 | (hand) | vanilla + viewmodels | drawn into the scene target with the jittered hand / viewmodel projections |
-| `beforeComposite` → post chain | the first HUD layer (root of `ForgeLayeredDraw`, also with F1) | decode → AA / upscale → motion blur (§11) → bloom → exposure → tone map and grade → sharpen / FXAA, written into Minecraft's real main target; main target swapped back; scene uniforms off |
+| `beforeComposite` → post chain | the first HUD layer (root of `ForgeLayeredDraw`, also with F1) | decode → AA / upscale → motion blur (§11) → water on the lens (§27) → bloom → exposure → tone map and grade → sharpen / FXAA, written into Minecraft's real main target; main target swapped back; scene uniforms off |
 | `endFrame` | `TickEvent.RenderTickEvent.Post` | statistics; if the composite did not run, the main target is swapped back anyway |
 
 **World effects in the particle pass** (`client/render/WorldFx`): BlockLand's effects on and in front of the world are
@@ -90,6 +90,10 @@ pipeline using those shaders are patched (once per program):
 * sampler `BlMaterialMap` → texture unit **13**: the block materials (§7) as one texel per atlas cell, read with
   `texelFetch` (a per-fragment search of the uniform block's rectangles would be slow, a per-vertex one is ambiguous at
   sprite edges; `BlMaterials` in the block stays filled for other readers);
+* sampler `noisetex` → texture unit **16**: Bliss's noise texture for the ported water (§15; `client/graphics/water/
+  BlissNoise`, `assets/blockland/textures/bliss/noises.png`, linear and repeating), bound with raw GL like the others
+  (unit 16 lies past Blaze3D's cache and past the 16 fragment units GL guarantees; with fewer units the uniform points at
+  the material map's unit instead — a valid draw, wrong waves — and the log says so);
 * `uniform int BlRole` → the program's role: **0** unpatched (exactly vanilla), **1** opaque (solid / cutout terrain,
   non-blended entities: lit, emission encoded in alpha), **2** blended (lit, alpha untouched), **3** translucent terrain
   (water and glass shading), **4** the Fabulous transparency composite (water refraction and absorption, emission alpha
@@ -369,6 +373,18 @@ the knife module from its strike and other players' impacts; decals stay the wea
 decal, `Decals.onEntity` with its `bodyDecal`, `bullet_wound`, for rounds that still had a third of their energy; body
 decals lie on the cube of the drawn model and follow its animation, `client/render/EntityPoses`, asset spec §14).
 
+**A body bleeds only when it was really hurt.** Whether a hit took anything off its target is the server's word
+(`combat/HurtCheck`: health + absorption before against after, or the target killed; `hurtServer` returning true is not
+enough — body armour can soak a round whole, a game can turn the damage down to nothing, a protected or creative player
+takes none). The gun and knife services send it to the attacker in their hit confirmation (`S2CHit`: target id,
+`wounded`, the hit point as the attacker saw it) and to everyone else in the shot / impact packet (`S2CShot.wounded`,
+`S2CImpact.wounded`). On the attacker's client a hit on a body that bleeds (`Impacts.bleeds`: its material has `blood`)
+is held (`client/impact/HurtConfirm.await`: blood, mist, wound, flesh sound, `bodyDecal`) and played by the confirmation
+(`HurtConfirm.settle`: the oldest hit held on that target; with none held — the server's trace struck someone else, or
+the 1.5 s hold ran out — the weapon plays it at the server's point); a hit never confirmed, or confirmed unhurt, never
+bleeds. Other players' hits play at once by the packet's flag. Bloodless targets (their material's debris, sparks,
+decals) and the attacker's feedback (hit sound, viewmodel kick) do not wait.
+
 **Data** (`assets/blockland/impacts.json`, Gson, `client/impact/ImpactData`; speeds blocks/s, sizes blocks, times s):
 
 * `materials.<id>`: `debris` {`count`, `shapes` (`chip` two crossed faces, `flake`, `splinter`, `shard` triangle,
@@ -596,33 +612,48 @@ Henyey-Greenstein g 0.6), `BlFog.w` ≥ 1 turns the render-distance fade into a 
 environmental fog stays linear; the emission alpha is fogged by the combined amount. With `BlFog.w = 0` or without world
 lighting it is exactly vanilla's `apply_fog`.
 
-**Cloud shadows** (`scene.glsl`: `bl_cloudCoverage`, `bl_cloudShadow`, inside `bl_shadow`): the ray from a point towards the
-sun meets the cloud layer's lower third; the coverage there (the clouds' weather map, `BlClouds` / `BlCloudShape`) as an
-optical depth 7·c² × density, mixed by the shadow strength (0.9) and faded out for a low sun. Every lit surface (terrain,
-entities, weapons, dust, graffiti) and the volumetric fog get it, with or without a shadow map; the shadows drift with the
-clouds. Zero while the volumetric clouds do not run.
+**The clouds are Bliss's code** (Bliss v2.1.2, a Chocapic13' Shaders edit by Xonk, based on Chocapic13's shaders; license
+and credits in `shaders/include/bliss/LICENSE.md`). `lib/volumetricClouds.glsl` is ported as `blockland:bliss_clouds.glsl`
+— not a re-implementation: its layer constants, `cloudCov` / `cloudVol` / `GetCumulusDensity` / `GetAltostratusDensity`,
+`densityAtPos` (3D noise from the 2D noise texture), `phaseg` / `DoCloudLighting`, `renderLayer` / `renderClouds` (with
+its blending order, distant fog and curvature tweak) and `GetCloudShadow` / `GetCloudShadow_VLFOG`, kept as written with
+Bliss's `settings.glsl` defaults; BlockLand's changes are marked "BlockLand:" in the file and are only the interface:
+* Iris's uniforms → BlockLand's: `cameraPosition` = `BlClouds.xyz` (the camera's world position, y shifted by 192 − the
+  dimension's cloud height, so Bliss's absolute layer heights 250 / 500 / 2000 sit as in the overworld), `worldTime` +
+  `worldDay % 100` = `BlClouds.w` (game time in ticks modulo 100 days: the clouds move where the day clock is stopped),
+  `rainStrength` = `BlCloudShape.y`, `WsunVec` / `sunElevation` = `BlSunDir` / the sun's elevation, `gbufferModelViewInverse`
+  = identity (positions are camera-relative world), `noisetex` = Bliss's `shaders/texture/noises.png` shipped byte for byte
+  (`textures/bliss/noises.png`, linear, repeating; `client/graphics/water/BlissNoise`, shared with the ported water, §15);
+  the renamed names are `#undef`'d at the file's end.
+* Settings: Bliss's defaults (layers 0 / 1 / 2 coverage 0.7 / 0.7 / 0.3, density 0.5 / 0.5 / 0.1, `Rain_coverage` 0.95,
+  `fbmAmount` 0.5, `Cloud_Speed` 1, `CLOUD_SHADOW_STRENGTH` 1 = `BlCloudShape.z`); 云量 scales the three coverages by
+  setting / 0.45 (the default setting is Bliss's default); `Daily_Weather` is off (its fixed-coverage branch); 云层质量
+  picks Bliss's ray-march steps (`minRayMarchSteps` / `maxRayMarchSteps`): 低 its LQ 10 / 30, 中 its HQ 15 / 15, 高 30 / 30.
+* Globals Bliss initialises from uniforms are assigned in `blissClouds_init()` (GLSL wants constant global initialisers),
+  called first by `renderClouds`, `GetCloudShadow` and `GetCloudShadow_VLFOG`.
+
+**Cloud shadows** (`scene.glsl`, which imports `bliss_clouds.glsl` — with `CLOUDSHADOWSONLY` except in the clouds' own pass):
+`bl_cloudShadow(pos)` is Bliss's `GetCloudShadow` (surfaces: inside `bl_shadow`, so terrain, entities, weapons, dust,
+graffiti and the far terrain get it, with or without a shadow map), `bl_cloudShadowFog(pos)` its `GetCloudShadow_VLFOG`
+(the volumetric fog, as Bliss's fog takes it); both 1 while the volumetric clouds do not run or the light is on the
+horizon. They need `noisetex`: on texture unit 16 (bound with the scene uniforms by `light/GlSlots`, raw GL like units
+12–15), which `light/VanillaPrograms` points the lighting pack's programs and every BlockLand pipeline that does not
+declare the sampler itself at (a pipeline compiled during a frame reads it from the next frame on).
 
 **Volumetric clouds** (`VolumetricClouds`, a frame stage after the level, registered before the light module; settings
-体积云 + 云层质量 + 云量; needs world lighting): a layer from the dimension's cloud height up 240 blocks (none where the
-dimension has no cloud height), marched per pixel at 1/3 or 1/2 of the internal resolution (32 / 48 / 72 steps, 3 / 4 / 6
-towards the sun) in `gfx_clouds`, stopped by the world depth. Noise, made once on the GPU (`gfx_cloud_noise`): a 128³
-Perlin-Worley shape volume tiling over 1024 blocks, a 32³ Worley detail volume tiling over 128 blocks (both stored as
-slices in 2D atlases, sampled bilinearly in the two nearest slices) and a 1024² weather map of the 4096-block cloud noise
-period (the raw coverage noise of `bl_cloudCoverage`, so the clouds and their shadows agree, and a cloud type). Density
-(Schneider 2015): coverage from 云量 (+ rain and thunder) cuts the Perlin-Worley cells; flat stratocumulus sheets or
-towering cumulus (flat base, rounded top, taller where the coverage is high) by the cloud type; the detail noise, drifting,
-erodes the edges — wispy at the base, billowy above. Light: `BlSunColor` × multiple scattering by octaves (Wrenninge 2013:
-three octaves of half the energy, a quarter of the optical depth, half the anisotropy) of a march towards `BlSunDir`, two
-Henyey-Greenstein lobes (0.8 forward, −0.3 back), the powder darkening of thin edges seen from the sun's side, ambient from
-`BlSkyColor` above and a ground bounce below; energy-conserving, early out at 1 % transmittance; aerial perspective tints
-them towards the sky (9000 blocks) and fades them out (14 000). The layer's numbers (`FrameContext.clouds`: noise position
-of the camera — camera + wind, 6 blocks/s, wrapped at 4096 — layer bottom and top relative to the camera, coverage,
-density, shadow strength, drift time) go into the scene block at `cameraReady`. Then `gfx_clouds_temporal` blends 12 % of
-the new march into last frame's (reprojected by the camera's turn only, clamped to this frame's 3×3 neighbourhood). The
-decode pass multiplies the world and the sky by their transmittance and adds their light, before the volumetric fog.
-Whether they run is decided at frame start (`GraphicsStatus.cloudsActive`) and written into `BlBlockLight.a`, so the
-lighting pack's cloud shader hides vanilla's clouds in exactly those frames; a scope's extra level render gets a copy of
-the world block with the flag off (the clouds are only marched for the main view). Programs `gfx_clouds`, `gfx_clouds_temporal`, `gfx_cloud_noise` and `clouds` (vanilla's, overridden) in
+体积云 + 云层质量 + 云量; needs world lighting): `gfx_clouds` is Bliss's cloud pass (`composite2.fsh` with
+`CLOUDS_INTERSECT_TERRAIN`: its R2 and blue-noise dithers and the `renderClouds` call), marched per pixel at 1/3 or 1/2 of
+the internal resolution; Bliss's `viewPos0` is the world's distance along the ray (world depth, else the far terrain's, else
+the sky), so the clouds stop at the world. The light handed to `renderClouds` is `BlSunColor` (Bliss: `lightCol / 80`) and
+`BlSkyColor` (Bliss: `averageSkyCol / 30`), so they follow the time of day, the weather and the player's light colours.
+The scene block carries the inputs (`FrameContext.clouds`, written at `cameraReady`): `BlClouds` = Bliss's
+`cameraPosition` and clock, `BlCloudShape` = the 云量 setting, rain, the shadow strength. Then `gfx_clouds_temporal` blends
+12 % of the new march into last frame's (reprojected by the camera's turn only, clamped to this frame's 3×3
+neighbourhood). The decode pass multiplies the world and the sky by their transmittance and adds their light (Bliss's
+`color * clouds.a + clouds.rgb`), before the volumetric fog. Whether they run is decided at frame start
+(`GraphicsStatus.cloudsActive`) and written into `BlBlockLight.a`, so the lighting pack's cloud shader hides vanilla's
+clouds in exactly those frames; a scope's extra level render gets a copy of the world block with the flag off (the clouds
+are only marched for the main view). Programs `gfx_clouds`, `gfx_clouds_temporal` and `clouds` (vanilla's, overridden) in
 `tools/shaders/programs.txt`.
 
 ## 15. Rain and water (the lighting pack, `client/render/WaterRipples`, `client/fluid`)
@@ -632,13 +663,49 @@ included; the lit terrain program takes the face's true normal from the screen d
 for lava (a glowing face whose claimed up normal is not level), so a waterfall is never shaded as a level surface seen
 edge-on.
 
-**Water** (terrain.fsh, role 3, kind water): level surfaces take their slope from `bl_waterSlope` — the travelling waves,
-rain drops (`bl_rainSlope`: two offset grids of cells, each a drop landing at its own moment of a 0.77 s cycle, a ring
-spreading from it; fewer cells in light rain, `BlWeather.y`) and ripples (`bl_rippleSlope`, below); falling sheets streak
-downwards and churn white (foam: aerated water, lit like the world). The environment — the sky above, the horizon's fog
-colour towards it, darker where sky light is low — is reflected by Fresnel (f0 0.02, at most 0.9) against the face's
-true normal; the sun's highlight is GGX with Smith visibility (roughness 0.07, more on foam), shadowed (clouds included)
-and capped. The Fabulous composite bends the world behind by the same slope.
+**Water is Bliss's code, ported** (Bliss v2.1.2, "Chocapic13' Shaders edit" by Xonk, based on Chocapic13's shaders; not
+BlockLand's own code — licence and credit in `assets/blockland/shaders/include/bliss/LICENSE.md`). The shared parts live in
+`blockland:bliss_water.glsl`, kept as close to the original as the interface allows (Bliss's names and structure; BlockLand's
+changes marked `BlockLand:` in the source): `lib/waterBump.glsl` (`getWaterHeightmap`, `getWaveNormal`, `waterCaustics`),
+`dimensions/all_translucent.fsh` (`getParallaxDisplacement` with `PW_DEPTH` 1.5 / `PW_POINTS` 2, `applyBump`, `GGX`),
+`lib/overworld_fog.glsl` (`fogPhase`), `dimensions/fogBehindTranslucent_pass.fsh` (`waterVolumetrics_test`), with Bliss's
+`settings.glsl` defaults (`WATER_WAVE_STRENGTH` 1, `WATER_WAVE_SPEED` 1, `WATER_CAUSTICS_BRIGHTNESS` 1, `Water_Absorb_*`
+0.2629 / 0.0565 / 0.01011, `Dirt_Amount` 0.14, `Dirt_Absorb_*` 0.65 / 0.85 / 1.05, `Dirt_Scatter_*` 0.7, `rayMarchSampleCount`
+2, `SNELLS_WINDOW` on) and `Vanilla_like_water` on (the surface keeps vanilla's texture and biome colour, so water reads as
+Minecraft's with or without Fabulous; Bliss's default makes the surface black and colours the water only in its volume pass).
+Interface: Iris's `cameraPosition` → `BlCamera.xyz` (wrapped every 2048 blocks), `frameTimeCounter` → `bl_time()`, `noisetex`
+→ Bliss's own `shaders/texture/noises.png` shipped unchanged (texture unit 16, §3), its shadow map → `bl_shadowMap` ×
+`bl_cloudShadow`, its sky texture `colortex4` → `bl_reflection`, its screen-space `rayTrace` → BlockLand's `bl_ssr` (§17).
+
+* **The surface** (terrain.fsh, role 3, kind water; Bliss's NORMALS, ALBEDO and SPECULAR LIGHTING blocks): the wave normal
+  (three noise octaves turned by the golden angle, wave sizes 48 × 12, 12 × 48, 32 × 32, the swell by a 600-block noise; the
+  derivative step growing with distance), a parallax displacement along the view in tangent space, waves flowing along
+  every face that is not exactly level (`posxz.xz -= (posxz.y + t·3) · normalize(normal.xz)`, so falling sheets stream
+  down), bump × 10. Vanilla's vertices carry no tangents: a level face's tangent runs along world x (binormal z), a side
+  face's horizontally along it; the face normal is the true one facing the camera (from the screen derivatives). On level
+  faces BlockLand's rain drops (`bl_rainSlope`) and ripples (`bl_rippleSlope`, below) are added on top, faded by the pixel's
+  footprint (rain between 0.04 and 0.16 blocks per pixel, ripples 0.08–0.35). Specular: f0 0.02, roughness 0, Fresnel
+  `(1 + n·v)⁵` mixed from f0; under water (`BlCamera.w`) Snell's window `(1.5 + n·v)²⁵`; the sun by `GGX` (roughness at least
+  0.035) × the direct light (`BlSunColor`, N·L remapped as Bliss does, the shadow map falling back to the sky light beyond
+  the shadow distance, the clouds' shadow cubed); above water the sky reflection, under water Bliss's `exp(−8 ·
+  Water_Absorb)` × the sun's height; mixed with the water's own colour by Bliss's `indoors` (sky light), the screen-space
+  reflection over it, the alpha raised by the Fresnel (`a + f − a·f`) and the colour divided by it so blending does not
+  darken the reflection. Computed in linear light from the lit vanilla colour (display → linear and back); `BlWater.z`
+  (the reflections setting) scales the Fresnel and the sun.
+* **What lies under it** (Fabulous composite, role 4, `bl_throughWater`; camera above water): refracted by the wave normal
+  as before, then Bliss's `composite1.fsh` under-water shading — `Absorbtion = mix(exp(−2 · totEpsilon · depth), exp(−8 ·
+  totEpsilon), 1 − e^(−0.1 depth))` with the estimated depth `Vdiff · |view.y|`, and the caustics `waterCaustics(...) + 0.25`
+  mixed in by `clamp(depth, 0, 1)` — and `fogBehindTranslucent_pass.fsh`'s water volume (`waterVolumetrics_test`: two
+  exponentially spaced samples of the sun through the shadow map and the sky light, scattered by the dirt's coefficients,
+  absorbed by `totEpsilon`; `colour · a + rgb`). BlockLand: the caustics weigh the sun's share by its shadow at the point
+  (Bliss multiplies only the direct light); the light map Bliss reads (sky light at the water, the eye's brightness) is the
+  camera's openness to the sky (`BlWeather.z`). Without Fabulous graphics there is no composite: no volume, no caustics from
+  above.
+* **Under water** (`client/graphics/water/UnderwaterCaustics`, a frame stage right after the level, before the hand): with the
+  camera in water and world lighting on, the surface's height over the camera is found on the CPU (up the camera's water
+  column, at most 48 blocks), the scene's colour copied and every world pixel below that height gets Bliss's caustics the same
+  way (`gfx_underwater_caustics`; the depth under the surface instead of Bliss's light-map estimate, the sun's share by its
+  shadow and facing), its alpha (emission) untouched. Vanilla's water fog stays the fog under water.
 
 **Ripples** (`client/render/WaterRipples`, a shared contract like `LightSources`): rings at a point of a surface with a
 strength and a heading; the newest 24 live (3.5 s) go into the scene block (`BlRipples[]`, count in `BlWeather.w`) every
@@ -917,3 +984,397 @@ sample, skips an update that could leave something a frame stale, or reorders dr
   this (260 = no cap; never during a benchmark). Vanilla only slows a minimized window or an idle player: a covered
   window kept drawing flat out and, with two clients on one GPU, made the one in front wait in its buffer swap for up
   to 2 s. Not an `Optimization` (it changes how often the background window draws, nothing in a frame).
+
+## 21. Display: aspect ratio and resolution (`client/graphics/display`, `com.blockland.mixin.display`)
+
+The 画质 tab's 显示 section picks the shape and the size of the picture the whole game renders, independently of the
+window (CS-style 4:3 stretched, black bars, lower or higher render resolutions). Not part of the presets; applies live.
+
+* **Settings** (`GraphicsSettings`): `aspectRatio` (`AspectRatio`: native, 4:3, 5:4, 3:2, 16:10, 16:9, 21:9, 32:9),
+  `aspectFit` (`AspectFit`: stretch = the picture fills the window, bars = it keeps its shape, centred, black around it),
+  `resolution` (`native`, a preset `WIDTHxHEIGHT`, or `custom` with `customWidth` × `customHeight`, 640×360 … 7680×4320).
+  The preset list is the common resolutions of the chosen ratio (the window's ratio for native), any size up to twice the
+  window per axis (above the window = supersampling).
+* **The virtual framebuffer.** What Minecraft takes for the window's framebuffer (`Window.getWidth/getHeight`: the main
+  target, the GUI scale, the projection's aspect, screenshots, BlockLand's pipeline output) is the *virtual* size: the
+  chosen resolution, or for native resolution with a ratio the largest box of that ratio the window holds (1920×1080 at
+  4:3 → 1440×1080). Native ratio and native resolution = the real framebuffer, exactly vanilla. The real size is kept by
+  `display/DisplayScaling` from GLFW's framebuffer callbacks (`WindowMixin`: `onFramebufferResize` stores the virtual size
+  in place of the real one, so vanilla's own resize check runs `Minecraft.resizeDisplay` only when the virtual size
+  changes; `refreshFramebufferSize`). A settings change takes effect at the start of the next frame (`MinecraftDisplayMixin`,
+  head of `runTick`: nothing of the frame is drawn yet and the main target is Minecraft's own).
+* **Presentation** (`GlCommandEncoderPresentMixin` in `presentTexture`): a presented texture of the window's size keeps
+  vanilla's 1:1 blit untouched; otherwise the blit's destination becomes the rectangle — the whole window (stretch) or the
+  centred fit (bars, the default framebuffer cleared black first) — with `GL_LINEAR` (nearest for a 1:1 picture in bars).
+  Only Blaze3D's own state calls (`GlStateManager`'s framebuffer binding, put back), so `GL_STATE`'s caches stay true
+  (§20). DLSS Frame Generation blits into its swapchain image with the same rectangle (`vkCmdClearColorImage` for the
+  bars).
+* **Mouse** (`MouseHandlerMixin`): GUI coordinates go through the destination rectangle (`x_gui = (x − rect.x) × guiWidth /
+  rect.width`, screen coordinates; drags scale by `guiWidth / rect.width`); a click in a bar lands outside the GUI. A
+  stretched picture fills the window, so it maps exactly like vanilla. Turning (raw deltas) is unchanged.
+
+## 22. Far terrain (远景地平线: `com.blockland.farterrain`, `server/farterrain`, `client/graphics/far`)
+
+Distant terrain beyond the loaded chunks, up to 32 768 blocks away, close to the real terrain in shape and colour, at a
+cost that does not grow with the distance: the farther a tile, the coarser its cells. The server knows the terrain (real
+chunks where they exist, the world generator's estimate where they do not) and streams compact tiles; the client caches
+them, meshes them into Minecraft-looking block columns and draws them behind the vanilla terrain.
+
+### Tiles (`com.blockland.farterrain.FarTile`, shared)
+
+* Level `k` = 0 … 9, cell = 2^k blocks, a tile = 64 × 64 cells = 64·2^k blocks; tile `(tx, tz)` covers x ∈
+  [tx·64·2^k, (tx + 1)·64·2^k). Key: `FarTile.key(level, tx, tz)` (level in the top 6 bits, tx and tz 29 bits each).
+* Cell `(i, j)` (index `i + 64·j`, i along x) is sampled at **one column**, its centre: x = x0 + i·2^k + ⌊2^k / 2⌋ (the
+  block itself at level 0). Point samples, so a coarse cell is a column of the real terrain, never an average.
+* Per cell: `height` (y of the top face: the topmost motion-blocking block's y + 1, leaves and fluids included;
+  `FarTile.EMPTY` = no terrain: void, unknown, outside the allowed region), `top` (state palette index: the top block),
+  `under` (state palette index: on land the block 3 below the top — dirt under grass, stone in cliffs; leaves under
+  leaves; under water the floor block), `biome` (biome palette index at the top), `water` (0 = no water, else the water's
+  depth to the floor, 1 … 255).
+* Palettes: block states as `Block.BLOCK_STATE_REGISTRY` ids (≤ 256 per tile), biomes as resource ids (≤ 256).
+  `version` = a 64-bit hash of the content (identical content, identical version). Codec `encode` / `decode`: a small
+  header, the palettes, heights delta-coded along rows, the byte planes, deflated.
+
+### Server (`server/farterrain`, `FarTerrainService`, wired by `BlockLandServer`)
+
+* **Sources**, per dimension, best first: (1) *live* — full chunks loaded on the server, queued when they load and when
+  they are saved (`ChunkDataEvent.Save`: every change ends in a save), captured on the server thread within 1 ms a tick,
+  loaded and modified ones swept again every 30 s, a changed chunk captured as it unloads; a snow layer on the top
+  counts as the top (plants do not); (2) *saved* — full-status chunks of the current data version in the dimension's
+  region files, read lazily when a tile needs them (the region's offset table says which exist, re-read when its file
+  changes; at most 8 reads at once through `ChunkMap.read`, only the heightmaps and the needed sections decoded); (3)
+  *estimate* — for noise generators the column's height in tiers by cell size (`Estimator`, measured with
+  `/bl far probe [columns]`, which also logs its lines): single-block cells the generator's exact column (`getBaseHeight`,
+  `OCEAN_FLOOR_WG`, about 2 ms a column), cells from 2 blocks a guided search of the uninterpolated final density started
+  from the fast guess (about 0.3 ms, −0.7 ± 2 blocks), cells from 64 blocks the fast guess alone — bisection of the
+  jagged-less initial density at −0.4, +4 blocks (about 0.07 ms, ± 4.4); the sea over anything below sea level, the biome at the surface from the biome source, and
+  `data/blockland/farterrain/surfaces.json` (a data-pack resource): per biome or `#tag` (first match, else `default`) the
+  surface, under and underwater floor blocks, ice on water, a stone line and a snow line, and a canopy (height, leaves,
+  cover share: a deterministic hash of the column decides; cells 8 blocks and wider take the canopy wherever the cover is at
+  least half, so a forest is one green roof). Flat generators: their layers; void: empty. Dimensions with a ceiling (the
+  Nether) are not offered (`enabled = false`).
+* **Coarse tiles never wait**: tiles of level 3 and coarser answer at once with what is captured and the estimate; the
+  saved chunks they sample are read behind them (24 reads at once) and the refreshed tile is pushed to its holders. Finer
+  tiles wait for up to 96 saved chunks, so near the camera the real terrain comes first.
+* **Generation** (`Generation`, as Distant Horizons generates): in noise-generated levels every chunk within
+  `generateRadius` (config, default 1536 blocks) of a player that does not exist yet is generated by the game's own world
+  generation — terrain, surface, caves, trees — nearest first (a spiral per player, the region files' tables say what is
+  missing, looked up on a worker), `generateConcurrency` at a time (default 8), each kept alive by a fresh one-tick ticket
+  every tick until it is done, none started while the server's tick takes over 40 ms. A finished chunk loads, is captured,
+  unloads and is saved like any other, so round the players the far terrain is the real terrain (and the world file
+  grows by those chunks). `/bl far status` shows it.
+* **Cache** (`DimensionTerrain`): every cell remembers whether it is real, estimated or empty and every tile the stamp it
+  was built at (a counter of captures that only grows), so a request copies newly real cells and only estimates unknown
+  ones (version bumped when anything changed); 1024 tiles per dimension in memory, on disk under
+  `<world>/blockland/farterrain/<namespace>/<path>/L<level>/` with an index of the real columns (`real.bin`); void
+  dimensions (arena, lobby) only in memory. A finished paste or clear (`WorldJobScheduler` completion) captures its box
+  again. A tile a player holds this session that changes is pushed to them unasked (`DATA` / `EMPTY`).
+* **Requests** run on a worker pool (6 tiles in work per player), nearest first per
+  player in a queue of 512 (beyond it the farthest are dropped unanswered: the client asks again after its timeout);
+  answers go out on the server thread within a per-player byte budget per second (config, default 384 KiB/s), packed
+  into `S2CTiles` of at most 128 KiB. A request outside the allowed reach (config `maxDistance`, default 32 768, + one
+  tile), wholly outside the player's view limit, while far terrain is off, or whose tile could not be built is answered
+  `DENIED`. **View limit**: a player in an arena match only gets cells inside their match's bounds
+  (`GameInstance.spectateBounds`; the rest `EMPTY`), so neighbouring matches 1024 blocks away never show; a new limit is
+  a new session (hello).
+* Config (`blockland-common.toml`, section `farTerrain`): `enabled`, `maxDistance`, `threads` (0 = half the cores, 2 … 8),
+  `bytesPerSecond`, `estimate` (allow generator estimates), `importSaved`, `generateRadius`, `generateConcurrency`.
+
+### Protocol (`network/packet/FarTerrainPackets`, play phase only)
+
+* `S2CHello(session, enabled, maxDistance, worldId, dimension, minY, maxY)` — when a player enters a level (login,
+  respawn into another dimension, teleport across dimensions). `session` numbers the stay in that level; anything of an
+  older session is ignored by both sides. `worldId` keys the client's disk cache (the world's seed hash and the view
+  limit: two arena slots are two caches).
+* `C2SRequest(session, keys[], versions[])` — ≤ 64 tiles, each with the version the client holds (0 = none); rate
+  limited (`anticheat/packets.json`). A request with no keys clears the player's queue (the client moved far away or
+  changed settings).
+* `S2CTiles(session, answers[])` — per tile: `DATA` (version + encoded tile), `UNCHANGED` (the client's copy is
+  current), `EMPTY` (nothing there at all: the client remembers it), `DENIED`.
+
+### Client (`client/graphics/far`)
+
+* **Selection** (a quadtree from level-9 roots round the camera): out to the full-detail distance (`farTerrainFullDetail`
+  chunks, at least the render distance, default 24) every cell is a block; beyond it a node is split while its cell is
+  coarser than `(distance − full) / detail` (`FarTerrainQuality.detail`: 96 / 128 / 192 / 256 — at 1080p and 70° about 7 / 5 / 3.5 / 2.6 pixels per
+  cell at the near edge of its ring), out to `farTerrainDistance` (1024 … 32 768 blocks); nodes wholly inside the vanilla
+  area are dropped (`Selection`, every frame at frame start). Every node of the desired tree is wanted, nearest first
+  (blocks; coarser first on ties). While some of a node's children are not complete the node stands in for all four, but
+  only when it is at most `Selection.COARSEST` (4) times coarser than its place asks for; otherwise the children that are
+  ready are drawn and the rest stays open until it arrives — a far tile's huge cells never stand in right beyond the
+  loaded chunks. Checked offline by `python -I tools/farterrain/check_far_terrain.py` (the codec, the mesher's winding and
+  merging, the selection: no holes, no overlaps, levels by distance).
+* **Store** (`TileStore`, render thread): decoded tiles while wanted, dropped 8 s after they stop being wanted; the encoded
+  bytes cached on disk under `<game>/blockland/farterrain/<server>/<worldId>-<state count>/<dimension>/<level>/<tx>_<tz>.bin`
+  (read before asking, shown at once, then validated: the request carries the version held). Requests: at most 192 in
+  flight, 8 packets a second, re-asked after 20 s. Decoding, the disk and meshing run on `FarWorkers` (1–3 low-priority
+  daemons, most urgent first); finished meshes are uploaded at frame start, at most 16 or 6 MB a frame.
+* **Looks** (`TileColors`, render thread, per palette entry): the block's top-face and side sprites in the block atlas
+  (`spriteCode`: x / 16, y / 16, log2 of size / 16 — square power-of-two sprites on the 16-texel grid; others fall back to
+  the colour), their tints at the cell's biome (`BlockColors` through a biome-only tint getter), the sprites' alpha-weighted
+  averages × tint as the colour without a sprite, the light emission; water: the biome's water colour × the water sprite,
+  mixed towards the floor by depth (drawn without a sprite).
+* **Meshes** (worker threads): block columns as Minecraft draws them — tops greedily merged where height and colour
+  agree, walls between neighbours of different height (a one-block band of the top block's side colour, below it the
+  `under` block; the band is left out where cells are wider than 4 blocks), skirts at tile borders down to the
+  neighbour's height where the same-level neighbour is known and at least max(8, 2 cells) deep either way (so a coarser
+  or finer neighbour drawn beside it never leaves a gap), the same next to empty cells; a tile whose same-level
+  neighbour arrives later is meshed again; tops merge only where the sprite agrees too. **Vertex** (12 bytes, element
+  `Packed`, `UINT × 3`, GENERIC): word 0 = x (bits 0–6, cells 0 … 64), z (7–13), y + 32768 (14–29), the foot of a wall
+  (30); word 2 = the face's sprite code (0 = none); word 1 = RGB (0–23: the tint with a sprite, else the colour), face
+  (24–26: 0 up, 1 north −z, 2 south +z, 3 west −x, 4 east +x), water (27), block light emission (28–31).
+* **Look**: a face with a sprite is drawn from the block atlas block by block, like the real terrain (`Sampler0`, the
+  face's coordinate within its block, the mip level from the texels a pixel covers, up to the atlas's last level, where a
+  block is its average colour) × the tint; faces without one get ± 8 % per block (a hash of its position) where a pixel
+  covers under about two blocks. Walls darken towards their foot (vertex bit 30, × 0.72).
+* **Drawing**: a frame pass after vanilla's sky and before its main pass (`LevelRendererMixin` in
+  `com.blockland.mixin.level` → `client/graphics/frame/LevelPasses`), into the main target's colour with the far
+  terrain's own depth texture (`FrameContext.farDepth`), with the level's own projection (bobbing and nausea included)
+  whose near and far planes are replaced (`FarRenderer.farProjection`: the depth row rebuilt from the w row; `farNear` =
+  half the vanilla render distance less a chunk, 8 … 256, `farFar` = 1.5 × the far distance + 4096) and the frame's
+  jitter. Per tile one draw: `DynamicTransforms` (view rotation, the tile's corner relative to the camera, the cell size in
+  `TextureMat[0][0]`), the shared quad index buffer; the view's own `FarView` block (projection, coverage mask placement,
+  the camera within its chunk) is written with `writeToBuffer` into a buffer per view (main, scope), never a slot the
+  other view is drawing with. Vanilla's terrain then draws over it with its own depth, so whatever vanilla draws
+  wins; the far terrain only shows where vanilla left the sky. Right after, `far_depth` (a full-screen pass, colour writes
+  off) carries the far terrain's depth into the target's own wherever it lies within the level projection's far plane
+  (the level's projection × the inverse of the far one, both jittered alike): vanilla's terrain is still drawn over it
+  where nearer, and what vanilla draws later — clouds, rain, particles, the Fabulous layers — is hidden behind far terrain
+  standing in front of it (without this the clouds were drawn over the land as if it were sky: it looked see-through). Tiles front to back; tiles touching the vanilla area use
+  the masked program (`far_terrain` with `MASKED`), which discards fragments over chunks vanilla has compiled
+  (`CoverageMask`: one texel per chunk, 128 × 128 round the camera); the rest the plain one (early depth test). Lit like
+  the lighting pack's terrain (`bl_skyShade` with sky light 15, the face shade, cloud shadows; water: Fresnel sky
+  reflection and the sun's glint), fogged with `bl_fog`. A scope's picture draws it too (its own depth texture).
+* **Fog**: while far terrain is drawn, vanilla's render-distance fade moves out to the far distance (vanilla's terrain no
+  longer fades into the sky where the far terrain carries on), the environmental fog runs from half the far distance to
+  its end (vanilla's 0 … 1024 stretched over the second half, rain pulling both in), and BlockLand's haze starts from
+  `1.2 × 远景雾 / far` per block instead of 0.002 (at most): about 70 % haze at the far end, the land clear to half way. `GraphicsStatus.farTerrainReach` (blocks, 0 = not drawn) is what the fog and the light module read.
+* **Post** (`FrameContext.farDepth` / `farNear` / `farFar`, null when nothing was drawn this frame): within the level's far
+  plane the world depth already holds the far terrain (`far_depth`); beyond it the decode pass gives far-terrain pixels
+  (world depth 1, far depth < 1) no sun glow (`gfx_decode` `FarDepthSampler`, `Params[1].w`); the
+  volumetric fog (`fx_volumetric`: `FarTerrain` in its block, `fx_farDistance`) and the volumetric clouds (`gfx_clouds`,
+  `Params[1].yzw`) end their rays at the far terrain, and through the sky the fog reaches as far as the far terrain does.
+  The temporal passes treat it as sky (camera rotation only: at hundreds of blocks the parallax of a moving camera stays
+  under a fraction of a pixel); screen-space reflections and ambient occlusion do not see it.
+* **Minecraft's video settings** (render distance, simulation distance, chunk updates, graphics mode, smooth lighting,
+  biome blend, entity distance and shadows, clouds and their distance, particles, mipmaps, frame rate, v-sync, fullscreen,
+  field of view, brightness, view bobbing) are rows of the 画质 tab too (`SettingsScreen.vanillaRows`): each sets the game's
+  own option (its range and reactions) and saves options.txt.
+* **Settings** (the 画质 tab, section 远景地平线; in the presets: 低 off, 中 4096 / low, 高 8192 / medium, 极高 16 384 /
+  high): `farTerrain`, `farTerrainDistance`, `farTerrainQuality`, `farTerrainFullDetail` (chunks, 0 … 64),
+  `farTerrainHaze` (0 … 2). Status: tiles drawn / wanted,
+  cells, GPU memory, the server's offer (`GraphicsStatus.far*`, also on F3 with 显示统计).
+* **Cost**: per frame the selection (a few hundred nodes), at most a handful of mesh jobs and uploads, one draw per
+  visible tile (front to back, early depth test outside the masked ring), one full-screen depth pass. Memory follows the
+  view: about 500–700 tiles are wanted at 32 768 blocks and medium detail (nearly the same count at every level) plus the
+  full-detail ring's single-block tiles, at 12 bytes a vertex.
+
+## 23. Real far chunks (真实远景区块: `com.blockland.farterrain.FarColumn`, `server/farterrain`, `client/graphics/far`)
+
+Beyond the render distance, out to `farChunkDistance` chunks (8 … 4096, presets 512 / 1024 / 2048), the world is drawn
+from its real chunks with Minecraft's own block renderer and vanilla's terrain pipelines (so the lighting pack lights it
+like the near world): the same block models, textures, tints, fluids and light. Out to `farChunkFullDetail` chunks
+(16 … 256, at least the render distance + 4) block for block; beyond it in **units** of scale k — 2^k × 2^k chunks whose
+blocks are cubes of 2^k real blocks, each cube the real block that best represents it, drawn as that block scaled up —
+the scale doubling as the distance doubles. That far a block is smaller than a pixel, so the cubes look like the blocks
+themselves while the cost per distance band stays the same (block-for-block geometry for 1000 chunks would need hundreds of
+GB). The far terrain (§22) is drawn only where no unit holds a real chunk: beyond the far chunk distance, and where the
+server has not generated a chunk yet.
+
+* **Unit** (`FarColumn`, shared): scale (0 … 6), position in units of its scale, its lowest cube-section
+  (`FarColumn.minSection` / `sectionCount`: sections of 16³ cubes), per section the bytes `LevelChunkSection.write` gives
+  (block count, block state and biome palettes: global ids — the same as vanilla's chunk packet) or null for air, the
+  section's sky and block light (2048 bytes each, null when there is none), and `present`: which of its chunks exist (a
+  missing chunk is never drawn as real air). Key: x bits 0–27, z 28–55, scale 56–59 (not `ChunkPos.asLong`). Version =
+  content hash. Codec FORMAT 2: header, presence words, per section flags (1 states, 2 sky, 4 block) and arrays, deflated.
+* **Protocol** (`FarChunkPackets`, the far terrain's session): `C2SRequest(session, keys[], versions[])` ≤ 128 units;
+  `S2CColumns(session, answers[])` with `FarTerrainPackets.Answer` kinds (DATA, UNCHANGED, EMPTY = none of its chunks
+  exists, DENIED). Rate limited (`packets.json`).
+* **Server** (`server/farterrain`): scale 0 from full-status chunks only — loaded chunks on the server thread (sections
+  and the light engine's data layers), saved ones from the region files on workers (older saves upgraded with the game's
+  data fixers first), never generated on request: the background generation of §22 follows the farthest unit a player
+  asks for up to `columnDistance`. Scale k ≥ 1 built from its four children on workers (per 2 × 2 × 2 cubes: the most
+  common top-exposed non-air block when at least half is non-air, else air; flowing fluid counts as air; light the
+  maximum; biomes sampled), cached on the world's disk (`<world>/blockland/farchunks/…`) with the stamps of the chunks
+  under it (their write times from the region file headers), rebuilt only when one of them was saved again. An existing
+  all-air chunk is DATA without sections (real air); EMPTY means no chunk exists. A unit only partly inside the view limit
+  has the chunks outside marked absent. Units outside the view limit or beyond `columnDistance` (config, chunks,
+  default 1024) are DENIED; answers go out nearest first within `columnBytesPerSecond` per player; a unit a player holds
+  that changes is pushed to them (scale 0 after 2 s quiet, coarser later).
+* **Client store** (`ColumnStore`): wanted = the leaves of a quadtree from scale-6 roots round the camera's chunk: a unit
+  splits while its nearest chunk is closer than `farChunkFullDetail` × 2^(k−1) chunks; nothing farther than
+  `farChunkDistance` or within the render distance − 2; a chunk vanilla draws (it holds it, it is within vanilla's view
+  distance, its surface section is compiled: `CoverageMask.vanillaDraws`) is left to vanilla, looked at again along
+  vanilla's edge every 250 ms. Disk cache (`…/farchunks2/<server>/<world>/<dim>/s<scale>/`), versions sent back. A unit is
+  kept as its compressed bytes; its `LevelChunkSection`s (light arrays all 0 or all 15 shared) only while a mesh needs
+  them, decoded again when one does. **Swaps:** a unit that leaves the tree stays drawn until every wanted unit over it
+  (finer or coarser) is meshed or known to hold nothing, then they change places in one frame (after 20 s it goes anyway);
+  a new unit is not placed while one it overlaps is still drawn. Real terrain never drops to the far tiles because its
+  replacement is still loading.
+* **Meshing** (`ColumnMesher`, workers): in the unit's grid (a position = a cube), once its eight neighbours of the same
+  scale are known; a neighbour of another scale counts as air, so borders between scales are closed by the units' own
+  faces. The getter answers blocks, fluids, biome tints (vanilla's blend radius) and light from the store, and from the
+  client level for chunks vanilla holds (scale 0); Minecraft's own block renderer (`renderBatched` / `renderLiquid`, Forge
+  model data and render types) writes each layer's quads, scaled by 2^k, positions relative to the unit's region. Sky light
+  missing: 15 above the unit's highest non-air cube, 0 below.
+* **Drawing** (`RegionRenderer`): units packed into regions of 4 × 4 units of one scale, one vertex buffer per region and
+  layer (a unit's place in it kept; a unit leaving is zeroed, a full buffer rebuilt by GPU copies), drawn in the level's
+  pass before vanilla's terrain (§22) with each layer's vanilla pipeline and atlas, the far projection (`Projection` block
+  of the pass), `DynamicTransforms` with the region's corner, frustum-culled, solid layers front to back before the far
+  tiles, translucent ones back to front after them, into the far terrain's depth; `far_depth` then carries it into the
+  level's own.
+* **Coverage** (`CoverageMask`): one texel per chunk out to 320 chunks round the camera (vanilla's chunks and placed
+  units), one per 16 × 16 chunks out to 4352 (set when all its chunks are held by placed units). The masked far tile
+  program drops fragments either marks; far tiles are also drawn 0.1 % farther than they are (same pixel), so where a
+  tile and a real chunk share a surface the real one wins.
+* **Settings** (the 画质 tab, 远景地平线): `farChunks`, `farChunkDistance`, `farChunkFullDetail`. Status: units drawn /
+  placed, held in memory, waiting, GPU MB.
+
+## 24. The distant atmosphere (远景大气: `client/graphics/post/FarAtmosphere`, in the post chain right after the decode)
+
+How far land looks to the eye, by its distance from the camera: one full-screen pass (`gfx_far_atmosphere`) on the
+decoded linear-HDR picture at the internal resolution, before the anti-aliasing / upscaling (span `bl/post/far_atmosphere`).
+Distance per pixel: the world depth through the inverse of the level projection × view rotation, or, where the world
+depth is 1, the far terrain's depth (`FrameContext.farDepth`, the same projection with `farNear` / `farFar`); the sky
+(both 1), the hand and the viewmodel (hand depth < 1, decode alpha 1) are passed through. In order:
+
+* **Heat shimmer** (`heatShimmer` 0 … 1 × the air's heat): where the pixel is read wobbles in fine, rising ripples (two
+  sines of screen position and time, up to about a pixel), from 250 blocks on (full at 2500) and only within ±0.1 of the
+  horizon in the view ray's height; a read whose distance is under 0.85 of the pixel's (nearer things) or the sky is
+  refused. The heat (eased) = warm biome at the camera (base temperature 0.5 → 0, 1.7 → 1) × daylight (sky darkness) ×
+  clear weather; none in dimensions without sky light.
+* **Detail loss** (`farBlur` 0 … 1): a rotated 8-tap disk, radius growing from 700 to 7000 blocks up to 2.2 pixels, of
+  taps that are at least 0.8 of the pixel's distance away and not sky or hand — fine detail melts and outlines merge,
+  silhouettes keep their edge against nearer things and the sky.
+* **Aerial perspective** (`aerialPerspective` 0 … 2): beyond 150 blocks, transmittance `exp(−(0.36, 0.6, 1.0) ×
+  strength × (d − 150) / 6000)` (blue scattered most: Rayleigh), saturation pulled towards luminance by 35 % of the
+  green channel's loss, and the horizon's colour scattered in (the sky's colour paled 40 % towards its grey, linear) —
+  a few percent within the render distance, the far terrain's mountains blue and soft; on top of the haze (§14, §22).
+* Off with `farAtmosphere` (preset 低), with all three at 0, with the camera under water, or without the pipeline. Settings
+  rows: the end of the 画质 tab's 远景地平线 section.
+
+## 25. Connected textures (连接贴图: `client/ctm`, data `assets/<ns>/ctm/*.json`)
+
+Blocks named by resource-pack data pick each face's tile from their neighbours, so a wall of them reads as one surface
+with a frame round its outside (OptiFine's CTM idea, our own format). Any pack may add rules, for vanilla blocks too;
+block code never knows it is connected.
+
+**Data** (`assets/<any namespace>/ctm/<name>.json`, every pack, read with each model bake; files in sorted order, the
+first rule of a block matching a quad wins). One rule, or several under `"rules": [...]`:
+
+```json
+{ "rules": [
+  { "blocks": ["blockland:container_red"], "faces": ["sides"], "textures": ["blockland:block/container/red/side/0"],
+    "method": "ctm", "tiles": "blockland:block/container/red/side" },
+  { "blocks": ["blockland:container_red"], "faces": ["top", "bottom"], "textures": ["blockland:block/container/red/top/0"],
+    "method": "ctm", "tiles": "blockland:block/container/red/top" }
+] }
+```
+
+* `blocks` — block ids whose models are wrapped (no tags: models bake before tags exist).
+* `faces` — `all` (default), `sides`, `top`, `bottom` or direction names; `textures` — the source sprites replaced
+  (empty: every quad on those faces).
+* `method` — `ctm` (47 tiles), `horizontal` (4: alone, joined left, right, both), `vertical` (4: alone, joined above,
+  below, both), `random` (needs `count` with a base path; `weights` optional; stable per block and face).
+* `tiles` — a base path (tile *i* is `<base>/<i>`) or an explicit list; they must lie under `textures/block/` (the block
+  atlas's `block/` directory source picks them up in every namespace).
+* `connect` — `block` (default: the same block, any state) or `state` (the very same state); `connectTo` — further
+  block ids or `#tags` that join it (tags are fine here: evaluated while meshing).
+* `exposedOnly` (default true) — a neighbour whose own face here is covered by a joined block does not join (the
+  surface turns a corner there, so the frame stays).
+
+**Tile layout** (`client/ctm/CtmTiles`, twin `tools/ctm/ctm_layout.py`). In-plane directions 0..7: up, right, down,
+left, up-right, down-right, down-left, up-left; mask bit *i* = that neighbour joins. `ctm` reduces the mask (a corner
+counts only when both its edges join) and the tile is the rank of the reduced mask among the 47 reduced masks in
+ascending order: tile 0 is a block alone (frame all round), 46 fully surrounded. A tile draws a frame on every edge whose
+bit is clear and an inner-corner piece where both edges join but the corner does not. Directions are in the
+**texture's frame** (image right = +u, image up = −v): each face has a fixed world frame (`right`/`up` seen from
+outside), and every quad's uv gradient (from its vertices) gives the permutation between the two, so rotated, uv-locked
+or mirrored models get the frame on the right world side. Quads whose uvs do not run along the face's axes are left
+alone.
+
+**Hook** (`ConnectedTextures`, no mixin). On `ModelEvent.ModifyBakingResult` (a worker thread of the bake; the new packs
+are already the resource manager's) the rules are loaded and each listed block's `BlockStateModel` is wrapped
+(`ConnectedModel`, one per distinct baked model). Forge's `getModelData(level, pos, state, data)` — called by the section
+compile with its `RenderSectionRegion` and by the far terrain's `ColumnMesher` with its column getter — reads the 26
+blocks round the block once and stores, per rule, eight bits per face plus the block's seed in a `ModelProperty`.
+`collectParts(random, parts, data, layer)` wraps the wrapped model's parts; their `getQuads` return the source quads with
+the uvs moved to the chosen tile (same place within the sprite), cached per source quad (keyed by its vertex array) and
+tile. Without that data (items, the breaking overlay, shadow casters, voxels, impact sprites) the model is the wrapped
+one. Tiles are looked up in the block atlas on first use (after its upload); a missing tile switches the rule off with a
+warning. A block change dirties the sections of every block within one block (vanilla), which covers every neighbour
+whose mask can depend on it (all reads lie within ±1 on each axis).
+
+**Performance switches.** Everything below the parts — vanilla's tesselation, `SECTION_MESHING` (`QuadWriter`, the
+per-block face decisions), `SECTION_COPIES`, `BIOME_TINTS` — sees ordinary quads, and the masks come from the same
+region snapshot either way, so the mesh is identical with every `Optimization` on or off. Cost: 27 block reads and a
+few bit operations per wrapped block in a compile, plus one list per part with a replaced quad.
+
+**Shipping containers** (`cargo/CargoContent`, 集装箱): eight colours (`container_<red|orange|yellow|green|blue|white|
+gray|brown>`), full metal cubes (strength 5, pickaxe), their own creative tab. `tools/assets/gen_containers.py` makes
+everything per colour: two 47-tile sets at 16 px (`side`: corrugated steel with vertical ribs every 4 px; `top`: the
+roof panel, also underneath) whose frames are the rails (top and bottom edges), corner posts (left and right), corner
+castings where two frame edges meet and an inner-corner piece; weathering repeats every 16 px so tiles continue each
+other. The model names tile 0; the ctm rule joins a container to containers of its own colour only. Models, block
+states, item models, loot tables and the `minecraft:mineable/pickaxe` tag come from the same script (the tag merged under
+a file lock).
+
+**Example pack** "BlockLand 连接玻璃" (`resourcepacks/blockland_connected`, `ConnectedPack`, off by default):
+`minecraft:glass` with a light frame only round the outside of a window (`tools/assets/gen_connected_glass.py`).
+
+Check: `python -I tools/ctm/check_ctm.py` (the layout, the Java twin's numbering, all 8 uv orientations put the frame on
+exactly the free world sides, every rule's tiles exist under `textures/block/`).
+
+## 26. Placement preview (`client/placement`, `common/block/MultiBlockFootprint`)
+
+While the player holds a block that occupies more than one block and the crosshair is on a spot where vanilla would
+place it, the blocks it would take are outlined: a faint blue-white fill (inset 4 mm, so it never fights with the faces
+it rests on; drawn both sides, no depth write) and the combined outline of the cells (one box for a door or the
+antenna, no line between the cells) as a light line over a translucent dark halo (vanilla's thick secondary outline),
+so it reads on snow, sand and in the dark. Nothing when the block would not be placed there.
+
+* **Contract.** A block that occupies several blocks implements `common/block/MultiBlockFootprint.footprint(state, pos)`:
+  the absolute positions its placement state takes when placed at `pos`, `pos` first (the revive antenna, §51 of the
+  asset spec: `pos` and the block above). The preview's adapter (`client/placement/Footprints`) covers vanilla's doors
+  and two-block plants (`DoorBlock`, `DoublePlantBlock`: the other half above or below) and beds (`BedBlock`: the head
+  towards its facing). No block gets preview code of its own.
+* **When** (`PlacementPreview.placement`, vanilla's own decision in `MultiPlayerGameMode.useItemOn` and
+  `BlockItem.place`, evaluated without side effects): the main hand's block item, or the off hand's while the main hand is
+  empty; inside the world border; not when the click would use the block clicked (its class overrides `useWithoutItem`
+  — chests, doors, levers, the ammo crate) unless sneaking; the adventure-mode `can_place_on` rule; the block enabled;
+  `BlockPlaceContext.canPlace`, `updatePlacementContext`, a non-null `getStateForPlacement` (which for these blocks
+  already checks the other cells), `canSurvive` and no entity in the way (`isUnobstructed`); every cell inside the
+  build height and the border. Only footprints of two or more cells are drawn.
+* **Where in the frame.** From vanilla's block outline (Forge's `RenderHighlightEvent.Block`, never cancelled), with its
+  pose stack and buffers: the same point of the level's frame as the outline beside it (after the block entities, or
+  after translucent terrain when the targeted block is translucent), jittered with the level like everything vanilla
+  draws there, so TAA and the upscalers treat it as they treat the outline. It follows wherever vanilla shows an outline
+  (not with the HUD hidden, not in spectator mode) and is never in the shadow map (no level render there). Render types
+  `debugStructureQuads` (fill), `secondaryBlockOutline` and `lines`; all blend translucently, which keeps the main
+  target's alpha at 1 over opaque pixels (no false emission, §3).
+
+## 27. Water on the lens (`client/graphics/post/LensWater`, after leaving water)
+
+Setting 镜头水滴 (`GraphicsSettings.lensWater`, default on, in the 画质 tab's rain and water section). One full-screen
+pass (`gfx_lens_water`) on the upscaled linear-HDR picture, in the post chain after motion blur and before bloom and
+exposure (the HUD is never wet; the hand and the viewmodel are, as on a real lens). The idea is Chocapic13's Bliss
+shaders' water on the camera (`exitWater`, smoothed over 5 s after the eye leaves water); the drops are BlockLand's own.
+
+* **When.** While the camera is in water (`Camera.getFluidInCamera() == WATER`): a gentle wavering of the picture
+  (≈ 0.2 % of the screen, more towards the edges). The moment it leaves, the clock of this exit starts (render clock,
+  `RenderClock`); after 5.6 s the last drop is gone and the pass is skipped (the picture handed back as it is). Every exit
+  lays different drops (a seed counted per exit, never random: the benchmark's frames repeat exactly). Changed settings
+  clear the lens.
+* **The film** (the first 0.8 s): below a line sweeping down the screen at 2.3 screen heights a second the water still
+  running bends the picture in streaming ripples, strongest at the line's meniscus.
+* **Sliding drops**: lanes 0.05 screen heights wide, three slots each (70 % taken); a drop's radius 0.008–0.024 (most
+  small), life 2.2–5.5 s (bigger ones longer), shrinking with √ of the life left. It sits for 0.2–2.2 s (bigger ones
+  less), then slides down at 0.05–0.42 screen heights a second by size, in fits — 35 % steady creep, 65 % lurches
+  (stick, let go) — wandering a little sideways, drawn out 30 % while it moves, losing a third of its size over the
+  first 0.6 screen heights. Behind it a hair-thin wet trail (a sideways smear, a touch darker) that dries within 1.6 s
+  of the drop passing, with a bead left every 0.018 here and there (45 %).
+* **Sitting drops**: a grid of 0.035 cells, 55 % taken, radii 0.002–0.009 (mostly the smallest), drying in 1.2–5 s.
+* **The lens.** Each drop is a cap of water: through it the picture turned over and squeezed (seen at
+  `centre − (p − centre) × 1.3…1.6`, a 4-tap blur of 1.5 pixels), a dark ring at the rim (light leaves it at a steep
+  angle, down to 45 %), a glint of the light above on its upper left; the nearest-on-top drop (the thickest at the pixel)
+  wins; the rim is anti-aliased over 1.5 pixels. All sizes are in screen heights, so drops are round at any aspect.

@@ -1,5 +1,6 @@
 package com.blockland.client.graphics.light;
 
+import com.blockland.client.graphics.Graphics;
 import com.blockland.client.graphics.GraphicsSettings;
 import com.blockland.client.graphics.shadow.SunPath;
 import com.blockland.client.render.RenderClock;
@@ -128,7 +129,10 @@ final class Sky {
         float low = 1 - smooth(0f, 0.3f, Math.abs(direction.y));
         float weather = 1 + 2.5f * rain;
         float height = (float) Math.exp(-HAZE_FALLOFF * Math.max(-48, camera.y - level.getSeaLevel()));
-        fog[0] = HAZE_SEA_LEVEL * settings.fogDensity * open * (1 + 1.5f * low) * weather * height;
+        // far terrain (rendering spec §22): the air thins out so the horizon is about 70 % haze where the far terrain ends
+        float reach = Graphics.status().farTerrainReach;
+        float base = reach > 0 ? Math.min(HAZE_SEA_LEVEL, 1.2f * settings.farTerrainHaze / reach) : HAZE_SEA_LEVEL;
+        fog[0] = base * settings.fogDensity * open * (1 + 1.5f * low) * weather * height;
         fog[1] = HAZE_FALLOFF;
         fog[2] = (sun ? 0.7f : 0.3f) * (1 - 0.7f * rain);
         fog[3] = 1;

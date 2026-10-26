@@ -101,15 +101,24 @@ public final class GunPackets {
 
     public enum HitKind { BODY, HEAD, KILL, HEAD_KILL }
 
-    /** Hit confirmation for the shooter's hit marker. */
-    public record S2CHit(HitKind kind, float damage) {
+    /**
+     * Hit confirmation for the shooter: the hit marker, and the round's blood — {@code wounded} when the target really lost
+     * health ({@code HurtCheck}; armour can soak a round whole), struck at {@code x, y, z} (as the shooter saw it).
+     */
+    public record S2CHit(HitKind kind, float damage, int target, boolean wounded, double x, double y, double z) {
         public static void encode(S2CHit msg, FriendlyByteBuf buf) {
             buf.writeEnum(msg.kind);
             buf.writeFloat(msg.damage);
+            buf.writeVarInt(msg.target);
+            buf.writeBoolean(msg.wounded);
+            buf.writeDouble(msg.x);
+            buf.writeDouble(msg.y);
+            buf.writeDouble(msg.z);
         }
 
         public static S2CHit decode(FriendlyByteBuf buf) {
-            return new S2CHit(buf.readEnum(HitKind.class), buf.readFloat());
+            return new S2CHit(buf.readEnum(HitKind.class), buf.readFloat(), buf.readVarInt(), buf.readBoolean(), buf.readDouble(),
+                    buf.readDouble(), buf.readDouble());
         }
     }
 
@@ -122,16 +131,17 @@ public final class GunPackets {
      *                   -1 (it struck an entity there, or flew its full range)
      * @param suppressed the gun wears a suppressor: no muzzle flash
      * @param hand       which gun of a dual pair fired (0 = right / the only one, 1 = left)
+     * @param wounded    it struck an entity and really hurt it ({@code HurtCheck}): only then does a body bleed
      */
     public record S2CShot(int shooterId, double endX, double endY, double endZ, boolean hitBlock, int face, boolean suppressed,
-                          int hand) {
+                          int hand, boolean wounded) {
         /** {@link #face} of a round that skipped off water, or that a fluid spent, at the end point (no block, no entity). */
         public static final int SKIPPED = -2, SPENT = -3;
         /** {@link #face} of a launched round (a grenade, flying on as an entity): the shot alone, no tracer or impact. */
         public static final int LAUNCHED = -4;
 
         public S2CShot(int shooterId, double endX, double endY, double endZ, boolean hitBlock, int face, boolean suppressed) {
-            this(shooterId, endX, endY, endZ, hitBlock, face, suppressed, 0);
+            this(shooterId, endX, endY, endZ, hitBlock, face, suppressed, 0, false);
         }
 
         public static void encode(S2CShot msg, FriendlyByteBuf buf) {
@@ -143,11 +153,12 @@ public final class GunPackets {
             buf.writeByte(msg.face);
             buf.writeBoolean(msg.suppressed);
             buf.writeByte(msg.hand);
+            buf.writeBoolean(msg.wounded);
         }
 
         public static S2CShot decode(FriendlyByteBuf buf) {
             return new S2CShot(buf.readVarInt(), buf.readDouble(), buf.readDouble(), buf.readDouble(), buf.readBoolean(), buf.readByte(),
-                    buf.readBoolean(), buf.readByte());
+                    buf.readBoolean(), buf.readByte(), buf.readBoolean());
         }
     }
 }

@@ -24,7 +24,10 @@ layout(std140) uniform VolumetricInfo {
     vec4 Extra;             // x under water, y cascades, z sun scattering strength, w forward anisotropy g
     vec4 Medium;            // x mist density per block, y mist height scale, z sea level, w sky light strength
     vec4 Far;               // x farthest distance (render distance), y dynamic lights on, zw -
+    vec4 FarTerrain;        // spec §22: x near, y far plane of its depth, z 1 = drawn this frame, w its reach (blocks)
 };
+
+uniform sampler2D FarDepthSampler;
 
 in vec2 texCoord;
 
@@ -117,7 +120,13 @@ void main() {
     vec3 view = fx_viewPosition(texCoord, min(depth, 0.999999));
     vec3 pos = mat3(ViewToWorld) * view;
     vec3 dir = normalize(pos);
-    float sceneDist = depth >= 1.0 ? Far.x : min(length(pos), Far.x);
+    float sceneDist = depth >= 1.0 ? max(Far.x, FarTerrain.w) : min(length(pos), Far.x);
+    if (depth >= 1.0 && FarTerrain.z > 0.5) {
+        // the far terrain lies behind the sky's depth: its own depth says how far the ray goes
+        ivec2 texel = clamp(ivec2(texCoord * FxSize.xy), ivec2(0), ivec2(FxSize.xy) - 1);
+        float farDepth = texelFetch(FarDepthSampler, texel, 0).r;
+        if (farDepth < 1.0) sceneDist = fx_farDistance(texCoord, farDepth, FarTerrain.x, FarTerrain.y);
+    }
     float marchDist = min(sceneDist, Fog.y);
     int steps = int(Fog.z + 0.5);
     float stepLength = marchDist / float(steps);
@@ -148,7 +157,7 @@ void main() {
         if (sigma <= 1e-6) {
             continue;
         }
-        float sun = shadowAt(p) * bl_cloudShadow(p);
+        float sun = shadowAt(p) * bl_cloudShadowFog(p);
         vec3 inscatter = sunColor * tint * (sun * sunPhase);
         // the sky and the lamps light the fog, not the thin shaft medium (which only shows the sun's shafts)
         inscatter += skyLight * (fog / sigma);
@@ -165,7 +174,7 @@ void main() {
         float shape = abs(x) > 1e-5 ? (exp(-x * marchDist) - exp(-x * sceneDist)) / x : (sceneDist - marchDist);
         float tau = BlFog.x * shape;
         float farT = exp(-tau);
-        float sun = bl_cloudShadow(dir * min(sceneDist, 512.0)) * (Extra.y > 0.5 ? 1.0 : SunDirection.w);
+        float sun = bl_cloudShadowFog(dir * min(sceneDist, 512.0)) *(Extra.y > 0.5 ? 1.0 : SunDirection.w);
         vec3 inscatter = sunColor * (sun * sunPhase) + skyLight;
         scattered += transmittance * inscatter * (1.0 - farT);
         transmittance *= farT;

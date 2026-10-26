@@ -1,5 +1,6 @@
 package com.blockland.client.graphics.upscale.dlss;
 
+import com.blockland.client.graphics.display.DisplayScaling;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
@@ -228,6 +229,18 @@ public final class FrameGeneration implements AutoCloseable {
             Vk.imageBarrier(barrier, 0, Vk.ACCESS_TRANSFER_WRITE, Vk.LAYOUT_UNDEFINED, Vk.LAYOUT_TRANSFER_DST, QUEUE_FAMILY_IGNORED,
                     QUEUE_FAMILY_IGNORED, swapImages[index]);
             vk.cmdPipelineBarrier.call(cb, Vk.STAGE_TRANSFER, Vk.STAGE_TRANSFER, 0, 0, 0, 0, 0, 1, barrier);
+            // the picture's place in the window (rendering spec §21): the whole of it, or centred with black bars
+            int[] rect = DisplayScaling.destination(swapWidth, swapHeight, color.width, color.height, DisplayScaling.bars());
+            if (rect[2] < swapWidth || rect[3] < swapHeight) {
+                long black = MemoryUtil.memAddress(stack.calloc(4, 16));
+                MemoryUtil.memPutFloat(black + 12, 1);
+                long range = MemoryUtil.memAddress(stack.calloc(4, 20));
+                MemoryUtil.memPutInt(range, 1);                   // colour aspect, mip 0 (1 level), layer 0 (1 layer)
+                MemoryUtil.memPutInt(range + 8, 1);
+                MemoryUtil.memPutInt(range + 16, 1);
+                vk.cmdClearColorImage.call(cb, swapImages[index], Vk.LAYOUT_TRANSFER_DST, black, 1, range);
+            }
+            int top = swapHeight - rect[1] - rect[3];
             long region = MemoryUtil.memAddress(stack.calloc(8, 80));
             MemoryUtil.memPutInt(region, 1);                  // colour aspect, mip 0, layer 0, 1 layer
             MemoryUtil.memPutInt(region + 12, 1);
@@ -236,10 +249,12 @@ public final class FrameGeneration implements AutoCloseable {
             MemoryUtil.memPutInt(region + 36, 1);
             MemoryUtil.memPutInt(region + 40, 1);
             MemoryUtil.memPutInt(region + 52, 1);
-            MemoryUtil.memPutInt(region + 68, swapWidth);     // dstOffsets[1]
-            MemoryUtil.memPutInt(region + 72, swapHeight);
+            MemoryUtil.memPutInt(region + 56, rect[0]);       // dstOffsets[0]
+            MemoryUtil.memPutInt(region + 60, top);
+            MemoryUtil.memPutInt(region + 68, rect[0] + rect[2]); // dstOffsets[1]
+            MemoryUtil.memPutInt(region + 72, top + rect[3]);
             MemoryUtil.memPutInt(region + 76, 1);
-            boolean scaled = swapWidth != color.width || swapHeight != color.height;
+            boolean scaled = rect[2] != color.width || rect[3] != color.height;
             vk.cmdBlitImage.call(cb, color.image, Vk.LAYOUT_GENERAL, swapImages[index], Vk.LAYOUT_TRANSFER_DST, 1, region, scaled ? 1 : 0);
             Vk.imageBarrier(barrier, Vk.ACCESS_TRANSFER_WRITE, 0, Vk.LAYOUT_TRANSFER_DST, Vk.LAYOUT_PRESENT_SRC, QUEUE_FAMILY_IGNORED,
                     QUEUE_FAMILY_IGNORED, swapImages[index]);

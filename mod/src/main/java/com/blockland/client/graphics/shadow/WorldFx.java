@@ -52,6 +52,7 @@ final class WorldFx implements WorldEffects {
             .withSampler("BlShadowMap")
             .withUniform("BlockLandScene", UniformType.UNIFORM_BUFFER)
             .withUniform("VolumetricInfo", UniformType.UNIFORM_BUFFER)
+            .withSampler("FarDepthSampler")
             .build();
 
     private final RenderTexture aoHalf = new RenderTexture("BlockLand ambient occlusion (half)", RenderTexture.Format.R16F, FilterMode.LINEAR);
@@ -92,7 +93,7 @@ final class WorldFx implements WorldEffects {
     private static int volumetricSize() {
         Std140SizeCalculator size = new Std140SizeCalculator().putMat4f();
         for (int i = 0; i < 4; i++) size.putMat4f();
-        for (int i = 0; i < 7; i++) size.putVec4();
+        for (int i = 0; i < 8; i++) size.putVec4();
         return size.get();
     }
 
@@ -228,6 +229,7 @@ final class WorldFx implements WorldEffects {
             b.putVec4(underwater, shadowed ? shadows.count() : 0, intensity, anisotropy);
             b.putVec4(mist, 9f, seaLevel, openness);
             b.putVec4(renderDistance, lights ? 1 : 0, 0, 0);
+            b.putVec4(frame.farNear, frame.farFar, frame.farDepth != null ? 1 : 0, com.blockland.client.graphics.Graphics.status().farTerrainReach);
         });
         fx(lightInfo, frame, hw, hh, 0, 0, frameIndex, 0, 0, 0, 0, 0);
         lightHalf.ensure(hw, hh);
@@ -235,6 +237,7 @@ final class WorldFx implements WorldEffects {
         lightFull.ensure(w, h);
         GpuTextureView depth = frame.worldDepth;
         Fullscreen.pass("BlockLand volumetric fog", lightHalf.view(), VOLUMETRIC).sampler("DepthSampler", depth)
+                .sampler("FarDepthSampler", frame.farDepth != null ? frame.farDepth : depth)
                 .sampler("BlShadowMap", shadowed ? shadows.atlas() : SceneLighting.lit())
                 .uniform("FxInfo", lightInfo.buffer().slice())
                 .uniform("BlockLandScene", SceneLighting.uniforms())

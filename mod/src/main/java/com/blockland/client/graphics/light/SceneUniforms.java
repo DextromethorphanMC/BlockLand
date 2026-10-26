@@ -151,6 +151,9 @@ final class SceneUniforms implements SceneLighting.Provider {
         // likewise the wind's plant columns (BlWindStack.w = 0 without them)
         GpuTexture columns = Wind.columns();
         if (columns != null && !columns.isClosed()) GlSlots.bindColumns(columns);
+        // Bliss's noise texture for the ported water (spec §15)
+        GpuTexture noise = com.blockland.client.graphics.water.BlissNoise.texture();
+        if (noise != null) GlSlots.bindNoise(noise);
     }
 
     /** The material map to bind before any frame wrote one (startup, lobby). */

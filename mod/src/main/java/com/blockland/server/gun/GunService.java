@@ -6,6 +6,7 @@ import com.blockland.BlockLand;
 import com.blockland.combat.Ballistics;
 import com.blockland.combat.HitRecords;
 import com.blockland.combat.HitShapes;
+import com.blockland.combat.HurtCheck;
 import com.blockland.server.anticheat.api.AntiCheatSignals;
 import com.blockland.server.anticheat.api.Suspicion;
 import com.blockland.server.combat.HitHistory;
@@ -228,7 +229,7 @@ public final class GunService implements GunPacketListeners.Server {
                 level.addFreshEntity(grenade);
                 Vec3 ahead = eye.add(dir);
                 BLNetwork.sendToTracking(player, new GunPackets.S2CShot(player.getId(), ahead.x, ahead.y, ahead.z, false,
-                        GunPackets.S2CShot.LAUNCHED, stats.suppressed(), volley ? round : fire.hand()));
+                        GunPackets.S2CShot.LAUNCHED, stats.suppressed(), volley ? round : fire.hand(), false));
             }
             playFire(level, player, stats, shots);
             return;
@@ -241,9 +242,9 @@ public final class GunService implements GunPacketListeners.Server {
                 int index = round * pellets + pellet;
                 Vec3 dir = GunMath.spreadDirection(yaw, pitch, spread, fire.seed(), index);
                 Shot shot = trace(level, player, eye, dir, stats.range(), stats.ammo().medium(), fire.seenAt(index), rewind);
-                if (shot.entity != null) damage(level, player, stats, shot, eye);
+                boolean wounded = shot.entity != null && damage(level, player, stats, shot, eye);
                 BLNetwork.sendToTracking(player, new GunPackets.S2CShot(player.getId(), shot.end.x, shot.end.y, shot.end.z, shot.hitBlock,
-                        shot.face, stats.suppressed(), hand));
+                        shot.face, stats.suppressed(), hand, wounded));
             }
         }
         playFire(level, player, stats, shots);
@@ -343,12 +344,13 @@ public final class GunService implements GunPacketListeners.Server {
         return null;
     }
 
-    private void damage(ServerLevel level, ServerPlayer shooter, GunStats stats, Shot shot, Vec3 eye) {
+    /** Hurts what the shot struck; returns whether it really took something off it (only then does a body bleed). */
+    private boolean damage(ServerLevel level, ServerPlayer shooter, GunStats stats, Shot shot, Vec3 eye) {
         Entity target = shot.entity;
         boolean head = shot.head;
         // a round slowed by water or lava hits with what it has left
         float amount = stats.damageAt(eye.distanceTo(shot.end)) * (head ? stats.ammo().headshotMultiplier : 1) * shot.energy;
-        if (amount <= 0.05f) return;
+        if (amount <= 0.05f) return false;
         DamageSource source = new DamageSource(level.registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE).getOrThrow(GunContent.BULLET),
                 shooter, shooter);
         // bullets are fast: every one counts, not just the first in vanilla's hurt cooldown
@@ -357,13 +359,16 @@ public final class GunService implements GunPacketListeners.Server {
             HitRecords.record(living, shooter, BlockLand.id(stats.gun().id).toString(), head);
         }
         boolean wasSpectator = target.isSpectator();
-        if (!target.hurtServer(level, source, amount)) return;
+        float before = HurtCheck.vitality(target);
+        if (!target.hurtServer(level, source, amount)) return false;
         // minigames cancel player deaths and turn the victim into a spectator instead
         boolean killed = !target.isAlive() || target instanceof LivingEntity living && living.isDeadOrDying()
                 || !wasSpectator && target.isSpectator();
+        boolean wounded = HurtCheck.hurt(target, before, killed);
         GunPackets.HitKind kind = killed ? (head ? GunPackets.HitKind.HEAD_KILL : GunPackets.HitKind.KILL)
                 : head ? GunPackets.HitKind.HEAD : GunPackets.HitKind.BODY;
-        BLNetwork.sendTo(shooter, new GunPackets.S2CHit(kind, amount));
+        BLNetwork.sendTo(shooter, new GunPackets.S2CHit(kind, amount, target.getId(), wounded, shot.end.x, shot.end.y, shot.end.z));
+        return wounded;
     }
 
     // ---- aiming ---------------------------------------------------------------------------------

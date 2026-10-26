@@ -13,6 +13,8 @@
     "ParachutePackets.C2SToggle": { "perSecond": 5, "burst": 10 },
     "SupplyPackets.C2SUse": { "perSecond": 5, "burst": 10 },
     "ArmorPackets.C2SInsert": { "perSecond": 4, "burst": 8 },
+    "FarTerrainPackets.C2SRequest": { "perSecond": 12, "burst": 30 },
+    "FarChunkPackets.C2SRequest": { "perSecond": 20, "burst": 40 },
     "GraffitiPackets.C2SSpray": { "perSecond": 2, "burst": 5 },
     "InfectionPackets.C2SSelectMonster": { "perSecond": 2, "burst": 5 },
     "InfectionPackets.C2SUseSkill": { "perSecond": 5, "burst": 10 },

@@ -60,7 +60,7 @@ final class Vk {
             getImageMemoryRequirements, allocateMemory, freeMemory, bindImageMemory, getMemoryWin32Handle, createImageView,
             destroyImageView;
     // device level, presentation (only with the swapchain extension)
-    Ffi.Fn createSwapchain, destroySwapchain, getSwapchainImages, acquireNextImage, queuePresent, cmdBlitImage;
+    Ffi.Fn createSwapchain, destroySwapchain, getSwapchainImages, acquireNextImage, queuePresent, cmdBlitImage, cmdClearColorImage;
 
     Vk(long getInstanceProcAddr, long getDeviceProcAddr) {
         this.getInstanceProcAddr = Ffi.fn("vkGetInstanceProcAddr", getInstanceProcAddr, PTR, PTR, PTR);
@@ -113,6 +113,8 @@ final class Vk {
         acquireNextImage = deviceFn("vkAcquireNextImageKHR", I32, PTR, I64, I64, I64, I64, PTR);
         queuePresent = deviceFn("vkQueuePresentKHR", I32, PTR, PTR);
         cmdBlitImage = deviceFn("vkCmdBlitImage", VOID, PTR, I64, U32, I64, U32, U32, PTR, U32);
+        // the black bars around a picture of another shape than the window (rendering spec §21)
+        cmdClearColorImage = deviceFn("vkCmdClearColorImage", VOID, PTR, I64, U32, PTR, U32, PTR);
     }
 
     /** After {@code vkCreateDevice}: the device-level functions. */

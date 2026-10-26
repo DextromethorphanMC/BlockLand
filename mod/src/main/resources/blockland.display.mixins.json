@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.blockland.mixin.display",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [
+    "GlCommandEncoderPresentMixin",
+    "MinecraftDisplayMixin",
+    "MouseHandlerMixin",
+    "WindowMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
