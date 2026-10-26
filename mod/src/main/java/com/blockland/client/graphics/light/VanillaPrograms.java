@@ -92,9 +92,17 @@ final class VanillaPrograms {
             if (role != 0 && compiled.isValid()) patch(compiled.program().getProgramId(), role);
             // BlockLand's own pipelines that evaluate scene.glsl's cloud shadows (Bliss's clouds, spec §14) read Bliss's
             // noise from the same unit; a pipeline that declares the sampler binds it itself
-            else if (compiled.isValid() && !compiled.info().getSamplers().contains("noisetex")) {
-                setInt(compiled.program().getProgramId(), GL20.glGetUniformLocation(compiled.program().getProgramId(), "noisetex"),
-                        GlSlots.noiseUnit());
+            else if (compiled.isValid()) {
+                int program = compiled.program().getProgramId();
+                var samplers = compiled.info().getSamplers();
+                if (!samplers.contains("noisetex")) {
+                    setInt(program, GL20.glGetUniformLocation(program, "noisetex"), GlSlots.noiseUnit());
+                }
+                // and every one that evaluates scene.glsl's sun shadow reads the raw shadow depth (soft shadows, spec §6)
+                // from the unit it stays bound on beside the vanilla programs' atlas
+                if (!samplers.contains("BlShadowDepth")) {
+                    setInt(program, GL20.glGetUniformLocation(program, "BlShadowDepth"), GlSlots.shadowDepthUnit());
+                }
             }
         }
     }
@@ -149,6 +157,7 @@ final class VanillaPrograms {
         setInt(program, GL20.glGetUniformLocation(program, "BlPrevScene"), GlSlots.REFLECTION_UNIT);
         setInt(program, GL20.glGetUniformLocation(program, "BlPlantColumns"), GlSlots.COLUMNS_UNIT);
         setInt(program, GL20.glGetUniformLocation(program, "noisetex"), GlSlots.noiseUnit());
+        setInt(program, GL20.glGetUniformLocation(program, "BlShadowDepth"), GlSlots.shadowDepthUnit());
         setInt(program, roleLocation, role);
         lit++;
     }

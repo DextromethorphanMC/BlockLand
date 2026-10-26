@@ -189,3 +189,160 @@ float bl_puddle(vec3 worldAbs, float wet) {
     float level = 1.0 - wet * 0.55;
     return smoothstep(level, level + 0.06, n);
 }
+
+// ---- foliage and smooth blocks (spec §3, §7) ----------------------------------------------------------------------
+
+// Share of the direct light a sunlit leaf lets through to its other side.
+const float BL_FOLIAGE_TRANSMIT = 0.4;
+
+// Whether the wind bits of a sprite (bl_blockWind) mark foliage that lets light through: leaves, grass, flowers, crops,
+// vines (any wind mode), not water plants (under water the composite's absorption owns the light).
+bool bl_isFoliage(int windBits) {
+    return (windBits & 3) != 0 && (windBits & 8) == 0;
+}
+
+// The sun (or moon) on a leaf or plant face and through it, with a single shadow lookup. `n` is the face's true normal
+// turned towards the viewer, `v` the direction to the viewer, `thickness` how far the face's back lies behind it (a leaf
+// block's other side 1, a blade of grass 0). x: what reaches the front — a wider wrap than bl_sunVisibility (a clump of
+// leaves scatters light round to faces turned a little away), y: what comes through from behind — the shadow at the back
+// (offset towards the light) × a forward-scattering lobe round the sun plus a small diffuse part. With shadow strength 0
+// (overcast) nothing comes through and x is the bare facing, like bl_sunVisibility.
+vec2 bl_foliageSun(vec3 pos, vec3 n, vec3 v, float thickness, vec2 pixel) {
+    vec3 l = BlSunDir.xyz;
+    float nl = dot(n, l);
+    float facing = clamp(nl * 1.5 + 0.55, 0.0, 1.0);
+    if (BlSunColor.a <= 0.0) {
+        return vec2(facing, 0.0);
+    }
+    if (nl >= 0.0) {
+        return vec2(facing * bl_shadow(pos, n, pixel), 0.0);
+    }
+    // the sun lights the back: light reaching that side (the faces turned slightly away take theirs from there too)
+    float back = bl_shadow(pos - n * thickness, -n, pixel);
+    float lobe = pow(max(dot(-v, l), 0.0), 6.0);
+    return vec2(facing * back, back * (lobe + 0.35 * -nl));
+}
+
+// Sunlight let through a leaf, as display-space light added to bl_skyShade's: the face's vanilla sky light `sky` (biome
+// tint, shade and the sky's brightness) in the sun's tint × `through` (bl_foliageSun().y) × the shadow strength × the
+// sky access, coloured like light that has passed through a leaf — more saturated and yellower than its surface (the
+// chlorophyll takes the red and blue). `leaf` is the surface colour (texel × tint).
+vec3 bl_foliageTransmission(vec3 sky, vec3 leaf, float through, float skyAccess) {
+    float amount = through * clamp(BlSunColor.a, 0.0, 1.0) * skyAccess * BL_FOLIAGE_TRANSMIT;
+    if (amount <= 0.0) {
+        return vec3(0.0);
+    }
+    vec3 deep = max(mix(vec3(bl_luminance(leaf)), leaf, 1.4) * vec3(1.06, 1.04, 0.82), vec3(0.0));
+    vec3 chroma = clamp(deep / max(leaf, vec3(1e-3)), vec3(0.5), vec3(1.6));
+    return sky * bl_sunTint() * chroma * amount;
+}
+
+// How rough a dry block is from its material's reflectivity (spec §7: on plain blocks a smoothness hint, 0 = no sheen).
+float bl_blockRoughness(float smoothness) {
+    return mix(0.7, 0.08, clamp(smoothness, 0.0, 1.0));
+}
+
+// The sun's (moon's) highlight on a dielectric of reflectance f0 (Schlick): GGX with Smith visibility like
+// bl_sunSpecular, capped lower (dry blocks are flat faces, a highlight spans them).
+float bl_sunSpecularF0(vec3 n, vec3 v, float roughness, float f0) {
+    vec3 l = BlSunDir.xyz;
+    vec3 h = normalize(v + l);
+    float nl = max(dot(n, l), 0.0), nv = max(dot(n, v), 1e-3), nh = max(dot(n, h), 0.0);
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float d = nh * nh * (a2 - 1.0) + 1.0;
+    float k = a * 0.5;
+    float vis = 0.25 / ((nl * (1.0 - k) + k) * (nv * (1.0 - k) + k));
+    return min(a2 / (3.14159265 * d * d) * vis * bl_fresnel(max(dot(h, v), 0.0), f0) * nl, 8.0);
+}
+
+// ---- water optics (spec §15): one model for what is seen through the surface, under it and from below ----------------
+
+// Per block of water: what it absorbs (red goes first, then green; the biome's colour takes a little more of what it
+// lacks) and what it scatters (the water's own colour comes from that). Clearer than Bliss's: a floor two blocks down
+// reads plainly, ten down is dim, twenty down is gone.
+const vec3 BL_WATER_ABSORB = vec3(0.30, 0.075, 0.045);
+const float BL_WATER_SCATTER = 0.035;
+// The surface's own grey before the biome colour (the shader draws the water, not a texture) and its alpha.
+const float BL_WATER_GREY = 0.62;
+const float BL_WATER_ALPHA = 0.72;
+
+// The biome's water colour (BlWaterColor), brightest channel 1.
+vec3 bl_waterTint() {
+    vec3 c = BlWaterColor.rgb;
+    return c / max(max(c.r, max(c.g, c.b)), 1e-3);
+}
+
+vec3 bl_waterAbsorb() {
+    return BL_WATER_ABSORB + 0.06 * (1.0 - bl_waterTint());
+}
+
+// The light the water body scatters towards the eye where it is deep (linear): its colour × the light that reaches into
+// it from the sky (the camera's openness) and the sun.
+vec3 bl_waterBody() {
+    vec3 sigmaT = bl_waterAbsorb() + BL_WATER_SCATTER;
+    vec3 light = BlSkyColor.rgb * mix(0.15, 1.0, BlWeather.z) + BlSunColor.rgb * 0.35 * BlWeather.z;
+    return BL_WATER_SCATTER / sigmaT * bl_waterTint() * light * 0.6;
+}
+
+// How strong the caustics are on what lies `depth` blocks under the surface: none right at it (the waves have not
+// focused the light yet), strongest a block or two down, gone by about fifteen.
+float bl_causticStrength(float depth) {
+    return smoothstep(0.05, 0.9, depth) * exp(-depth / 5.0);
+}
+
+// ---- lava (spec §16): drawn by the shader, not a texture ------------------------------------------------------------
+
+float bl_lavaHash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+float bl_lavaNoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(bl_lavaHash(i), bl_lavaHash(i + vec2(1.0, 0.0)), f.x),
+            mix(bl_lavaHash(i + vec2(0.0, 1.0)), bl_lavaHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+
+// Distance to the edge between the nearest two cells of a jittered grid (0 on a crack), cells of size 1.
+float bl_lavaEdge(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    float d1 = 8.0, d2 = 8.0;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            vec2 g = vec2(float(x), float(y));
+            vec2 o = vec2(bl_lavaHash(i + g), bl_lavaHash(i + g + 17.3)) * 0.85 + 0.075;
+            float d = length(g + o - f);
+            if (d < d1) {
+                d2 = d1;
+                d1 = d;
+            } else if (d < d2) {
+                d2 = d;
+            }
+        }
+    }
+    return d2 - d1;
+}
+
+// Lava at a world position on a face (normal n), time t: a cooled crust broken into plates, light only in the cracks
+// between them and in molten pools welling up; falling faces stream down. rgb display colour, a how much it glows.
+vec4 bl_lava(vec3 p, vec3 n, float t) {
+    vec2 q = abs(n.y) > 0.5 ? p.xz : (abs(n.x) > abs(n.z) ? p.zy : p.xy);
+    if (abs(n.y) < 0.9) {
+        q.y += t * 0.9;
+    }
+    vec2 warp = vec2(bl_lavaNoise(q * 0.7 + vec2(t * 0.05, 0.0)), bl_lavaNoise(q * 0.7 + vec2(7.3, -t * 0.04))) - 0.5;
+    float big = bl_lavaEdge(q * 0.9 + warp * 0.6);
+    float fine = bl_lavaEdge(q * 2.6 + warp * 1.4 + 11.0);
+    float crack = 1.0 - smoothstep(0.015, 0.16, big);
+    crack = max(crack, (1.0 - smoothstep(0.01, 0.07, fine)) * 0.6);
+    float churn = 0.7 + 0.3 * bl_lavaNoise(q * 2.2 + vec2(t * 0.35, t * 0.21));
+    float molten = smoothstep(0.55, 0.72, bl_lavaNoise(q * 0.22 + vec2(t * 0.015, -t * 0.012)) * 0.6
+            + bl_lavaNoise(q * 0.5 - vec2(t * 0.03)) * 0.4);
+    float heat = clamp(max(crack * churn, molten * (0.8 + 0.2 * churn)), 0.0, 1.0);
+    vec3 crust = mix(vec3(0.05, 0.035, 0.03), vec3(0.17, 0.07, 0.035), bl_lavaNoise(q * 3.1) * smoothstep(0.0, 0.3, 1.0 - big));
+    vec3 hot = mix(vec3(0.78, 0.16, 0.02), vec3(1.0, 0.78, 0.32), heat * heat);
+    return vec4(mix(crust, hot, smoothstep(0.0, 0.6, heat)), heat);
+}

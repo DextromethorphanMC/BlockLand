@@ -1,12 +1,14 @@
 package com.blockland.client.graphics.post;
 
 import com.blockland.BlockLand;
+import com.blockland.client.graphics.Graphics;
 import com.blockland.client.graphics.GraphicsSettings;
 import com.blockland.client.graphics.WorldEffects;
 import com.blockland.client.graphics.frame.FrameContext;
 import com.blockland.client.graphics.gpu.Fullscreen;
 import com.blockland.client.graphics.gpu.RenderTexture;
 import com.blockland.client.graphics.gpu.Ubo;
+import com.blockland.client.graphics.shadow.SunPath;
 import com.blockland.client.graphics.upscale.Upscaler;
 import com.blockland.client.perf.FrameTimings;
 import com.blockland.client.perf.Optimization;
@@ -14,7 +16,20 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.FilterMode;
 import com.mojang.blaze3d.textures.GpuTextureView;
+import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.DimensionSpecialEffects;
+import net.minecraft.util.ARGB;
+import net.minecraft.util.Mth;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.material.FogType;
+import net.minecraftforge.client.event.ViewportEvent;
+import net.minecraftforge.eventbus.api.listener.Priority;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
+import org.joml.Vector4f;
 
 import javax.annotation.Nullable;
 
@@ -63,6 +78,16 @@ public final class PostChain implements AutoCloseable {
      * at — that of an ordinary Minecraft day, so daylight stays exactly as vanilla draws it.
      */
     private static final float EXPOSURE_STRENGTH = 0.4f, EXPOSURE_MIN = -0.5f, EXPOSURE_MAX = 0.4f, EXPOSURE_KEY = 0.15f;
+    /** Vanilla's fog of this frame's level render (the sky's physical model meets it at the horizon): colour (display). */
+    private static final float[] fogColor = new float[3];
+    /** Its sky fog end (blocks) and whether it was the open air's (no fluid, no dimension or boss fog). */
+    private static float skyEnd;
+    private static boolean openAirFog;
+
+    static {
+        // read last, after every other listener had its say: the colour and distances the level was drawn with
+        ViewportEvent.RenderFog.BUS.addListener(Priority.LOWEST, PostChain::onFog);
+    }
 
     private final RenderTexture hdr = new RenderTexture("BlockLand HDR", RenderTexture.Format.RGBA16F, FilterMode.LINEAR);
     private final RenderTexture ldr = new RenderTexture("BlockLand LDR", RenderTexture.Format.RGBA8, FilterMode.LINEAR);
@@ -122,8 +147,17 @@ public final class PostChain implements AutoCloseable {
             GpuTextureView clouds = in.effects().clouds();
             // the far terrain (rendering spec §22) lies where the scene's depth is 1, like the sky: its own depth tells them apart
             GpuTextureView far = ctx.farDepth;
-            decodeUbo.pass(NONE, EMISSION_BOOST * s.emission, s.ambientOcclusion, ao != null ? 1 : 0, volumetric != null ? 1 : 0,
-                    in.emissionEncoded() ? 1 : 0, traced != null ? 1 : 0, clouds != null ? 1 : 0, far != null ? 1 : 0);
+            float[] params = new float[24];
+            params[0] = EMISSION_BOOST * s.emission;
+            params[1] = s.ambientOcclusion;
+            params[2] = ao != null ? 1 : 0;
+            params[3] = volumetric != null ? 1 : 0;
+            params[4] = in.emissionEncoded() ? 1 : 0;
+            params[5] = traced != null ? 1 : 0;
+            params[6] = clouds != null ? 1 : 0;
+            params[7] = far != null ? 1 : 0;
+            boolean sky = physicalSky(ctx, params);
+            decodeUbo.pass(sky ? new Matrix4f(ctx.projection).mul(ctx.viewRotation).invert() : NONE, params);
             Fullscreen.pass("BlockLand post: decode", hdr.view(), DECODE)
                     .sampler("SceneSampler", in.scene())
                     .sampler("WorldDepthSampler", worldDepth)
@@ -216,6 +250,53 @@ public final class PostChain implements AutoCloseable {
                         .sampler("InSampler", ldr.view()).uniform(fxaaUbo).draw();
             }
         }
+    }
+
+    /**
+     * Writes the decode pass's physical sky parameters (Params[2..5] from index 8, see gfx_decode.fsh); false (and zeros)
+     * when the sky is left as vanilla drew it: the setting is off, the sky is not the overworld's open-air sky (no sky
+     * light, the Nether's or the End's, under water, in lava or powder snow, dimension or boss fog) or a blinding effect
+     * hides it (vanilla draws no sky then).
+     */
+    private static boolean physicalSky(FrameContext ctx, float[] params) {
+        Minecraft mc = Minecraft.getInstance();
+        ClientLevel level = mc.level;
+        if (!Graphics.settings().physicalSky || level == null || ctx.submerged || !openAirFog || skyEnd <= 0) return false;
+        if (!level.dimensionType().hasSkyLight() || level.effects().skyType() != DimensionSpecialEffects.SkyType.OVERWORLD) return false;
+        Camera camera = mc.gameRenderer.getMainCamera();
+        if (camera.getEntity() instanceof LivingEntity living
+                && (living.hasEffect(MobEffects.BLINDNESS) || living.hasEffect(MobEffects.DARKNESS))) return false;
+        float partial = ctx.partialTick;
+        // vanilla's sky colour and sunrise fan exactly as LevelRenderer passed them to the sky renderer
+        int sky = level.getSkyColor(camera.getPosition(), partial);
+        float timeOfDay = level.getTimeOfDay(partial);
+        float fanR = 0, fanG = 0, fanB = 0, fanAlpha = 0;
+        if (level.effects().isSunriseOrSunset(timeOfDay)) {
+            int fan = level.effects().getSunriseOrSunsetColor(timeOfDay);
+            fanR = ARGB.redFloat(fan);
+            fanG = ARGB.greenFloat(fan);
+            fanB = ARGB.blueFloat(fan);
+            fanAlpha = ARGB.alphaFloat(fan) * (Mth.sin(level.getSunAngle(partial)) < 0 ? -1 : 1);
+        }
+        Vector3f sun = SunPath.sun(level, partial, new Vector3f());
+        float overcast = Mth.clamp(0.7f * level.getRainLevel(partial) + 0.3f * level.getThunderLevel(partial), 0, 1);
+        float[] values = {
+                ARGB.redFloat(sky), ARGB.greenFloat(sky), ARGB.blueFloat(sky), skyEnd,
+                fogColor[0], fogColor[1], fogColor[2], level.getMoonBrightness(),
+                fanR, fanG, fanB, fanAlpha,
+                sun.x, sun.y, sun.z, overcast};
+        System.arraycopy(values, 0, params, 8, values.length);
+        return true;
+    }
+
+    private static boolean onFog(ViewportEvent.RenderFog event) {
+        openAirFog = event.getType() == FogType.ATMOSPHERIC;
+        Vector4f color = event.getColor();
+        fogColor[0] = color.x();
+        fogColor[1] = color.y();
+        fogColor[2] = color.z();
+        skyEnd = event.getData().skyEnd;
+        return false;
     }
 
     /**

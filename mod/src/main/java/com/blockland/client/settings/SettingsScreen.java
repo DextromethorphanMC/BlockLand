@@ -407,6 +407,9 @@ public final class SettingsScreen extends Screen {
                 v -> tr(gfx + "blocks", Math.round(v)))));
         rows.add(custom(new Slider(gfx + "shadow_softness", 0.25, 3, 0.05, () -> g.shadowSoftness, v -> g.shadowSoftness = (float) v,
                 v -> String.format(Locale.ROOT, "%.2f×", v))));
+        rows.add(custom(new Slider(gfx + "shadow_penumbra", 0, 1, 0.05, () -> g.shadowPenumbra, v -> g.shadowPenumbra = (float) v,
+                SettingsScreen::percentOrOff)));
+        rows.add(new Note(() -> tr(gfx + "shadow_penumbra.note")));
         rows.add(custom(new Slider(gfx + "sun_strength", 0, 2, 0.05, () -> g.sunStrength, v -> g.sunStrength = (float) v, SettingsScreen::percent)));
         // ---- light colours (with world lighting; the ray tracer and the clouds take them too)
         rows.add(custom(new Slider(gfx + "sun_temperature", -1, 1, 0.05, () -> g.sunTemperature, v -> g.sunTemperature = (float) v,
@@ -474,6 +477,10 @@ public final class SettingsScreen extends Screen {
                     i -> g.fogQuality = GraphicsSettings.id(GraphicsSettings.FogQuality.values()[i]),
                     tr(gfx + "quality.low"), tr(gfx + "quality.medium"), tr(gfx + "quality.high"))));
         }
+        rows.add(custom(new Toggle(gfx + "shader_sun_moon", () -> g.shaderSunMoon, v -> g.shaderSunMoon = v)));
+        rows.add(new Note(gfx + "shader_sun_moon.note"));
+        rows.add(custom(new Toggle(gfx + "physical_sky", () -> g.physicalSky, v -> g.physicalSky = v)));
+        rows.add(new Note(gfx + "physical_sky.note"));
         rows.add(custom(new Toggle(gfx + "volumetric_clouds", () -> g.volumetricClouds, v -> g.volumetricClouds = v)).then(this::rebuild));
         rows.add(new Note(this::cloudsLine));
         if (g.volumetricClouds) {
@@ -502,8 +509,6 @@ public final class SettingsScreen extends Screen {
         rows.add(new Note(() -> tr(gfx + "soaking.note")));
         rows.add(custom(new Toggle(gfx + "lens_water", () -> g.lensWater, v -> g.lensWater = v)));
         rows.add(new Note(() -> tr(gfx + "lens_water.note")));
-        rows.add(custom(new Toggle(gfx + "fluid_textures", () -> g.fluidTextures, v -> g.fluidTextures = v)));
-        rows.add(new Note(() -> tr(gfx + "fluid_textures.note")));
 
         // ---- wind
         rows.add(new Header(gfx + "section.wind"));

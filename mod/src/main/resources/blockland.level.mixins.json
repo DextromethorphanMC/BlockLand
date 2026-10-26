@@ -5,7 +5,8 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
   "client": [
-    "LevelRendererPassMixin"
+    "LevelRendererPassMixin",
+    "SkyRendererMixin"
   ],
   "injectors": {
     "defaultRequire": 1

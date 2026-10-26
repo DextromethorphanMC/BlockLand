@@ -8,9 +8,12 @@ import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.opengl.GlTexture;
 import com.mojang.blaze3d.textures.GpuTexture;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL31;
+import org.lwjgl.opengl.GL33;
 
 import javax.annotation.Nullable;
 import java.lang.reflect.Field;
@@ -19,7 +22,7 @@ import java.lang.reflect.Field;
  * The fixed GL slots the lighting pack's vanilla programs read from (rendering spec §3): the scene block on uniform
  * binding point 15, the shadow atlas on texture unit 12 and the block material map on unit 13. Blaze3D only uses the low
  * binding points and units 0..11 (its state cache tracks no more), so whatever is bound here stays bound (and last
- * frame's world for reflections on unit 14); binding goes
+ * frame's world for reflections on unit 14, the shadow atlas as raw depth on unit 17); binding goes
  * through raw GL and the active texture unit is put back to what Blaze3D's cache believes.
  */
 final class GlSlots {
@@ -36,6 +39,15 @@ final class GlSlots {
      */
     private static final int NOISE_UNIT = 16;
     private static int noiseUnit = -1;
+    /**
+     * Texture unit of {@code BlShadowDepth} (rendering spec §6): the shadow atlas once more, read as raw depth for the
+     * soft shadows' blocker search through a sampler object of its own (no comparison, nearest), so the atlas keeps its
+     * comparison mode for {@code BlShadowMap}. 17, past the guaranteed 16 fragment units: without it the uniform points at
+     * the material map's unit and the scene block says so (no penumbra, the fixed filter as before).
+     */
+    private static final int SHADOW_DEPTH_UNIT = 17;
+    private static int shadowDepthUnit = -1;
+    private static int shadowDepthSampler;
 
     @Nullable
     private static final Field BUFFER_HANDLE = handleField();
@@ -53,8 +65,39 @@ final class GlSlots {
         if (handle > 0) GL30.glBindBufferBase(GL31.GL_UNIFORM_BUFFER, SceneLighting.VANILLA_UBO_BINDING, handle);
     }
 
+    /** The shadow atlas on unit 12 (comparison) and, where the driver has it, on unit 17 as raw depth. */
     static void bindShadow(GpuTexture texture) {
         bindTexture(SceneLighting.VANILLA_SHADOW_UNIT, texture);
+        if (shadowDepthAvailable()) {
+            bindTexture(SHADOW_DEPTH_UNIT, texture);
+            // the sampler object overrides the texture's own parameters on this unit only (nothing else binds samplers)
+            GL33.glBindSampler(SHADOW_DEPTH_UNIT, shadowDepthSampler);
+        }
+    }
+
+    /** The unit {@code BlShadowDepth} is patched to: 17 when the driver has it, else the material map's (never read then). */
+    static int shadowDepthUnit() {
+        if (shadowDepthUnit < 0) {
+            int units = GL11.glGetInteger(org.lwjgl.opengl.GL20.GL_MAX_TEXTURE_IMAGE_UNITS);
+            if (units > SHADOW_DEPTH_UNIT) {
+                shadowDepthSampler = GL33.glGenSamplers();
+                GL33.glSamplerParameteri(shadowDepthSampler, GL14.GL_TEXTURE_COMPARE_MODE, GL11.GL_NONE);
+                GL33.glSamplerParameteri(shadowDepthSampler, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_NEAREST);
+                GL33.glSamplerParameteri(shadowDepthSampler, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_NEAREST);
+                GL33.glSamplerParameteri(shadowDepthSampler, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+                GL33.glSamplerParameteri(shadowDepthSampler, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
+            }
+            shadowDepthUnit = units > SHADOW_DEPTH_UNIT && shadowDepthSampler != 0 ? SHADOW_DEPTH_UNIT : MATERIAL_UNIT;
+            if (shadowDepthUnit != SHADOW_DEPTH_UNIT) {
+                BlockLand.LOGGER.warn("[BlockLand] only {} fragment texture units: shadows keep a fixed-width filter (no penumbra)", units);
+            }
+        }
+        return shadowDepthUnit;
+    }
+
+    /** The raw shadow depth is on its unit: the soft shadows' blocker search can run (else the scene block turns it off). */
+    static boolean shadowDepthAvailable() {
+        return shadowDepthUnit() == SHADOW_DEPTH_UNIT;
     }
 
     static void bindMaterials(GpuTexture texture) {

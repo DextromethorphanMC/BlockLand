@@ -292,6 +292,12 @@ public final class GraphicsSettings {
     public float shadowDistance = 96;
     /** Shadow filter size multiplier (0.5 sharp … 2 soft). */
     public float shadowSoftness = 1f;
+    /**
+     * Soft shadows' penumbra, 0..1 (rendering spec §6): shadows harden where the caster touches and widen with its
+     * distance, by a light size from 0.6° to 4°; 0 = off (the fixed-width filter of {@link #shadowSoftness} alone, which
+     * stays the narrowest edge either way).
+     */
+    public float shadowPenumbra = 0.5f;
     /** Direct sunlight strength (1 = keeps vanilla brightness on average). */
     public float sunStrength = 1f;
     public boolean dynamicLights = true;
@@ -343,10 +349,15 @@ public final class GraphicsSettings {
     public boolean wind = true;
     /** How far the wind moves the plants, 0..2 (1 = natural). */
     public float windStrength = 1f;
-    /** BlockLand's high-resolution fluid textures (a built-in resource pack; switching reloads resources). */
-    public boolean fluidTextures = true;
     /** Screen-space reflections on water and puddles ({@link ReflectionQuality} id). */
     public String reflections = "high";
+    /**
+     * The sun and the moon drawn by BlockLand's shader in place of vanilla's textures (rendering spec §14): where the
+     * shadows come from, a limb-darkened sun reddening towards the horizon, a lit moon sphere in vanilla's phase.
+     */
+    public boolean shaderSunMoon = true;
+    /** The sky re-shaded by atmospheric scattering in the decode pass (rendering spec §14), vanilla's colour at the zenith. */
+    public boolean physicalSky = true;
     /** Ray-marched clouds in place of vanilla's (needs world lighting). */
     public boolean volumetricClouds = false;
     public String cloudQuality = "medium";
@@ -643,6 +654,7 @@ public final class GraphicsSettings {
         sharpness = clamp(sharpness, 0, 1);
         shadowDistance = clamp(shadowDistance, 16, 256);
         shadowSoftness = clamp(shadowSoftness, 0.25f, 3);
+        shadowPenumbra = clamp(shadowPenumbra, 0, 1);
         sunStrength = clamp(sunStrength, 0, 2);
         sunTemperature = clamp(sunTemperature, -1, 1);
         moonTemperature = clamp(moonTemperature, -1, 1);

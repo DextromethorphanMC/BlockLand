@@ -124,7 +124,6 @@ public final class BlockLandClient {
         Graphics.init(modBus);
         // optimizations, frame timings and the benchmark (after the pipeline: its capture layer follows the composite)
         com.blockland.client.perf.Perf.init(modBus);
-        com.blockland.client.textures.FluidTextures.init(modBus);
         com.blockland.client.fluid.WaterInteractions.init();
         Holster.init();
         ViewmodelImpulses.init(modBus);

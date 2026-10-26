@@ -44,7 +44,11 @@ layout(std140) uniform BlockLandScene {
                            // edge only (the volumetric fog pass is the haze)
     vec4 BlClouds;         // the clouds (spec §14, Bliss' cameraPosition and clock): xyz the camera's world position, y
                            // shifted by 192 - the dimension's cloud height; w game time in ticks modulo 100 days
-    vec4 BlCloudShape;     // x the 云量 setting 0..1, y rain 0..1, z shadow strength 0..1 (0 = no clouds), w unused
+    vec4 BlCloudShape;     // x the 云量 setting 0..1, y rain 0..1, z shadow strength 0..1 (0 = no clouds); w (not the
+                           // clouds') the soft shadows' tan of the light's effective angular radius, 0 = fixed filter (§6)
+    vec4 BlGround;         // the ground round the camera (colour bleeding): rgb its albedo (linear), a how much of it lies
+                           // below (0 in the air)
+    vec4 BlWaterColor;     // spec §15: the biome's water colour round the camera (linear, vanilla's blend); a unused
     vec4 BlWeather;        // spec §15: x wetness 0..1 (rain where the biome rains, built up and dried over time, × the
                            // setting), y rain falling now 0..1, z how open the camera stands to the sky, w ripple count
     vec4 BlRipples[BL_MAX_RIPPLES * 2]; // ripple i: [2i] (camera-relative x, surface y, z, age s),
@@ -69,6 +73,9 @@ layout(std140) uniform BlockLandScene {
 
 // Shadow atlas, comparison sampling: 2x2 tiles, cascade c in tile ((c & 1) / 2, (c >> 1) / 2).
 uniform sampler2DShadow BlShadowMap;
+// The same atlas as raw depth (nearest, no comparison; texture unit 17, set by client/graphics/light for every program):
+// the soft shadows' blocker search. Only read while BlCloudShape.w > 0.
+uniform sampler2D BlShadowDepth;
 
 bool bl_worldLit() {
     return BlFlags.x > 0.5;
@@ -115,6 +122,85 @@ const vec2 BL_POISSON[8] = vec2[8](
     vec2(-0.7071, 0.7071), vec2(-0.0000, -0.8750), vec2(0.5303, 0.5303), vec2(-0.6250, -0.0000),
     vec2(0.3536, -0.3536), vec2(-0.0000, 0.3750), vec2(-0.1768, -0.1768), vec2(0.1250, 0.0000));
 
+// ---- soft shadows (spec §6): percentage-closer soft shadows, the penumbra widening with the caster's distance --------
+
+// Blocker search: (direction, share of the way from the filter's floor radius to the search radius). The centre and a
+// ring at the floor radius first (a caster touching the receiver, a shadow edge right here), then a spiral outwards,
+// denser near the middle where near casters are.
+const vec3 BL_SEARCH[11] = vec3[11](
+    vec3(-0.7336, 0.6796, 0.0), vec3(-0.2217, -0.9751, 0.0), vec3(0.9553, 0.2955, 0.0), vec3(0.5403, 0.8415, 0.1250),
+    vec3(-0.9668, -0.2555, 0.2500), vec3(0.8855, -0.4647, 0.3750), vec3(-0.3391, 0.9408, 0.5000),
+    vec3(-0.3855, -0.9227, 0.6250), vec3(0.9075, 0.4200, 0.7500), vec3(-0.9529, 0.3033, 0.8750), vec3(0.4977, -0.8673, 1.0000));
+// The filter: a 16-tap Vogel disc (even over the area).
+const vec2 BL_SOFT[16] = vec2[16](
+    vec2(0.1768, 0.0000), vec2(-0.2258, 0.2068), vec2(0.0346, -0.3938), vec2(0.2846, 0.3712), vec2(-0.5222, -0.0924),
+    vec2(0.4947, -0.3147), vec2(-0.1655, 0.6155), vec2(-0.3156, -0.6076), vec2(0.6846, 0.2500), vec2(-0.7123, 0.2940),
+    vec2(0.3434, -0.7337), vec2(0.2537, 0.8089), vec2(-0.7647, -0.4432), vec2(0.8971, -0.1972), vec2(-0.5475, 0.7788),
+    vec2(-0.1265, -0.9761));
+// Widest penumbra radius (blocks), and the caster distance (blocks) the blocker search is sized for.
+#define BL_PENUMBRA_MAX 1.5
+#define BL_PENUMBRA_REACH 48.0
+
+// Soft shadow of one cascade at its local position (inside the box). `radius` is the fixed filter's radius (atlas uv),
+// kept as the floor, `depth` the biased receiver depth, `tanSize` the tangent of the light's angular radius.
+float bl_shadowSoft(int c, vec3 local, vec3 normal, vec2 tile, float texel, float radius, float depth, mat2 rotation,
+                    float tanSize) {
+    // the cascade matrix is BIAS × ortho × a rigid light view: its rows are the light's axes, x and y scaled by
+    // 0.5 / half side, z by 1 / box depth — local units per block (client/graphics/shadow/Cascade)
+    mat4 m = BlShadowMatrix[c];
+    vec3 rowX = vec3(m[0][0], m[1][0], m[2][0]);
+    vec3 rowY = vec3(m[0][1], m[1][1], m[2][1]);
+    vec3 rowZ = vec3(m[0][2], m[1][2], m[2][2]);
+    float perBlock = length(rowX);
+    float depthPerBlock = length(rowZ);
+    float uvPerBlock = 0.5 * perBlock; // the tile is half the atlas
+    // receiver plane: the depth the surface itself has at a tap's offset (atlas uv), so wide taps neither shadow a
+    // surface tilted against the light nor see through it
+    vec2 slope = vec2(0.0);
+    float n2 = dot(normal, normal);
+    if (n2 > 0.25) {
+        vec3 n = normal * inversesqrt(n2);
+        vec3 nl = vec3(dot(n, rowX) / perBlock, dot(n, rowY) / perBlock, dot(n, rowZ) / depthPerBlock);
+        float nz = nl.z < 0.0 ? min(nl.z, -0.25) : max(nl.z, 0.25);
+        slope = -nl.xy / nz * (depthPerBlock / uvPerBlock);
+    }
+    vec2 centre = local.xy * 0.5;
+    vec2 lo = vec2(texel), hi = vec2(0.5 - texel);
+    float widest = max(radius, min(BL_PENUMBRA_MAX, tanSize * BL_PENUMBRA_REACH) * uvPerBlock);
+
+    // blocker search: how far (along the light) the casters around this point are above the surface
+    float blockers = 0.0;
+    float gap = 0.0;
+    float d = textureLod(BlShadowDepth, tile + clamp(centre, lo, hi), 0.0).r;
+    if (d < depth) {
+        blockers = 1.0;
+        gap = depth - d;
+    }
+    for (int i = 0; i < 11; i++) {
+        vec2 o = rotation * BL_SEARCH[i].xy * mix(radius, widest, BL_SEARCH[i].z);
+        float ref = min(depth + dot(slope, o), 1.0);
+        d = textureLod(BlShadowDepth, tile + clamp(centre + o, lo, hi), 0.0).r;
+        if (d < ref) {
+            blockers += 1.0;
+            gap += ref - d;
+        }
+    }
+    if (blockers < 0.5) {
+        return 1.0;
+    }
+    if (blockers > 11.5) {
+        return 0.0;
+    }
+    // penumbra: the caster's distance above the surface (blocks) × the light's angular size
+    float width = clamp(gap / blockers / depthPerBlock * tanSize * uvPerBlock, radius, widest);
+    float lit = 0.0;
+    for (int i = 0; i < 16; i++) {
+        vec2 o = rotation * BL_SOFT[i] * width;
+        lit += texture(BlShadowMap, vec3(tile + clamp(centre + o, lo, hi), min(depth + dot(slope, o), 1.0)));
+    }
+    return lit * 0.0625;
+}
+
 // Shadow of one cascade (1 lit .. 0 shadowed), or -1 when the position is outside its box.
 float bl_shadowCascade(int c, vec3 pos, vec3 normal, float noise) {
     // cascades grow with their reach: offsets and filter radius scale along (in world units they stay similar per texel)
@@ -133,6 +219,9 @@ float bl_shadowCascade(int c, vec3 pos, vec3 normal, float noise) {
     // every box spans a few hundred blocks along the light, so a constant depth offset is a few centimetres in each;
     // the normal offset above (grows with the cascade's texels) and the casters' slope-scaled bias do the rest
     float depth = local.z - 0.00005;
+    if (BlCloudShape.w > 0.0) {
+        return bl_shadowSoft(c, local, normal, tile, texel, radius, depth, rotation, BlCloudShape.w);
+    }
     float lit = 0.0;
     for (int i = 0; i < 8; i++) {
         vec2 uv = local.xy * 0.5 + rotation * BL_POISSON[i] * radius;

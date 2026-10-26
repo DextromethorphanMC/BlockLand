@@ -7,8 +7,10 @@ import com.blockland.client.render.RenderClock;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
+import net.minecraft.client.renderer.BiomeColors;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
 
@@ -53,6 +55,15 @@ final class Sky {
     final float[] weather = new float[3];
     private float wet;
     private long lastNanos;
+    /**
+     * BlGround: the ground round the camera as light bounces off it (colour bleeding): rgb its albedo (linear), a how much
+     * of it there is below (0 in the air or over the void). Looked at every few frames, eased.
+     */
+    final float[] ground = {0.18f, 0.18f, 0.18f, 1f};
+    private final float[] groundTarget = {0.18f, 0.18f, 0.18f, 1f};
+    /** BlWaterColor: the biome's water colour round the camera (linear, vanilla's blend), eased; a unused. */
+    final float[] waterColor = {0.25f, 0.46f, 0.84f, 1f};
+    private int groundFrame;
 
     /** @param openAir the camera is in the open air (not in a fluid, not blinded): BlockLand's haze may apply */
     void update(ClientLevel level, Vec3 camera, float partial, GraphicsSettings settings, boolean openAir) {
@@ -60,6 +71,10 @@ final class Sky {
         LightColors.blockLight(settings, blockLight);
         fog[0] = fog[1] = fog[2] = fog[3] = 0;
         wetness(level, camera, rain, settings);
+        ground(level, camera);
+        int water = BiomeColors.getAverageWaterColor(level, BlockPos.containing(camera));
+        float[] target = {linear((water >> 16 & 0xFF) / 255f), linear((water >> 8 & 0xFF) / 255f), linear((water & 0xFF) / 255f)};
+        for (int i = 0; i < 3; i++) waterColor[i] += (target[i] - waterColor[i]) * 0.05f;
         int sky = level.getSkyColor(camera, partial);
         skyColor[0] = linear((sky >> 16 & 0xFF) / 255f);
         skyColor[1] = linear((sky >> 8 & 0xFF) / 255f);
@@ -118,6 +133,44 @@ final class Sky {
         weather[0] = wet * settings.rainWetness;
         weather[1] = falling * settings.rainWetness;
         weather[2] = sky;
+    }
+
+    /** Samples the ground below and round the camera (7 × 7 columns, 2 blocks apart, the first solid block in 10 down). */
+    private void ground(ClientLevel level, Vec3 camera) {
+        if (++groundFrame >= 4) {
+            groundFrame = 0;
+            BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+            int x0 = Mth.floor(camera.x), y0 = Mth.floor(camera.y), z0 = Mth.floor(camera.z);
+            float r = 0, g = 0, b = 0, weight = 0;
+            int found = 0;
+            for (int dz = -3; dz <= 3; dz++) {
+                for (int dx = -3; dx <= 3; dx++) {
+                    for (int dy = 0; dy < 10; dy++) {
+                        pos.set(x0 + dx * 2, y0 - dy, z0 + dz * 2);
+                        BlockState state = level.getBlockState(pos);
+                        if (state.isAir()) continue;
+                        int col = state.getMapColor(level, pos).col;
+                        if (col == 0) continue;
+                        // nearer columns count more (they fill more of what a held weapon's underside sees)
+                        float w = 1f / (1 + 0.15f * (dx * dx + dz * dz)) / (1 + 0.1f * dy);
+                        r += w * linear((col >> 16 & 0xFF) / 255f);
+                        g += w * linear((col >> 8 & 0xFF) / 255f);
+                        b += w * linear((col & 0xFF) / 255f);
+                        weight += w;
+                        found++;
+                        break;
+                    }
+                }
+            }
+            if (weight > 0) {
+                // map colours are a block's bright face; the albedo it reflects is about 0.6 of that
+                groundTarget[0] = r / weight * 0.6f;
+                groundTarget[1] = g / weight * 0.6f;
+                groundTarget[2] = b / weight * 0.6f;
+            }
+            groundTarget[3] = found / 49f;
+        }
+        for (int i = 0; i < 4; i++) ground[i] += (groundTarget[i] - ground[i]) * 0.15f;
     }
 
     private void haze(ClientLevel level, Vec3 camera, float partial, GraphicsSettings settings, float rain) {

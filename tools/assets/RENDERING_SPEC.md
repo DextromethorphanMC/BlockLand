@@ -68,12 +68,22 @@ One std140 uniform block `BlockLandScene` per frame (layout and helpers in
 * Light colours and sky (§14): `BlBlockLight` (rgb block light tint × strength, 1 = vanilla's; `a` 1 = the volumetric
   clouds replace vanilla's this frame), `BlFog` (haze extinction at the camera's height, height falloff, sun in-scatter,
   `w` 1 = on). `BlSunColor` already carries the player's sun / moon colour temperature.
+* Ground (colour bleeding): `BlGround` rgb the albedo of the ground round the camera (linear; `light/Sky` samples 7 × 7
+  columns 2 blocks apart, the first block within 10 below eye height, map colour × 0.6, nearer columns weigh more, every
+  4 frames, eased), `a` the share of columns that found ground (0 in the air). Weapons take their bounce light from it,
+  entities tint their undersides with it.
+* Water: `BlWaterColor` rgb the biome's water colour round the camera (linear; §15's water optics), `a` unused.
 * Wind (§18), last in the block: `BlWind` (heading, steady strength, the setting), `BlWindInfo` (counts), the tunables
   `BlWindBend`, `BlWindStack`, `BlWindPush`, `BlWindSpring`, `BlWindKinds`, then `BlGusts[]`, `BlPushers[]`, `BlSways[]`;
   the plant columns are a texture, `BlPlantColumns` on unit 15 (patched like the material map, read by terrain.vsh).
 
+* Soft shadows: `BlCloudShape.w` (a free component of the clouds' vec4) is the light size: the tangent of the
+  light's effective angular radius, 0 = the fixed filter (§6).
+
 BlockLand's own pipelines declare `withUniform("BlockLandScene", UNIFORM_BUFFER)` and `withSampler("BlShadowMap")`
-and bind `SceneLighting.uniforms()` / `SceneLighting.shadowMap()` on every pass. When nothing provides them (graphics
+and bind `SceneLighting.uniforms()` / `SceneLighting.shadowMap()` on every pass.
+The raw shadow depth `BlShadowDepth` (sampler2D, declared in scene.glsl) is never bound by a pipeline: every program
+that has it is pointed at unit 17 (§3), BlockLand's own included. When nothing provides them (graphics
 off, lobby) a zeroed block and a lit 1×1 shadow map stand in, and shaders take their non-world path.
 
 ## 3. The lighting pack and vanilla programs (`client/graphics/light`)
@@ -94,6 +104,12 @@ pipeline using those shaders are patched (once per program):
   BlissNoise`, `assets/blockland/textures/bliss/noises.png`, linear and repeating), bound with raw GL like the others
   (unit 16 lies past Blaze3D's cache and past the 16 fragment units GL guarantees; with fewer units the uniform points at
   the material map's unit instead — a valid draw, wrong waves — and the log says so);
+* sampler `BlShadowDepth` → texture unit **17**: the shadow atlas once more (the very texture on unit 12, the 1×1 lit
+  stand-in included, bound together by `GlSlots.bindShadow`), read as raw depth for the soft shadows' blocker search
+  (§6) through a GL sampler object of its own on that unit (`GL_TEXTURE_COMPARE_MODE` none, nearest, clamp to edge), so
+  the texture keeps its comparison mode for `BlShadowMap`. BlockLand's own pipelines that include scene.glsl but do not
+  list the sampler get the same unit from the per-frame program scan (like `noisetex`). With 17 or fewer fragment units
+  the uniform points at the material map's unit, `BlCloudShape.w` is written 0 (the fixed filter) and the log says so.
 * `uniform int BlRole` → the program's role: **0** unpatched (exactly vanilla), **1** opaque (solid / cutout terrain,
   non-blended entities: lit, emission encoded in alpha), **2** blended (lit, alpha untouched), **3** translucent terrain
   (water and glass shading), **4** the Fabulous transparency composite (water refraction and absorption, emission alpha
@@ -250,6 +266,33 @@ The local player casts their whole shadow in first person too, head included. Th
 within 1.6 blocks of the eye) looks its shadow up 1 block towards the light, past the player's own body and the head
 round the eye, so they shade the world but not what the player holds in front of their face.
 
+**Soft shadows (percentage-closer soft shadows, `bl_shadowSoft` in scene.glsl).** Real shadows are sharp where the
+caster touches the receiver and widen with the distance between them (the sun is a disc; the sky's light softens them
+further). While `BlCloudShape.w` (= tan θ, θ the light's effective angular radius) is above 0, a cascade lookup:
+
+1. Blocker search: 12 raw-depth taps of `BlShadowDepth` — the centre, three at the fixed filter's radius, eight on a
+   spiral out to the search radius (min(1.5 blocks, tan θ × 48 blocks), never below the fixed radius) — all rotated by
+   the per-pixel noise. A tap is a blocker when its depth is nearer the light than the receiver at that tap; the
+   average of (receiver − blocker) is the caster's height above the surface. No blocker: fully lit (no filtering);
+   every tap a blocker: fully shadowed.
+2. Penumbra radius = that height (blocks) × tan θ, clamped between the fixed filter's radius (`BlShadowParams.y`
+   texels — the 阴影柔和度 setting — so contact edges look as before) and the search radius.
+3. Filter: 16 comparison taps of `BlShadowMap` (a Vogel disc, the same rotation) over that radius.
+
+Units come from the cascade matrix, which is BIAS × ortho(±half, 0..depth) × a rigid light view
+(`shadow/Cascade.update`): its x and y rows are the light's axes × 0.5 / half (local units per block), its z row the
+axis along the rays × 1 / box depth. So depth units per block = length of the z row
+`(M[0][2], M[1][2], M[2][2])`, and atlas uv per block = 0.5 × length of the x row (the tile is half the atlas).
+Every tap is compared against the receiver plane (the surface's normal in the light's axes gives its depth slope per uv
+offset, the normal's component along the light clamped to ≥ 0.25), so wide taps neither shadow a surface tilted against
+the light nor see through it; callers that pass a zero normal get a flat plane. Cascade selection, normal offset, depth
+bias and the last cascade's fade are unchanged.
+
+Light size: the 画质 setting 阴影半影 (`GraphicsSettings.shadowPenumbra`, 0..1, default 0.5) maps to θ = 0.6° + 3.4° ×
+setting (sun and moon alike; the true sun disc is 0.27°, the rest stands for the sky's softening); 0 = off, exactly the
+previous fixed 8-tap filter. Cost per lookup: lit 12 raw taps, penumbra 12 + 16, deep shadow 12 (was 8 everywhere);
+vertex-stage callers (particles, graffiti, bomb smoke) run the same with an unrotated pattern.
+
 ## 7. Block materials (`assets/blockland/graphics/block_materials.json`)
 
 Data, not code: block texture → material, resolved to sprite rects of the block atlas after every atlas stitch.
@@ -270,11 +313,57 @@ An entry may carry `"wind": {"mode": "bend" | "sway" | "leaves", "flex": 0.5..2,
 an entry with only `wind` sets no material. In the material map's texel, B packs the kind (bits 0–1) and the wind
 (bits 2–3 mode, 4 upper half, 5 water plant, 6–7 flex level: 0.5 / 1 / 1.5 / 2).
 
+`reflectivity` 0..1: for `water`, `glass` and `metal` how strongly they reflect; for `plain` blocks it is a smoothness
+hint (0 = rough, no sheen — grass, dirt, wood, leaves stay as they are). The material map (unit 13) holds every entry; only
+the first 96 sprites (`SceneLighting.MAX_MATERIALS`) also go into `BlMaterials` of the scene block (no shader reads that
+list today), so new entries go after the existing ones.
+
+**Smooth blocks** (terrain.fsh, kind `plain` with a reflectivity, any role, not on glowing texels, dry or wet): the
+reflectivity `s` (× (1 − emission)) gives the roughness `mix(0.7, 0.08, s)` (`bl_blockRoughness`); the sky
+(`bl_reflection(reflect(−v, n), outdoors, FogColor)`) is mixed in by Schlick's Fresnel with f0 0.04 × `s²` × outdoors ×
+0.7, and the sun adds `BlSunColor × bl_sunSpecularF0(n, v, roughness, 0.04) × sun × shadow strength` (GGX, Smith
+visibility, capped at 8). Data: blue ice 0.85, packed ice 0.7, glazed terracotta (16) 0.75, obsidian 0.65, polished
+andesite / diorite / granite / deepslate / blackstone / tuff / basalt 0.5, quartz (block, pillar, chiseled, bricks) 0.45,
+prismarine (3) 0.4, concrete (16) and smooth stone 0.35. Water, glass and metal keep their own shading (ice is `glass`).
+Cost: nothing for blocks without a reflectivity; one GGX and a sky gradient for the smooth ones.
+
+**Leaves and plants let the sun through** (terrain.fsh; what counts as foliage is data: every sprite with a `wind` entry
+(§18) except water plants — leaves, grass, ferns, flowers, crops, saplings, vines, sugar cane, bamboo). Foliage is
+shaded on the face's true plane turned towards the viewer (from the screen derivatives of the undisplaced position, so a
+crossed plant is lit as its diagonal, not as the nearest axis its vertex normal claims). `bl_foliageSun` does it with one
+shadow lookup:
+
+* sun on the viewer's side (`n·L ≥ 0`): `facing × bl_shadow(pos, n)` with a wider wrap than other blocks,
+  `facing = clamp(1.5 n·L + 0.55, 0, 1)` (others: `2.5 n·L + 0.35`);
+* sun behind the face (`n·L < 0`): the shadow is looked up at the face's back — for a leaf block its other side
+  (`pos − n`), for a blade the face itself — with the normal `−n` (offset towards the light), so the outer leaves of a
+  canopy glow and the inner ones stay dark under the leaves in front of the sun. The front takes `facing × back`; the
+  light let through is `back × (pow(max(−v·L, 0), 6) + 0.35 · max(−n·L, 0))` (a forward-scattering lobe round the sun
+  plus a diffuse part).
+
+The transmitted light (`bl_foliageTransmission`) is added to `bl_skyShade`'s display-space light: the face's vanilla
+sky light (`vertexColor − blockColor`: biome tint, shade, the sky's brightness) × `bl_sunTint()` × 0.4
+(`BL_FOLIAGE_TRANSMIT`) × the shadow strength (overcast and moonless: none) × `smoothstep(0.5, 0.95, sky light)` ×
+a chroma that makes it look like light through a leaf (the surface colour saturated 1.4× and shifted yellow
+(1.06, 1.04, 0.82), as a per-channel ratio clamped to 0.5–1.6). It never raises the light more than a fifth over
+vanilla's sky light on that face (`min(light + t, max(light, 1.2 · sky))`, then the usual `min(light, 1)`). Cost:
+foliage fragments do at most one shadow lookup, as before (faces turned more than ~8° away from the sun did none and now
+do one).
+
 ## 8. Weapons
 
 The viewmodel and third-person weapons use the `blockland:core/gun` pipeline (`GunPipelines`): with world lighting on
-they are lit by the sun (with the shadow at the weapon's world position), the sky, and the dynamic lights, on top of a
-dimmed studio rig that keeps them readable; emissive parts and skin effects write emission alpha. The gate is
+they take the world's light the way the terrain does (§3's split of the lightmap into its sky and block parts): the sun's
+share warm and directional (`SUN_SHARE` of the sky part × `BlSunColor`, with the shadow at the weapon's world position),
+the sky's share cool (`BlAmbient.rgb` × `SKY_SHARE`) over the part of the dome a face sees (`SKY_UP` overhead,
+`SKY_SIDE` upright — the bright band round the horizon — nothing facing down), and the ground's bounce (`BlGround` ×
+the ground's irradiance: the sun on it, `SUN_SHARE × sun elevation`, where the weapon's shadow says it reaches and
+partly even then, plus the sky's) over the half of the world below a face's horizon — in the ground's colour (colour
+bleeding: green over grass, warm over sand). A side face turned to neither sun nor sky lives on the horizon and that
+bounce, as outdoors (about 40 % of a sunlit top at noon). The block light tinted (`BlBlockLight`), the dynamic lights, and
+reflections of the sky above and the lit ground below (Fresnel through the split-sum response) — so a weapon turned to the
+sun is bright and warm, one in shade dim and cool, as the blocks round it. A studio rig in view space is left only as a faint fill (`STUDIO_FILL`, 3.5 %) so a weapon in the dark
+keeps its shape; without world lighting the rig lights it alone. Emissive parts and skin effects write emission alpha. The gate is
 `SceneLighting.weaponsLit()` (world and hand phases, setting 武器受环境光照): in the hand phase BlockLand's pipelines still
 get the world block while binding 15 serves vanilla's held items the hand block, so the viewmodel is lit by its own
 muzzle flash and stands in the same shadow as the player. Third-person weapons
@@ -297,6 +386,8 @@ Presets 低 / 中 / 高 / 极高 / 自定义 fill in the values; any change make
 (`Graphics.settingsCommitted`). Light colours (阳光色温, 月光色温, 方块光源色温 −1 cool … +1 warm, 方块光源亮度 0..2) are
 temperature tints of luminance 1 (`light/LightColors`) used by the scene uniforms, the ray tracer and the clouds; 迷雾,
 薄雾浓度, 体积云, 云层质量 and 云量 are §14's.
+
+阴影半影 (`shadowPenumbra`, 0..1, default 0.5, after 阴影柔和度): soft shadows' light size (§6), 0 = off.
 
 ## 10. The bomb explosion (`client/bomb/fx`)
 
@@ -593,6 +684,58 @@ off) the paint is texture × shade × lightmap, like vanilla terrain; the glow n
 never end with a hard edge); water, lava, powder snow, blindness and darkness keep their fog. With fog on vanilla's
 numbers are untouched.
 
+**Sun and moon** (`CelestialBodies`, setting 着色器日月, on by default; `mixin/level/SkyRendererMixin` only forwards):
+vanilla's `renderSun` / `renderMoon` are replaced by one quad each in the same sky batch (`blockland:core/celestial`,
+premultiplied alpha: the discs cover the stars, the glow adds), at `SunPath`'s sun and opposite it — where the shadows come
+from (vanilla's sky turns its sun on an untilted arc). Sun: a limb-darkened disc (1.6° radius) in a corona fading over
+10°, its colour the light after the air it crossed (`exp(−τ·airmass)`, τ = 0.021 / 0.052 / 0.120, Kasten-style airmass),
+so it reddens towards the horizon. Moon (2.5° radius): a sphere lit from vanilla's phase (0 full … 4 new; waning lit from
+the left), a soft terminator, Lommel–Seeliger brightness (as bright at its edge as at its centre when full), maria and
+craters from fixed noise, earthshine on the dark side, a halo as bright as its lit share. Both take vanilla's alpha (1 −
+rain). The decode pass already lifts the brightest sky pixels into HDR (bloom). Off, or graphics off: vanilla's textures.
+
+**Physical sky** (物理天空, `blockland:bl_sky.glsl` in the decode pass, `post/PostChain` sets its parameters; on by default):
+the overworld's sky pixels — world depth 1, no far terrain, not the hand (the decode's sun-glow test) — are re-shaded by
+single Rayleigh + Mie scattering before the sun's HDR lift, the volumetric clouds and the volumetric fog are composited
+over them. Model (km): planet 6360, atmosphere top 6420, eye 0.3 above the ground (the same sky at any build height);
+Rayleigh β (5.8, 13.5, 33.1)·10⁻³/km, scale height 8; Mie β 21·10⁻³/km, albedo 0.9, scale height 1.2, Henyey-Greenstein
+g 0.76; Rayleigh phase 3/16π (1 + μ²). 8 samples along the view ray (quadratically spaced, dense near the eye, midpoint
+optical depth from the eye), the light's optical depth to space in closed form (Chapman's function, Schüler's
+approximation, with the grazing branch below the local horizontal), the planet's shadow by a ray–sphere test, so the sun
+keeps lighting the high air until 8° under the horizon. View directions come from inverse(level projection × view
+rotation), the sun from `SunPath` (where `CelestialBodies` draws it), the moon opposite it. No disc is drawn here.
+* **Anchored to vanilla.** Day: vanilla's colour straight up (the sky colour fogged as vanilla's disc is at its centre,
+  16 / sky fog end) is the zenith; elsewhere its luminance × (scattered luminance along the ray / straight up)^0.35
+  (at most 2.2), its colour vanilla's chroma × the scattered light's chroma ratio (ray / zenith, 0.05 … 4), mixed with the
+  scattered light's own chroma by 0.6 (1 − y)² towards the horizon. So the zenith is exactly vanilla's (biome tint, time,
+  weather, lightning), the horizon pales, the anti-sun sky deepens, the sky round the sun brightens (Mie aureole, on top of
+  the shader sun's corona) and the sunset side turns orange. Night: the moon lights a dark blue sky of its own,
+  (0.30, 0.45, 1.0) × 0.003 linear at a full moon high up, × (scattered luminance / 0.01)^0.35, half the scattered
+  light's chroma, × the moon's brightness (phase), fading with its height; 12 % of it stays on moonless nights (airglow).
+* **Weather.** Overcast = 0.7 rain + 0.3 thunder: Mie × (1 + 5 overcast), g − 0.25 overcast, the brightness exponent
+  down to 0.12, the colour 75 % back to vanilla's grey; the night sky × (1 − 0.6 overcast).
+* **The horizon and the fog.** Towards the horizon the result fades into vanilla's own gradient there — the sky colour
+  fogged to the fog colour, the fog colour itself round and below the disc — over a band 2.5 × as high as the one vanilla
+  fully fogs at the render distance (0.06 … 0.4 in the ray's height), so the sky meets the fogged terrain exactly as before;
+  at and below the horizon the pixel is vanilla's.
+* **What vanilla drew over its sky is kept.** Vanilla's gradient is rebuilt per pixel from the numbers it was drawn
+  with — the sky disc (octagon fan 16 blocks up, corners 512 out, fog distance interpolated over it, fogged by the sky fog
+  end towards the fog colour, the clear colour outside it) and the sunrise fan (its colour and alpha, its side by the
+  sun angle's sign; its 16-gon taken as the cone through its rim, within 0.005 alpha) — and replaced:
+  pixel − vanilla gradient + physical sky, the difference dropped where it is within vanilla's 8-bit steps (1.5 … 4 / 255,
+  so no banding is brought back). Stars, the sun and the moon (shader or vanilla textures), rain streaks and anything
+  else drawn over the sky stay as they were, with the new sky under them. Below the horizon the dark void disc is left alone.
+* **Inputs.** Vanilla's fog of the frame's level render (colour, sky fog end, open-air type) is read by `PostChain` from
+  `ViewportEvent.RenderFog` at the lowest priority (after `FogSwitch` and the far terrain); the sky colour
+  (`getSkyColor` at the camera), the sunrise colour, the moon's brightness, rain and thunder from the level. Decode
+  parameters: `Matrix` = NDC → camera-relative world, `Params[2]` (sky colour, display; sky fog end, 0 = off),
+  `Params[3]` (fog colour, display; moon brightness), `Params[4]` (sunrise fan colour; alpha, negative on +x),
+  `Params[5]` (towards the sun; overcast).
+* Off (vanilla's sky as drawn) with the setting off, outside the overworld sky type or without sky light (Nether, End),
+  with the camera in water, lava or powder snow, in dimension or boss fog, or blind (blindness, darkness: no sky is drawn).
+  Cost: sky pixels only, two marches by day (ray and zenith; three in twilight with the moon), one by night: about
+  0.03–0.1 ms at 1080p on a fast GPU depending on how much sky is in view (span `bl/post/decode`).
+
 **Volumetric fog and light** (`shadow/WorldFx`, `fx_volumetric`, settings 迷雾, 雾的浓度, 雾的质量 16 / 28 / 44 steps,
 体积光): the air as one participating medium, marched at half the internal resolution up to the shadow distance and
 integrated in closed form beyond it (to the scene, or the render distance through the sky), energy-conserving. Medium: the
@@ -671,8 +814,10 @@ changes marked `BlockLand:` in the source): `lib/waterBump.glsl` (`getWaterHeigh
 `lib/overworld_fog.glsl` (`fogPhase`), `dimensions/fogBehindTranslucent_pass.fsh` (`waterVolumetrics_test`), with Bliss's
 `settings.glsl` defaults (`WATER_WAVE_STRENGTH` 1, `WATER_WAVE_SPEED` 1, `WATER_CAUSTICS_BRIGHTNESS` 1, `Water_Absorb_*`
 0.2629 / 0.0565 / 0.01011, `Dirt_Amount` 0.14, `Dirt_Absorb_*` 0.65 / 0.85 / 1.05, `Dirt_Scatter_*` 0.7, `rayMarchSampleCount`
-2, `SNELLS_WINDOW` on) and `Vanilla_like_water` on (the surface keeps vanilla's texture and biome colour, so water reads as
-Minecraft's with or without Fabulous; Bliss's default makes the surface black and colours the water only in its volume pass).
+2, `SNELLS_WINDOW` on) and `Vanilla_like_water` on, but the surface is drawn by the shader, not a texture (§16): its grey `BL_WATER_GREY` 0.62 × the biome
+colour (vertex colour), alpha `BL_WATER_ALPHA` 0.72 — one colour, the waves carry the detail. Where the composite draws the
+water's volume (above water, `BlWater.w` on) the surface's own colour is only a film (alpha 0.06 before the Fresnel),
+from below 0.18; else vanilla's alpha.
 Interface: Iris's `cameraPosition` → `BlCamera.xyz` (wrapped every 2048 blocks), `frameTimeCounter` → `bl_time()`, `noisetex`
 → Bliss's own `shaders/texture/noises.png` shipped unchanged (texture unit 16, §3), its shadow map → `bl_shadowMap` ×
 `bl_cloudShadow`, its sky texture `colortex4` → `bl_reflection`, its screen-space `rayTrace` → BlockLand's `bl_ssr` (§17).
@@ -687,25 +832,35 @@ Interface: Iris's `cameraPosition` → `BlCamera.xyz` (wrapped every 2048 blocks
   footprint (rain between 0.04 and 0.16 blocks per pixel, ripples 0.08–0.35). Specular: f0 0.02, roughness 0, Fresnel
   `(1 + n·v)⁵` mixed from f0; under water (`BlCamera.w`) Snell's window `(1.5 + n·v)²⁵`; the sun by `GGX` (roughness at least
   0.035) × the direct light (`BlSunColor`, N·L remapped as Bliss does, the shadow map falling back to the sky light beyond
-  the shadow distance, the clouds' shadow cubed); above water the sky reflection, under water Bliss's `exp(−8 ·
-  Water_Absorb)` × the sun's height; mixed with the water's own colour by Bliss's `indoors` (sky light), the screen-space
+  the shadow distance, the clouds' shadow cubed); above water the sky reflection, under water (outside Snell's window: total
+  internal reflection) the water body round the eye (`bl_waterBody`, BlockLand; Bliss used a fixed `exp(−8 · Water_Absorb)`,
+  which turned the surface seen from below into a flat blue); mixed with the water's own colour by Bliss's `indoors` (sky light), the screen-space
   reflection over it, the alpha raised by the Fresnel (`a + f − a·f`) and the colour divided by it so blending does not
   darken the reflection. Computed in linear light from the lit vanilla colour (display → linear and back); `BlWater.z`
   (the reflections setting) scales the Fresnel and the sun.
-* **What lies under it** (Fabulous composite, role 4, `bl_throughWater`; camera above water): refracted by the wave normal
-  as before, then Bliss's `composite1.fsh` under-water shading — `Absorbtion = mix(exp(−2 · totEpsilon · depth), exp(−8 ·
-  totEpsilon), 1 − e^(−0.1 depth))` with the estimated depth `Vdiff · |view.y|`, and the caustics `waterCaustics(...) + 0.25`
-  mixed in by `clamp(depth, 0, 1)` — and `fogBehindTranslucent_pass.fsh`'s water volume (`waterVolumetrics_test`: two
-  exponentially spaced samples of the sun through the shadow map and the sky light, scattered by the dirt's coefficients,
-  absorbed by `totEpsilon`; `colour · a + rgb`). BlockLand: the caustics weigh the sun's share by its shadow at the point
-  (Bliss multiplies only the direct light); the light map Bliss reads (sky light at the water, the eye's brightness) is the
-  camera's openness to the sky (`BlWeather.z`). Without Fabulous graphics there is no composite: no volume, no caustics from
-  above.
+* **Water optics** (`blockland:bl_lighting.glsl`, shared by the surface, the composite and the under-water pass): per
+  block, absorption `BL_WATER_ABSORB` (0.30, 0.075, 0.045) plus 0.06 × (1 − the biome's water tint) — the biome's colour
+  takes a little more of what it lacks — and scattering `BL_WATER_SCATTER` 0.035; the biome's water colour round the camera
+  is `BlWaterColor` (`light/Sky`: vanilla's `BiomeColors.getAverageWaterColor`, linear, eased). The water body (what deep
+  water looks like, `bl_waterBody`): scattering / extinction × the tint × (sky light by the camera's openness + 0.35 of the
+  sun) × 0.6. Caustics by depth under the surface (`bl_causticStrength`): `smoothstep(0.05, 0.9, d) · e^(−d/5)` — none at
+  the surface, strongest a block or two down, gone by about fifteen.
+* **What lies under it** (Fabulous composite, role 4, `bl_throughWater`; camera above water, `BlWater.w` on): water is told
+  from other translucent blocks by the translucent layer's alpha (terrain.fsh makes water's lowest alpha bit 1, the rest 0:
+  one 255th at most), so a surface reflecting a sunset or a green swamp is still water, and so are falling sheets. Refracted
+  by the wave normal as before, with dispersion (red at 0.95, blue at 1.05 of the offset; two extra taps, only where the
+  bent tap was accepted). Then the view ray's real way through the water (`way`, to the floor, 64 blocks where nothing is
+  behind) and the floor's depth under the surface (`d`, world heights): the floor is lit by light that came down through
+  `d` (`e^(−absorb · d · (0.5 + 0.5 / max(sun y, 0.25)))`, the sun's slanted way and the sky's straight one) and focused
+  into Bliss's caustic pattern (`waterCaustics + 0.25`, ported from Bliss as before) by `bl_causticStrength(d)` × the sun's
+  shadow at the floor; then `colour · T + body · (1 − T)` with `T = e^(−(absorb + scatter) · way)`. So a floor a block down
+  is plain (a little cyan), five down blue-green, fifteen down the water body. Without Fabulous graphics or with
+  refraction off there is no composite and the surface keeps vanilla's alpha.
 * **Under water** (`client/graphics/water/UnderwaterCaustics`, a frame stage right after the level, before the hand): with the
   camera in water and world lighting on, the surface's height over the camera is found on the CPU (up the camera's water
-  column, at most 48 blocks), the scene's colour copied and every world pixel below that height gets Bliss's caustics the same
-  way (`gfx_underwater_caustics`; the depth under the surface instead of Bliss's light-map estimate, the sun's share by its
-  shadow and facing), its alpha (emission) untouched. Vanilla's water fog stays the fog under water.
+  column, at most 48 blocks), the scene's colour copied and every world pixel below that height is lit as the composite
+  lights a floor: the light's way down through its depth and the caustics by `bl_causticStrength` (`gfx_underwater_caustics`;
+  the sun's share by its shadow and facing), its alpha (emission) untouched. Vanilla's water fog stays the fog under water.
 
 **Ripples** (`client/render/WaterRipples`, a shared contract like `LightSources`): rings at a point of a surface with a
 strength and a heading; the newest 24 live (3.5 s) go into the scene block (`BlRipples[]`, count in `BlWeather.w`) every
@@ -754,24 +909,18 @@ rim is as soft as a pixel, so distant and third-person weapons read as wet witho
 side. Nothing under water (the camera in it). Dry or wet, every weapon is a little glossier than its material says
 (roughness eased 30 % towards its square; non-metals under a 0.12 clear coat).
 
-## 16. The texture pack (`resourcepacks/blockland_textures`, `client/textures/FluidTextures`)
+## 16. Fluids drawn by the shader (the lighting pack's terrain.fsh)
 
-The built-in client pack "BlockLand 材质" replaces vanilla's water and lava textures with 1024-texel ones made by
-`tools/assets/gen_fluid_textures.py` (spectral noise: every field tiles by construction and animates by whole phase turns
-per loop; flow textures also translate along +v — the direction LiquidBlockRenderer's UVs give the current — by one
-period of their content per loop, so their spectrum keeps only v frequencies that fit that period). Water stays greyscale
-with vanilla's alpha 180 and mean luminance (the biome colour tints it); it is low-contrast on purpose, since the block
-atlas has only ~4 mip levels: a slow swell, a soft caustic-like network, faint capillary ripples; the flow adds long soft
-streaks and foam along the current. Lava: cooled basalt crust, near black and grey-brown with low ropy wrinkles, dull red
-where thin beside a crack, broken into plates of very different sizes (warped jittered cells at three scales: big
-plates, about half split again, fine cooling cracks; crack width varies) — light only in the cracks (white-yellow core,
-orange edge, a few centimetres wide) and in molten channels and pools welling up along the big cracks (orange-yellow,
-hottest in the middle, swirled), about a quarter of the area. The flow draws the plates out along the current. Only the
-hot parts glow: the lava materials' threshold in `block_materials.json` is 0.42 (brightest channel), above the crust.
-16 frames each, not interpolated (vanilla interpolates on the CPU per pixel, far too slow at this size); speeds as
-vanilla's (water flow 1.25 blocks/s, lava flow 0.42). The pack follows 高清流体材质 (`GraphicsSettings.fluidTextures`):
-preselected at startup, added or removed with one resource reload when the settings are committed; an ordinary pack
-otherwise (the player may reorder it).
+Water and lava keep vanilla's textures in the atlas but, with world lighting, neither is drawn from them. Water (role 3,
+kind `water`): one colour, `BL_WATER_GREY` × the biome colour, alpha `BL_WATER_ALPHA` (§15); the waves, reflections and the
+volume give it its detail. Lava (`block_materials.json` marks it `kind: water` with an emission — a combination nothing else
+has; it is drawn in the solid layer, so the water shading never applies): `bl_lava` in `bl_lighting.glsl`, in world space on
+the face's plane (falling faces stream down at 0.9 blocks/s): a cooled crust of warped jittered cells at two scales, light
+only in the cracks between plates (white-yellow core, orange edge, the fine cracks dimmer) and in molten pools welling up
+where two slow noise fields overlap, churning in time; dark crust otherwise, a dull red near the cracks. Its heat is the
+emission (the colour kept against the light, the emission alpha for bloom); no rain wetness. Without world lighting both
+are vanilla's textures as drawn. (The former built-in pack "BlockLand 材质" with 1024-texel fluid textures and its setting
+高清流体材质 are gone.)
 
 ## 17. Screen-space reflections (`client/graphics/reflect`, `blockland:bl_ssr.glsl`)
 

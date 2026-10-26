@@ -47,6 +47,10 @@ void main() {
         vec3 n = normalize(worldNormal);
         float sun = bl_sunVisibility(worldPos, n, gl_FragCoord.xy);
         vec3 light = bl_skyShade(lightMapColor.rgb, blockLightColor.rgb, sun) + bl_pointLightsDisplay(worldPos, n);
+        // colour bleeding: what faces the ground takes on the ground's colour (BlGround), as much as the sky reaches it
+        vec3 groundTint = BlGround.rgb / max(bl_luminance(BlGround.rgb), 1e-3);
+        float below = (0.5 - 0.5 * n.y) * 0.35 * BlGround.a * skyExposure;
+        light *= mix(vec3(1.0), clamp(groundTint, vec3(0.5), vec3(1.6)), below);
         color *= vec4(min(light, vec3(1.0)), lightMapColor.a);
         // rain (spec §15): fur, skin and cloth darken when soaked, and a sheen of water catches the sky
         float wet = bl_wetness(skyExposure, n);

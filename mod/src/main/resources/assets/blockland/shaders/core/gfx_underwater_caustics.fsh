@@ -39,9 +39,16 @@ void main() {
     float facing = clamp(dot(n, BlSunDir.xyz) * 2.0 + 0.2, 0.0, 1.0);
     float sunShare = bl_shadow(feetPlayerPos, n, gl_FragCoord.xy) * clamp(BlSunColor.a, 0.0, 1.0) * facing;
     if (sunShare <= 0.001) {
-        return;
+        sunShare = 0.0;
     }
-    float caustics = waterCaustics(feetPlayerPos + BlCamera.xyz, BlSunDir.xyz)*WATER_CAUSTICS_BRIGHTNESS + 0.25;
-    vec3 lin = bl_linear(scene.rgb) * mix(1.0, caustics, clamp(estimatedDepth,0.0,1.0) * sunShare);
+    // BlockLand: the light that reached this deep came down through the water (absorbed per channel, as the composite
+    // has it from above), and the waves focus it most a block or two down, not at all deep down (bl_causticStrength)
+    float sunY = max(BlSunDir.y, 0.25);
+    vec3 lin = bl_linear(scene.rgb) * exp(-bl_waterAbsorb() * estimatedDepth * (0.5 + 0.5 / sunY));
+    float strength = bl_causticStrength(estimatedDepth) * sunShare;
+    if (strength > 0.001) {
+        float caustics = waterCaustics(feetPlayerPos + BlCamera.xyz, BlSunDir.xyz)*WATER_CAUSTICS_BRIGHTNESS + 0.25;
+        lin *= mix(1.0, caustics, strength);
+    }
     fragColor = vec4(bl_display(lin), scene.a);
 }

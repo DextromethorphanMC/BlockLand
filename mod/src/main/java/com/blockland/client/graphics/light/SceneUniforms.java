@@ -212,7 +212,9 @@ final class SceneUniforms implements SceneLighting.Provider {
         out.putVec4(sky.fog[0], sky.fog[1], sky.fog[2], fogMode); // BlFog
         float[] c = frame.clouds;
         out.putVec4(c[0], c[1], c[2], c[3]); // BlClouds
-        out.putVec4(c[4], c[5], c[6], c[7]); // BlCloudShape
+        out.putVec4(c[4], c[5], c[6], penumbra()); // BlCloudShape (w: the soft shadows, spec §6)
+        out.putVec4(sky.ground[0], sky.ground[1], sky.ground[2], sky.ground[3]); // BlGround
+        out.putVec4(sky.waterColor[0], sky.waterColor[1], sky.waterColor[2], 1); // BlWaterColor
         ripples(out, frame, sky);
         // BlPrevView: camera-relative world now -> last frame's view (its rotation, the camera's move since)
         prevView.set(frame.prevViewRotation).translate((float) (frame.camX - frame.prevCamX), (float) (frame.camY - frame.prevCamY),
@@ -256,6 +258,18 @@ final class SceneUniforms implements SceneLighting.Provider {
                 out.putVec4(0, 0, 0, 0);
             }
         }
+    }
+
+    /**
+     * The soft shadows' light size (rendering spec §6): the tangent of the sun's (or moon's) effective angular radius,
+     * from the 阴影半影 setting — 0.6° (the disc, a little over its true 0.27°) at its low end up to 4° (the sky's light
+     * softens real shadows well past the disc's own penumbra); 0 = off, the fixed filter, also when the driver has no
+     * unit for the raw depth.
+     */
+    private static float penumbra() {
+        float setting = Graphics.settings().shadowPenumbra;
+        if (setting <= 0 || !GlSlots.shadowDepthAvailable()) return 0;
+        return (float) Math.tan(Math.toRadians(0.6 + 3.4 * setting));
     }
 
     private static float split(@Nullable ShadowInfo shadows, int cascade, int count) {

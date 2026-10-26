@@ -12,6 +12,7 @@ transparency         | minecraft:post/screenquad | minecraft:post/transparency |
 # BlockLand pipelines
 gun                  | blockland:core/gun | blockland:core/gun | Position,UV0,Normal |
 gun_particle         | blockland:core/gun_particle | blockland:core/gun_particle | Position,UV0,Normal |
+celestial            | blockland:core/celestial | blockland:core/celestial | Position,UV0,Color |
 # BlockLand post chain (client/graphics/post, upscale, frame)
 gfx_decode           | blockland:core/gfx_screen | blockland:core/gfx_decode | Position |
 gfx_taa              | blockland:core/gfx_screen | blockland:core/gfx_taa | Position |

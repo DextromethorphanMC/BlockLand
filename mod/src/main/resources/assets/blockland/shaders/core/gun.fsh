@@ -18,12 +18,17 @@ in vec4 blockLightColor;
 
 out vec4 fragColor;
 
-// A small studio light rig in view space (like a weapon viewmodel): key light above/right, cool fill from the left, a
-// rim from behind and a sky-gradient environment that rough surfaces see blurred. Lit in linear light (GGX, Smith,
-// Schlick), converted back to display space and scaled by Minecraft's lightmap like vanilla shading; emission is
-// added after the lightmap. Lit by the world (flag 64, rendering spec §8) the rig is dimmed and the world's own light
-// takes over: the sun with its shadow at the weapon, the sky's share of the lightmap tinted and shadowed, the dynamic
-// lights (a muzzle flash lights its own gun) and reflections of the sky.
+// Without the world's light: a small studio light rig in view space (like a weapon viewmodel): key light above/right,
+// cool fill from the left, a rim from behind and a sky-gradient environment that rough surfaces see blurred. Lit in
+// linear light (GGX, Smith, Schlick), converted back to display space and scaled by Minecraft's lightmap like vanilla
+// shading; emission is added after the lightmap. Lit by the world (flag 64, rendering spec §8) the weapon takes the
+// world's light as the terrain does, split the same way: the sun's share warm and directional (with its shadow at the
+// weapon), the sky's share cool from the sky's half of what a face sees, and the light the ground round the player
+// throws back (BlGround: its colour, so a weapon over grass picks up green, over sand warm yellow — colour bleeding) on the
+// half that sees the ground: lit by the sun where it is not in shadow and by the sky. A side face, turned to neither sun
+// nor sky, lives on the sky's horizon and that bounce, as it does outdoors. Then the block light tinted, the dynamic
+// lights (a muzzle flash lights its own gun) and reflections of the sky above and the ground below. The studio rig is
+// left only as a faint fill so a weapon in the dark keeps its shape.
 const vec3 KEY = vec3(0.37968, 0.81930, 0.42963);
 const vec3 FILL = vec3(-0.90886, 0.20449, 0.36354);
 const vec3 RIM = vec3(0.0, 0.34894, -0.93715);
@@ -36,6 +41,13 @@ const vec3 SKY = vec3(0.50, 0.58, 0.72);
 const vec3 GROUND = vec3(0.045, 0.045, 0.05);
 const float PI = 3.14159265;
 const float SELF_CLEAR = 1.0;        // blocks: the eye-to-weapon reach plus the player head's half diagonal
+// the world's light on a weapon (linear, × the lightmap's sky part): the sun's direct share and the sky's share, so a
+// face turned to a high sun in the open is about as bright as the terrain's top faces, one in shade about half that
+const float SUN_SHARE = 0.62;
+const float SKY_SHARE = 0.5;
+// how much of the sky a face sees: overhead, upright (the bright band round the horizon), facing down
+const float SKY_UP = 1.0, SKY_SIDE = 0.62, SKY_DOWN = 0.0;
+const float STUDIO_FILL = 0.035;
 // LabPBR predefined metals (G 230..237): iron, gold, aluminium, chrome, copper, lead, platinum, silver
 const vec3 METALS[8] = vec3[8](
     vec3(0.531, 0.512, 0.496), vec3(1.000, 0.782, 0.344), vec3(0.913, 0.922, 0.924), vec3(0.549, 0.556, 0.554),
@@ -120,12 +132,13 @@ vec3 environment(vec3 r, float roughness) {
     return mix(GROUND, SKY, sky) * (1.0 - 0.35 * roughness);
 }
 
-// The world seen in a reflection (world-space direction): the sky above as bright as the sky light at the weapon, a
-// dark floor below; block light (torches) fills both a little.
-vec3 worldEnvironment(vec3 r, float roughness, vec3 skyShare, vec3 blockShare) {
-    float sky = smoothstep(-0.35 - 0.45 * roughness, 0.8 + 0.2 * roughness, r.y);
+// The world seen in a reflection (world-space direction): the sky above as bright as the sky light at the weapon, the
+// ground below as the light it throws back (its colour, lit as BlGround and the sun make it); block light (torches)
+// fills both a little.
+vec3 worldEnvironment(vec3 r, float roughness, vec3 skyShare, vec3 blockShare, vec3 groundLight) {
+    float sky = smoothstep(-0.25 - 0.45 * roughness, 0.25 + 0.3 * roughness, r.y);
     vec3 above = BlSkyColor.rgb * bl_luminance(skyShare) + blockShare * 0.35;
-    vec3 below = (skyShare + blockShare) * 0.06;
+    vec3 below = groundLight + blockShare * 0.12;
     return mix(below, above, sky) * (1.0 - 0.35 * roughness);
 }
 
@@ -732,8 +745,9 @@ void main() {
         vec3 worldPos = toWorld * viewPos;
         vec3 worldNormal = toWorld * n;
         vec3 light = toLinear(lightColor.rgb);
-        vec3 blockShare = toLinear(blockLightColor.rgb);
-        vec3 skyShare = max(light - blockShare, vec3(0.0));
+        vec3 blockOnly = toLinear(blockLightColor.rgb);
+        vec3 skyShare = max(light - blockOnly, vec3(0.0));
+        vec3 blockShare = blockOnly * BlBlockLight.rgb;
         // the sun (the moon at night) reaches the weapon where the sky does and its shadow does not fall. Next to the eye
         // (the first-person weapon) the shadow is looked up SELF_CLEAR towards the light: the local player's own body,
         // head round the eye included, casts on the world but not on what they hold in front of their face
@@ -741,21 +755,31 @@ void main() {
         float shadow = bl_shadow(worldPos + BlSunDir.xyz * selfClear, toWorld * geometric, gl_FragCoord.xy);
         float skyAccess = clamp((floor(ModelOffset.y) - 6.0) / 9.0, 0.0, 1.0);
         vec3 sunView = mat3(BlViewRotation) * BlSunDir.xyz;
-        vec3 sun = BlSunColor.rgb * (0.85 * skyAccess * shadow);
+        vec3 sun = BlSunColor.rgb * (SUN_SHARE * skyAccess * shadow);
         vec3 direct = directLight(n, v, sunView, diffuse, f0, directAlpha, 1.0, 1.0) * sun * directAo;
-        // the sky's share of the light: its own tint in full shadow, only part of it left there
-        vec3 shade = mix(BlAmbient.rgb * max(BlAmbient.a, 0.0), vec3(1.0), shadow);
-        vec3 ambientLight = (blockShare + skyShare * shade) * mix(0.55, 1.0, worldNormal.y * 0.5 + 0.5);
+        // the sky: cool (the terrain's shade tint), from the part of the dome a face sees
+        float up = worldNormal.y;
+        float skyView = up >= 0.0 ? mix(SKY_SIDE, SKY_UP, up) : mix(SKY_SIDE, SKY_DOWN, -up);
+        vec3 skyIrradiance = skyShare * BlAmbient.rgb * SKY_SHARE;
+        vec3 skyLight = skyIrradiance * skyView;
+        // the ground round the player: lit by the sun (where the weapon's shadow says the sun reaches, a little of it
+        // even then: the ground round a shadow is lit) and by the sky, throwing its colour back up; a face sees it on
+        // the half of the world below its horizon
+        float groundSun = max(BlSunDir.y, 0.0) * skyAccess * mix(0.35, 1.0, shadow);
+        vec3 groundLight = BlGround.rgb * BlGround.a * (BlSunColor.rgb * (SUN_SHARE * groundSun) + skyIrradiance);
+        vec3 bounce = groundLight * (0.5 - 0.5 * up);
+        // block light (torches, lamps) comes from all round, a little more from the side it is placed on
+        vec3 ambientLight = skyLight + bounce + blockShare * mix(0.7, 1.0, abs(up));
         vec3 points = bl_pointLights(worldPos, worldNormal);
-        vec3 env = worldEnvironment(toWorld * reflect(-v, n), sqrt(alpha), skyShare * shade, blockShare);
-        vec3 color = studio * 0.35 * light
+        vec3 env = worldEnvironment(toWorld * reflect(-v, n), sqrt(alpha), skyShare, blockShare, groundLight);
+        vec3 color = studio * STUDIO_FILL * light
                 + direct
-                + diffuse * ambientLight * 0.45 * ao
+                + diffuse * ambientLight * ao
                 + (diffuse + f0 * 0.35) * points * directAo
                 + env * environmentBrdf(f0, sqrt(alpha), nov) * ao;
         if (coat > 0.0) {
             float coatNov = max(dot(coatN, v), 1e-4);
-            vec3 coatEnv = worldEnvironment(toWorld * reflect(-v, coatN), 0.06, skyShare * shade, blockShare);
+            vec3 coatEnv = worldEnvironment(toWorld * reflect(-v, coatN), 0.06, skyShare, blockShare, groundLight);
             color += coat * (coatEnv * environmentBrdf(vec3(0.04), 0.06, coatNov) * ao
                     + directLight(coatN, v, sunView, vec3(0.0), vec3(0.04), 0.03, 1.0, 0.0) * sun * directAo);
         }

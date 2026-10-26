@@ -155,6 +155,8 @@ public final class SceneLighting {
         size.putVec4(); // BlFog
         size.putVec4(); // BlClouds
         size.putVec4(); // BlCloudShape
+        size.putVec4(); // BlGround
+        size.putVec4(); // BlWaterColor
         size.putVec4(); // BlWeather
         for (int i = 0; i < WaterRipples.MAX * 2; i++) size.putVec4(); // BlRipples[]
         size.putMat4f(); // BlPrevView

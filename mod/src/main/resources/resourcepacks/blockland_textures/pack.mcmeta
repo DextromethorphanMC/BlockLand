@@ -1,9 +1,0 @@
-{
-  "pack": {
-    "description": {
-      "translate": "blockland.graphics.textures_pack.description",
-      "fallback": "BlockLand 材质"
-    },
-    "pack_format": 64
-  }
-}

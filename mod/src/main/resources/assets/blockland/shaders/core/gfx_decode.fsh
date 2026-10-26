@@ -1,15 +1,23 @@
 #version 150
 
 #moj_import <blockland:gfx_screen.glsl>
+#moj_import <blockland:bl_sky.glsl>
 
 // BlockLand post chain, step 1 (client/graphics/post/PostChain): the frame as drawn (display colours, emission in the
 // alpha of opaque pixels, rendering spec §3) into linear HDR at the internal resolution. World pixels get the ambient
 // occlusion, the ray traced light (client/graphics/raytrace: added, its ambient occlusion replacing the screen-space one)
 // the volumetric clouds (client/graphics/sky: the picture behind them × their transmittance, plus their light) and the
 // volumetric light; the hand and the viewmodel (drawn after the level: depth < 1 in the hand depth) get none; the sun and the moon (the brightest sky pixels) are lifted into HDR so they bloom. Output alpha = 1 on
-// hand / viewmodel pixels (the temporal and blur passes keep them apart from the world).
+// hand / viewmodel pixels (the temporal and blur passes keep them apart from the world). With the physical sky (rendering
+// spec §14, blockland:bl_sky.glsl) the overworld's sky pixels first get Rayleigh and Mie scattering in place of vanilla's
+// gradient (the stars, the sun and the moon kept), before the glow and the clouds.
+//   Matrix    = inverse(level projection × view rotation): NDC → camera-relative world (identity without the physical sky)
 //   Params[0] = (emission boost: HDR multiplier added at full emission, AO strength, AO present, volumetric light present)
 //   Params[1] = (the alpha carries emission, ray traced light present, clouds present, far terrain drawn)
+//   Params[2] = physical sky: (vanilla's sky colour, display rgb; the sky's fog end in blocks, 0 = physical sky off)
+//   Params[3] = (vanilla's fog colour, display rgb; the moon's brightness 0..1)
+//   Params[4] = (vanilla's sunrise fan colour, display rgb; its alpha, negative when it stands on +x; 0 = none)
+//   Params[5] = (towards the sun, camera-relative world; overcast 0..1: rain and thunder)
 // The far terrain (rendering spec §22) lies where the world's depth is 1, like the sky; its own depth (FarDepthSampler,
 // < 1 where it was drawn) keeps it from the sun's glow.
 
@@ -38,6 +46,12 @@ void main() {
     }
     bool farTerrain = Params[1].w > 0.5 && worldDepth >= 1.0 && texture(FarDepthSampler, texCoord).r < 1.0;
     if (hand < 0.5 && worldDepth >= 1.0 && !farTerrain) {
+        if (Params[2].w > 0.0) {
+            vec4 far = Matrix * vec4(texCoord * 2.0 - 1.0, 1.0, 1.0);
+            vec3 dir = normalize(far.xyz / far.w);
+            color = gfx_linear(bl_sky(dir, scene.rgb, Params[2].rgb, Params[3].rgb, Params[2].w, Params[4], Params[5].xyz,
+                    Params[3].w, Params[5].w));
+        }
         // the sky: only the sun's and the moon's discs are this bright, give them the glow they have in a camera
         color *= 1.0 + 2.0 * smoothstep(0.75, 1.0, gfx_luminance(scene.rgb));
     }
