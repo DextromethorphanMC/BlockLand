@@ -5,6 +5,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
+import net.minecraft.world.entity.monster.Ghast;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraftforge.event.entity.EntityAttributeCreationEvent;
 import net.minecraftforge.eventbus.api.bus.BusGroup;
@@ -30,6 +31,22 @@ public final class BLEntities {
             .eyeHeight(1.74F)
             .clientTrackingRange(8)
             .build(key("creeper_zombie")));
+
+    /** 恶魂领主: the vanilla ghast model and textures at a player's size, opening its mouth when its player fires. */
+    public static final RegistryObject<EntityType<GhastLord>> GHAST_LORD = TYPES.register("ghast_lord", () -> EntityType.Builder
+            .<GhastLord>of(GhastLord::new, MobCategory.MONSTER)
+            .sized(0.6F, 1.8F)
+            .eyeHeight(1.4F)
+            .clientTrackingRange(8)
+            .build(key("ghast_lord")));
+
+    /** A vanilla ghast fireball whose landing its shooter decides (the ghast lord's skill). */
+    public static final RegistryObject<EntityType<SkillFireball>> SKILL_FIREBALL = TYPES.register("skill_fireball", () -> EntityType.Builder
+            .<SkillFireball>of(SkillFireball::new, MobCategory.MISC)
+            .sized(1.0F, 1.0F)
+            .clientTrackingRange(4)
+            .updateInterval(10)
+            .build(key("skill_fireball")));
 
     public static final RegistryObject<EntityType<SlimeShot>> SLIME_SHOT = TYPES.register("slime_shot", () -> EntityType.Builder
             .<SlimeShot>of(SlimeShot::new, MobCategory.MISC)
@@ -70,6 +87,7 @@ public final class BLEntities {
         EntityAttributeCreationEvent.getBus(modBus).addListener(event -> {
             event.put(SLIME_LICKER.get(), Zombie.createAttributes().build());
             event.put(CREEPER_ZOMBIE.get(), Zombie.createAttributes().build());
+            event.put(GHAST_LORD.get(), Ghast.createAttributes().build());
             event.put(PRACTICE_TARGET.get(), PracticeTarget.createAttributes().build());
         });
     }

@@ -159,16 +159,18 @@ final class BlockMaterials {
                 }
             }
             Map<ResourceLocation, Integer> windBits = new HashMap<>();
+            boolean[] moving = new boolean[mapWidth * mapHeight];
             for (Entry entry : entries) {
                 int wind = entry.wind == null ? 0 : entry.wind.bits();
                 if (wind == 0) continue;
                 for (TextureAtlasSprite sprite : sprites(atlas, entry)) {
                     fill(image, sprite, cell, mapWidth, mapHeight, wind << 16, 0xFC << 16);
                     windBits.put(sprite.contents().name(), wind >> 2);
+                    mark(moving, sprite, cell, mapWidth, mapHeight);
                 }
             }
             // the same bits for the CPU: what must move with a plant (blood on it) asks client/render/PlantWind
-            PlantWind.publish(windBits);
+            PlantWind.publish(windBits, moving, mapWidth, mapHeight);
             if (map != null) map.close();
             map = RenderSystem.getDevice().createTexture(() -> "BlockLand block materials", GpuTexture.USAGE_TEXTURE_BINDING
                     | GpuTexture.USAGE_COPY_DST, TextureFormat.RGBA8, mapWidth, mapHeight, 1, 1);
@@ -187,6 +189,16 @@ final class BlockMaterials {
             if (id != null && atlas.getTextureLocations().contains(id)) sprites.add(atlas.getSprite(id));
         }
         return sprites;
+    }
+
+    /** The sprite's cells, as {@link #fill} covers them. */
+    private static void mark(boolean[] cells, TextureAtlasSprite sprite, int cell, int mapWidth, int mapHeight) {
+        int x0 = sprite.getX() / cell, y0 = sprite.getY() / cell;
+        int x1 = Math.min(mapWidth, Math.max(x0 + 1, (sprite.getX() + sprite.contents().width()) / cell));
+        int y1 = Math.min(mapHeight, Math.max(y0 + 1, (sprite.getY() + sprite.contents().height()) / cell));
+        for (int y = y0; y < y1; y++) {
+            for (int x = x0; x < x1; x++) cells[y * mapWidth + x] = true;
+        }
     }
 
     /** Writes {@code abgr} into the sprite's cells, only the bits of {@code mask} (the rest of the texel is kept). */

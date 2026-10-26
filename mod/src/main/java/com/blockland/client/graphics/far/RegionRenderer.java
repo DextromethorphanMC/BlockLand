@@ -1,5 +1,8 @@
 package com.blockland.client.graphics.far;
 
+import com.blockland.client.perf.Optimization;
+import com.blockland.client.perf.terrain.FaceGroups;
+import com.blockland.client.perf.terrain.FaceIndex;
 import com.blockland.farterrain.FarColumn;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
@@ -7,6 +10,7 @@ import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
@@ -31,6 +35,8 @@ import java.util.List;
  */
 final class RegionRenderer {
     static final int REGION = 4;
+    /** {@code FACE_GROUPS}: time per view for writing index lists of region layers whose visible groups changed. */
+    private static final long FACE_INDEX_NANOS = 1_000_000;
     private static final int VERTEX = DefaultVertexFormat.BLOCK.getVertexSize();
     private static final int QUAD = VERTEX * 4;
     private static final ChunkSectionLayer[] LAYERS = ChunkSectionLayer.values();
@@ -43,10 +49,14 @@ final class RegionRenderer {
 
     private static final class Range {
         final int offset, length;
+        /** {@code FACE_GROUPS}: the unit's quads of this layer by facing (positions relative to the region), or null. */
+        @Nullable
+        final FaceGroups groups;
 
-        Range(int offset, int length) {
+        Range(int offset, int length, @Nullable FaceGroups groups) {
             this.offset = offset;
             this.length = length;
+            this.groups = groups;
         }
     }
 
@@ -55,6 +65,18 @@ final class RegionRenderer {
         GpuBuffer buffer;
         int capacity, used, live;
         final Long2ObjectOpenHashMap<Range> ranges = new Long2ObjectOpenHashMap<>();
+        /** {@code FACE_GROUPS}: bumped when units come or go; the units in buffer order and their visible groups. */
+        long version;
+        @Nullable
+        Range[] order;
+        int[] masks = new int[0];
+        long key;
+        final FaceIndex index = new FaceIndex();
+
+        void changed() {
+            version++;
+            order = null;
+        }
     }
 
     private static final class Region {
@@ -112,7 +134,8 @@ final class RegionRenderer {
             if (layer.buffer == null || layer.used + length > layer.capacity) grow(layer, length, encoder);
             data.limit(data.position() + length);
             encoder.writeToBuffer(layer.buffer.slice(layer.used, length), data);
-            layer.ranges.put(column, new Range(layer.used, length));
+            layer.ranges.put(column, new Range(layer.used, length, mesh.groups.get(LAYERS[i])));
+            layer.changed();
             layer.used += length;
             layer.live += length;
         }
@@ -140,6 +163,7 @@ final class RegionRenderer {
                     encoder.writeToBuffer(layer.buffer.slice(r.offset + off, n), ZEROS);
                 }
                 layer.live -= r.length;
+                layer.changed();
             }
             if (!layer.ranges.isEmpty()) empty = false;
         }
@@ -150,6 +174,7 @@ final class RegionRenderer {
                     gpuBytes -= layer.capacity;
                     layer.buffer.close();
                 }
+                if (layer != null) layer.index.close();
             }
             regions.remove(FarColumn.key(region.scale, region.rx, region.rz));
         } else {
@@ -168,32 +193,39 @@ final class RegionRenderer {
             for (Long2ObjectMap.Entry<Range> e : layer.ranges.long2ObjectEntrySet()) {
                 Range r = e.getValue();
                 encoder.copyToBuffer(layer.buffer.slice(r.offset, r.length), next.slice(at, r.length));
-                e.setValue(new Range(at, r.length));
+                e.setValue(new Range(at, r.length, r.groups));
                 at += r.length;
             }
             gpuBytes -= layer.capacity;
             layer.buffer.close();
         }
         layer.buffer = next;
+        layer.changed();
         layer.capacity = capacity;
         layer.used = at;
         layer.live = at;
         gpuBytes += capacity;
     }
 
-    /** One region layer to draw this frame. */
-    record Draw(GpuBuffer buffer, int quads, ChunkSectionLayer layer, GpuBufferSlice transform, double distance) {
+    /**
+     * One region layer to draw this frame: the whole buffer, or with {@code FACE_GROUPS} the index list of its units'
+     * quads that may face the camera ({@code indexBuffer}, in the buffer's order).
+     */
+    record Draw(GpuBuffer buffer, int quads, ChunkSectionLayer layer, GpuBufferSlice transform, double distance,
+                @Nullable GpuBuffer indexBuffer, VertexFormat.IndexType indexType, int firstIndex, int indexCount) {
     }
 
     /**
-     * The visible region layers, nearest first (translucent ones farthest first, at the end), with their transforms made
-     * now (before the pass opens).
+     * The visible region layers, nearest first (translucent ones farthest first, at the end), with their transforms (and
+     * index lists) made now (before the pass opens).
      */
     List<Draw> prepare(FrustumIntersection frustum, Matrix4f viewRotation, double camX, double camY, double camZ) {
         List<Draw> opaque = new ArrayList<>(), translucent = new ArrayList<>();
         Vector4f white = new Vector4f(1, 1, 1, 1);
         Matrix4f texture = new Matrix4f();
         int columns = 0;
+        boolean grouped = Optimization.FACE_GROUPS.on();
+        FaceIndex.budget(FACE_INDEX_NANOS);
         for (Region region : regions.values()) {
             if (region.minY > region.maxY) continue;
             double span = span(region.scale);
@@ -206,11 +238,24 @@ final class RegionRenderer {
             for (int i = 0; i < LAYERS.length; i++) {
                 Layer layer = region.layers[i];
                 if (layer == null || layer.buffer == null || layer.used < QUAD) continue;
+                GpuBuffer indexBuffer = null;
+                int indexCount = layer.used / QUAD * 6, firstIndex = 0;
+                if (grouped && FaceGroups.grouped(LAYERS[i])) {
+                    // the units' quads that may face the camera, in the buffer's order (places of units gone left out too)
+                    int count = visibleIndices(layer, camX - region.rx * span, camY - region.originY, camZ - region.rz * span);
+                    if (count == 0) continue;
+                    if (count > 0 && layer.index.ensure(layer.key, count, true, out -> writeIndices(layer, out))) {
+                        indexBuffer = layer.index.buffer();
+                        indexCount = layer.index.indexCount();
+                        firstIndex = layer.index.firstIndex();
+                    }
+                }
                 if (transform == null) {
                     Vector3f offset = new Vector3f((float) x0, (float) (region.originY - camY), (float) z0);
                     transform = RenderSystem.getDynamicUniforms().writeTransform(viewRotation, white, offset, texture, 1);
                 }
-                Draw d = new Draw(layer.buffer, layer.used / QUAD, LAYERS[i], transform, distance);
+                Draw d = new Draw(layer.buffer, layer.used / QUAD, LAYERS[i], transform, distance, indexBuffer, VertexFormat.IndexType.INT,
+                        firstIndex, indexCount);
                 if (LAYERS[i] == ChunkSectionLayer.TRANSLUCENT || LAYERS[i] == ChunkSectionLayer.TRIPWIRE) translucent.add(d);
                 else opaque.add(d);
             }
@@ -223,8 +268,56 @@ final class RegionRenderer {
         return opaque;
     }
 
+    /**
+     * {@code FACE_GROUPS}: each unit's visible groups for a camera at ({@code x, y, z}) relative to the region, kept in the
+     * layer ({@code masks}, units in buffer order) with a key for them; the indices they draw, or -1 when every unit draws
+     * all of its quads (the whole buffer then).
+     */
+    private static int visibleIndices(Layer layer, double x, double y, double z) {
+        if (layer.order == null) {
+            layer.order = layer.ranges.values().toArray(new Range[0]);
+            java.util.Arrays.sort(layer.order, (a, b) -> Integer.compare(a.offset, b.offset));
+            layer.masks = new int[layer.order.length];
+        }
+        long key = layer.version * 0x9E3779B97F4A7C15L;
+        int count = 0;
+        boolean all = true;
+        for (int u = 0; u < layer.order.length; u++) {
+            Range r = layer.order[u];
+            int mask;
+            if (r.groups == null || !r.groups.current()) {
+                mask = -1;
+                count += r.length / QUAD * 6;
+            } else {
+                mask = r.groups.visible(x, y, z);
+                if (!r.groups.all(mask)) all = false;
+                count += r.groups.quads(mask) * 6;
+            }
+            layer.masks[u] = mask;
+            key = (key ^ mask) * 0x100000001B3L + u;
+        }
+        layer.key = key;
+        return all ? -1 : count;
+    }
+
+    /** The index list {@link #visibleIndices} counted (ints, the buffer's quads in their order). */
+    private static void writeIndices(Layer layer, java.nio.ByteBuffer out) {
+        for (int u = 0; u < layer.order.length; u++) {
+            Range r = layer.order[u];
+            int base = r.offset / QUAD;
+            if (layer.masks[u] != -1) {
+                r.groups.writeIndices(out, layer.masks[u], base, true);
+                continue;
+            }
+            for (int q = 0, n = r.length / QUAD; q < n; q++) {
+                int v = (base + q) * 4;
+                out.putInt(v).putInt(v + 1).putInt(v + 2).putInt(v + 2).putInt(v + 3).putInt(v);
+            }
+        }
+    }
+
     /** The draws {@link #prepare} made, in its order; vanilla's pipelines and atlases per layer. */
-    static void draw(RenderPass pass, List<Draw> draws, boolean translucent) {
+    static void draw(RenderPass pass, List<Draw> draws, boolean translucent, GpuBuffer indices, VertexFormat.IndexType indexType) {
         ChunkSectionLayer current = null;
         for (Draw d : draws) {
             boolean isTranslucent = d.layer == ChunkSectionLayer.TRANSLUCENT || d.layer == ChunkSectionLayer.TRIPWIRE;
@@ -236,7 +329,13 @@ final class RegionRenderer {
             }
             pass.setVertexBuffer(0, d.buffer);
             pass.setUniform("DynamicTransforms", d.transform);
-            pass.drawIndexed(0, 0, d.quads * 6, 1);
+            if (d.indexBuffer != null) {
+                pass.setIndexBuffer(d.indexBuffer, d.indexType);
+                pass.drawIndexed(0, d.firstIndex, d.indexCount, 1);
+                pass.setIndexBuffer(indices, indexType);
+            } else {
+                pass.drawIndexed(0, 0, d.quads * 6, 1);
+            }
         }
     }
 
@@ -256,7 +355,11 @@ final class RegionRenderer {
 
     void clear() {
         for (Region region : regions.values()) {
-            for (Layer layer : region.layers) if (layer != null && layer.buffer != null) layer.buffer.close();
+            for (Layer layer : region.layers) {
+                if (layer == null) continue;
+                if (layer.buffer != null) layer.buffer.close();
+                layer.index.close();
+            }
         }
         regions.clear();
         regionOfColumn.clear();

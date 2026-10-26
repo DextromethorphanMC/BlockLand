@@ -2,6 +2,10 @@ package com.blockland.client.perf.terrain;
 
 import com.blockland.client.perf.FrameTimings;
 import com.blockland.client.perf.Optimization;
+import com.mojang.blaze3d.vertex.MeshData;
+import net.minecraft.client.renderer.block.model.BlockModelPart;
+import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
+import net.minecraft.client.renderer.chunk.SectionCompiler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
@@ -10,6 +14,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Vector3f;
 
 import javax.annotation.Nullable;
+import java.util.List;
 
 /**
  * One chunk section compile ({@code SectionCompiler.compile}) on the current thread: the terrain switches as they were
@@ -27,6 +32,11 @@ public final class TerrainCompile {
     private boolean compiling;
     private boolean meshing;
     private boolean tints;
+    /** {@code ENCLOSED_BLOCKS}: the full faces of the section and its one-block border ({@link #enclosed}). */
+    private boolean enclosed;
+    private final byte[] fullFaces = new byte[18 * 18 * 18];
+    /** {@code FACE_GROUPS}: the solid and cutout quads are grouped by facing at the end ({@link #finish}). */
+    private boolean groups;
     int originX, originY, originZ;
     @Nullable
     private FrameTimings.Span span;
@@ -56,6 +66,8 @@ public final class TerrainCompile {
         c.compiling = true;
         c.meshing = TerrainSwitches.on(Optimization.SECTION_MESHING);
         c.tints = TerrainSwitches.on(Optimization.BIOME_TINTS);
+        c.enclosed = TerrainSwitches.on(Optimization.ENCLOSED_BLOCKS);
+        c.groups = TerrainSwitches.on(Optimization.FACE_GROUPS);
         c.originX = section.minBlockX();
         c.originY = section.minBlockY();
         c.originZ = section.minBlockZ();
@@ -69,8 +81,56 @@ public final class TerrainCompile {
             if (c.tintMemo == null) c.tintMemo = new BiomeTints.Memo();
             c.tintMemo.begin(c.originX, c.originY, c.originZ);
         }
+        if (c.enclosed) c.readFullFaces(region);
         // render-thread compiles only (sections the player changed); worker compiles are timed by MeshCheck
         c.span = FrameTimings.span("bl/terrain/compile");
+    }
+
+    /** The section and its border as full-face bits, index {@code (y * 18 + z) * 18 + x} from the origin − 1. */
+    private void readFullFaces(BlockAndTintGetter region) {
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        int i = 0;
+        for (int y = -1; y <= 16; y++) {
+            for (int z = -1; z <= 16; z++) {
+                for (int x = -1; x <= 16; x++) {
+                    fullFaces[i++] = (byte) FullFaces.of(region.getBlockState(pos.set(originX + x, originY + y, originZ + z)));
+                }
+            }
+        }
+    }
+
+    /**
+     * {@code ENCLOSED_BLOCKS}: whether tesselating this block would draw nothing — every neighbour's face against it is a
+     * full block (so {@code Block.shouldRenderFace} culls each of its faces at its first test) and no part has quads
+     * without a face to cull by ({@code getQuads(null)}, always drawn). Then {@code renderBatched} is left out: the same
+     * mesh without the work of deciding six culled faces.
+     */
+    public static boolean enclosed(BlockPos pos, List<BlockModelPart> parts) {
+        TerrainCompile c = THREAD.get();
+        if (!c.compiling || !c.enclosed) return false;
+        int x = pos.getX() - c.originX + 1, y = pos.getY() - c.originY + 1, z = pos.getZ() - c.originZ + 1;
+        if (x < 1 || x > 16 || y < 1 || y > 16 || z < 1 || z > 16) return false;
+        int i = (y * 18 + z) * 18 + x;
+        byte[] f = c.fullFaces;
+        // the neighbour below must be full on its up face, the one above on its down face, and so on
+        if ((f[i - 324] & 1 << 1) == 0 || (f[i + 324] & 1) == 0 || (f[i - 18] & 1 << 3) == 0 || (f[i + 18] & 1 << 2) == 0
+                || (f[i - 1] & 1 << 5) == 0 || (f[i + 1] & 1 << 4) == 0) return false;
+        for (int p = 0, n = parts.size(); p < n; p++) {
+            if (!parts.get(p).getQuads(null).isEmpty()) return false;
+        }
+        return true;
+    }
+
+    /** {@code FACE_GROUPS}: the groups of the compile's solid and cutout quads (RETURN of the compile, before {@link #end}). */
+    public static void finish(SectionCompiler.Results results) {
+        TerrainCompile c = THREAD.get();
+        if (!c.compiling || !c.groups) return;
+        for (java.util.Map.Entry<ChunkSectionLayer, MeshData> e : results.renderedLayers.entrySet()) {
+            if (!FaceGroups.grouped(e.getKey())) continue;
+            MeshData mesh = e.getValue();
+            FaceGroups groups = FaceGroups.of(mesh.vertexBuffer(), mesh.drawState().format().getVertexSize());
+            if (groups != null) FaceGroups.pending(mesh, groups);
+        }
     }
 
     /** The compile is done (RETURN of {@code SectionCompiler.compile}): nothing of it is kept alive. */

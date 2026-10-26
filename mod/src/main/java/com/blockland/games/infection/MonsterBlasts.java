@@ -3,6 +3,8 @@ package com.blockland.games.infection;
 import com.blockland.BlockLand;
 import com.blockland.combat.HitRecords;
 import com.blockland.common.Sounds;
+import com.blockland.entity.BLEntities;
+import com.blockland.entity.SkillFireball;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
@@ -14,6 +16,8 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageType;
 import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
@@ -33,9 +37,9 @@ import java.util.function.Function;
 
 /**
  * Monster explosions of one match, data-driven by the skills in monsters.json: the {@code self_destruct} skill (a
- * fuse — the monster slowed, swelling and flashing on everyone's screen — then a blast that takes the monster with it)
- * and the {@code death_blast} passive (a monster that dies goes off after a short delay, also when it is killed during
- * its fuse). A blast hurts only the monster's enemies, with the damage falling off from {@code innerRadius} to
+ * fuse — the monster slowed, swelling and flashing on everyone's screen — then a blast that takes the monster with it),
+ * the {@code death_blast} passive (a monster that dies goes off after a short delay, also when it is killed during
+ * its fuse) and the {@code fireball} skill (a vanilla ghast fireball that blows up where it lands). A blast hurts only the monster's enemies, with the damage falling off from {@code innerRadius} to
  * {@code radius} and scaled by how much of each body it can see (cover protects, nothing goes through walls); the
  * kill is the monster player's. It never touches a block. The game supplies the rules (who is an enemy, what dying
  * means, who watches) through {@link Rules}.
@@ -45,7 +49,10 @@ final class MonsterBlasts {
     static final ResourceKey<DamageType> DAMAGE = ResourceKey.create(Registries.DAMAGE_TYPE, BlockLand.id("monster_blast"));
     /** What kills by a monster blast are credited to (kill feed / hit records). */
     static final String WEAPON = "blockland:monster_blast";
+    /** What fireball kills are credited to (an item, so the kill feed names it). */
+    static final String FIREBALL_WEAPON = "minecraft:fire_charge";
     private static final String EXPLODE_SOUND = "blockland:equipment.frag_explode";
+    private static final String FIREBALL_SOUND = "minecraft:entity.generic.explode";
 
     /** What the game decides. */
     interface Rules {
@@ -73,6 +80,8 @@ final class MonsterBlasts {
     private final List<Delayed> delayed = new ArrayList<>();
     /** Monsters dying by their own blast right now: their death sets nothing more off. */
     private final Set<UUID> selfDestructing = new HashSet<>();
+    /** Fireballs in flight. */
+    private final List<SkillFireball> fireballs = new ArrayList<>();
 
     MonsterBlasts(Rules rules) {
         this.rules = rules;
@@ -94,6 +103,41 @@ final class MonsterBlasts {
     }
 
     /**
+     * The {@code fireball} skill: a vanilla ghast fireball from the monster's eyes along its view, launched at the
+     * skill's {@code speed} and speeding up as it flies. It passes through everyone who is not its owner's enemy and
+     * blows up on the first enemy or block it meets (a punch can send it back: then it is the puncher's, and their
+     * enemies get the blast), or fizzles out after its {@code lifetime}.
+     */
+    void fireball(ServerPlayer player, MonsterCatalog.Skill skill) {
+        ServerLevel level = player.level();
+        SkillFireball ball = BLEntities.SKILL_FIREBALL.get().create(level, EntitySpawnReason.TRIGGERED);
+        if (ball == null) return;
+        Vec3 look = player.getLookAngle();
+        // the 1-block ball centred a little in front of the eyes
+        ball.setPos(player.getX() + look.x * 0.6, player.getEyeY() - 0.5 + look.y * 0.6, player.getZ() + look.z * 0.6);
+        ball.setOwner(player);
+        ball.setDeltaMovement(look.scale(Math.max(0.05f, skill.speed)));
+        ball.setLifetime(Math.round(skill.lifetime * 20));
+        ball.setImpact(new SkillFireball.Impact() {
+            @Override
+            public boolean canHit(SkillFireball b, Entity target) {
+                Entity owner = b.getOwner();
+                return owner == null || !(target instanceof LivingEntity living) || rules.isEnemy(owner.getUUID(), living);
+            }
+
+            @Override
+            public void land(SkillFireball b, Vec3 at, @Nullable Entity hit) {
+                fireballs.remove(b);
+                Entity owner = b.getOwner();
+                if (owner == null) return;
+                explode(level, at, owner.getUUID(), owner instanceof ServerPlayer p ? p : null, skill, FIREBALL_WEAPON, FIREBALL_SOUND);
+            }
+        });
+        fireballs.add(ball);
+        level.addFreshEntity(ball);
+    }
+
+    /**
      * A monster died (not by falling out of the world): a burning fuse is put out, and a {@code death_blast} passive
      * goes off at the spot after its delay.
      */
@@ -111,6 +155,7 @@ final class MonsterBlasts {
 
     /** Every server tick of the fight: fuses that burned down go off (the monster with them), then delayed blasts. */
     void tick(int now, Function<UUID, ServerPlayer> online) {
+        fireballs.removeIf(Entity::isRemoved);
         for (Iterator<Map.Entry<UUID, Fuse>> it = fuses.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<UUID, Fuse> e = it.next();
             if (now < e.getValue().at) continue;
@@ -128,13 +173,13 @@ final class MonsterBlasts {
             } finally {
                 selfDestructing.remove(player.getUUID());
             }
-            explode(level, centre, e.getKey(), player, e.getValue().skill);
+            explode(level, centre, e.getKey(), player, e.getValue().skill, WEAPON, EXPLODE_SOUND);
         }
         for (Iterator<Delayed> it = delayed.iterator(); it.hasNext(); ) {
             Delayed d = it.next();
             if (now < d.at) continue;
             it.remove();
-            explode(d.level, d.centre, d.owner, online.apply(d.owner), d.skill);
+            explode(d.level, d.centre, d.owner, online.apply(d.owner), d.skill, WEAPON, EXPLODE_SOUND);
         }
     }
 
@@ -143,18 +188,22 @@ final class MonsterBlasts {
         if (fuses.remove(player) != null) rules.fuse(player, 0);
     }
 
-    /** The round is over: every fuse and pending blast is dropped. */
+    /** The round is over: every fuse, pending blast and fireball in flight is dropped. */
     void clear() {
         for (UUID id : fuses.keySet()) rules.fuse(id, 0);
         fuses.clear();
         delayed.clear();
+        for (SkillFireball ball : fireballs) ball.discard();
+        fireballs.clear();
     }
 
     // ---- the blast ----------------------------------------------------------------------------------
 
-    private void explode(ServerLevel level, Vec3 centre, UUID ownerId, @Nullable ServerPlayer owner, MonsterCatalog.Skill skill) {
+    /** @param weapon what kills are credited to; @param sound the bang */
+    private void explode(ServerLevel level, Vec3 centre, UUID ownerId, @Nullable ServerPlayer owner, MonsterCatalog.Skill skill,
+                         String weapon, String sound) {
         float radius = Math.max(0.5f, skill.radius), inner = Math.min(radius, skill.innerRadius);
-        playSound(level, centre, EXPLODE_SOUND, 5f, 0.85f + level.random.nextFloat() * 0.12f);
+        playSound(level, centre, sound, 5f, 0.85f + level.random.nextFloat() * 0.12f);
         rules.blasted(centre, radius);
         DamageSource source = new DamageSource(level.registryAccess().lookupOrThrow(Registries.DAMAGE_TYPE).getOrThrow(DAMAGE), null, owner);
         AABB box = new AABB(centre, centre).inflate(radius);
@@ -169,7 +218,7 @@ final class MonsterBlasts {
             if (exposure <= 0) continue;
             float t = distance <= inner ? 0 : (float) ((distance - inner) / Math.max(0.01, radius - inner));
             float amount = (skill.minDamage + (skill.damage - skill.minDamage) * (1 - t) * (1 - t)) * exposure;
-            if (owner != null) HitRecords.record(victim, owner, WEAPON, false);
+            if (owner != null) HitRecords.record(victim, owner, weapon, false);
             victim.invulnerableTime = 0;
             victim.hurtServer(level, source, amount);
             Vec3 away = body.getCenter().subtract(centre);

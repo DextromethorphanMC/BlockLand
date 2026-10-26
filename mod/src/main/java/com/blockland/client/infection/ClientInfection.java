@@ -5,6 +5,8 @@ import com.blockland.client.equipment.effect.ClientEquipmentEffects;
 import com.blockland.client.morph.ClientMorphs;
 import com.blockland.client.render.RenderClock;
 import com.blockland.entity.CreeperZombie;
+import com.blockland.entity.GhastLord;
+import com.blockland.entity.SkillFireball;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.InfectionPacketListeners;
 import com.blockland.network.packet.InfectionPackets;
@@ -17,6 +19,7 @@ import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.client.gui.overlay.ForgeLayeredDraw;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.eventbus.api.bus.BusGroup;
 
 import java.util.HashMap;
@@ -25,7 +28,8 @@ import java.util.UUID;
 
 /**
  * Client side of 枪战感染: the monster selection panel when infected, the skill key and the monster HUD, and what
- * monster explosions look like (a burning fuse swells and flashes the monster, the blast's fire and smoke). Everything
+ * monster explosions look like (a burning fuse swells and flashes the monster, the blast's fire and smoke, a ghast lord
+ * opening its mouth as it fires). Everything
  * shown (monsters, health, skills, cooldowns) comes from the server; the client only remembers its own role.
  */
 public final class ClientInfection {
@@ -37,6 +41,8 @@ public final class ClientInfection {
     private static long skillUsedAt;
     /** Burning fuses by player. */
     private static final Map<UUID, Fuse> fuses = new HashMap<>();
+    /** When each player last fired a skill fireball (render clock nanoseconds). */
+    private static final Map<UUID, Long> shots = new HashMap<>();
 
     private record Fuse(long start, float seconds) {
     }
@@ -57,12 +63,23 @@ public final class ClientInfection {
         ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(event -> {
             role = InfectionPackets.S2CRole.NONE;
             fuses.clear();
+            shots.clear();
         });
-        // a monster burning its fuse swells and flashes wherever it is drawn
+        // a fireball appearing is its owner's shot (the owner comes with the spawn packet)
+        EntityJoinLevelEvent.BUS.addListener(event -> {
+            if (event.getLevel().isClientSide() && event.getEntity() instanceof SkillFireball ball && ball.getOwner() != null) {
+                shots.put(ball.getOwner().getUUID(), RenderClock.nanos());
+            }
+            return false;
+        });
+        // a monster burning its fuse swells and flashes wherever it is drawn; a ghast lord that just fired shows it
         ClientMorphs.setDecorator((player, proxy) -> {
-            if (!(proxy instanceof CreeperZombie creeper)) return;
-            Fuse fuse = fuses.get(player);
-            creeper.fuse(fuse == null ? 0 : fuse.start(), fuse == null ? 0 : fuse.seconds());
+            if (proxy instanceof CreeperZombie creeper) {
+                Fuse fuse = fuses.get(player);
+                creeper.fuse(fuse == null ? 0 : fuse.start(), fuse == null ? 0 : fuse.seconds());
+            } else if (proxy instanceof GhastLord lord) {
+                lord.shot(shots.getOrDefault(player, 0L));
+            }
         });
         BLNetwork.setInfectionClientListener(new InfectionPacketListeners.Client() {
             @Override

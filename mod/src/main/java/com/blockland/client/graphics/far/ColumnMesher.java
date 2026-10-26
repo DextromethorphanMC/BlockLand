@@ -1,5 +1,7 @@
 package com.blockland.client.graphics.far;
 
+import com.blockland.client.perf.Optimization;
+import com.blockland.client.perf.terrain.FaceGroups;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
@@ -40,11 +42,14 @@ final class ColumnMesher {
     /** The column's layers, each in native memory ({@link #free}); positions relative to its region's corner. */
     static final class Result {
         final EnumMap<ChunkSectionLayer, ByteBuffer> layers = new EnumMap<>(ChunkSectionLayer.class);
+        /** {@code FACE_GROUPS}: the solid and cutout layers' quads by facing. */
+        final EnumMap<ChunkSectionLayer, FaceGroups> groups = new EnumMap<>(ChunkSectionLayer.class);
         int minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
 
         void free() {
             for (ByteBuffer b : layers.values()) MemoryUtil.memFree(b);
             layers.clear();
+            groups.clear();
         }
 
         long bytes() {
@@ -76,6 +81,9 @@ final class ColumnMesher {
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         int baseX = column.cx() << 4, baseZ = column.cz() << 4;
         pose.scale(size, size, size);
+        // FAR_HIDDEN_GEOMETRY: cells no line of sight from outside the unit reaches are left out
+        long[] hidden = Optimization.FAR_HIDDEN_GEOMETRY.on() ? HiddenCells.of(column) : null;
+        boolean grouped = Optimization.FACE_GROUPS.on();
         ModelBlockRenderer.enableCaching();
         try {
             for (int i = 0; i < column.sections().length; i++) {
@@ -87,6 +95,7 @@ final class ColumnMesher {
                         for (int lx = 0; lx < 16; lx++) {
                             BlockState state = section.getBlockState(lx, ly, lz);
                             if (state.isAir()) continue;
+                            if (hidden != null && HiddenCells.has(hidden, (i * 16 + ly) * 256 + lz * 16 + lx)) continue;
                             pos.set(baseX + lx, baseY + ly, baseZ + lz);
                             FluidState fluid = state.getFluidState();
                             if (!fluid.isEmpty()) {
@@ -122,6 +131,10 @@ final class ColumnMesher {
                     ByteBuffer copy = MemoryUtil.memAlloc(vertices.remaining());
                     MemoryUtil.memCopy(vertices, copy);
                     result.layers.put(e.getKey(), copy);
+                    if (grouped && FaceGroups.grouped(e.getKey())) {
+                        FaceGroups g = FaceGroups.of(copy, DefaultVertexFormat.BLOCK.getVertexSize());
+                        if (g != null) result.groups.put(e.getKey(), g);
+                    }
                 }
             }
         } catch (RuntimeException | Error e) {

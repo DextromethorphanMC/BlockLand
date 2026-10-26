@@ -976,6 +976,27 @@ sample, skips an update that could leave something a frame stale, or reorders dr
   gives both. `bench compare` (dev automation) runs the frame comparison alone, `bench <id>` compares one optimization
   (off and on, every other one on). Reports:
   `<game>/blockland/benchmarks/<time>.txt` (the player's language) and `.json` (every pass, every span).
+* **Chunk geometry** (entries that leave out work the picture never shows):
+  `ENCLOSED_BLOCKS` — a section compile reads its section and one-block border as full-face bits
+  (`terrain/FullFaces`: `getFaceOcclusionShape(side) == Shapes.block()`, `Block.shouldRenderFace`'s first test, which culls
+  whatever the block); a block whose six neighbours are full against it and whose parts have no `getQuads(null)` quads is
+  not handed to `renderBatched` (same mesh). `FACE_GROUPS` — at the end of a compile each quad of the solid and cutout
+  meshes (back-face culled, unblended; translucent and tripwire keep vanilla's sort) gets one of seven groups
+  (`terrain/FaceGroups`: quads in one axis plane whose two triangles wind towards one axis direction, and the rest —
+  including every quad on a texture the wind moves, `client/render/PlantWind.moves`, since a bent quad can face a camera
+  far off to the side; groups made before the moving textures changed are not used); the mesh itself is never reordered (a reorder changes which of two fragments at equal depth wins — the benchmark saw it on
+  distant leaves). The groups are attached to the section's `SectionBuffers` at upload; `TerrainDraws.prepare` finds the
+  groups the camera may see (it is not behind all of their planes by more than `FaceGroups.MARGIN`, 1 block, for
+  bobbing) and draws the section through an index list of just those quads in the mesh's order, vanilla's `0 1 2 2 3 0`
+  per quad (`terrain/FaceIndex`, one per section layer, in shared 8 MB index buffers so neighbouring draws keep one bound;
+  the visible groups are worked out again once the camera moved a quarter block, with the margin widened by as much; a
+  list is written again only when they change, within 1.5 ms per view; a list not ready draws the whole mesh). Back-facing quads make no fragments, so the same fragments reach the
+  screen in the same order. Other loops (shadow casters, Blaze3D's validating loop, the entry off) draw the whole mesh.
+  The real far chunks use the same groups per unit, one index list per region layer (§23).
+  `FAR_HIDDEN_GEOMETRY` — a far unit is flooded from its border through cells that are not full on all six faces; cells
+  neither reachable nor next to a reachable one (and not on the border) are not meshed (`far/HiddenCells`): the camera is
+  never inside a far unit, so no line of sight reaches them. Switching the far entries meshes the real far chunks again.
+  Offline check: `python -I tools/perf/check_mesh_opt.py` (FaceInfo windings, grouping, flood).
 * **Freezes** (`perf/Hitches`): a frame over 100 ms in a world is logged with its garbage collections, heap, window state
   and the time vanilla's frame flip spent in the buffer swap and in the window's event polls (`RenderSystemMixin` →
   `PerfHooks.displayStep`); the timings then record for a minute, so the next one is also logged span by span.

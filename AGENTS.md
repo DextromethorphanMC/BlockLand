@@ -35,6 +35,7 @@
 - 改了 DLSS 桥接（`client/graphics/upscale/dlss`）或其输入着色器要跑 `python -I tools/dlss/check_dlss.py <运行库目录>`（隐藏窗口、真实 DLSS，比较各约定的误差）；改了帧生成（`FrameGeneration` / `FrameGenerator`）再跑 `--framegen`（不抢焦点，DLSS-G 接受全部输入且状态为 0 即通过；真正生成帧需要窗口在前台，交给用户实机看）；改了 DLSS 5 神经渲染（`Ngx` / `NeuralRendering` / `NeuralRenderer`）跑 `--neural`；改了光线重建跑 `--rr`；改了光线追踪的体素布局或 `rt_common.glsl` 跑 `python -I tools/raytrace/check_voxels.py`（GPU 追踪与 CPU 对照）；NVIDIA 的运行库不进仓库，用 `tools/dlss/install_runtime.py` 装到游戏目录。
 - 改了反作弊的物理预测（`server/anticheat/predict`）要跑 `python -I tools/anticheat/check_movement.py`（独立的原版物理模拟：合法移动不得越界，速度 / 悬停 / 高跳 / 台阶 / 瞬移作弊必须越界）；改了 `mixin/anticheat` 同样按下面的 mixin 规则离线套用。
 - 改了远景地形的 `FarTile` 编码、网格（`MeshBuilder`）或选块（`Selection`）要跑 `python -I tools/farterrain/check_far_terrain.py`（离线：编码、四边形朝外绕序、合并、选块无空洞无重叠且精度随距离）。
+- 改了区块几何优化（`client/perf/terrain/FaceGroups`、`FullFaces`、`client/graphics/far/HiddenCells`）要跑 `python -I tools/perf/check_mesh_opt.py`（离线：按原版 `FaceInfo` 的绕序验证朝向分组与背面剔除假设、分组稳定、封闭洞穴的泛洪）。
 - 改了 `combat/Ballistics`（子弹在流体中的弹道）要跑 `python -I tools/combat/check_ballistics.py`（只让 Gradle 给出编译类路径，不编译到 `mod/build`，开着开发客户端也能跑）。
 - 加了或改了 mixin 要在离线环境里用 Forge 自带的 Mixin 0.8.7 把全部配置一起套到目标类上（`defaultRequire: 1`，目标找不到会在启动时崩溃），再编译；优化的实际收益与「关 / 开逐像素一致」由用户在游戏里跑 设置 → 性能 → 运行基准测试 得出，报告在 `<游戏目录>/blockland/benchmarks/`。
 - 改了任何着色器（含原版覆盖）都要跑 `python -I tools/shaders/check_shaders.py`（隐藏窗口里用本机驱动编译链接，不抢焦点），新的程序 / 宏组合登记到 `tools/shaders/programs.txt`。

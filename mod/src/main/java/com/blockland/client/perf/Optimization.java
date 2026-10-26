@@ -25,6 +25,10 @@ public enum Optimization {
     SECTION_COPIES(Group.VANILLA, false),
     /** Biome colour blending reuses each sampled biome's colour. */
     BIOME_TINTS(Group.VANILLA, true),
+    /** Blocks whose every face is culled by full neighbours are not tesselated at all (same mesh, less work). */
+    ENCLOSED_BLOCKS(Group.VANILLA, true),
+    /** Solid and cutout quads grouped by facing; groups facing away from the camera are not drawn (the GPU culls them). */
+    FACE_GROUPS(Group.VANILLA, true),
     /** The section compile queue drops cancelled tasks in one sweep. */
     COMPILE_QUEUE(Group.VANILLA, false),
     /** Particles: dead ones removed in one sweep, no garbage per particle, light looked up once per block and frame. */
@@ -54,7 +58,9 @@ public enum Optimization {
     /** Bullet debris, sparks and stains: only live entries are visited, stain clipping is kept while unchanged. */
     IMPACT_POOLS(Group.PIPELINE, false),
     /** Per-frame loops over nearby entities without garbage (motion, lights, poses). */
-    FRAME_GARBAGE(Group.PIPELINE, false);
+    FRAME_GARBAGE(Group.PIPELINE, false),
+    /** Real far chunks: blocks no line of sight from outside can reach (sealed caves, buried blocks) are not meshed. */
+    FAR_HIDDEN_GEOMETRY(Group.PIPELINE, false);
 
     /** Where an entry works: vanilla Minecraft (through hooks) or BlockLand's own pipeline. */
     public enum Group { VANILLA, PIPELINE }

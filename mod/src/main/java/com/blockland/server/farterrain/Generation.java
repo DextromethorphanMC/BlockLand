@@ -1,6 +1,7 @@
 package com.blockland.server.farterrain;
 
 import com.blockland.BlockLand;
+import com.blockland.mixin.farterrain.ServerChunkCacheAccess;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.server.MinecraftServer;
@@ -107,7 +108,8 @@ final class Generation {
             while (running.size() < settings.generateConcurrency() && (key = s.missing.poll()) != null) {
                 int x = Chunks.x(key), z = Chunks.z(key);
                 if (running.containsKey((long) key) || chunks.hasChunk(x, z)) continue;
-                running.put((long) key, chunks.getChunkFuture(x, z, ChunkStatus.FULL, true));
+                // not getChunkFuture: on the server thread it waits for the chunk (the tick would stand still until it is made)
+                running.put((long) key, ((ServerChunkCacheAccess) chunks).blockland$scheduleChunk(x, z, ChunkStatus.FULL, true));
                 started++;
             }
         }
@@ -126,7 +128,8 @@ final class Generation {
                     continue;
                 }
                 try {
-                    chunks.getChunkFuture(Chunks.x(entry.getLongKey()), Chunks.z(entry.getLongKey()), ChunkStatus.FULL, true);
+                    ((ServerChunkCacheAccess) chunks).blockland$scheduleChunk(Chunks.x(entry.getLongKey()), Chunks.z(entry.getLongKey()),
+                            ChunkStatus.FULL, true);
                 } catch (RuntimeException ex) {
                     BlockLand.LOGGER.debug("[BlockLand] Far terrain generation could not keep a chunk", ex);
                     it.remove();

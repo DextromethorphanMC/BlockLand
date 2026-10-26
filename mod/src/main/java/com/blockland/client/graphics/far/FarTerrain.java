@@ -6,6 +6,7 @@ import com.blockland.client.graphics.GraphicsStatus;
 import com.blockland.client.graphics.frame.FrameContext;
 import com.blockland.client.graphics.frame.FrameStage;
 import com.blockland.client.graphics.frame.LevelPasses;
+import com.blockland.client.perf.Optimization;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.FarTerrainPacketListeners;
 import com.blockland.network.packet.FarChunkPackets;
@@ -100,6 +101,8 @@ public final class FarTerrain {
     /** Frame start: what is wanted and drawn, requests, meshes, uploads, the coverage mask. */
     private static final class Stage implements FrameStage {
         private boolean wasOn;
+        /** The meshing switches the real far chunks were meshed with (a change meshes them all again). */
+        private boolean meshedGroups = Optimization.FACE_GROUPS.on(), meshedHidden = Optimization.FAR_HIDDEN_GEOMETRY.on();
 
         @Override
         public void beginFrame(FrameContext context) {
@@ -147,6 +150,11 @@ public final class FarTerrain {
             if (settings.farChunks && columns.enabled()) {
                 ring = Math.min(settings.farChunkDistance, (int) Math.ceil(reach / 16));
                 if (ring <= renderDistance) ring = 0;
+            }
+            if (Optimization.FACE_GROUPS.on() != meshedGroups || Optimization.FAR_HIDDEN_GEOMETRY.on() != meshedHidden) {
+                meshedGroups = Optimization.FACE_GROUPS.on();
+                meshedHidden = Optimization.FAR_HIDDEN_GEOMETRY.on();
+                columns.remesh();
             }
             if (ring > 0) {
                 columns.beginFrame(now);

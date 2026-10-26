@@ -9,8 +9,10 @@
     "ClientLevelMixin",
     "CompileTaskAccess",
     "CompileTaskDynamicQueueMixin",
+    "CompiledSectionMeshMixin",
     "ModelBlockRendererCacheMixin",
     "ModelBlockRendererMixin",
+    "SectionBuffersMixin",
     "SectionCompilerMixin",
     "SectionCopyMixin"
   ],

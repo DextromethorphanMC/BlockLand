@@ -192,7 +192,7 @@ final class FarRenderer {
                 pass.bindSampler("Sampler2", lightmap);
                 pass.setUniform("Fog", view.fog());
                 pass.setIndexBuffer(indices, sequential.type());
-                RegionRenderer.draw(pass, ringDraws, false);
+                RegionRenderer.draw(pass, ringDraws, false, indices, sequential.type());
             }
             pass.setUniform("Fog", view.fog());
             pass.setUniform("BlockLandScene", scene);
@@ -221,7 +221,7 @@ final class FarRenderer {
             }
             if (projectionBuffer != null) {
                 pass.bindSampler("Sampler2", lightmap);
-                RegionRenderer.draw(pass, ringDraws, true);
+                RegionRenderer.draw(pass, ringDraws, true, indices, sequential.type());
             }
         }
         if (view.mainView()) {

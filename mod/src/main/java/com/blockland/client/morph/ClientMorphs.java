@@ -40,7 +40,8 @@ import java.util.function.BiConsumer;
  * own, e.g. infected players as zombies. Each morphed player has an invisible client-only proxy entity of that type;
  * its renderer draws it in the player's place with the player's pose copied over (walk cycle, body and head
  * rotation, attack swing, crouch, hurt flash, name tag), so it moves exactly like the player. In first person a
- * humanoid morph also replaces the player's bare arm with the entity's arm. Game-agnostic.
+ * humanoid morph also replaces the player's bare arm with the entity's arm (a morph without arms, e.g. a ghast, shows
+ * none). Game-agnostic.
  */
 public final class ClientMorphs {
     private static final Map<UUID, EntityType<?>> morphs = new HashMap<>();
@@ -182,7 +183,7 @@ public final class ClientMorphs {
 
     // ---- first person ---------------------------------------------------------------------------------
 
-    /** A humanoid morph's own arm instead of the player's bare arm. */
+    /** A humanoid morph's own arm instead of the player's bare arm; any other morph has no arm to show. */
     private static boolean renderArm(RenderArmEvent event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || morphs.isEmpty()) return false;
@@ -194,7 +195,8 @@ public final class ClientMorphs {
 
     private static <E extends Entity, S extends EntityRenderState> boolean drawArm(EntityRenderer<? super E, S> renderer, E proxy, HumanoidArm side,
                                                                                     PoseStack pose, MultiBufferSource buffers, int light) {
-        if (!(renderer instanceof LivingEntityRenderer<?, ?, ?> living) || !(living.getModel() instanceof HumanoidModel<?> model)) return false;
+        if (!(renderer instanceof LivingEntityRenderer<?, ?, ?> living)) return false;
+        if (!(living.getModel() instanceof HumanoidModel<?> model)) return true;
         S state = renderer.createRenderState(proxy, Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(true));
         ResourceLocation texture = texture(living, state);
         if (texture == null) return false;

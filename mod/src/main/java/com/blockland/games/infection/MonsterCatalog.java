@@ -57,14 +57,17 @@ final class MonsterCatalog {
         float cooldown = 15;
         /** Sound event id played for everyone around. */
         String sound = "";
-        /** projectile: the entity fired (e.g. {@code blockland:slime_shot}) and its speed in blocks per tick. */
+        /**
+         * projectile: the entity fired (e.g. {@code blockland:slime_shot}) and its speed in blocks per tick; fireball:
+         * its launch speed (it speeds up in flight like a ghast's).
+         */
         String projectile = "";
         float speed = 1.5f;
         /**
-         * self_destruct / death_blast: seconds of fuse (death_blast: the delay after death) — self_destruct slows the
-         * monster by {@code effect} / {@code amplifier} while it burns — and the blast: full {@code damage} within
-         * {@code innerRadius} falling off (quadratically) to {@code minDamage} at {@code radius} blocks, shoving
-         * everyone it reaches by {@code knockback}.
+         * self_destruct / death_blast / fireball: seconds of fuse (death_blast: the delay after death) — self_destruct
+         * slows the monster by {@code effect} / {@code amplifier} while it burns — and the blast (fireball: where the
+         * fireball lands): full {@code damage} within {@code innerRadius} falling off (quadratically) to
+         * {@code minDamage} at {@code radius} blocks, shoving everyone it reaches by {@code knockback}.
          */
         float fuse = 1.3f;
         float radius = 4;
@@ -72,6 +75,8 @@ final class MonsterCatalog {
         float damage = 20;
         float minDamage = 2;
         float knockback = 0.9f;
+        /** fireball: seconds it flies before fizzling out. */
+        float lifetime = 6;
 
         /** Seconds the skill keeps working on the monster itself (for its HUD); projectiles act on others. */
         float activeSeconds() {

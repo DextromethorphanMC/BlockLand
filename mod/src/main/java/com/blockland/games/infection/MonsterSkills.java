@@ -26,13 +26,13 @@ final class MonsterSkills {
     }
 
     private static final Map<String, Kind> KINDS = Map.of("effect", (p, s, b) -> effect(p, s), "projectile", (p, s, b) -> projectile(p, s),
-            "self_destruct", (p, s, b) -> b.lightFuse(p, s));
+            "self_destruct", (p, s, b) -> b.lightFuse(p, s), "fireball", (p, s, b) -> b.fireball(p, s));
 
     private MonsterSkills() {
     }
 
     /**
-     * @param blasts the match's monster explosions (self_destruct lights a fuse there)
+     * @param blasts the match's monster explosions (self_destruct lights a fuse there, fireball launches one)
      * @return false when the skill's type is unknown (nothing happens)
      */
     static boolean use(ServerPlayer player, MonsterCatalog.Skill skill, MonsterBlasts blasts) {

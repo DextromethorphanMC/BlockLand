@@ -72,6 +72,28 @@
         "knockback": 0.7,
         "sound": "blockland:infection.creeper_fuse"
       }
+    },
+    "ghast_lord": {
+      "name": "恶魂领主",
+      "description": "从下界飘来的恶魂之王，躲在远处向人类倾泻火球。",
+      "entity": "blockland:ghast_lord",
+      "health": 55,
+      "speed": 0.95,
+      "knockbackResistance": 0.2,
+      "skill": {
+        "type": "fireball",
+        "name": "恶魂火球",
+        "description": "朝准星方向发射一颗恶魂火球，越飞越快，撞到人类或方块就爆炸，炸伤周围的人类（不破坏方块，穿过同伴）。火球会被拳头打回去。",
+        "speed": 0.8,
+        "lifetime": 6,
+        "radius": 3.0,
+        "innerRadius": 1.0,
+        "damage": 20,
+        "minDamage": 4,
+        "knockback": 1.0,
+        "cooldown": 5,
+        "sound": "minecraft:entity.ghast.shoot"
+      }
     }
   }
 }

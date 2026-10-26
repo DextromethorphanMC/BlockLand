@@ -1,6 +1,8 @@
 package com.blockland.client.perf.gl;
 
 import com.blockland.client.perf.Optimization;
+import com.blockland.client.perf.terrain.FaceGroups;
+import com.blockland.client.perf.terrain.FaceIndex;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.opengl.GlProgram;
@@ -66,6 +68,10 @@ public final class TerrainDraws {
 
     private static final ChunkSectionLayer[] LAYERS = ChunkSectionLayer.values();
     private static final String DYNAMIC_TRANSFORMS = "DynamicTransforms";
+    /** {@code FACE_GROUPS}: time per view for writing index lists of sections whose visible groups changed. */
+    private static final long FACE_INDEX_NANOS = 1_500_000;
+    /** {@code FACE_GROUPS}: how far the camera may move before a section's visible groups are worked out again. */
+    private static final double FACE_DRIFT = 0.25;
     /** Vertex array names above this are not cached (GL hands out small names; this only bounds the table). */
     private static final int MAX_VAO = 4096;
 
@@ -224,6 +230,7 @@ public final class TerrainDraws {
         Vector4f colorModulator = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
         Matrix4f textureMatrix = new Matrix4f();
         Object[] sections = visibleSections.elements();
+        FaceIndex.budget(FACE_INDEX_NANOS);
         int count = visibleSections.size();
         try {
             for (int s = 0; s < count; s++) {
@@ -244,6 +251,35 @@ public final class TerrainDraws {
                     }
 
                     BlockPos origin = section.getRenderOrigin();
+                    // FACE_GROUPS: only the quads of the groups the camera may see, in the mesh's order (none: the layer is
+                    // left out of this view; the index list not ready this frame: the whole mesh, as before)
+                    int indexCount = buffers.getIndexCount();
+                    FaceGroups groups = FaceGroups.grouped(layer) && buffers.getIndexBuffer() == null && Optimization.FACE_GROUPS.on()
+                            ? ((FaceGroups.Holder) (Object) buffers).blockland$faceGroups() : null;
+                    int firstIndex = 0;
+                    if (groups != null && groups.quads * 6 == indexCount && groups.current()) {
+                        // worked out again only once the camera moved a quarter block (the margin widened by as much)
+                        FaceIndex faceIndex = ((FaceGroups.Holder) (Object) buffers).blockland$faceIndex();
+                        double x = cameraX - origin.getX(), y = cameraY - origin.getY(), z = cameraZ - origin.getZ();
+                        int mask = faceIndex.reuse(x, y, z, FACE_DRIFT);
+                        if (mask < 0) {
+                            mask = groups.visible(x, y, z, FaceGroups.MARGIN + FACE_DRIFT);
+                            faceIndex.remember(x, y, z, mask);
+                        }
+                        if (mask == 0) continue;
+                        if (!groups.all(mask)) {
+                            int visibleIndices = groups.quads(mask) * 6;
+                            boolean wide = groups.quads * 4 > 0xFFFF;
+                            FaceGroups g = groups;
+                            int drawn = mask;
+                            if (faceIndex.ensure(drawn, visibleIndices, wide, out -> g.writeIndices(out, drawn, 0, wide))) {
+                                indexBuffer = faceIndex.buffer();
+                                indexType = faceIndex.type();
+                                indexCount = faceIndex.indexCount();
+                                firstIndex = faceIndex.firstIndex();
+                            }
+                        }
+                    }
                     int index = list.size();
                     list.add(new DynamicUniforms.Transform(
                             modelView,
@@ -251,8 +287,8 @@ public final class TerrainDraws {
                             new Vector3f((float) (origin.getX() - cameraX), (float) (origin.getY() - cameraY), (float) (origin.getZ() - cameraZ)),
                             textureMatrix,
                             1.0F));
-                    layerLists[layer.ordinal()].add(new RenderPass.Draw<>(0, buffers.getVertexBuffer(), indexBuffer, indexType, 0,
-                            buffers.getIndexCount(), upload(index)));
+                    layerLists[layer.ordinal()].add(new RenderPass.Draw<>(0, buffers.getVertexBuffer(), indexBuffer, indexType, firstIndex,
+                            indexCount, upload(index)));
                 }
             }
             GpuBufferSlice[] slices = RenderSystem.getDynamicUniforms().writeTransforms(list.toArray(new DynamicUniforms.Transform[0]));
