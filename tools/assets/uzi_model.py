@@ -14,6 +14,7 @@ cover for optics. Every builder returns a meshkit.Mesh in the design frame; gen_
 import numpy as np
 
 import shapes as sh
+import smg_detail as sd
 from ak_model import _cyl_x, _cyl_z, _ring_xy
 from meshkit import Mesh
 from p9_model import chamfer_bevel, extrude_z, round_bevel
@@ -106,23 +107,15 @@ def _pad_x(loop_zy, x_face, side, proud, material, embed=0.0004, chamfer=None):
     return sh.loft(rings, material)
 
 
-def _rib_y(x_face, side, z, w, y0, y1, proud, material, draft=0.30):
-    """Moulded rib standing on a face normal to X, running along Y: a trapezoid section (drafted sides, no knife
-    edge) from y0 to y1."""
-    xb, xt = side * (x_face - 0.0003), side * (x_face + proud)
-    t = w * draft
-    sec = [(xb, z), (xt, z + t), (xt, z + w - t), (xb, z + w)]
-    rings = [np.array([(x, y, zz) for x, zz in sec]) for y in (y0, y1)]
-    return sh.loft(rings, material)
+def _rib_y(x_face, side, z, w, y0, y1, proud, material):
+    """Moulded rib standing on a face normal to X, running along Y from y0 to y1 (`w` wide from z): a round crown,
+    its ends running down into the face (smg_detail.rib)."""
+    return sd.rib_x(x_face, side, (z + 0.5 * w, y0), (z + 0.5 * w, y1), w, proud, material)
 
 
-def _rib_z(x_face, side, y, h, z0, z1, proud, material, draft=0.30):
-    """Moulded rib on a face normal to X running along Z (height h from y)."""
-    xb, xt = side * (x_face - 0.0003), side * (x_face + proud)
-    t = h * draft
-    sec = [(xb, y), (xt, y + t), (xt, y + h - t), (xb, y + h)]
-    rings = [np.array([(x, yy, z) for x, yy in sec]) for z in (z0, z1)]
-    return sh.loft(rings, material)
+def _rib_z(x_face, side, y, h, z0, z1, proud, material):
+    """Moulded rib on a face normal to X running along Z (height h from y), round crowned like _rib_y."""
+    return sd.rib_x(x_face, side, (z0, y + 0.5 * h), (z1, y + 0.5 * h), h, proud, material)
 
 
 def _rot_y(mesh):
@@ -605,10 +598,9 @@ def grip_mesh():
     for y in ys:
         toe = 0.0030 * np.clip((y - (GRIP_Y1 + 0.0120)) / -0.0120, 0.0, 1.0)
         sec = _grip_section(y, toe)
-        if y == GRIP_Y1:
-            sec = sh.offset_loop(sec, 0.0009)
         rings.append(np.stack([sec[:, 0], np.full(len(sec), y), sec[:, 1]], 1))
-    m = sh.loft(rings, "polymer")
+    rings, soft = sd.round_end(rings, 0.0013)                   # the base rounded over (thin C-wall)
+    m = sh.loft(rings, "polymer", soft_bands=soft)
     # the steel front strap closing the well's front
     strap = np.array([(-0.0136, GRIP_PANEL_Z + 0.0002), (-0.0136, GRIP_Z0 + 0.0012), (-0.0124, GRIP_Z0),
                       (0.0124, GRIP_Z0), (0.0136, GRIP_Z0 + 0.0012), (0.0136, GRIP_PANEL_Z + 0.0002)])
@@ -745,8 +737,7 @@ def mag_mesh(extended=False):
     m.merge(_round_9mm().translated((0.0028, 0.0060, 0.0160)))
     for s in (-1, 1):                                       # pressed ribs along both sides
         for zc in (-0.0072, 0.0072):
-            rib = sh.box(-0.0006, bot + 0.0180, zc - 0.0016, 0.0006, -0.0250, zc + 0.0016, 0.0004, "mag")
-            m.merge(rib.translated((s * (MAG_HW - 0.0001), 0.0, 0.0)))
+            m.merge(sd.rib_x(MAG_HW, s, (zc, bot + 0.0180), (zc, -0.0250), 0.0032, 0.0006, "mag", end=0.0030))
     y_catch = GRIP_BOTTOM_LOCAL - 0.0005                     # notch the heel catch hooks into
     m.merge(sh.box(-0.0060, y_catch - 0.0030, MAG_HD - 0.0006, 0.0060, y_catch + 0.0005, MAG_HD + 0.0002, 0.0002,
                    "mag_base"))

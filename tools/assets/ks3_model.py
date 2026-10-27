@@ -74,12 +74,14 @@ def grip_center(d):
     return GRIP_TOP + d * GRIP_AXIS
 
 
-def from_source(part, material):
+def from_source(part, material, soft=False):
+    """A source part as one mesh; soft: its faces are the facets of a moulded, rounded part (the grip, the pump) and
+    are shaded smooth with each other (section 53), the receiver's machined edges stay crisp."""
     pos, tris = source()[0][part]
     m = Mesh()
     m.add_vertices(pos)
     for t in tris:
-        m.add_face(t, material)
+        m.add_face(t, material, soft=soft)
     return m
 
 
@@ -113,7 +115,7 @@ def receiver_mesh():
 
 
 def grip_mesh():
-    return from_source("grip", "grip")
+    return from_source("grip", "grip", soft=True)
 
 
 def safety_mesh():
@@ -225,7 +227,7 @@ def tube_mesh(end, extended):
 def pump_mesh():
     """The source forend (with its bolt and action-bar stubs), our steel action bars along the tube into the receiver
     and sleeves at both ends of the forend's channel round the tube (node-local: origin at the pump's pivot)."""
-    m = from_source("pump", "pump")
+    m = from_source("pump", "pump", soft=True)
     o = pivot("pump")
     z0, z1 = -0.0760, 0.0060                         # forend rear end .. inside the receiver at rest
     for s in (-1, 1):

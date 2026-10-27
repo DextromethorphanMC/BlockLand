@@ -133,6 +133,10 @@ keeps encoding on, so held items never fake glow from their texture alpha.
 
 * Render scale: the world, hand and viewmodel are drawn into the scene target at the internal resolution (upscaler
   quality × window size); the HUD is drawn afterwards at the window's resolution.
+* Texture scrolling: `DrawList.uvScroll` (through `GpuModel.Style.uvScroll(material)`, in the material's uvs before its uv
+  scale) shifts a draw's texture coordinates along v by a fraction of a repeat — a tank track's links running round. It
+  rides in ModelOffset.x's fraction (the block-light texel there is whole; gun.vsh adds `fract(ModelOffset.x)`), so every
+  other draw is exactly as before.
 * Jitter: Halton(2,3) sub-pixel offsets (`FrameJitter`, NDC). GameRenderer's level and hand projection buffers are
   replaced by jittering subclasses; `ViewmodelRenderer` applies `FrameJitter.apply` to its own projection. Off when no
   temporal pass runs.
@@ -445,8 +449,18 @@ blur", with Jimenez 2014's alternating tap directions):
    reaches it, equal blurs count both ways), so moving things smear over what is behind them and silhouettes and the
    weapon keep no halo. Alpha (the weapon marker) is the centre's.
 
-Skipped (and the entity history dropped) without the world depth, on a camera cut or when both shutters are 0. The DLSS /
-TAA motion vectors still carry only the camera's and the weapon's motion.
+Skipped (and the entity history dropped) without the world depth, on a camera cut or when both shutters are 0.
+
+**Objects' own motion** (`client/render/ObjectMotion`, a contract like `HandMotion`): rigid things in the world that move
+on their own — vehicles — report, each frame they are drawn in the main view (not the shadow pass), their pose (model →
+world) and a box in their model space that holds them and whatever rides on them. At the start of the post chain
+`post/ObjectMotionBlock` pairs each with its pose a frame before (drawn both frames, moved or turned, not a teleport over 8
+blocks, within 160 blocks; the nearest 8) and writes one uniform block, `BlObjectMotion` of `blockland:bl_object_motion.glsl`
+(the current projection's inverse, the camera reprojection, per mover current camera-relative world → box space and box
+space → where that point was a frame ago). TAA (`gfx_taa`, the world pixels), the DLSS motion input (`gfx_dlss_motion`,
+also for Frame Generation and DLSS 5) and the motion blur's velocity (`gfx_mb_velocity`, before its entity boxes) move a
+world pixel that lies in a mover's box back by the mover's own motion, turning included, then reproject it; every other
+pixel is exactly as before. So TAA / DLSS / motion blur carry the camera's, the weapon's and the vehicles' motion.
 
 ## 12. Bullet impacts (`client/impact`)
 
@@ -475,6 +489,15 @@ is held (`client/impact/HurtConfirm.await`: blood, mist, wound, flesh sound, `bo
 the 1.5 s hold ran out — the weapon plays it at the server's point); a hit never confirmed, or confirmed unhurt, never
 bleeds. Other players' hits play at once by the packet's flag. Bloodless targets (their material's debris, sparks,
 decals) and the attacker's feedback (hit sound, viewmodel kick) do not wait.
+
+**The rounds** (the gun's `ammo` attachment, VIEWMODEL_SPEC §56). A round's impact profile is its caliber's with the
+round's modifier multiplied in: guns pass `GunStats.impactProfile()` (`rifle+incendiary`), and `ImpactCatalog` combines
+`impacts.json` ammo `base+modifier` field by field (a modifier names only what it changes; `incendiary`: 3.5× the sparks,
+`armor_piercing`: 2× the sparks, a little more energy). Every shot's streak (`GunParticles.Tracer`, local and others')
+takes the round's colour and width when the skin brings none (an incendiary's orange); a tracer round draws the long,
+bright streak (9 blocks, full opacity) in its own colour for everyone, whatever the skin. A waterproof round's path
+(`GunStats.medium()`: water does not slow it, it never skips) is the same on the server and in the client's prediction,
+so its splashes and the trail under water follow it.
 
 **Data** (`assets/blockland/impacts.json`, Gson, `client/impact/ImpactData`; speeds blocks/s, sizes blocks, times s):
 
@@ -756,7 +779,7 @@ environmental fog stays linear; the emission alpha is fogged by the combined amo
 lighting it is exactly vanilla's `apply_fog`.
 
 **The clouds are Bliss's code** (Bliss v2.1.2, a Chocapic13' Shaders edit by Xonk, based on Chocapic13's shaders; license
-and credits in `shaders/include/bliss/LICENSE.md`). `lib/volumetricClouds.glsl` is ported as `blockland:bliss_clouds.glsl`
+and credits in `shaders/include/bliss/license.md`). `lib/volumetricClouds.glsl` is ported as `blockland:bliss_clouds.glsl`
 — not a re-implementation: its layer constants, `cloudCov` / `cloudVol` / `GetCumulusDensity` / `GetAltostratusDensity`,
 `densityAtPos` (3D noise from the 2D noise texture), `phaseg` / `DoCloudLighting`, `renderLayer` / `renderClouds` (with
 its blending order, distant fog and curvature tweak) and `GetCloudShadow` / `GetCloudShadow_VLFOG`, kept as written with
@@ -807,7 +830,7 @@ for lava (a glowing face whose claimed up normal is not level), so a waterfall i
 edge-on.
 
 **Water is Bliss's code, ported** (Bliss v2.1.2, "Chocapic13' Shaders edit" by Xonk, based on Chocapic13's shaders; not
-BlockLand's own code — licence and credit in `assets/blockland/shaders/include/bliss/LICENSE.md`). The shared parts live in
+BlockLand's own code — licence and credit in `assets/blockland/shaders/include/bliss/license.md`). The shared parts live in
 `blockland:bliss_water.glsl`, kept as close to the original as the interface allows (Bliss's names and structure; BlockLand's
 changes marked `BlockLand:` in the source): `lib/waterBump.glsl` (`getWaterHeightmap`, `getWaveNormal`, `waterCaustics`),
 `dimensions/all_translucent.fsh` (`getParallaxDisplacement` with `PW_DEPTH` 1.5 / `PW_POINTS` 2, `applyBump`, `GGX`),
@@ -1505,7 +1528,8 @@ so it reads on snow, sand and in the dark. Nothing when the block would not be p
 
 * **Contract.** A block that occupies several blocks implements `common/block/MultiBlockFootprint.footprint(state, pos)`:
   the absolute positions its placement state takes when placed at `pos`, `pos` first (the revive antenna, §51 of the
-  asset spec: `pos` and the block above). The preview's adapter (`client/placement/Footprints`) covers vanilla's doors
+  asset spec: `pos` and the block above; the target stand, §28: the same; the vending machine, §28: four cells, `pos`
+  the lower one on the viewer's left, one to the viewer's right and the two above). The preview's adapter (`client/placement/Footprints`) covers vanilla's doors
   and two-block plants (`DoorBlock`, `DoublePlantBlock`: the other half above or below) and beds (`BedBlock`: the head
   towards its facing). No block gets preview code of its own.
 * **When** (`PlacementPreview.placement`, vanilla's own decision in `MultiPlayerGameMode.useItemOn` and
@@ -1548,3 +1572,31 @@ shaders' water on the camera (`exitWater`, smoothed over 5 s after the eye leave
   `centre − (p − centre) × 1.3…1.6`, a 4-tap blur of 1.5 pixels), a dark ring at the rim (light leaves it at a steep
   angle, down to 45 %), a glint of the light above on its upper left; the nearest-on-top drop (the thickest at the pixel)
   wins; the rim is anti-aliased over 1.5 pixels. All sizes are in screen heights, so drops are round at any aspect.
+
+## 28. Vanilla-style decor blocks (`decor/DecorContent`, `tools/assets/gen_decor.py`)
+
+Plain Minecraft blocks in vanilla's own style: JSON element models, 16 px pixel art from `gen_decor.py` (deterministic,
+own art), vanilla shading and lighting — no GLB, no PBR. `tools/assets/check_decor.py` checks ids, block states, models,
+textures, loot tables, lang, tags and that the model boxes are the collision shapes.
+
+* **Vending machine** (`vending_machine`, 自动贩卖机): 2 wide × 2 tall × 15 px deep, its front towards the placer; four
+  parts (`part` = `lower_left`, `lower_right`, `upper_left`, `upper_right`, seen from the front), each a box with its
+  quarter of one 32 px front picture (a lit window of drinks, the payment panel, the flap); broken as one, only the lower
+  left drops. Light level 9; the window, the drinks and the panel's LEDs glow through the block materials (§7, threshold
+  0.82 above the red body). Decoration only. Item icon flat, as vanilla's doors.
+* **Target stand** (`target_stand`, 靶子): an easel stand and a straw board printed with archery rings, two tall, broken as
+  one. A hit on the board — vanilla projectiles (`onProjectileHit`) and rounds (`common/block/BulletReactive`, called by
+  the gun service for every round that ends on a block face) — gives a redstone pulse of 1..15 by the distance from the
+  bullseye (vanilla's target block's rule over the 7 px disc; 20 ticks for arrows, 8 otherwise) from both halves, and a
+  thump.
+* **Swim ring** (`swim_ring`, 游泳圈): an octagonal lifebuoy (white sides, red corners), 3 px high; its item lays it on a
+  water surface like a lily pad (in the block above the water) or on any block; waterloggable.
+* **Grass and stone layers** (`grass_layer` 草台 with the grass block's biome-tinted top on every face, `stone_layer`
+  石台 with stone): 1–8 layers of 2 px, stacked with their own item like snow, solid at their full height. Another block
+  placed into a layer lower than half a block replaces it; a block put on top breaks one lower than half a block and
+  presses one between half and whole down to half a block (4 layers); half a block and a whole block stay. Drops as many
+  as its layers.
+* **Corals** (alive and dead, the dead bleached grey; alive ones die out of water as vanilla's coral plants do):
+  `staghorn`, `sea_whip` (cross plants), `table`, `pillar`, `brain_dome`, `tube_cluster` (element shapes). **Reef coral**
+  (`reef_coral`, 礁珊瑚, and its dead twin): a knobbly core with an arm to every neighbouring reef coral and down to a
+  solid face (multipart, chorus-plant style), so a heap grows into one branching reef; alive while water touches it.

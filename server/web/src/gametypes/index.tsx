@@ -4,6 +4,7 @@ import { fastPvpUi } from './fastpvp'
 import { infectionUi } from './infection'
 import { battleRoyaleUi } from './battleroyale'
 import { bombUi } from './bomb'
+import { luckyPillarsUi } from './pillars'
 import { aimPracticeUi, bridgePracticeUi } from './practice'
 import { skyWarsUi } from './skywars'
 import { worldUi } from './world'
@@ -77,6 +78,7 @@ const registry: Record<string, GameTypeUi> = {
   BOMB: bombUi,
   WORLD: worldUi,
   BATTLE_ROYALE: battleRoyaleUi,
+  LUCKY_PILLARS: luckyPillarsUi,
 }
 
 export function uiFor(type: string): GameTypeUi {

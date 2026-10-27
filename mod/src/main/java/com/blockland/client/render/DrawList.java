@@ -50,6 +50,8 @@ public final class DrawList {
     /** Draws of the world's frame (viewmodel, third person), not of a GUI picture. */
     private boolean scene;
     /** How soaked the weapon is (0..1, {@link Wetness}): packed into the flags' fraction (gun.fsh). */
+    /** {@link #uvScroll}: fraction of a texture repeat, 0 = none. */
+    private float uvScroll;
     private float wetness;
     /** Unjittered projection of a list that records its motion ({@link #motion}), or null. */
     @Nullable
@@ -154,6 +156,17 @@ public final class DrawList {
      */
     public DrawList scene(boolean value) {
         scene = value;
+        return this;
+    }
+
+    /**
+     * The v offset of the next draws' texture coordinates, in texture repeats (a tank track's links running round, vehicle
+     * spec §3; 0 = none, the default). Only its fraction counts (the textures tile); it rides in ModelOffset.x's fraction —
+     * the block-light texel there is a whole number — so draws without it are exactly as before.
+     */
+    public DrawList uvScroll(float repeats) {
+        float f = repeats - (float) Math.floor(repeats);
+        uvScroll = Float.isFinite(f) ? Math.min(f, 0.999f) : 0;
         return this;
     }
 
@@ -282,7 +295,7 @@ public final class DrawList {
         int flags = (material.fullbright() ? FULLBRIGHT : 0) | (normal != null ? NORMAL_MAP : 0)
                 | (specular != null ? SPECULAR_MAP : 0) | (additive ? PREMULTIPLY : 0) | (opaque ? OPAQUE : 0)
                 | (scene ? SCENE : 0) | (scene && SceneLighting.weaponsLit() ? WORLD_LIT : 0);
-        e.offset.set(blockLight, skyLight, flags + (scene ? WETNESS_SCALE * wetness : 0));
+        e.offset.set(blockLight + uvScroll, skyLight, flags + (scene ? WETNESS_SCALE * wetness : 0));
         // TextureMat columns: (metallic, roughness, cutoff, uv scale) (origin, time) (effect params) (effect colour,
         // effect + its surge: the id's whole part, the surge × SURGE_SCALE its fraction)
         float[] p = material.params();

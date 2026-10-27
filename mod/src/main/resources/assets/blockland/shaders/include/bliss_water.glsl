@@ -1,5 +1,5 @@
 // Ported from Bliss (Chocapic13' Shaders edit) by Xonk, based on Chocapic13's shaders; see
-// assets/blockland/shaders/include/bliss/LICENSE.md. Not BlockLand's own code: Bliss v2.1.2's water — lib/waterBump.glsl
+// assets/blockland/shaders/include/bliss/license.md. Not BlockLand's own code: Bliss v2.1.2's water — lib/waterBump.glsl
 // (getWaterHeightmap, getWaveNormal, waterCaustics), the water parts of dimensions/all_translucent.fsh (getParallaxDisplacement,
 // applyBump, GGX), lib/overworld_fog.glsl (fogPhase) and dimensions/fogBehindTranslucent_pass.fsh (waterVolumetrics_test),
 // with Bliss's settings.glsl defaults. Kept as close to the original as the interface allows; what BlockLand changed is

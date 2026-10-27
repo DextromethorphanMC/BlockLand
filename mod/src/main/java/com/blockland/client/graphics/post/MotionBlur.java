@@ -44,6 +44,7 @@ final class MotionBlur implements AutoCloseable {
     private static final RenderPipeline VELOCITY = Fullscreen.pipeline("gfx_mb_velocity")
             .withSampler("ColorSampler").withSampler("WorldDepthSampler").withSampler("HandVelocitySampler")
             .withUniform("MotionBlurData", UniformType.UNIFORM_BUFFER)
+            .withUniform(ObjectMotionBlock.BLOCK, UniformType.UNIFORM_BUFFER)
             .build();
     private static final RenderPipeline TILE = Fullscreen.pipeline("gfx_mb_tile").withSampler("VelocitySampler").build();
     /** The same tile maximum in two separable passes ({@link Optimization#MOTION_BLUR_TILES}): rows, then columns. */
@@ -138,6 +139,7 @@ final class MotionBlur implements AutoCloseable {
                 .sampler("HandVelocitySampler", ctx.handVelocity != null ? ctx.handVelocity : none)
                 .uniform(velocityUbo)
                 .uniform("MotionBlurData", data.buffer().slice())
+                .uniform(ObjectMotionBlock.BLOCK, ObjectMotionBlock.slice())
                 .draw();
 
         // 2. tile max, 3. neighbour max

@@ -26,13 +26,17 @@ def check(path, arms, r):
     g = GLTF(path)
     label = "deagle"
     tris = {n["name"]: sum(len(p["indices"]) for p in g.mesh_primitives(n["mesh"])) for n in g.nodes if "mesh" in n}
-    drawn = sum(v for k, v in tris.items() if k not in ("fx_shell", "mag_extended"))
+    drawn = sum(v for k, v in tris.items() if k not in ("fx_shell", "mag_extended", "mag_drum"))
     r.check(drawn <= BUDGET, f"{label}: {drawn} triangles drawn (budget {BUDGET})")
+    if "mag_drum" in tris:                         # section 56
+        r.check(tris["mag_drum"] + drawn - tris["mag_standard"] <= BUDGET + 300, f"{label}: too heavy with the drum")
     with open(GUNS_JSON, encoding="utf-8") as f:
         gun = json.load(f)["guns"].get("deagle")
     if r.check(gun is not None, f"{label}: no guns.json entry"):
-        r.check(set(gun["slots"]) == {"optic"}, f"{label}: slots {sorted(gun['slots'])}, expected only the optic")
-        r.check(len(gun["magazines"]) == 1, f"{label}: magazines {gun['magazines']} (one, not selectable)")
+        r.check(set(gun["slots"]) == {"optic", "magazine", "ammo"},
+                f"{label}: slots {sorted(gun['slots'])}, expected the optic, the magazine (the drum) and the rounds")
+        # one magazine of its own; the drum (section 56) is the only choice
+        r.check(gun["magazines"] == ["deagle_7", "deagle_drum"], f"{label}: magazines {gun['magazines']} (the 7-round and the drum)")
         lock = gun.get("slideLock", {}).get("offset", [0, 0, 0])[2]
         fire = next(a for a in g.json["animations"] if a["name"] == "fire_last")
         slide = g.names["slide"]

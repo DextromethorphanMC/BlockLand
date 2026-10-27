@@ -1142,5 +1142,157 @@
       "blockland:binoculars/zoom"
     ],
     "subtitle": "subtitles.blockland.binoculars.zoom"
+  },
+  "gun.bizon.fire": {
+    "sounds": [
+      "blockland:gun/bizon_fire_1",
+      "blockland:gun/bizon_fire_2",
+      "blockland:gun/bizon_fire_3"
+    ],
+    "subtitle": "subtitles.blockland.gun.bizon.fire"
+  },
+  "gun.bizon.fire_far": {
+    "sounds": [
+      "blockland:gun/bizon_fire_far"
+    ],
+    "subtitle": "subtitles.blockland.gun.bizon.fire_far"
+  },
+  "vehicle.motorcycle.engine": {
+    "sounds": [
+      "blockland:vehicle/motorcycle_engine"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.motorcycle.engine"
+  },
+  "vehicle.motorcycle.start": {
+    "sounds": [
+      "blockland:vehicle/motorcycle_start"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.motorcycle.start"
+  },
+  "vehicle.motorcycle.horn": {
+    "sounds": [
+      "blockland:vehicle/motorcycle_horn"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.motorcycle.horn"
+  },
+  "vehicle.motorcycle.hit": {
+    "sounds": [
+      "blockland:vehicle/motorcycle_hit"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.motorcycle.hit"
+  },
+  "vehicle.motorcycle.destroyed": {
+    "sounds": [
+      "blockland:vehicle/motorcycle_destroyed"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.motorcycle.destroyed"
+  },
+  "vehicle.offroad.engine": {
+    "sounds": [
+      "blockland:vehicle/offroad_engine"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.offroad.engine"
+  },
+  "vehicle.offroad.start": {
+    "sounds": [
+      "blockland:vehicle/offroad_start"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.offroad.start"
+  },
+  "vehicle.offroad.horn": {
+    "sounds": [
+      "blockland:vehicle/offroad_horn"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.offroad.horn"
+  },
+  "vehicle.offroad.hit": {
+    "sounds": [
+      "blockland:vehicle/offroad_hit"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.offroad.hit"
+  },
+  "vehicle.offroad.destroyed": {
+    "sounds": [
+      "blockland:vehicle/offroad_destroyed"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.offroad.destroyed"
+  },
+  "vehicle.speedboat.engine": {
+    "sounds": [
+      "blockland:vehicle/speedboat_engine"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.speedboat.engine"
+  },
+  "vehicle.speedboat.start": {
+    "sounds": [
+      "blockland:vehicle/speedboat_start"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.speedboat.start"
+  },
+  "vehicle.speedboat.horn": {
+    "sounds": [
+      "blockland:vehicle/speedboat_horn"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.speedboat.horn"
+  },
+  "vehicle.speedboat.hit": {
+    "sounds": [
+      "blockland:vehicle/speedboat_hit"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.speedboat.hit"
+  },
+  "vehicle.speedboat.destroyed": {
+    "sounds": [
+      "blockland:vehicle/speedboat_destroyed"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.speedboat.destroyed"
+  },
+  "vehicle.tank.engine": {
+    "sounds": [
+      "blockland:vehicle/tank_engine"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.tank.engine"
+  },
+  "vehicle.tank.start": {
+    "sounds": [
+      "blockland:vehicle/tank_start"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.tank.start"
+  },
+  "vehicle.tank.hit": {
+    "sounds": [
+      "blockland:vehicle/tank_hit"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.tank.hit"
+  },
+  "vehicle.tank.destroyed": {
+    "sounds": [
+      "blockland:vehicle/tank_destroyed"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.tank.destroyed"
+  },
+  "vehicle.tank.fire_cannon": {
+    "sounds": [
+      "blockland:vehicle/tank_fire_cannon"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.tank.fire_cannon"
+  },
+  "vehicle.tank.reload_cannon": {
+    "sounds": [
+      "blockland:vehicle/tank_reload_cannon"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.tank.reload_cannon"
+  },
+  "vehicle.tank.fire_mg": {
+    "sounds": [
+      "blockland:vehicle/tank_fire_mg"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.tank.fire_mg"
+  },
+  "vehicle.tank.reload_mg": {
+    "sounds": [
+      "blockland:vehicle/tank_reload_mg"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.tank.reload_mg"
   }
 }

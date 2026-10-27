@@ -5,7 +5,8 @@
 // so no extra uniform buffers are needed (packed by DrawList.add):
 //   ModelViewMat   model -> view space
 //   ColorModulator display colour (rgb, a skin's tint applied) and alpha
-//   ModelOffset    xy = lightmap texel (block, sky light 0..15)
+//   ModelOffset    xy = lightmap texel (block, sky light 0..15); x's fraction = the texture coordinates' v offset in
+//                       repeats (a tank track running round, DrawList.uvScroll; 0 for everything else)
 //                  z  = flags: 1 fullbright (emissive parts, effects), 2 has a _n map, 4 has a _s map,
 //                       8 premultiply alpha (additive blending ignores it), 16 a draw of the world's frame (viewmodel,
 //                       third person: may store emission in alpha), 32 opaque pipeline, 64 lit by the world (sun,
@@ -41,7 +42,7 @@ void main() {
     gl_Position = ProjMat * pos;
     viewPos = pos.xyz;
     viewNormal = mat3(ModelViewMat) * (Normal.xyz * 2.0 - 1.0);
-    texCoord0 = UV0 * TextureMat[0][3];
+    texCoord0 = UV0 * TextureMat[0][3] + vec2(0.0, fract(ModelOffset.x));
     objectPos = Position + TextureMat[1].xyz;
     vertexAo = Normal.w;
     lightColor = texelFetch(Sampler2, ivec2(clamp(ModelOffset.xy, 0.0, 15.0)), 0);

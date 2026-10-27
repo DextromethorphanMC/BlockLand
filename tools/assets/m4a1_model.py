@@ -15,6 +15,7 @@ seen through the port, and the six-position stock on its buffer tube. Every buil
 design frame; gen_m4a1 moves meshes into node-local space."""
 import numpy as np
 
+import rifle_forms as rf
 import shapes as sh
 from ak_model import _cyl_x, _cyl_z, _ring_xy
 from meshkit import Mesh
@@ -521,8 +522,8 @@ def trigger_mesh():
 def pistol_grip_mesh():
     """A2 pistol grip, raked 25 degrees: the finger swell on the front strap, a beavertail at the top rear, chequered
     side panels (texture set)."""
-    rings = []
-    n = 11
+    stations = []
+    n = 18
     for k in range(n + 1):
         d = -0.0120 + (GRIP_LEN + 0.0120) * k / n
         u = k / n
@@ -531,16 +532,13 @@ def pistol_grip_mesh():
         c = grip_center(d)
         swell = 0.0032 * np.exp(-((d - 0.0430) / 0.0075) ** 2)          # the A2 finger ridge
         tail = 0.0045 * np.exp(-((d + 0.0040) / 0.0090) ** 2)           # beavertail under the buffer tower
-        sec = sh.superellipse(w, depth, 2.5, 22)
+        sec = sh.superellipse(w, depth, 2.5, 34)
         pts = []
         for x, y in sec:
             yy = y + (swell if y > 0 else -tail) * (abs(x) < w * 0.8) * (1 - (abs(x) / w) ** 2)
-            pts.append(c + x * np.array([1.0, 0.0, 0.0]) + yy * GRIP_FRONT)
-        if k == n:
-            cen = np.mean(pts, axis=0)
-            pts = [cen + 0.88 * (p - cen) + 0.0012 * GRIP_AXIS for p in pts]
-        rings.append(np.array(pts))
-    return sh.loft(rings, "polymer")
+            pts.append((x, yy))
+        stations.append((np.array(pts), c, np.array([1.0, 0.0, 0.0]), GRIP_FRONT))
+    return rf.frame_loft(stations, "polymer", 0.0, 0.0050)
 
 
 # --------------------------------------------------------------------------------------- barrel, front sight
@@ -776,36 +774,46 @@ def _rot_x_to_y():
 
 
 def stock_body_mesh():
+    """The M4 stock's slider and web: round over the tube, the web dropping to the toe with a pocket moulded into each
+    side, every edge rounded (4-6 mm at the toe), the front end domed; the latch lever and the rubber butt pad."""
     z0, z1 = BUTT_Z - STOCK_LEN, BUTT_Z - 0.0080
     R = 0.0190
-    stations = [z0, z0 + 0.0020, z0 + 0.0240, z0 + 0.0600, z0 + 0.0950, z0 + 0.1250, z1 - 0.0120, z1 - 0.0030, z1]
-    rings = []
-    for k, z in enumerate(stations):
-        u = (z - z0) / (z1 - z0)
+    side_n = 9
+
+    def sec(u):
         yb = -0.0240 - 0.0080 * u - 0.0630 * max(0.0, (u - 0.30) / 0.70) ** 1.15   # slider, then the web drops
         w = 0.0110 + 0.0062 * u ** 1.4
         if u < 0.16:
             yb = -0.0300                                     # latch housing under the front
         jy = -np.sqrt(max(R * R - w * w, 0.0))
         a0 = np.degrees(np.arctan2(jy, w))
-        pts = [(w - 0.0035, yb), (w - 0.0010, yb + 0.0010), (w, yb + 0.0035), (w, jy)]
-        pts += arc(0.0, 0.0, R, a0 + 8.0, 180.0 - a0 - 8.0, 13)
-        pts += [(-w, jy), (-w, yb + 0.0035), (-w + 0.0010, yb + 0.0010), (-w + 0.0035, yb)]
-        sec = np.array(pts)
-        if k in (0, len(stations) - 1):
-            sec = sh.offset_loop(sh.ccw(sec), 0.0012)
-        rings.append(_ring_xy(sh.ccw(sec), z))
-    m = sh.loft(rings, "polymer")
+        rb = min(0.0055, 0.45 * w, 0.30 * (jy - yb))         # the toe's rounded corners
+        depth = 0.0016 * np.clip((u - 0.25) / 0.15, 0, 1) * np.clip((0.97 - u) / 0.07, 0, 1)
+
+        def side(x_sign):
+            pts = []
+            for t in np.linspace(0.0, 1.0, side_n):
+                y = yb + rb + t * (jy - yb - rb)
+                k = np.sin(np.pi * np.clip((y - (yb + rb + 0.0025)) / max(jy - yb - rb - 0.0060, 1e-4), 0, 1))
+                pts.append((x_sign * (w - depth * k ** 0.6), y))
+            return pts
+        right = side(1)
+        left = side(-1)[::-1]
+        corner_r = [(w - rb + rb * np.cos(a), yb + rb + rb * np.sin(a)) for a in np.linspace(-np.pi / 2, 0, 4)[:-1]]
+        corner_l = [(-w + rb + rb * np.cos(a), yb + rb + rb * np.sin(a)) for a in np.linspace(np.pi, 1.5 * np.pi, 4)[1:]]
+        pts = corner_r + right + arc(0.0, 0.0, R, a0 + 8.0, 180.0 - a0 - 8.0, 13) + left + corner_l
+        return sh.ccw(np.array(pts))
+    m = rf.frame_loft(rf.straight_stations(sec, z0, z1, 18), "polymer", 0.0030, 0.0)
     # latch lever under the front and its pivot, the sling slot boss at the toe
     lever = np.array([(z0 + 0.0040, -0.0300), (z0 + 0.0420, -0.0275), (z0 + 0.0440, -0.0295), (z0 + 0.0400, -0.0330),
                       (z0 + 0.0080, -0.0340)])
     m.merge(sh.extrude_x(lever, (), 0.0050, chamfer_bevel(0.0006), "steel_dark"))
     m.merge(_cyl_x(0.0020, -0.0120, 0.0120, (-0.0262, z0 + 0.0380), "steel_dark", 10))
-    # butt pad
+    # butt pad: a rubber pad with its edges well rounded
     yb = -0.0240 - 0.0080 - 0.0630
     w = 0.0172
-    pad = sh.rounded_rect(-w - 0.0004, yb - 0.0006, w + 0.0004, R + 0.0010, (0.0040, 0.0040, 0.0150, 0.0150), 3)
-    m.merge(prism(pad, z1 - 0.0004, BUTT_Z, 0.0006, 0.0018, "pad"))
+    pad = sh.rounded_rect(-w - 0.0004, yb - 0.0006, w + 0.0004, R + 0.0010, (0.0060, 0.0060, 0.0150, 0.0150), 4)
+    m.merge(rf.frame_loft(rf.straight_stations(lambda u: pad, z1 - 0.0004, BUTT_Z, 2), "pad", 0.0, 0.0028))
     return m
 
 
@@ -815,7 +823,7 @@ def _mag_spine(extended):
     length = 0.2380 if extended else 0.1800
     straight = 0.0700 if extended else 0.0640
     curve = 0.36 if extended else 0.30
-    n = 15 if extended else 12
+    n = 24 if extended else 19
     pts, angs = [], []
     for k in range(n + 1):
         s = length * k / n

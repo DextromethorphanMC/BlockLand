@@ -99,6 +99,14 @@ public final class GpuModel implements AutoCloseable {
         default float surge() {
             return 0;
         }
+
+        /**
+         * How far a material's texture coordinates run along v this frame, in its own uv units before its uv scale (a
+         * tank track's links, vehicle spec §3); 0 = still.
+         */
+        default float uvScroll(String material) {
+            return 0;
+        }
     }
 
     private GpuModel(String label, GltfModel source) {
@@ -345,9 +353,12 @@ public final class GpuModel implements AutoCloseable {
             else if (material != null && material.isBlend() || alpha < 0.999f) pipeline = GunPipelines.TRANSLUCENT;
             else if (material != null && material.doubleSided) pipeline = GunPipelines.OPAQUE_NO_CULL;
             else pipeline = GunPipelines.OPAQUE;
+            float scroll = style.uvScroll(name);
+            if (scroll != 0) list.uvScroll(scroll * uvScale);
             list.add(pipeline, vertexOverride != null ? vertexOverride : vertices, indices, indexType, part.firstIndex, part.indexCount,
                     modelView, color, blockLight, skyLight, material(material, emissive, uvScale, layer, style.surge()), origin, albedo,
                     normal, specular, sources != null && index < sources.size() ? sources.get(index) : part.primitive, id, managed);
+            if (scroll != 0) list.uvScroll(0);
         }
     }
 

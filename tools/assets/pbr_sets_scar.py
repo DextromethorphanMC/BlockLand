@@ -8,6 +8,19 @@ FDE_ALU = (0.480, 0.395, 0.290)        # sRGB albedo of the anodised upper (a li
 FDE_POLY = (0.500, 0.432, 0.322)       # the polymer lower / stock (paler, a touch greener)
 
 
+def _deep(pt, recipe, k=4.0):
+    """The shared moulded-polymer recipe with its EDM grain k times deeper (0.01 -> 0.04 mm): deep enough for the
+    parallax and the micro-shadows to show the mould texture at viewmodel distance (VIEWMODEL_SPEC section 53).
+    recipe None -> a function deepening Layers directly."""
+    import dataclasses
+
+    def deepen(lay):
+        return dataclasses.replace(lay, height=lay.height * k)
+    if recipe is None:
+        return deepen
+    return lambda d, rng: deepen(recipe(d, rng))
+
+
 def sets(pt):
     def anodized_fde(size, rng, pmm):
         """Type III hard anodise, dyed flat dark earth, on bead-blasted extruded aluminium: fine blast grain and faint
@@ -44,7 +57,7 @@ def sets(pt):
 
     def polymer_fde(size, rng, pmm):
         """The FDE glass-filled polymer of the lower and the stock (the house moulded polymer recipe)."""
-        return pt.polymer_moulded(size, rng, pmm, colour=FDE_POLY)
+        return _deep(pt, None)(pt.polymer_moulded(size, rng, pmm, colour=FDE_POLY))
 
     def grip_fde(size, rng, pmm):
         """The grip's moulded pebble texture in the polymer's colour."""

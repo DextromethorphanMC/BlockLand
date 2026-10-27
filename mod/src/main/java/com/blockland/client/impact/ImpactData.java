@@ -264,6 +264,19 @@ final class ImpactData {
          */
         boolean blade;
         boolean thrust;
+
+        /** A caliber's profile with a round's modifier multiplied in (the blade flags stay the caliber's). */
+        static Ammo times(Ammo base, Ammo modifier) {
+            Ammo out = new Ammo();
+            out.energy = base.energy * modifier.energy;
+            out.count = base.count * modifier.count;
+            out.size = base.size * modifier.size;
+            out.dust = base.dust * modifier.dust;
+            out.sparks = base.sparks * modifier.sparks;
+            out.blade = base.blade;
+            out.thrust = base.thrust;
+            return out;
+        }
     }
 
     /** What the weather and the surroundings change. */

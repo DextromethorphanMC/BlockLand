@@ -47,7 +47,8 @@ public final class DlssUpscaler implements Upscaler, StreamlineHost.Client {
     static final RenderPipeline DEPTH = Fullscreen.pipeline("gfx_dlss_depth")
             .withSampler("ColorSampler").withSampler("WorldDepthSampler").build();
     static final RenderPipeline MOTION = Fullscreen.pipeline("gfx_dlss_motion")
-            .withSampler("ColorSampler").withSampler("WorldDepthSampler").withSampler("HandVelocitySampler").build();
+            .withSampler("ColorSampler").withSampler("WorldDepthSampler").withSampler("HandVelocitySampler")
+            .withUniform(com.blockland.client.graphics.post.ObjectMotionBlock.BLOCK, com.mojang.blaze3d.shaders.UniformType.UNIFORM_BUFFER).build();
     private static final RenderPipeline OUTPUT = Fullscreen.pipeline("gfx_dlss_output")
             .withSampler("InSampler").withSampler("HandSampler").build();
     /** Ray Reconstruction's guides from the ray tracer's albedo and normals (rows flipped). */
@@ -142,7 +143,8 @@ public final class DlssUpscaler implements Upscaler, StreamlineHost.Client {
         ubo.pass(frame.reprojection(), rw, rh, 1f / rw, 1f / rh);
         Fullscreen.pass("BlockLand DLSS: motion", motion.view, MOTION)
                 .sampler("ColorSampler", frame.color()).sampler("WorldDepthSampler", worldDepth)
-                .sampler("HandVelocitySampler", ctx.handVelocity != null ? ctx.handVelocity : still()).uniform(ubo).draw();
+                .sampler("HandVelocitySampler", ctx.handVelocity != null ? ctx.handVelocity : still()).uniform(ubo)
+                .uniform(com.blockland.client.graphics.post.ObjectMotionBlock.BLOCK, com.blockland.client.graphics.post.ObjectMotionBlock.slice()).draw();
 
         GraphicsSettings settings = com.blockland.client.graphics.Graphics.settings();
         DlssBridge.Frame parameters = parameters(ctx, frame.reprojection(), history && frame.historyValid() && frame.worldDepth() != null);

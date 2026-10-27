@@ -1,0 +1,212 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "blockland:block/decor/coral/reef"
+  },
+  "elements": [
+    {
+      "from": [
+        4,
+        4,
+        4
+      ],
+      "to": [
+        12,
+        12,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "down": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        6,
+        11,
+        5
+      ],
+      "to": [
+        9,
+        13,
+        8
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            7,
+            3,
+            10,
+            5
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            6,
+            3,
+            9,
+            5
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            5,
+            3,
+            8,
+            5
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            8,
+            3,
+            11,
+            5
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            6,
+            5,
+            9,
+            8
+          ],
+          "texture": "#particle"
+        },
+        "down": {
+          "uv": [
+            6,
+            8,
+            9,
+            11
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        9,
+        5,
+        10
+      ],
+      "to": [
+        11,
+        8,
+        13
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            5,
+            8,
+            7,
+            11
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            9,
+            8,
+            11,
+            11
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            10,
+            8,
+            13,
+            11
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            3,
+            8,
+            6,
+            11
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            9,
+            10,
+            11,
+            13
+          ],
+          "texture": "#particle"
+        },
+        "down": {
+          "uv": [
+            9,
+            3,
+            11,
+            6
+          ],
+          "texture": "#particle"
+        }
+      }
+    }
+  ]
+}

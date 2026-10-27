@@ -19,7 +19,7 @@ from gen_items import patch_colours, render_items_icon, write_json
 from glbread import GLTF
 from preview import GUN_DIR, hidden_set, load_materials
 
-GUNS = ("uzi", "p90", "mp5", "sten", "ssg08", "calico", "scar", "m4a1", "jackhammer", "vector")
+GUNS = ("uzi", "p90", "mp5", "sten", "ssg08", "calico", "scar", "m4a1", "jackhammer", "vector", "bizon")
 TEMPLATE = {"pistol": "p9", "smg": "tommy", "rifle": "ak47", "lmg": "rpd", "sniper": "awp", "shotgun": "ks3"}
 UNIT = 0.044                      # metres per item-model unit (the AK's scale)
 ORIGIN = (8.0, 8.95, 7.3)         # gun-space origin in item-model units (as the AK / RPD held models)
@@ -41,7 +41,7 @@ def skins_of(gun):
 def side_items(g, mats):
     gi = g.names["gun"]
     W = g.world_matrices({gi: {"translation": np.zeros(3), "rotation": np.array([0, 0, 0, 1.0])}})
-    hide = hidden_set(g, {"mag_extended", "fx_shell", "shell_load"})
+    hide = hidden_set(g, {"mag_extended", "mag_drum", "fx_shell", "shell_load"})
     view = np.array([[0, 0, -1.0], [0, 1.0, 0], [1.0, 0, 0]])
     items = []
     for i, n in enumerate(g.nodes):
@@ -98,7 +98,7 @@ def part_boxes(g):
     """(min, max, material index) of the visible mesh nodes in gun space, the largest first (at most MAX_BOXES)."""
     gi = g.names["gun"]
     W = g.world_matrices({gi: {"translation": np.zeros(3), "rotation": np.array([0, 0, 0, 1.0])}})
-    hide = hidden_set(g, {"mag_extended", "fx_shell", "shell_load"})
+    hide = hidden_set(g, {"mag_extended", "mag_drum", "fx_shell", "shell_load"})
     boxes = []
     for i, n in enumerate(g.nodes):
         if "mesh" not in n or i in hide or n.get("name", "").startswith("arm"):

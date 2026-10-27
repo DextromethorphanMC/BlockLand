@@ -1,0 +1,189 @@
+{
+  "model": {
+    "type": "minecraft:select",
+    "property": "minecraft:display_context",
+    "cases": [
+      {
+        "when": [
+          "gui"
+        ],
+        "model": {
+          "type": "minecraft:select",
+          "property": "minecraft:custom_model_data",
+          "index": 0,
+          "cases": [
+            {
+              "when": "woodland",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_woodland"
+              }
+            },
+            {
+              "when": "desert",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_desert"
+              }
+            },
+            {
+              "when": "arctic",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_arctic"
+              }
+            },
+            {
+              "when": "tiger",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_tiger"
+              }
+            },
+            {
+              "when": "gold",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_gold"
+              }
+            },
+            {
+              "when": "aurora",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_magma"
+              }
+            },
+            {
+              "when": "gold_beads",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_gold_beads"
+              }
+            },
+            {
+              "when": "silver_beads",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_silver_beads"
+              }
+            },
+            {
+              "when": "neon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_neon"
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "blockland:item/bizon"
+          }
+        }
+      },
+      {
+        "when": [
+          "firstperson_righthand",
+          "firstperson_lefthand"
+        ],
+        "model": {
+          "type": "minecraft:select",
+          "property": "minecraft:custom_model_data",
+          "index": 0,
+          "cases": [
+            {
+              "when": "woodland",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_held_woodland"
+              }
+            },
+            {
+              "when": "desert",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_held_desert"
+              }
+            },
+            {
+              "when": "arctic",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_held_arctic"
+              }
+            },
+            {
+              "when": "tiger",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_held_tiger"
+              }
+            },
+            {
+              "when": "gold",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_held_gold"
+              }
+            },
+            {
+              "when": "aurora",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_held_aurora"
+              }
+            },
+            {
+              "when": "magma",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_held_magma"
+              }
+            },
+            {
+              "when": "gold_beads",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_held_gold_beads"
+              }
+            },
+            {
+              "when": "silver_beads",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_held_silver_beads"
+              }
+            },
+            {
+              "when": "neon",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/bizon_held_neon"
+              }
+            }
+          ],
+          "fallback": {
+            "type": "minecraft:model",
+            "model": "blockland:item/bizon_held"
+          }
+        }
+      }
+    ],
+    "fallback": {
+      "type": "minecraft:special",
+      "base": "blockland:item/bizon_held",
+      "model": {
+        "type": "blockland:weapon",
+        "fit": "blockland:item/bizon_held"
+      }
+    }
+  }
+}

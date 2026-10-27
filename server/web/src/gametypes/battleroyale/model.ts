@@ -1,12 +1,8 @@
-export const BATTLE_ROYALE = 'BATTLE_ROYALE'
+import type { LootRow } from '../common/LootTableField'
 
-/** One row of the loot table: an item spec, how many of it, how likely (relative weight). */
-export interface LootRow {
-  item: string
-  min: number
-  max: number
-  weight: number
-}
+export type { LootRow }
+
+export const BATTLE_ROYALE = 'BATTLE_ROYALE'
 
 /** Mode settings of 大逃杀 (mirrors the backend's BattleRoyaleDefinition). */
 export interface BattleRoyaleSettings {

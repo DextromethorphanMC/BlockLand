@@ -17,8 +17,9 @@ Every builder returns a meshkit.Mesh in the design frame; gen_calico moves meshe
 import numpy as np
 
 import shapes as sh
+import smg_detail as sd
 from meshkit import Mesh
-from model_quality import arc_segments
+from model_quality import arc_segments, edge_radius, is_sharp
 from p9_model import chamfer_bevel, round_bevel
 from vmath import norm
 
@@ -137,9 +138,19 @@ def fillet(poly, radii, minimum=2):
 def extrude_x2(outer, holes=(), half_width=0.01, bevel=((0.0, 0.0),), material="default", x_center=0.0,
                hole_bevel=((0.0, 0.0),)):
     """shapes.extrude_x with its own bevel for the holes (default: straight tunnels): a rounded outline does not pay
-    for rounding every vent and slot as well."""
+    for rounding every vent and slot as well. Rounded like shapes.extrude_x (VIEWMODEL_SPEC section 53): no bevel
+    becomes a small quarter round, a plain chamfer a quarter round of its size, the outline's corners (and the holes')
+    are filleted, and the faces of every round are soft shaded."""
     outer = sh.ccw(outer)
     holes = [sh.cw(h) for h in holes]
+    chords = [np.zeros(len(outer), bool)] + [np.zeros(len(h), bool) for h in holes]
+    if sh._rounding[0] and not is_sharp(material):
+        bevel, r = sh._round_profile([outer], bevel, 2 * half_width)
+        hole_bevel = sh._as_round(hole_bevel)
+        outer, c0 = sh.fillet_loop(outer, r, arcs=True)
+        rounded = [sh.fillet_loop(h, min(r, edge_radius(float(np.min(np.ptp(h, axis=0))))), arcs=True) for h in holes]
+        holes = [h for h, _ in rounded]
+        chords = [c0] + [c for _, c in rounded]
 
     def rings(bv):
         rs = sorted(bv, key=lambda r: -r[0])
@@ -156,6 +167,7 @@ def extrude_x2(outer, holes=(), half_width=0.01, bevel=((0.0, 0.0),), material="
     faces = []
     for k, loop in enumerate([outer] + list(holes)):
         xs, insets = rings(bevel if k == 0 else hole_bevel)
+        chord = chords[k]
         secs = []
         for x, ins in zip(xs, insets):
             o = sh.offset_loop(loop, ins) if ins else loop
@@ -167,7 +179,7 @@ def extrude_x2(outer, holes=(), half_width=0.01, bevel=((0.0, 0.0),), material="
             for i in range(N):
                 a, b = base + j * N + i, base + j * N + (i + 1) % N
                 c, d = base + (j + 1) * N + (i + 1) % N, base + (j + 1) * N + i
-                mesh.add_face([a, d, c, b], material)
+                mesh.add_face([a, d, c, b], material, soft=insets[j] > 0 or insets[j + 1] > 0 or bool(chord[i]))
         faces.append((secs[0], secs[-1]))
     from meshkit import triangulate
     for end, flip in ((0, False), (1, True)):
@@ -428,8 +440,10 @@ def grip_mesh():
         tilt = 0.0022 if k >= len(GRIP_SECTIONS) - 2 else 0.0
         rings.append(_grip_ring(y, zf, zb, w, tilt=tilt))
     y, zf, zb, w = GRIP_SECTIONS[-1]
-    rings.append(_grip_ring(y - 0.0012, zf, zb, w, inset=0.0012, tilt=0.0022))
-    m = sh.loft(rings, "polymer")
+    rings.append(_grip_ring(y - 0.0012, zf, zb, w, tilt=0.0022))
+    # the butt rounded over (a moulded base, not a flat cap)
+    rings, soft = sd.round_end(rings, 0.0035)
+    m = sh.loft(rings, "polymer", soft_bands=soft)
     # side panels: ribs slanting down to the rear, and the slot along their front
     for side in (-1, 1):
         for k in range(13):
@@ -552,9 +566,10 @@ def mag_mesh(extended=False):
     key; the 100-round magazine is 12.3 cm longer."""
     zr = MAG_BODY[extended] - MAG_Z0
     sec = _mag_section()
-    c = 0.0012
-    rings = [(sh.offset_loop(sec, c), 0.0), (sec, c), (sec, zr)]
-    m = sh.loft([np.stack([s[:, 0], s[:, 1], np.full(len(s), z)], 1) for s, z in rings], "mag")
+    # the moulded nose rounded over (it lies in full view on top of the gun)
+    rings = [np.stack([sec[:, 0], sec[:, 1], np.full(len(sec), z)], 1) for z in (0.0, 0.0300, zr)]
+    rings, soft = sd.round_end(rings, 0.0040, at_end=False)
+    m = sh.loft(rings, "mag", soft_bands=soft)
     # rear cap and the winding key on it
     c = 0.0016                                   # open at the front: that end is buried in the body
     m.merge(sh.revolve([(CAP_R, zr - 0.0010), (CAP_R, zr + CAP_LEN - c), (CAP_R - c, zr + CAP_LEN),

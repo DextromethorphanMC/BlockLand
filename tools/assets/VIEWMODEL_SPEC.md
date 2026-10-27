@@ -770,15 +770,18 @@ the box projection of §6, given our material names, texture sets and regions, a
 `tools/assets/CREDITS.md` and in the README.
 
 Precision authoring budgets (`model_quality.json`; attachments and fx_shell not counted): rifles / SMGs /
-shotguns ≤ 18k triangles, pistols ≤ 10k each (one magazine fitted), knives ≤ 12k, equipment ≤ 12k.
-These replace the original low-poly 9k / 5k / 3k / 4k limits; historical counts below describe the original assets.
+shotguns ≤ 64k triangles (the whole file: both magazines and the shell; a rifle with picatinny rails draws ~56k), pistols
+≤ 32k each (one magazine fitted), knives ≤ 30k, equipment ≤ 30k (raised from 18k / 10k / 12k / 12k for the rounded
+edges of §53, on the user's request for first-person models of a modern shooter's
+standard; before that they replaced the original low-poly 9k / 5k / 3k / 4k limits). Historical counts below describe
+the assets as they were first built.
 The third-person renderer currently shares these meshes: there is no separate distance LOD, so large crowds still
 need in-game performance testing. Do not silently increase these limits to make a failed model pass.
 
-Curved parts opt into `shapes.revolve(..., precision=True)`; sampling is based on a 0.04 mm circular chord error,
-with at most 96 radial segments (authored minima are never reduced). This is an offline geometric target, NOT a
-screen-space error or an industry-quality certification. Intentional polygonal parts and open meshes joining
-fixed authored rings stay unchanged. Round bevels evaluate more points on their original arc; blade grids retain
+Curved parts are sampled to a 0.04 mm circular chord error (`shapes.revolve` with 12 or more segments does it by
+default since §53, `precision=True` forces it; `shapes.circle` keeps its count: use `arc_segments`), with at most 96 radial segments (authored minima are
+never reduced). This is an offline geometric target, NOT a screen-space error or an industry-quality certification.
+Intentional polygonal parts (fewer than 12 segments) and open meshes joining fixed authored rings stay unchanged. Round bevels evaluate more points on their original arc; blade grids retain
 all authored breakpoints and re-evaluate the analytic edge/fullers between them. Flat faces are not subdivided.
 Flashbang vents are actual bevelled holes in a 1.2 mm curved shell with a core recessed by 3.5 mm, not dark discs.
 Sizes, rig/node transforms, clips/events, skin material names/regions and mount positions remain the contract.
@@ -793,7 +796,10 @@ finger contacts, third-person crowds) remains a user-side in-game check; these t
 Based on *Gangster Tommy Gun* by Pieter Ferreira (CC-BY-4.0). A 1928-pattern .45 SMG at real scale (overall ≈ 0.85 m,
 barrel ≈ 0.27 m): finned barrel with a compensator, receiver with the cocking knob on top, rear leaf sight, front
 post, wooden buttstock, wooden pistol grip, stick magazine and drum; its wooden vertical foregrip is the underbarrel
-slot's default attachment `tommy_grip` (§35). Built like §18:
+slot's default attachment `tommy_grip` (§35). The buttstock and the pistol grip are ours on the source parts'
+footprints (`tommy_model.stock_mesh` / `grip_mesh`): rounded walnut sections lofted along the stock (wrist to butt,
+the rear rounded into a steel butt plate with two screws) and down the raked grip (the M1928's finger grooves down its
+front, a palm swell, the base rounded over). Built like §18:
 
 ```
 viewmodel
@@ -910,7 +916,8 @@ shell clips, `shell_load` only shown during `reload_shell`, the pump returns in 
 `gen_ks3.py`, `build_ks3.py`; texture sets `pbr_models_ks3.py`, `pbr_sets_ks3.py`). The source is read as data only
 (scale 0.0054 m per unit: its bore becomes 19 mm); kept are the receiver (with its trigger guard, ejection port and
 hardware), the pistol grip, the forend (with the bolt that shows in the port and rides with the pump), the trigger and
-the loading gate, decimated by quadric edge collapse (`qem.py`) to 3.3k triangles; its perforated heat shield,
+the loading gate, at the source's full 4.8k triangles (§55; once decimated by quadric edge collapse, `qem.py`, to 3.3k
+for the old budget); its perforated heat shield,
 barrel, tube, sights and round are not used. Ours: a 0.49 m barrel with a knurled extended choke and a ventilated rib,
 a picatinny rail on the receiver (`mount_optic` 0.115 behind the receiver face), the iron sights, a skeleton
 buttstock with a ribbed pad (comb 3.3 cm under the sight line), the standard tube (ends 0.34 in front of the receiver,
@@ -2440,3 +2447,192 @@ held model is cuboids (as the parachute's), and looking through it is the optics
 
 Files: `gen_binoculars_items.py` (icon, held cuboid model + palette, item definition), `gen_binoculars_sounds.py`,
 `build_binoculars.py` (steps `binoculars_items`, `binoculars_sounds`).
+
+## 53. Edges, smoothing and relief (every model: `shapes.py`, `meshkit.py`, `gun.fsh`)
+
+First-person models of a modern shooter's standard have no knife-sharp edges: every edge a hand or a machine would
+round catches a highlight, and the material's relief reads as depth. The shared layer does this for every model at
+once; a model only opts out where an edge must stay sharp.
+
+* **Rounded primitives** (`shapes.py`, numbers in `model_quality.json` `edges`): `extrude_x` without a bevel gets a
+  quarter-round edge on both faces, a plain 45° chamfer `[(c, 0), (0, c)]` becomes a quarter round of radius c, other
+  authored bevels stay; `prism_z` / `box` round both ends the same way (a box's `chamfer` is its edge radius) and their
+  corners along the sides; the outlines of extrusions and prisms get their corners filleted (`fillet_loop`: corners
+  turning 40°–120°, convex and concave; sharper corners are points on purpose — sight ramps, teeth, tips); `revolve` fillets its profile's corners (points on the axis stay).
+  Hand-built prisms (a `loft` of one outline offset in parallel planes: the model helpers' `prism`) get the outline
+  fillets and their plain chamfers made round; their square ends stay square (helpers use them for flush joins).
+  Radius by the part's smallest dimension: 12 % of it within 0.25–1.2 mm (`edge_radius`), never more than fits 45 % of
+  the adjacent edges, none under 0.2 mm (sub-pixel), an outline's fillet at least 1.25 × the face rounding so the inset rings stay simple (checked;
+  halved until they do, else square). A round's facets (`fillet_segments`) keep a 0.08 mm chord error
+  (`fillet_error_m`) and are at most 45° apart; lathes of 12 or more segments are sampled to the 0.04 mm curve chord
+  error, fewer segments are an intentional polygon (`circle` keeps its count: use `arc_segments`). `rounding=False` (or
+  everything built inside `with shapes.authored():`, e.g. a closed crate's contents) keeps a part as authored; sharp materials (`edges.sharp_materials`: `blade`, `blade_edge`, `edge`) are never
+  rounded. Other lofts (tapers, lathes, organic shapes) and hand-built meshes are unchanged: round them in the model.
+* **Weighted normals and smoothing flags** (`meshkit.build_primitives`, `Mesh.soft`): faces meeting at less than
+  `hard_deg` (35°) are smoothed — the facets of a round, marked soft by the primitives, up to `soft_deg` (50°), so a
+  round of two or three facets shades as one curve — each face's share weighted by its corner angle × its polygon's
+  area: a big flat face keeps its own normal up to its edge and the narrow facets of the round carry the turn. No
+  shading gradients across flat faces; highlights roll over the edges. Code that removes faces from a mesh removes
+  their `soft` entry too.
+* **Relief** (`gun.fsh`): the normal map's detail is not counted by the specular anti-aliasing (only the geometric
+  normal's curvature is; the averaged-away detail already roughens the mips, Toksvig); the material AO (`_n` blue)
+  gives micro-shadows to the direct lights (`microShadow`: a cavity facing away from a light is in its shadow); and the
+  height (`_n` alpha, 0.51 mm full range) is parallax-occlusion mapped at its true depth (8–24 steps by the view
+  angle, faded out once a pixel covers more than ~1 mm: third person, distance). Every texture of a set is looked up
+  at the parallax point with the unshifted gradients. Not on sprays, blood or the galaxy skin (its own parallax).
+* **What the primitives leave to the model** (`smg_detail.py`, used by the SMGs): moulded and pressed ribs with a
+  round crown whose ends run down into the face (`rib`, `rib_x`; not a trapezoid prism), organic lofts' ends rounded
+  over within their length along the end ring's normal (`round_end`: grip bases, a magazine's nose, a hand stop; the
+  radius halves until a thin C-wall's inset stays simple), bent straps smoothed by corner cutting (`smooth_open`); every
+  facet of these rounds soft. Weapon-local extrusion helpers (`calico_model.extrude_x2`, `p90_shapes.extrude_var`)
+  round and flag their edges the way `shapes.extrude_x` does.
+* **Budgets**: §24's raised limits. The AO bake (`pbr_apply.bake_ao`) culls by chunks of 32 triangles and spreads
+  large models over worker processes (both give exactly the brute-force result).
+* **Checks**: `check_model_quality.py` (unit tests incl. the polygon rule, budgets, `--baseline` contracts and 1 mm
+  bounds), `check_glb.py`, `pbr_check.py`, each weapon's check script, `tools/shaders/check_shaders.py`.
+
+## 54. PP-19 Bizon (`models/gun/bizon.glb`, weapon id `bizon`, 野牛)
+
+An original procedural model after the PP-19 Bizon (sections 18–21, 31, built like the MP5 of §40 on the AK's design
+frame of §18; `bizon_model.py`, +X right, +Y up, +Z back, bore on the axis, z = 0 at the receiver's front face): 650 mm
+with the stock unfolded, 230 mm barrel, sight radius 228 mm; every edge rounded by §53. Satin black enamel over the
+stamped steel, black phosphated barrel, black polymer grip and magazine.
+
+* **Receiver** (`receiver`, material `steel`, region `body`, set `bizon/receiver`): the AKS-74U-pattern stamping, cut short
+  over the magazine in front (its bottom 11 mm under the bore) and stepped down behind it to the AK's depth; the front
+  trunnion (proud, rivets) carrying the rear sight base, the rear trunnion plate, the pressed rail along both flanks, the
+  ejection port as a real recess, the stamped trigger guard, the selector's detent stops, the stock hinge block with its
+  pin and latch button on the left rear, the rear sling loop. `dust_cover`: the ribbed AK cover with the spring guide
+  button and a low picatinny section on top (optics).
+* **Front**: the bare `barrel` (thread step, barrel nut, a clamp-on side rail — the laser mount — with its screws), the
+  `front_sight` block (collar, tower, cross pins, front sling swivel and the magazine's **front catch**: a stamped tab
+  hanging ahead of the magazine's nose), the ears `front_sight_hood` under the post `sight_iron`, the open rear sight
+  `sight_rear` (notch plate, range drum on the right; no hood: nothing rises above the sight line between the eye and
+  the post, checked by `check_bizon.check_sight_picture`), the slotted muzzle nut `muzzle_brake`.
+* **Parts**: `bolt` = the carrier top and the AK charging handle on the right (reciprocating: the slide-lock node, +Z,
+  80 mm stroke), the big AK `selector`, `trigger`, `paddle` = the AK magazine release behind the magazine (pressed
+  forward about X), `pistol_grip` (AK-74 polymer, raked 20°, finger ribs), `stock` = the AKS-74 side-folding triangle
+  stock unfolded (yoke, upper and lower strut, stamped butt plate with its rib, ribbed rubber pad; hidden by a stock
+  attachment; material `steel` split to `steel_stock`, region `stock`).
+* **Magazine** `mag_standard` (64 rounds, the only one): a 53 mm polymer cylinder under the barrel that is the
+  foregrip — finger flutes along its underside, moulded bands, the rounded nose with the **nose lug** that butts against
+  the front catch, the feed tower rising into the receiver at its rear, the latch lug on its rear face, a round-count
+  window down its left. Set `bizon/mag` (the feed spiral as faint diagonal ridges, glossy lanes where the hand holds
+  it). Its node `mag` sits at the top of the latch; clips turn it about `MAG_FRONT_HOOK` (the lug's tip): + = rear down.
+* **Mounts**: `mount_optic` on the cover rail 146 mm behind the receiver face, `mount_laser` on the barrel's side rail,
+  `mount_barrel` on the thread, `mount_stock` on the rear trunnion, `mount_charm` at the rear sling loop. No underbarrel
+  slot: the magazine is the foregrip.
+* **Clips** (`bizon_clips.py`, built on the AK's; rig `bizon_rig.py`: the support hand palm up under the magazine,
+  `bizon_wrap`): `idle`, `draw` 0.70, `fire` / `fire_last` 0.085 s (700 rpm blowback: the bolt and its handle fly back
+  80 mm with every shot), `fire_ads` / `fire_last_ads` (`ads_fire`), `reload` 2.40 (the thumb on the release, the
+  magazine's rear rocked down about its nose lug and drawn back off the catch, dropped; the new one brought up nose
+  first, its lug set against the catch, the rear rocked up home with a hit and a push from below), `reload_empty` 2.90
+  (then the reach-under pull of the charging handle), `inspect` 4.00 (press check), `walk`, `sprint`, `tac_sprint`. The
+  iron-sight eye point is 230 mm behind the rear notch (a cheek weld on the stock). No bolt hold-open.
+* **Data**: guns.json `bizon` (smg ammo, magazine `bizon_64`, slots optic / barrel / laser / magazine / stock / charm),
+  sounds `gun.bizon.fire` / `fire_far` (`gen_bizon_sounds.py`), texture sets `bizon/receiver`, `barrel`, `polymer`,
+  `mag` (`pbr_sets_bizon.py`, bound in `pbr_models_bizon.py`; small parts `common/steel_dark`, the pad `common/rubber`).
+  Skins `default`, `woodland`, `desert`, `arctic`, `tiger` (camo on body / stock / magazine), `gold`, and every shared
+  skin of `craft/skins.json`. Steps `bizon`, `bizon_sounds` (`build_bizon.py`), `bizon_items` (gen_gun_items); checks
+  `check_bizon.py` (the magazine's rock and drop, the release pressed, the bolt's cycle).
+
+## 55. Handgun detail (`organic.py`; p9, usp, usp_dual, deagle, revolver, handcannon, ks3, jackhammer)
+
+The pistols' and shotguns' second pass after §53, in their own model modules (the core is unchanged):
+
+* **Grips** are lofts of round sections (`organic.ring`: superellipse halves with exponents near 2 — 2.1–2.3 at the
+  front strap, 2.35–2.9 at the back — 48 points round, rings every 3–3.5 mm and close to every feature edge,
+  `organic.refine`), not boxes with rounded corners, and every facet of them is shaded as one surface (`organic.skin`
+  marks all bands soft). Finger grooves (`organic.finger_grooves`): P9 three of 0.9 mm, Desert Eagle 1.8 mm, hand cannon
+  1.6 mm, revolver 1.7 mm. Texture panels are real panel lines: the panel is pushed 0.4–0.5 mm into the grip along the
+  section's normal (`organic.panel_mask` + `organic.recess`; a negative depth stands a sleeve proud — the Desert
+  Eagle's rubber wrap, 0.5 mm over its steel back strap), with a 1.4 mm slope round it, and only its faces take the
+  textured material. P9: stippled side panels; USP: one checkered panel round the sides and the front strap; hand
+  cannon: rubber all over with stippled panels set in; revolver: walnut with a checkered panel each side (`grip_checker`
+  -> `revolver/checkered_walnut`: two sets of V grooves 1.25 mm apart crossing at 60°, 0.4 mm deep, for the parallax of
+  §53) and a butt rounded over in its last 7 mm. The magazine wells still follow the grip (`fit_well` on the new rings).
+* **Drawn curves**: outline stretches that are curves in the real gun (the revolver's trigger guard and its hole) are
+  corner-cut into smooth curves (`organic.chaikin`, `organic.smooth_span`) before extruding: §53's fillets only round
+  corners of 40–120°, so a curve drawn with a few points would stay a polygon.
+* **Castings rounded to their size**: the hand cannon's receiver (55 mm wide) has 5.5 mm edge rounds and steel side
+  plates with four screws (the left plate above the barrel latch); the Jackhammer's castings 2–5 mm (receiver cap and
+  lower, handle, lower frame, butt and pad) instead of 1.5–3 mm chamfers. Slide noses get a carry bevel (P9: 2.2 mm in
+  at the face, gone 9 mm back).
+* **Sourced parts**: the KS-3's source parts are kept whole (no decimation: they fit the §24 budget), its grip and pump
+  — and the Cerberus skin's grip — shaded soft (moulded parts); machined source parts keep their crisp edges.
+
+## 56. Drum magazines (`mag_drum`) and the rounds slot (`ammo`)
+
+**Drums.** The magazine slot of the Uzi, the MP5 and the box-magazine pistols (P9 / P9A, USP, dual USP and its Cerberus
+skin, Desert Eagle) also offers a drum (guns.json `<gun>_drum`, `node: "mag_drum"`). Not the Calico (excluded), the
+revolver (a cylinder and speed loader) or the hand cannon (a single 40 mm round). `mag_drum` is a third child of `mag`
+beside `mag_standard` / `mag_extended`; the runtime shows only the fitted magazine's node (`WeaponLook`), the icon
+generators and the preview loadouts hide it like `mag_extended`. Built by `tools/assets/drum_mags.py` in the gun's
+magazine space on its standard magazine, which stays the drum's neck (it seats in the well exactly as the box does):
+
+* `side_drum` (pistols, Uzi): one drum across the gun under the neck — rounded rims with two raised bands, dished
+  covers with a hub, six rivets per cover, the winding knob and its fold-out key on the right, round-count windows with
+  brass behind them on the left, a fairing from the neck into the drum. The Uzi's and the MP5's long box magazines are
+  `trim`med just under the grip / the well's lip first (a real drum seats right there).
+* `twin_drum` (MP5): C-Mag style, two drums along the bore either side of a bridge under the neck.
+
+Sizes (radius × width): pistols 45 × 44 mm (50 rounds; the Desert Eagle 41 × 42 mm, 20 rounds), Uzi 56 × 52 mm (100),
+MP5 2 × 40 × 52 mm (100). Materials are the magazine's own (`mag`, `mag_base`, `brass`), so the PBR bindings and skins
+need nothing new. Triangles count against the gun's budget with one magazine fitted (§24).
+
+**Drum reloads.** A box magazine's reload holds the fresh magazine by its lower body and slaps its base plate; on a drum
+those points lie inside the drum. `drum_mags.drum_clips` re-bakes `reload` and `reload_empty` as `reload_drum` /
+`reload_empty_drum` with the rig's support-hand anchors moved onto the drum (`p9_holds`: carried by the left cover, the
+slap under the drum's bottom; `uzi_holds`; `mp5_holds`: the left drum, the fresh one by the front covers, the push under
+the bridge). guns.json's magazine `clipSuffix: "_drum"` makes the runtime play them (`GunStats.reloadClip`; the gun's
+own clips where the model has none). The dual pistols need none: no hand touches their magazines.
+
+**The rounds (`ammo` slot).** A slot without a model: `craft/attachments.json` `ammo_normal` (default),
+`ammo_incendiary`, `ammo_armor_piercing`, `ammo_tracer`, `ammo_water`, each with a `round` object (`armorDamage`,
+`fireSeconds`, `tracer` / `tracerColor` / `tracerWidth`, `waterproof`, `impact`) besides the ordinary stat multipliers.
+Every gun with magazines declares it with its default magazine's node as `node` — not a mount: the 工匠 callout points
+at the magazine (the rounds are in it) and the tools' mount lists only take `mount_*` nodes. What the rounds do goes
+through `combat/RoundTraits` (armour, hulls, fire), `GunStats.medium()` (water) and the impact / tracer paths
+(rendering spec §12).
+
+## 57. Vehicles (`models/vehicle/<id>.glb`: motorcycle 摩托车, offroad 越野车, speedboat 游艇, tank 坦克)
+
+Contract of nodes, seats and data: `tools/vehicles/VEHICLE_SPEC.md` (§3: front −Z, origin on the ground — a boat's on its
+keel — under the middle; `seat_<i>` at the rider's hips in data order). Built by `build_all.py` steps `vehicle_<id>`
+(`build_vehicles.py`): `gen_vehicles.py` writes the nodes and meshes of the vehicle's model script
+`vehicle_<id>.py` (`build(rig)`: parts modelled in vehicle space, each node a pivot and an optional rotation, the writer
+makes both local), then `pbr_apply` binds `pbr_models_vehicles.py` and bakes AO (distance 8 cm; the hull and what is
+fixed to it shade each other, moving parts — wheels, the fork, the steering knuckles, the turret, the tracks, the
+outboard — only themselves). Shared builders in `vehicle_parts.py`: pipes along bent paths, lathes about any axis,
+lofted shells from superellipse stations, tyres with tread lugs, wheel faces and nuts, the link track with uvs.
+
+* **Vehicle-scale modelling.** `gen_vehicles.VEHICLE_QUALITY` replaces §53's weapon settings while a vehicle builds (in
+  memory only): edge rounds up to 6 mm (a highlight on an edge still reads from a metre or more), chord error 0.4 mm,
+  at most 48 radial segments. Small dense parts that no one sees closely (disc holes, sprocket teeth, tread lugs,
+  the tank's twelve road wheels) are built unrounded with explicit segment counts; welded armour is bevelled flat
+  (`vehicle_tank._bevel`: 30 mm bevels keep each plate flat, the bevel carries the turn).
+* **Budgets** (`model_quality.json`): `vehicle_motorcycle` 80k, `vehicle_offroad` 140k, `vehicle_speedboat` 110k,
+  `vehicle_tank` 180k triangles (third-person models seen from inside and up close; there is no LOD yet).
+* **Materials** (one name, one kind of part on every vehicle; the set is the vehicle's): `paint` (motorcycle red,
+  4x4 sand; the boat's antifouling), `paint_accent` (black trim; the boat's navy stripes and outboard), `gelcoat`,
+  `armor` (olive drab: cast texture, chips, dust), `frame` (powder-coated black), `metal`, `chrome`, `alu` (sand-cast),
+  `exhaust` (temper tint and soot), `rubber`, `tire` (tread blocks in the height), `plastic`, `seat` (vinyl), `fabric`
+  (canvas), `deck` (non-skid; the motorcycle's number boards), `gunmetal`, `propeller`, `track` (steel links with
+  grousers, pins and rubber pads, two links per repeat; extras `scroll.vPerMetre` = 20: its v runs along the track, 20
+  units a metre before `uvScale`, so the runtime can scroll it with the track's speed). No set: `glass` (blended),
+  `lens`, `headlight` and `taillight` (glowing), `indicator`, `reflector`, `gauge` (glowing dim). Texture sets
+  `textures/pbr/vehicle/*` from `pbr_sets_vehicles.py`.
+* **Sounds** (`gen_vehicle_sounds.py`, `sounds/vehicle/<id>_<key>.ogg`, events `blockland:vehicle.<id>.<key>`, subtitles
+  `subtitles.blockland.vehicle.<id>.<key>`): seamless 2 s engine loops (the runtime pitches them by speed), `start`,
+  `horn` (not the tank), `hit`, `destroyed`; the tank `fire_cannon`, `reload_cannon`, `fire_mg`, `reload_mg`.
+* **Checks**: `check_vehicle_models.py` (in `check_glb.py`): nodes and parents, seats, the ground and the front, spinning
+  parts concentric with their pivots, wheels touching the ground, materials (regions, sets, glass, glow, the track's
+  scroll extras, baked AO) and the budget. The data's anchors against the nodes: `tools/vehicles/check_vehicles.py`.
+  Previews: `vehicle_preview.py <id>` (turntable; `closeup(...)`).
+
+| Vehicle | Nodes beyond `body` and the seats | Look |
+|---|---|---|
+| motorcycle | `fork` (rotated 26° of rake: its Y is the steering axis) → `handlebar`, `wheel_f`, `headlight_0`; `wheel_r`; `exhaust_0`, `taillight_0` | air-cooled single scrambler: tube cradle frame, finned barrel, teardrop tank, ribbed seat, high pipe, mono-shock swingarm, chain drive, cast wheels with drilled discs |
+| offroad | `steer_fl` → `wheel_fl`, `steer_fr` → `wheel_fr`, `wheel_rl`, `wheel_rr`; `headlight_0/1`, `taillight_0/1`, `exhaust_0` | open-top 4x4, left-hand drive: arch-cut steel sides with flares, slotted grille, bull bar and winch, windshield, roll cage, four bucket seats, dashboard, spare wheel and jerrycans, live axles; mud tyres on steel beadlock wheels |
+| speedboat | `outboard` → `propeller`, `exhaust_0`; `headlight_0` (bow light), `taillight_0` (stern light), `wake` | 5.6 m bowrider: deep-V hull with chines and spray rails, stripes, rub rails, bow rail, wrap-around windshield, helm console, two pedestal seats and a stern bench, swim platform and ladder |
+| tank | `turret` → `cannon` → `muzzle_cannon`, `turret` → `mg` → `muzzle_mg`, seats 1–2 under `turret`; `track_l/r`, `roadwheel_l0..5`, `roadwheel_r0..5`, `sprocket_l/r`, `idler_l/r`; `headlight_0/1`, `taillight_0/1`, `exhaust_0/1` | MBT: welded hull, side skirts, stowage bins, faceted bevelled turret with add-on plates, canvas mantlet cover, sleeved gun with fume extractor, cupola machine gun with shield, smoke dischargers, bustle basket |

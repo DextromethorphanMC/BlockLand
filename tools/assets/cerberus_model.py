@@ -20,6 +20,7 @@ sys.path.insert(0, HERE)
 
 import numpy as np                              # noqa: E402
 
+import drum_mags                                # noqa: E402
 import mesh_orient                              # noqa: E402
 import shapes as sh                             # noqa: E402
 from meshkit import Mesh                        # noqa: E402
@@ -159,12 +160,13 @@ def load_parts(src=None):
     return {k: (data[f"{k}__v"].astype(np.float64), data[f"{k}__t"].astype(np.int64)) for k in keys}
 
 
-def _mesh(part, material):
+def _mesh(part, material, soft=False):
+    """soft: the part is moulded and rounded (the grip): its facets are shaded smooth with each other (section 53)."""
     v, t = part
     m = Mesh()
     base = m.add_vertices(v)
     for tri in t:
-        m.add_face([base + int(i) for i in tri], material)
+        m.add_face([base + int(i) for i in tri], material, soft=soft)
     return m
 
 
@@ -310,7 +312,7 @@ def gunset(src=None):
     parts = load_parts(src)
     lay = layout(parts)
     body = lambda key, material="cerberus_body": _mesh(parts[key], material)
-    frame = body("lower_bar").merge(body("frame")).merge(body("grip_frame")).merge(body("grip", "cerberus_grip"))
+    frame = body("lower_bar").merge(body("frame")).merge(body("grip_frame")).merge(_mesh(parts["grip"], "cerberus_grip", soft=True))
     frame.merge(body("strip", "cerberus_trim")).merge(inlay_patch_mesh()).merge(rivets_mesh()).merge(release_mesh())
     slide = body("slide_block").merge(body("port", "steel_dark")).merge(ribs_mesh())
     for side in (-1, 1):
@@ -325,6 +327,8 @@ def gunset(src=None):
         "slide_stop": slide_stop_mesh().translated(-STOP_PIVOT),
         "mag_standard": up.mag_mesh(False).transformed(MAG_SCALE),
         "mag_extended": up.mag_mesh(True).transformed(MAG_SCALE),
+        # section 56: the skin keeps the node contract, drum included (seated on its own magazine)
+        "mag_drum": drum_mags.side_drum(up.mag_mesh(False).transformed(MAG_SCALE), 0.045, 0.044)[0],
     }
     import cerberus_clips
     # the skin's own inspect and its effect nodes (VIEWMODEL_SPEC section 38)

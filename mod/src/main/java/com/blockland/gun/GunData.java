@@ -84,6 +84,11 @@ public final class GunData {
         public String node = "";
         public float reloadTimeScale = 1;
         public float adsTimeScale = 1;
+        /**
+         * Suffix of this magazine's own reload clips ({@code _drum}: {@code reload_drum}, {@code reload_empty_drum}), for
+         * a magazine the hands must hold differently (a drum); the gun's clips play where the model has none.
+         */
+        public String clipSuffix = "";
     }
 
     public static final class Falloff {

@@ -1,0 +1,8 @@
+{
+  "_comment": "Backpacks (背包): item id under blockland, storage rows of 9 (1..6), the model's depth in pixels on the player's back. Read when the mod starts (items are registered from it), on both sides.",
+  "backpacks": [
+    { "id": "backpack_small", "rows": 1, "depth": 3 },
+    { "id": "backpack_medium", "rows": 2, "depth": 4 },
+    { "id": "backpack_large", "rows": 3, "depth": 5 }
+  ]
+}

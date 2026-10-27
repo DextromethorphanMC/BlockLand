@@ -153,7 +153,8 @@ MODEL_MODULES = ("pbr_models_tommy", "pbr_models_ks3", "pbr_models_usp", "pbr_mo
                  "pbr_models_uzi", "pbr_models_p90", "pbr_models_mp5", "pbr_models_sten", "pbr_models_ssg08", "pbr_models_calico", "pbr_models_scar", "pbr_models_m4a1", "pbr_models_jackhammer",
                  "pbr_models_crowbar", "pbr_models_knuckles",
                  "pbr_models_handcannon", "pbr_models_vector", "pbr_models_baton", "pbr_models_ammo_crate",
-                 "pbr_models_deagle", "pbr_models_revolver", "pbr_models_armor", "pbr_models_revive")
+                 "pbr_models_deagle", "pbr_models_revolver", "pbr_models_armor", "pbr_models_revive", "pbr_models_bizon",
+                 "pbr_models_vehicles")
 
 
 def _load_model_modules():
@@ -418,36 +419,140 @@ def bake_ao(points, normals, tris, distance, rays=48, eps=1e-4):
     keys_sorted = keys[order]
     split = np.nonzero(np.any(np.diff(keys_sorted, axis=0) != 0, axis=1))[0] + 1
     occl = np.zeros((n, rays))
+    jobs = []
     for group in np.split(order, split):
         cmin = pts[group].min(0)
         cmax = pts[group].max(0)
         cand = np.nonzero(np.all(hi >= cmin, axis=1) & np.all(lo <= cmax, axis=1))[0]
-        if len(cand) == 0:
-            continue
-        O = np.repeat(origins[group], rays, axis=0)
-        D = dirs[group].reshape(-1, 3)
-        nearest = np.full(len(O), np.inf)
-        step = max(1, int(1_500_000 // max(1, len(cand))))
-        V0, E1, E2 = v0[cand], e1[cand], e2[cand]
+        if len(cand):
+            jobs.append((group, cand))
+    work = sum(len(g) * len(c) for g, c in jobs) * rays
+    pool = _ao_pool() if work > AO_PARALLEL_WORK else None
+    if pool is None:
+        for group, cand in jobs:
+            occl[group] = _ao_trace(origins[group], dirs[group], v0[cand], e1[cand], e2[cand], distance, eps)
+        return np.clip(1 - occl.mean(axis=1), 0.25, 1.0)
+    # the triangles once in shared memory, the vertex groups spread over the worker processes (same result)
+    from multiprocessing import shared_memory
+    packed = np.ascontiguousarray(np.stack([v0, e1, e2], 1))
+    shm = shared_memory.SharedMemory(create=True, size=max(packed.nbytes, 8))
+    try:
+        np.ndarray(packed.shape, packed.dtype, buffer=shm.buf)[:] = packed
+        futures = [(group, pool.submit(_ao_job, shm.name, packed.shape, origins[group], dirs[group], cand, distance, eps))
+                   for group, cand in jobs]
+        for group, future in futures:
+            occl[group] = future.result()
+    finally:
+        shm.close()
+        shm.unlink()
+    return np.clip(1 - occl.mean(axis=1), 0.25, 1.0)
+
+
+#: Above this much ray-triangle work (rays x candidate triangles) a bake is spread over worker processes.
+AO_PARALLEL_WORK = 2e8
+_pool = None
+
+
+def _ao_pool():
+    """The worker processes (one pool per run of the tools; None where a pool cannot start)."""
+    global _pool
+    if _pool is None:
+        try:
+            import concurrent.futures
+            import multiprocessing
+            workers = max(1, min(20, (os.cpu_count() or 2) - 2))
+            _pool = concurrent.futures.ProcessPoolExecutor(workers, mp_context=multiprocessing.get_context("spawn"))
+        except (ImportError, OSError, NotImplementedError):
+            _pool = False
+    return _pool or None
+
+
+_attached = {}
+
+
+def _ao_job(name, shape, origins, dirs, cand, distance, eps):
+    """Worker side of bake_ao: one vertex group against its candidate triangles (shared memory `name`)."""
+    from multiprocessing import shared_memory
+    if name not in _attached:
+        for old in _attached.values():
+            old.close()
+        _attached.clear()
+        _attached[name] = shared_memory.SharedMemory(name=name)
+    tri = np.ndarray(shape, np.float64, buffer=_attached[name].buf)[cand]
+    return _ao_trace(origins, dirs, tri[:, 0], tri[:, 1], tri[:, 2], distance, eps)
+
+
+def _ao_trace(origins, dirs, V0, E1, E2, distance, eps):
+    """Occlusion weights (g, rays) of the rays from `origins` (g, 3) along `dirs` (g, rays, 3) against triangles. Many
+    triangles: they are sorted into spatial chunks and each ray only tests the triangles of the chunks whose box it
+    crosses within `distance` (the same nearest hit as testing them all)."""
+    g, rays = dirs.shape[0], dirs.shape[1]
+    O = np.repeat(origins, rays, axis=0)
+    D = dirs.reshape(-1, 3)
+    nearest = np.full(len(O), np.inf)
+    if len(V0) <= 4 * AO_CHUNK:
+        step = max(1, int(1_500_000 // max(1, len(V0))))
         for s0 in range(0, len(O), step):
-            o = O[s0:s0 + step][:, None, :]
-            d = D[s0:s0 + step][:, None, :]
-            p = np.cross(d, E2[None])
-            det = np.sum(E1[None] * p, -1)
-            ok = np.abs(det) > 1e-14
-            inv = np.where(ok, 1.0 / np.where(ok, det, 1), 0)
-            sv = o - V0[None]
-            u = np.sum(sv * p, -1) * inv
-            q = np.cross(sv, E1[None])
-            v = np.sum(d * q, -1) * inv
-            tt = np.sum(E2[None] * q, -1) * inv
-            hit = ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (tt > eps) & (tt < distance)
-            tt = np.where(hit, tt, np.inf)
-            nearest[s0:s0 + step] = tt.min(axis=1)
-        w = np.where(np.isfinite(nearest), 1 - (np.minimum(nearest, distance) / distance) ** 2, 0)
-        occl[group] = w.reshape(len(group), rays)
-    ao = 1 - occl.mean(axis=1)
-    return np.clip(ao, 0.25, 1.0)
+            nearest[s0:s0 + step] = _ao_hits(O[s0:s0 + step][:, None, :], D[s0:s0 + step][:, None, :],
+                                             V0[None], E1[None], E2[None], distance, eps).min(axis=1)
+    else:
+        # chunks of nearby triangles (sorted by a coarse grid cell of their centroid), their boxes
+        cen = V0 + (E1 + E2) / 3
+        lo, hi = cen.min(0), cen.max(0)
+        q = np.floor((cen - lo) / np.maximum(hi - lo, 1e-9) * 15.999).astype(np.int64)
+        order = np.lexsort((q[:, 2], q[:, 1], q[:, 0]))
+        V0, E1, E2 = V0[order], E1[order], E2[order]
+        count = len(V0)
+        chunks = (count + AO_CHUNK - 1) // AO_CHUNK
+        pad = chunks * AO_CHUNK - count
+        idx = np.concatenate([np.arange(count), np.full(pad, -1)]).reshape(chunks, AO_CHUNK)
+        pts = np.stack([V0, V0 + E1, V0 + E2], 1)                      # (T, 3, 3)
+        safe = np.where(idx < 0, idx[:, :1], idx)
+        bmin = pts[safe].min(axis=(1, 2)) - 1e-7
+        bmax = pts[safe].max(axis=(1, 2)) + 1e-7
+        with np.errstate(divide="ignore", invalid="ignore"):
+            inv = 1.0 / np.where(np.abs(D) < 1e-30, 1e-30, D)
+        batch = max(1, int(4_000_000 // max(1, chunks)))
+        for s0 in range(0, len(O), batch):
+            o, iv = O[s0:s0 + batch], inv[s0:s0 + batch]
+            t1 = (bmin[None] - o[:, None]) * iv[:, None]
+            t2 = (bmax[None] - o[:, None]) * iv[:, None]
+            tmin = np.minimum(t1, t2).max(axis=2)
+            tmax = np.maximum(t1, t2).min(axis=2)
+            ri, ci = np.nonzero((tmax >= np.maximum(tmin, eps)) & (tmin < distance))
+            if len(ri) == 0:
+                continue
+            tri = idx[ci].reshape(-1)
+            ray = np.repeat(ri, AO_CHUNK)
+            keep = tri >= 0
+            tri, ray = tri[keep], ray[keep]
+            best = np.full(len(o), np.inf)
+            for t0 in range(0, len(tri), 2_000_000):
+                tr, ra = tri[t0:t0 + 2_000_000], ray[t0:t0 + 2_000_000]
+                hit = _ao_hits(o[ra], D[s0:s0 + batch][ra], V0[tr], E1[tr], E2[tr], distance, eps)
+                np.minimum.at(best, ra, hit)
+            nearest[s0:s0 + batch] = best
+    w = np.where(np.isfinite(nearest), 1 - (np.minimum(nearest, distance) / distance) ** 2, 0)
+    return w.reshape(g, rays)
+
+
+#: Triangles per chunk of the AO bake's culling (see _ao_trace).
+AO_CHUNK = 32
+
+
+def _ao_hits(o, d, V0, E1, E2, distance, eps):
+    """Moller-Trumbore distances (inf where missed or out of (eps, distance)); arrays broadcast together."""
+    p = np.cross(d, E2)
+    det = np.sum(E1 * p, -1)
+    ok = np.abs(det) > 1e-14
+    inv = np.where(ok, 1.0 / np.where(ok, det, 1), 0)
+    sv = o - V0
+    u = np.sum(sv * p, -1) * inv
+    q = np.cross(sv, E1)
+    v = np.sum(d * q, -1) * inv
+    tt = np.sum(E2 * q, -1) * inv
+    hit = ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (tt > eps) & (tt < distance)
+    return np.where(hit, tt, np.inf)
 
 
 def _ao_key(points, normals, tris, distance):

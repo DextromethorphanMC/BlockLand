@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.blockland.mixin.inventory",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "CreativeSlotPacketMixin",
+    "InventoryMenuMixin",
+    "SlotAccess"
+  ],
+  "client": [
+    "ContainerScreenAccess",
+    "CreativeScreenAccess"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

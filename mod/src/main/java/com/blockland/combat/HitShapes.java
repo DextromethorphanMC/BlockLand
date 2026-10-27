@@ -91,8 +91,20 @@ public final class HitShapes {
     public record Hit(Vec3 point, boolean head) {
     }
 
+    /**
+     * An entity whose hit boxes are its own, not its (square, axis-aligned) bounding box — a vehicle's yawed hull boxes
+     * (vehicle spec §6). Hits on them are never head hits.
+     */
+    public interface Shaped {
+        List<Box> hitBoxes(double inflate);
+    }
+
     /** The entity's hit boxes, each grown by {@code inflate}. */
     public static List<Box> of(Entity entity, double inflate) {
+        if (entity instanceof Shaped shaped) {
+            List<Box> boxes = shaped.hitBoxes(inflate);
+            if (!boxes.isEmpty()) return boxes;
+        }
         ActionState state = BodyActions.state(entity);
         if (state != null) {
             return bodyBoxes(entity.position(), state.yaw(), BodyActions.scaleOf(entity), BodyActions.hitBody(state.action()),
@@ -105,7 +117,7 @@ public final class HitShapes {
     @Nullable
     public static Hit clip(Entity entity, Vec3 from, Vec3 to, double inflate) {
         Hit hit = clip(of(entity, inflate), from, to);
-        if (hit == null || BodyActions.isActing(entity)) return hit;
+        if (hit == null || BodyActions.isActing(entity) || entity instanceof Shaped) return hit;
         return new Hit(hit.point(), inHeadBand(entity, hit.point().y));
     }
 
@@ -148,7 +160,7 @@ public final class HitShapes {
             return best;
         }
         Box body = boxes.get(0);
-        if (!head || BodyActions.isActing(entity)) return body;
+        if (!head || BodyActions.isActing(entity) || entity instanceof Shaped) return body;
         AABB box = entity.getBoundingBox().inflate(0.02);
         double bottom = entity.getEyeY() - Math.max(0.12, entity.getBbHeight() * 0.12);
         return Box.of(new AABB(box.minX, Math.min(bottom, box.maxY - 0.1), box.minZ, box.maxX, box.maxY, box.maxZ), true);

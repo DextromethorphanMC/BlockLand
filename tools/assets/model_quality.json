@@ -2,5 +2,20 @@
   "curve_error_m": 0.00004,
   "max_radial_segments": 96,
   "blade_subdivisions": 2,
-  "budgets": {"long_gun": 18000, "pistol": 10000, "knife": 12000, "equipment": 12000}
+  "budgets": {"long_gun": 64000, "pistol": 32000, "knife": 30000, "equipment": 30000,
+              "vehicle_motorcycle": 80000, "vehicle_offroad": 140000, "vehicle_speedboat": 110000,
+              "vehicle_tank": 180000},
+  "edges": {
+    "radius_fraction": 0.12,
+    "min_radius_m": 0.00025,
+    "max_radius_m": 0.0012,
+    "skip_radius_m": 0.0002,
+    "min_turn_deg": 40,
+    "max_turn_deg": 120,
+    "max_facet_deg": 45,
+    "soft_deg": 50,
+    "fillet_error_m": 0.00008,
+    "auto_curve_min_segments": 12,
+    "sharp_materials": ["blade", "blade_edge", "edge"]
+  }
 }

@@ -184,13 +184,14 @@ def _magazine(x, z, h=0.175):
 
 def contents_mesh():
     m = Mesh()
-    m.merge(_ammo_can(-0.385, -0.095, -0.205, -0.045, 0.19))
-    m.merge(_ammo_can(-0.385, -0.095, 0.035, 0.195, 0.19))
-    m.merge(_ammo_can(-0.070, 0.180, -0.205, -0.045, 0.19))
-    for k, z in enumerate(np.linspace(-0.17, 0.17, 6)):
-        m.merge(_magazine(0.235 + 0.06 * (k % 2), z + 0.012 * (k % 3 - 1)))
-    m.merge(_magazine(0.040, 0.10))
-    m.merge(_magazine(0.075, 0.12, 0.170))
+    with sh.authored():                       # inside the crate, seen from a step away: no rounded edges (spec 53)
+        m.merge(_ammo_can(-0.385, -0.095, -0.205, -0.045, 0.19))
+        m.merge(_ammo_can(-0.385, -0.095, 0.035, 0.195, 0.19))
+        m.merge(_ammo_can(-0.070, 0.180, -0.205, -0.045, 0.19))
+        for k, z in enumerate(np.linspace(-0.17, 0.17, 6)):
+            m.merge(_magazine(0.235 + 0.06 * (k % 2), z + 0.012 * (k % 3 - 1)))
+        m.merge(_magazine(0.040, 0.10))
+        m.merge(_magazine(0.075, 0.12, 0.170))
     return m
 
 

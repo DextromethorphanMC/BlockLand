@@ -9,6 +9,7 @@ receiver -> body, barrel -> barrel, bolt -> detail, steel_dark -> detail, stock 
 mag / mag_base -> magazine, brass -> none."""
 import numpy as np
 
+import rifle_forms as rf
 import shapes as sh
 from ak_model import _cyl_x, _cyl_z, _loft_z, _ring_xy
 from meshkit import Mesh
@@ -174,9 +175,10 @@ def forend_mesh():
     """Forend of the chassis stock around the free-floated barrel, with the accessory rail and sling stud."""
     sec = _forend_section(STOCK_W, FE_Y0, FE_Y1)
     nose = _forend_section(STOCK_W - 0.0040, FE_Y0 + 0.0040, FE_Y1 - 0.0030)
-    pairs = [(sh.offset_loop(nose, 0.0012), FE_Z0), (nose, FE_Z0 + 0.0020), (sec, FE_Z0 + 0.0180),
-             (sec, -0.0200), (sec, 0.0000)]
-    m = _loft_z(pairs, "stock")
+    loops = [nose, 0.5 * (nose + sec), sec, sec, sec]
+    zs = [FE_Z0, FE_Z0 + 0.0090, FE_Z0 + 0.0180, -0.0200, 0.0000]
+    m = rf.frame_loft([(lp, np.array([0.0, 0.0, z]), np.array([1.0, 0, 0]), np.array([0, 1.0, 0]))
+                       for lp, z in zip(loops, zs)], "stock", 0.0035, 0.0)
     # accessory rail under the front of the forend (bipod / sling)
     m.merge(sh.box(-0.0090, FE_Y0 - 0.0060, FE_Z0 + 0.0250, 0.0090, FE_Y0 + 0.0010, FE_Z0 + 0.1250, 0.0006, "steel_dark"))
     for k in range(9):
@@ -224,17 +226,32 @@ def butt_mesh():
     the grip to the toe (closing the thumbhole), the raised cheek piece and the rubber butt pad."""
     z0 = GRIP_TOP[2] - 0.0040
     # the wrist stays low behind the receiver: the bolt shroud travels back over it (comb rises behind the stroke)
-    upper = np.array([(z0, CH_TOP), (z0, -0.0420), (0.3200, -0.0480), (0.3900, -0.0620), (0.4600, -0.0930),
-                      (0.5300, -0.1330), (0.5600, -0.1440), (BUTT_Z, -0.1440), (BUTT_Z, 0.0200),
-                      (BUTT_Z - 0.0080, COMB_Y), (CHEEK_Z0, COMB_Y), (CHEEK_Z0 - 0.0150, 0.0200),
-                      (CHEEK_Z0 - 0.0350, -0.0100), (CHEEK_Z0 - 0.0700, -0.0160), (0.2700, -0.0160)])
-    m = sh.extrude_x(upper, (), 0.0210, round_bevel(0.0040, 2), "stock")
-    # lower bar: bottom of the grip to the toe
+    # upper body: lofted along the stock (not a slab), sides dished, every edge rounded ~6 mm, the comb's front sloping
+    bz = [z0, 0.3200, 0.3900, 0.4600, 0.5300, 0.5600, BUTT_Z]
+    by = [-0.0420, -0.0480, -0.0620, -0.0930, -0.1330, -0.1440, -0.1440]
+    tz = [z0, 0.2700, CHEEK_Z0 - 0.0700, CHEEK_Z0 - 0.0350, CHEEK_Z0 - 0.0150, CHEEK_Z0, BUTT_Z - 0.0080, BUTT_Z]
+    ty = [CH_TOP, -0.0160, -0.0160, -0.0100, 0.0200, COMB_Y, COMB_Y, COMB_Y - 0.0040]
+    zs = np.unique(np.concatenate([np.linspace(z0, BUTT_Z, 26), [CHEEK_Z0 - 0.035, CHEEK_Z0 - 0.015, CHEEK_Z0]]))
+
+    def body(z):
+        y0, y1 = np.interp(z, bz, by), np.interp(z, tz, ty)
+        u = (z - z0) / (BUTT_Z - z0)
+        w = 0.0200 + 0.0012 * np.sin(np.pi * u)
+        return rf.section(w, y1, y0, n=4.2, count=36, dent=0.0012 * np.sin(np.pi * np.clip(u, 0.05, 0.95)),
+                          dent_y=0.5 * (y0 + y1), dent_w=0.45 * (y1 - y0))
+    m = rf.frame_loft([(body(z), np.array([0.0, 0.0, z]), np.array([1.0, 0, 0]), np.array([0, 1.0, 0])) for z in zs],
+                      "stock", 0.0, 0.0030)
+    # lower bar: a rounded beam from the bottom of the grip to the toe (closing the thumbhole)
     bot = grip_center(GRIP_LEN)
-    bar = np.array([(bot[2] - 0.0140, bot[1] + 0.0180), (bot[2] - 0.0090, bot[1] - 0.0100),
-                    (bot[2] + 0.0250, bot[1] - 0.0170), (0.5600, -0.1570), (0.5700, -0.1280),
-                    (bot[2] + 0.0380, bot[1] + 0.0110)])
-    m.merge(sh.extrude_x(bar, (), 0.0160, round_bevel(0.0045, 2), "stock"))
+    path, tan = rf.along([np.array([0.0, bot[1] + 0.0060, bot[2] - 0.0020]), np.array([0.0, bot[1] - 0.0080, bot[2] + 0.0250]),
+                          np.array([0.0, -0.1450, 0.5300]), np.array([0.0, -0.1400, 0.5680])], 14)
+    stations = []
+    for k, (c, t) in enumerate(zip(path, tan)):
+        yv = np.cross(t, np.array([1.0, 0.0, 0.0]))
+        yv = -yv if yv[1] < 0 else yv
+        hh = 0.0135 + 0.0020 * (k / (len(path) - 1))
+        stations.append((rf.section(0.0158, hh, -hh, n=3.0, count=28), c, np.array([1.0, 0, 0]), yv))
+    m.merge(rf.frame_loft(stations, "stock", 0.0, 0.0))
     # raised cheek piece on two posts
     c0, c1 = CHEEK_Z0 + 0.0020, CHEEK_Z0 + 0.1300
     cheek = np.array([(c0, COMB_Y - 0.0040), (c1, COMB_Y - 0.0040), (c1, CHEEK_Y - 0.0030),
@@ -252,9 +269,8 @@ def butt_mesh():
 
 def pad_mesh():
     """Rubber butt pad behind the stock."""
-    prof = np.array([(BUTT_Z - 0.0005, -0.1460), (BUTT_Z + 0.0200, -0.1450), (BUTT_Z + 0.0230, -0.1380),
-                     (BUTT_Z + 0.0230, 0.0170), (BUTT_Z + 0.0200, 0.0250), (BUTT_Z - 0.0005, 0.0270)])
-    m = sh.extrude_x(prof, (), 0.0225, round_bevel(0.0050, 2), "pad")
+    pad = rf.section(0.0225, 0.0270, -0.1460, n=4.5, count=36)
+    m = rf.frame_loft(rf.straight_stations(lambda u: pad, BUTT_Z - 0.0005, BUTT_Z + 0.0230, 3), "pad", 0.0, 0.0060)
     for k in range(5):                                                             # horizontal ribs on the face
         y = -0.1200 + k * 0.0300
         m.merge(sh.box(-0.0180, y, BUTT_Z + 0.0228, 0.0180, y + 0.0040, BUTT_Z + 0.0242, 0.0005, "pad"))
@@ -264,18 +280,19 @@ def pad_mesh():
 def grip_mesh():
     """Thumbhole pistol grip (stippled), raked 16 degrees, finger grooves on the front strap; its bottom runs into
     the lower bar of the stock."""
-    rings = []
-    n = 10
+    stations = []
+    n = 16
     for k in range(n + 1):
         d = -0.0060 + (GRIP_LEN + 0.0120) * k / n
         c = grip_center(d)
         u = k / n
         depth = 0.0195 + 0.0020 * np.sin(np.pi * u)
         w = 0.0145 + 0.0010 * np.sin(np.pi * u)
-        sec = sh.superellipse(w, depth, 2.5, 20)
-        pts = np.array([c + p[0] * np.array([1.0, 0, 0]) + p[1] * (-GRIP_FRONT) for p in sec])
-        rings.append(pts)
-    m = sh.loft(rings, "grip")
+        sec = sh.superellipse(w, depth, 2.5, 36)
+        front = sec[:, 1] < 0
+        sec[:, 0] = np.where(front, sec[:, 0] * (1.0 - 0.18 * (-sec[:, 1] / depth) ** 2), sec[:, 0])
+        stations.append((sec, c, np.array([1.0, 0, 0]), -GRIP_FRONT))
+    m = rf.frame_loft(stations, "grip", 0.0, 0.0)
     for k in range(3):                                                             # finger grooves (ridges)
         d = 0.0300 + k * 0.0230
         c = grip_center(d) + GRIP_FRONT * 0.0195

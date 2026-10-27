@@ -54,12 +54,30 @@ def centre_line(u):
     return np.array([x, 0.0, z]), outer, tangent
 
 
+JIMP_U = (0.035, 0.150)       # thumb jimping along the spine behind the hump (u range)
+JIMP_PITCH = 0.0017            # metres between notches
+JIMP_DEPTH = 0.00045           # notch depth into the spine
+
+
+def _jimping(u):
+    """Depth the spine is cut back at u: rounded scallops between JIMP_U, faded in and out at the ends."""
+    if not JIMP_U[0] < u < JIMP_U[1]:
+        return 0.0
+    phase = (u - JIMP_U[0]) * BLADE_LEN / JIMP_PITCH
+    fade = _smooth(JIMP_U[0], JIMP_U[0] + 0.012, u) * (1 - _smooth(JIMP_U[1] - 0.012, JIMP_U[1], u))
+    return JIMP_DEPTH * fade * (0.5 - 0.5 * np.cos(2 * np.pi * phase)) ** 1.5
+
+
 def widths(u):
     """Distance of the spine and of the edge from the centre line: the spine curls down into the point, the edge
-    runs on into it (the point sits a little to the inner, edge side: a hooked claw)."""
-    ws = SPINE_W * np.sqrt(max(0.0, 1 - u ** 2.6)) * (1 - 0.18 * u)
+    runs on into it (the point sits a little to the inner, edge side: a hooked claw). Thumb jimping is cut into the
+    spine near the root."""
+    ws = SPINE_W * np.sqrt(max(0.0, 1 - u ** 2.6)) * (1 - 0.18 * u) - _jimping(u)
     we = EDGE_W * (1 - u) ** 0.8 * (1 + 0.25 * np.sin(np.pi * u))     # the belly of the inner edge
     return ws, we
+
+
+GRIND_S = 0.85 - 0.78 * 1.85   # s of the grind line (a = 0.78 in thickness())
 
 
 def thickness(u, s):
@@ -77,9 +95,11 @@ def thickness(u, s):
 
 
 def blade_mesh():
-    us = np.array([0.0, 0.04, 0.10, 0.17, 0.25, 0.33, 0.41, 0.49, 0.57, 0.65, 0.72, 0.79, 0.85, 0.90, 0.945, 0.975,
-                   1.0])
-    ss = np.array([1.0, 0.95, 0.85, 0.60, 0.30, 0.0, -0.30, -0.55, -0.72, -0.85, -0.94, -1.0])
+    jimp = np.arange(JIMP_U[0], JIMP_U[1], JIMP_PITCH / BLADE_LEN / 6)
+    us = np.unique(np.concatenate([[0.0, 0.17, 0.25, 0.33, 0.41, 0.49, 0.57, 0.65, 0.72, 0.79, 0.85, 0.90, 0.945, 0.975,
+                                    1.0], [0.02], jimp]))
+    # GRIND_S: where the flat grind meets the polished edge bevel (thickness() changes slope there): a line of its own
+    ss = np.array([1.0, 0.95, 0.85, 0.60, 0.30, 0.0, -0.30, -0.50, GRIND_S, -0.72, -0.85, -0.94, -1.0])
     us, ss = refine_samples(us), refine_samples(ss)
     nu, ns = len(us), len(ss)
     P = np.zeros((2, nu, ns, 3))
@@ -98,7 +118,8 @@ def blade_mesh():
     for i in range(nu - 1):
         for j in range(ns - 1):
             sm = 0.5 * (ss[j] + ss[j + 1])
-            mat = "blade_edge" if sm < -0.80 and 0.5 * (us[i] + us[i + 1]) > 0.05 else "blade"
+            # the edge bevel polished, the flat satin: the grind line reads as a change of finish
+            mat = "blade_edge" if sm < GRIND_S and 0.5 * (us[i] + us[i + 1]) > 0.05 else "blade"
             m.add_face([idx(0, i, j), idx(0, i + 1, j), idx(0, i + 1, j + 1), idx(0, i, j + 1)], mat)
             m.add_face([idx(1, i, j), idx(1, i, j + 1), idx(1, i + 1, j + 1), idx(1, i + 1, j)], mat)
         m.add_face([idx(0, i, 0), idx(1, i, 0), idx(1, i + 1, 0), idx(0, i + 1, 0)], "blade")
@@ -141,7 +162,46 @@ def handle_mesh():
             pts.append((x * _section_scale_x(z, np.sign(x)) * end - 0.004 * _smooth(0.042, HANDLE_Z[1], z),
                         y * end * (0.92 if z < 0.002 else 1.0), z))
         rings.append(pts)
-    return sh.loft(rings, "handle")
+    m = sh.loft(rings, "handle")
+    m.merge(tang_mesh(zs))
+    m.merge(screws_mesh())
+    return m
+
+
+TANG_T = 0.0009                # half thickness of the full tang between the scales
+TANG_PROUD = 0.00035           # how far the tang stands out of the scales' outline
+SCREW_Z = (0.0135, 0.0345)     # scale screws along the handle
+SCREW_R = 0.0021               # screw head radius
+
+
+def _outline_x(z, side):
+    """The handle's side-view outline at z (its half widths at y = 0, the grooves and the guard included)."""
+    end = 1 - 0.30 * _smooth(0.044, HANDLE_Z[1], z)
+    return side * HANDLE_A * _section_scale_x(z, side) * end - 0.004 * _smooth(0.042, HANDLE_Z[1], z)
+
+
+def tang_mesh(zs):
+    """The full tang between the two scales: a steel band standing a hair proud all round the handle's outline,
+    so the handle reads as two scales on a steel core (blackened, like the ring it runs into)."""
+    zz = np.linspace(HANDLE_Z[0] + 0.0004, HANDLE_Z[1] - 0.0004, 40)
+    right = [(z, -(_outline_x(z, 1.0) + TANG_PROUD)) for z in zz]
+    left = [(z, -(_outline_x(z, -1.0) - TANG_PROUD)) for z in zz[::-1]]
+    band = sh.extrude_x(right + left, half_width=TANG_T, material="ring")
+    # extrude_x profiles are (z, y) along X: here (z, -x) along Y (a right-handed turn: x -> y, y -> -x)
+    return sh.place(band, x_axis=(0, 1, 0), y_axis=(-1, 0, 0), z_axis=(0, 0, 1))
+
+
+def screws_mesh():
+    """Two torx scale screws a side: domed heads seated on the scales' crown, a six-lobed recess in each."""
+    m = Mesh()
+    head = sh.revolve([(0.0, 0.00020), (0.00055, 0.00020), (0.00075, 0.00062), (SCREW_R * 0.8, 0.00058),
+                       (SCREW_R, 0.00025), (SCREW_R, -0.0006), (0.0, -0.0006)], 24, "ring")
+    for z in SCREW_Z:
+        crown = HANDLE_B * (0.92 if z < 0.002 else 1.0) - 0.00012
+        for side in (1.0, -1.0):
+            m.merge(sh.place(head, origin=(_outline_x(z, 1.0) * 0.5 + _outline_x(z, -1.0) * 0.5, side * crown, z),
+                             x_axis=(1, 0, 0), y_axis=(0, 0, -side), z_axis=(0, side, 0)))
+    return m
 
 
 # ------------------------------------------------------------------------------------------ ring

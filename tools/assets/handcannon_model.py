@@ -12,6 +12,7 @@ side latch that frees the barrel; an external hammer; a squared trigger guard; a
 meshkit.Mesh."""
 import numpy as np
 
+import organic as og
 import shapes as sh
 from meshkit import Mesh
 from p9_model import chamfer_bevel, orient_radial, pin, round_bevel
@@ -116,24 +117,28 @@ GRIP_WIDTH = [(-0.0060, 0.0300), (0.0, 0.0310), (0.0080, 0.0330), (0.0200, 0.034
               (0.0700, 0.0348), (0.0820, 0.0340), (GRIP_LEN, 0.0320)]
 
 
-def _grip_ring(d, half_w, front, back, count=22):
-    t = np.linspace(0, 2 * np.pi, count, endpoint=False) + np.pi / count
-    c, s = np.cos(t), np.sin(t)
-    n = np.where(s > 0, 2.4, 3.0)
-    x = half_w * np.sign(c) * np.abs(c) ** (2 / n)
-    sv = np.where(s > 0, front, back) * np.sign(s) * np.abs(s) ** (2 / n)
+GROOVES = (0.0120, 0.0740, 3, 0.0016)
+PANEL_D = (0.0100, 0.0790)
+
+
+def _grip_ring(d, half_w, front, back, count=48):
+    sec = og.ring(half_w, front, back, count, 2.2, 2.6, flat_sides=0.3)
     centre = grip_center(d)
-    return centre[None, :] + x[:, None] * np.array([1.0, 0, 0]) + sv[:, None] * FRONT[None, :]
+    return centre[None, :] + sec[:, 0:1] * np.array([1.0, 0, 0]) + sec[:, 1:2] * FRONT[None, :]
 
 
 def grip_mesh():
-    """The raked grip: rubber with three finger grooves on its front, a flat steel heel cap."""
-    rings = []
-    for d, w in GRIP_WIDTH:
-        u = np.clip((d - 0.012) / 0.062, 0, 1)
-        groove = 0.0016 * (0.5 - 0.5 * np.cos(2 * np.pi * 3 * u)) * (0.012 < d < 0.074)
-        rings.append(_grip_ring(d, 0.5 * w, 0.0158 - groove, 0.0175))
-    m = sh.loft(rings, "grip", cap_start=True, cap_end=True, auto_orient=False)
+    """The raked grip: rubber with three finger grooves on its front and stippled side panels set into it, a flat steel
+    heel cap."""
+    ds = og.refine([d for d, _ in GRIP_WIDTH], PANEL_D + GROOVES[:2], 0.0035)
+    gd, gw = zip(*GRIP_WIDTH)
+    sections = [og.ring(0.5 * np.interp(d, gd, gw), 0.0158 - og.finger_grooves(d, *GROOVES), 0.0175, 48, 2.2, 2.6,
+                        flat_sides=0.3) for d in ds]
+    mask = og.panel_mask(sections, ds, *PANEL_D, side=0.55)
+    sections = og.recess(sections, mask, 0.0005)
+    rings = [grip_center(d)[None, :] + sec[:, 0:1] * np.array([1.0, 0, 0]) + sec[:, 1:2] * FRONT[None, :]
+             for d, sec in zip(ds, sections)]
+    m = og.skin(rings, "grip", mask, cap_start=True, cap_end=True)
     orient_radial(m, GRIP_C0, AXIS, +1)
     caps = [len(m.f) - 2, len(m.f) - 1]
     pv = np.array(m.v)
@@ -149,8 +154,25 @@ def grip_mesh():
     return m.merge(cap)
 
 
+# the receiver's side plates: raised cover plates over its flanks, four screws each (section 55)
+# (the left one stops above the barrel latch, which lies along that flank)
+SIDE_PLATE = [(0.0060, REC_Y1 - 0.0070), (REC_Z1 - 0.0120, REC_Y1 - 0.0070), (REC_Z1 - 0.0070, REC_Y1 - 0.0130),
+              (REC_Z1 - 0.0060, -0.0140), (REC_Z1 - 0.0130, -0.0300), (0.0060, -0.0300)]
+SIDE_PLATE_LEFT = [(0.0060, REC_Y1 - 0.0070), (REC_Z1 - 0.0120, REC_Y1 - 0.0070), (REC_Z1 - 0.0070, REC_Y1 - 0.0130),
+                   (REC_Z1 - 0.0066, 0.0015), (0.0060, 0.0015)]
+SIDE_SCREWS = [(0.0110, REC_Y1 - 0.0110), (REC_Z1 - 0.0170, REC_Y1 - 0.0110), (0.0110, -0.0255),
+               (REC_Z1 - 0.0170, -0.0255)]
+
+
 def frame_mesh():
-    m = sh.extrude_x(RECEIVER, (), SW, round_bevel(0.0024, 2), "polymer")
+    # a forged block, not a box: its edges rounded over 5.5 mm (it is 55 mm wide), side plates set on its flanks
+    m = sh.extrude_x(RECEIVER, (), SW, round_bevel(0.0055, 3), "polymer")
+    for sx, plate in ((-1, SIDE_PLATE_LEFT), (1, SIDE_PLATE)):
+        m.merge(sh.extrude_x(plate, (), 0.0006, round_bevel(0.0005, 1), "steel_dark", x_center=sx * (SW + 0.0004)))
+        for z, y in SIDE_SCREWS:
+            if sx < 0 and y < 0:
+                continue
+            m.merge(pin((sx * (SW + 0.0011), y, z), 0.0019, 0.0004, "steel_dark", seg=12))
     m.merge(sh.extrude_x(KNUCKLE, (), KNUCKLE_W, round_bevel(0.0014, 1), "polymer"))
     m.merge(sh.extrude_x(GUARD, (), 0.0060, round_bevel(0.0022, 1), "polymer"))
     m.merge(grip_mesh())

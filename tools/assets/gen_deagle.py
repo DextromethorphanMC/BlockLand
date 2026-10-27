@@ -7,6 +7,7 @@ import numpy as np
 
 import ads_fire
 import armrig
+import drum_mags
 import deagle_model as hm
 import meshkit as mk
 import variants
@@ -102,7 +103,16 @@ def build_meshes():
         "mag_standard": mag,
         "mag_extended": mag.copy(),          # the contract's node; the gun has one magazine (guns.json)
         "fx_shell": hm.shell_mesh(),
+        "mag_drum": drum()[0],
     }
+
+
+DRUM = (0.041, 0.042)        # the .50 drum (20 rounds): radius and width (section 56)
+
+
+def drum():
+    """The drum magazine (mag space) and where its drum sits (drum_mags.side_drum)."""
+    return drum_mags.side_drum(hm.mag_mesh(), *DRUM)
 
 
 def add_materials(g, materials=MATERIALS):
@@ -137,6 +147,7 @@ def build(path, clips=None):
         if name == "mag":
             g.add_node("mag_standard", "mag", mesh=mesh_idx["mag_standard"])
             g.add_node("mag_extended", "mag", mesh=mesh_idx["mag_extended"])
+            g.add_node("mag_drum", "mag", mesh=mesh_idx["mag_drum"])
     for name, (parent, t, rot, scale) in r.MOUNTS.items():          # section 19: attachment mounts
         g.add_node(name, parent, t, rot, scale=scale)
     for side, shoulder in (("R", r.SHOULDER_R), ("L", r.SHOULDER_L)):
@@ -160,6 +171,8 @@ def build(path, clips=None):
     }
     for side in ("R", "L"):
         rest_vals.update(armrig.rest_values(rest, side))
+    # the drum's own reloads (section 56): the support hand on the drum, not under a box magazine's base
+    clips = list(clips) + drum_mags.drum_clips(clips, r.ANCHORS, drum_mags.p9_holds(r, drum()[1]))
     info = {clip.name: bake_clip(g, clip, rest_vals) for clip in clips}
     g.save(path)
     return tri_counts, info

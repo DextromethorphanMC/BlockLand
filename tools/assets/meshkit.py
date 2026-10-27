@@ -1,4 +1,5 @@
-"""Polygon mesh container + export to glTF primitives (hard-edge normals, box-projected UVs)."""
+"""Polygon mesh container + export to glTF primitives (smoothing by angle with face-weighted normals, box-projected
+UVs)."""
 import numpy as np
 
 
@@ -10,28 +11,33 @@ class Mesh:
         self.f = []          # tuple of vertex indices
         self.m = []          # material name per face
         self.uv = []         # None or list of (u, v) per face corner (explicit UVs)
+        self.soft = []       # per face: part of a round (smoothed up to EDGES soft_deg, VIEWMODEL_SPEC section 53)
 
     def add_vertices(self, pts):
         base = len(self.v)
         self.v.extend([list(map(float, p)) for p in np.asarray(pts, dtype=float).reshape(-1, 3)])
         return base
 
-    def add_face(self, idx, material, uvs=None):
+    def add_face(self, idx, material, uvs=None, soft=False):
         self.f.append(tuple(int(i) for i in idx))
         self.m.append(material)
         self.uv.append(uvs)
+        self.soft.append(bool(soft))
 
-    def add_poly(self, pts, material, uvs=None):
+    def add_poly(self, pts, material, uvs=None, soft=False):
         base = self.add_vertices(pts)
-        self.add_face(range(base, base + len(pts)), material, uvs)
+        self.add_face(range(base, base + len(pts)), material, uvs, soft)
 
     def merge(self, other):
         base = len(self.v)
         self.v.extend([list(p) for p in other.v])
-        for f, m, uv in zip(other.f, other.m, other.uv):
+        soft = getattr(other, "soft", None) or []
+        soft = list(soft) + [False] * (len(other.f) - len(soft))
+        for f, m, uv, sf in zip(other.f, other.m, other.uv, soft):
             self.f.append(tuple(i + base for i in f))
             self.m.append(m)
             self.uv.append(uv)
+            self.soft.append(sf)
         return self
 
     def copy(self):
@@ -232,24 +238,40 @@ def box_uv(p, n, scale):
     return u / scale, -vup / scale
 
 
+def _soft_flags(mesh):
+    """Per face: part of a round (meshes built before smoothing flags existed have none, or a short list)."""
+    soft = list(getattr(mesh, "soft", None) or [])
+    return soft[:len(mesh.f)] + [False] * (len(mesh.f) - len(soft))
+
+
 def build_primitives(mesh, hard_deg=35.0, uv_scale=0.05, split_materials=False):
     """-> list of dicts {material, positions, normals, uvs, indices}; one per material.
-    split_materials: also treat material boundaries as hard edges (crisp bevels on thin parts)."""
+    split_materials: also treat material boundaries as hard edges (crisp bevels on thin parts).
+    Normals: faces meeting at less than hard_deg are shaded smooth, each face's share weighted by its corner angle and
+    its polygon's area ("weighted normals", VIEWMODEL_SPEC section 53): a big flat face keeps its own normal up to its
+    rounded edge, and the narrow facets of the round carry the turn, so highlights roll over the edge. Faces marked
+    soft (the facets of a round) are smoothed with their neighbours up to EDGES soft_deg instead of hard_deg."""
+    from model_quality import EDGES
     if not mesh.f:
         return []
     V = np.array(mesh.v, dtype=float)
-    tri_v, tri_m, tri_uv = [], [], []
-    for f, mat, uvs in zip(mesh.f, mesh.m, mesh.uv):
+    tri_v, tri_m, tri_uv, tri_face = [], [], [], []
+    for k, (f, mat, uvs) in enumerate(zip(mesh.f, mesh.m, mesh.uv)):
         for t in _tri_face(V, f):
             tri_v.append([f[t[0]], f[t[1]], f[t[2]]])
             tri_m.append(mat)
             tri_uv.append([uvs[t[0]], uvs[t[1]], uvs[t[2]]] if uvs is not None else None)
+            tri_face.append(k)
     T = np.array(tri_v, dtype=np.int64)
     p0, p1, p2 = V[T[:, 0]], V[T[:, 1]], V[T[:, 2]]
     fn = np.cross(p1 - p0, p2 - p0)
     ln = np.linalg.norm(fn, axis=1)
     keep = ln > 1e-13
     T, fn, ln = T[keep], fn[keep], ln[keep]
+    tri_face = np.asarray(tri_face, dtype=np.int64)[keep]
+    tri_soft = np.asarray(_soft_flags(mesh), dtype=bool)[tri_face] if len(mesh.f) else np.zeros(0, bool)
+    face_area = np.bincount(tri_face, weights=0.5 * ln, minlength=len(mesh.f))
+    tri_area = face_area[tri_face]
     tri_m = [m for m, k in zip(tri_m, keep) if k]
     tri_uv = [u for u, k in zip(tri_uv, keep) if k]
     fnu = fn / ln[:, None]
@@ -277,13 +299,14 @@ def build_primitives(mesh, hard_deg=35.0, uv_scale=0.05, split_materials=False):
     A, B = order[a_pos], order[b_pos]
     ta, tb = A // 3, B // 3
     dots = np.sum(fnu[ta] * fnu[tb], axis=1)
-    sel = dots >= np.cos(np.radians(hard_deg))
+    sel = (dots >= np.cos(np.radians(hard_deg))) | ((tri_soft[ta] | tri_soft[tb])
+                                                    & (dots >= np.cos(np.radians(max(hard_deg, EDGES["soft_deg"])))))
     if split_materials:
         mat_id = {m: i for i, m in enumerate(dict.fromkeys(tri_m))}
         tm = np.array([mat_id[m] for m in tri_m])
         sel &= tm[ta] == tm[tb]
     normals = np.zeros((ntri * 3, 3))
-    np.add.at(normals, A[sel], fnu[tb[sel]] * ang[B[sel]][:, None])
+    np.add.at(normals, A[sel], fnu[tb[sel]] * (ang[B[sel]] * tri_area[tb[sel]])[:, None])
     nl = np.linalg.norm(normals, axis=1)
     bad = nl < 1e-12
     normals[bad] = fnu[np.arange(ntri * 3)[bad] // 3]

@@ -94,6 +94,34 @@
         "cooldown": 5,
         "sound": "minecraft:entity.ghast.shoot"
       }
+    },
+    "blind": {
+      "name": "瞎子",
+      "description": "双眼被蒙住的感染者，靠听觉摸索前进；能为身边的同伴疗伤，靠近它的人类会陷入黑暗。",
+      "entity": "blockland:blind",
+      "health": 55,
+      "speed": 0.98,
+      "knockbackResistance": 0.15,
+      "skill": {
+        "type": "heal_allies",
+        "name": "疗愈低语",
+        "description": "低声呢喃，为 3 格内的感染者同伴恢复 20 点生命（不包括自己）。被动「黑暗笼罩」：1 格内的人类会被致盲。",
+        "heal": 20,
+        "radius": 3.0,
+        "healSelf": false,
+        "cooldown": 14,
+        "sound": "minecraft:block.amethyst_block.resonate"
+      },
+      "passive": {
+        "type": "blind_aura",
+        "name": "黑暗笼罩",
+        "description": "靠近到 1 格以内的人类获得失明效果，离开后 2 秒才恢复。",
+        "radius": 1.0,
+        "effect": "minecraft:blindness",
+        "amplifier": 0,
+        "duration": 2,
+        "sound": "minecraft:entity.warden.tendril_clicks"
+      }
     }
   }
 }

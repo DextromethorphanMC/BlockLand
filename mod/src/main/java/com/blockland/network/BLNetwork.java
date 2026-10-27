@@ -13,6 +13,7 @@ import com.blockland.network.packet.ProfilePackets;
 import com.blockland.network.packet.C2SJoinQueue;
 import com.blockland.network.packet.RankedPackets;
 import com.blockland.network.packet.ParachutePackets;
+import com.blockland.network.packet.VehiclePackets;
 import com.blockland.network.packet.SupplyPackets;
 import com.blockland.network.packet.ArmorPackets;
 import com.blockland.network.packet.C2SLeaveQueue;
@@ -58,7 +59,7 @@ import java.util.function.Function;
  * never references server or client logic directly.
  */
 public final class BLNetwork {
-    private static final int PROTOCOL_VERSION = 21;
+    private static final int PROTOCOL_VERSION = 22;
 
     public static final SimpleChannel CHANNEL = ChannelBuilder.named(BlockLand.id("main"))
             .networkProtocolVersion(PROTOCOL_VERSION)
@@ -105,6 +106,8 @@ public final class BLNetwork {
     private static volatile BattleRoyalePacketListeners.Client battleRoyaleClientListener = BattleRoyalePacketListeners.Client.NOOP;
     private static volatile ParachutePacketListeners.Server parachuteServerListener = ParachutePacketListeners.Server.NOOP;
     private static volatile ParachutePacketListeners.Client parachuteClientListener = ParachutePacketListeners.Client.NOOP;
+    private static volatile VehiclePacketListeners.Server vehicleServerListener = VehiclePacketListeners.Server.NOOP;
+    private static volatile VehiclePacketListeners.Client vehicleClientListener = VehiclePacketListeners.Client.NOOP;
     private static volatile SupplyPacketListeners.Server supplyServerListener = SupplyPacketListeners.Server.NOOP;
     private static volatile SupplyPacketListeners.Client supplyClientListener = SupplyPacketListeners.Client.NOOP;
     private static volatile ArmorPacketListeners.Server armorServerListener = ArmorPacketListeners.Server.NOOP;
@@ -290,6 +293,16 @@ public final class BLNetwork {
                 (msg, player) -> parachuteServerListener.onToggle(player, msg));
         toClient(ParachutePackets.S2CState.class, ParachutePackets.S2CState::encode, ParachutePackets.S2CState::decode,
                 msg -> parachuteClientListener.onState(msg));
+
+        // vehicles (载具, tools/vehicles/VEHICLE_SPEC.md): only in the world
+        toServer(VehiclePackets.C2SControl.class, VehiclePackets.C2SControl::encode, VehiclePackets.C2SControl::decode,
+                (msg, player) -> vehicleServerListener.onControl(player, msg));
+        toServer(VehiclePackets.C2SAction.class, VehiclePackets.C2SAction::encode, VehiclePackets.C2SAction::decode,
+                (msg, player) -> vehicleServerListener.onAction(player, msg));
+        toClient(VehiclePackets.S2CState.class, VehiclePackets.S2CState::encode, VehiclePackets.S2CState::decode,
+                msg -> vehicleClientListener.onState(msg));
+        toClient(VehiclePackets.S2CShot.class, VehiclePackets.S2CShot::encode, VehiclePackets.S2CShot::decode,
+                msg -> vehicleClientListener.onShot(msg));
 
         // ammo crate resupply (弹药箱): only in the world
         toServer(SupplyPackets.C2SUse.class, SupplyPackets.C2SUse::encode, SupplyPackets.C2SUse::decode,
@@ -519,6 +532,14 @@ public final class BLNetwork {
 
     public static void setParachuteClientListener(ParachutePacketListeners.Client listener) {
         parachuteClientListener = listener == null ? ParachutePacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setVehicleServerListener(VehiclePacketListeners.Server listener) {
+        vehicleServerListener = listener == null ? VehiclePacketListeners.Server.NOOP : listener;
+    }
+
+    public static void setVehicleClientListener(VehiclePacketListeners.Client listener) {
+        vehicleClientListener = listener == null ? VehiclePacketListeners.Client.NOOP : listener;
     }
 
     public static void setSupplyServerListener(SupplyPacketListeners.Server listener) {

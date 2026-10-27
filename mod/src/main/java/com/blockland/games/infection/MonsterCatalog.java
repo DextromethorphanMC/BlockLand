@@ -40,7 +40,10 @@ final class MonsterCatalog {
         float speed = 1;
         float knockbackResistance = 0;
         Skill skill = new Skill();
-        /** An always-on skill, or null; {@code death_blast}: the monster goes off when it dies (MonsterBlasts). */
+        /**
+         * An always-on skill, or null; {@code death_blast}: the monster goes off when it dies (MonsterBlasts);
+         * {@code blind_aura}: enemies close to it go blind (MonsterAuras).
+         */
         Skill passive;
     }
 
@@ -77,6 +80,13 @@ final class MonsterCatalog {
         float knockback = 0.9f;
         /** fireball: seconds it flies before fizzling out. */
         float lifetime = 6;
+        /**
+         * heal_allies: health given back to every infected ally within {@code radius} blocks (the monster itself too
+         * when {@code healSelf}). blind_aura (passive): every enemy within {@code radius} blocks of the monster's body
+         * gets {@code effect} / {@code amplifier} for {@code duration} seconds, renewed while it stays that close.
+         */
+        float heal = 20;
+        boolean healSelf;
 
         /** Seconds the skill keeps working on the monster itself (for its HUD); projectiles act on others. */
         float activeSeconds() {

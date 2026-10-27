@@ -16,6 +16,7 @@ grip in flat dark earth, the rails, sights, barrel, stock and magazines black (p
 import numpy as np
 
 import shapes as sh
+import smg_detail as sd
 from calico_model import picatinny
 from meshkit import Mesh
 from model_quality import arc_segments
@@ -226,8 +227,7 @@ def lower_mesh():
         a = np.array([0.0359, -0.0735]) / np.linalg.norm([0.0359, -0.0735])
         for k in range(6):
             c = np.array([-0.0202, -0.0374]) + a * (0.010 + 0.0105 * k) + np.array([0.0050, 0.0])
-            rib = sh.box(-0.0006, -0.0012, -0.0040, 0.0006, 0.0012, 0.0040, 0.0003, "lower")
-            m.merge(rib.translated((s * (LOWER_W + 0.0003), c[1], c[0])))
+            m.merge(sd.rib_x(LOWER_W, s, (c[0] - 0.0040, c[1]), (c[0] + 0.0040, c[1]), 0.0024, 0.0009, "lower"))
         # the release tabs' bosses
         m.merge(_stud(PADDLE_PIVOT[1] - 0.0060, PADDLE_PIVOT[2] + 0.0040, s * LOWER_W, s, 0.0040, 0.0006, "lower"))
     # the slim guard bar across the opening, under the trigger
@@ -256,17 +256,14 @@ def pistol_grip_mesh():
     n = 12
     for k in range(n + 1):
         u = k / n
-        d = -0.0080 + (GRIP_LEN + 0.0080) * u
+        d = -0.0080 + (GRIP_LEN + 0.0132) * u
         c = grip_center(d)
         depth = 0.0300 - 0.0100 * u + 0.0016 * np.sin(np.pi * u) + 0.0014 * smooth(0.88, 1.0, u)
         w = 0.0142 + 0.0008 * np.sin(np.pi * u) + 0.0012 * smooth(0.88, 1.0, u)
-        sec = sh.superellipse(w, depth, 2.8, 24, n_front=2.3)
+        sec = sh.superellipse(w, depth, 2.8, 32, n_front=2.3)
         rings.append(np.array([c + p[0] * np.array([1.0, 0, 0]) + p[1] * GRIP_FRONT for p in sec]))
-    for inset, dd in ((0.0018, 0.0030), (0.0055, 0.0052)):
-        c = grip_center(GRIP_LEN + dd)
-        sec = sh.offset_loop(sh.superellipse(w, depth, 2.8, 24, n_front=2.3), inset)
-        rings.append(np.array([c + p[0] * np.array([1.0, 0, 0]) + p[1] * GRIP_FRONT for p in sec]))
-    m = sh.loft(rings, "lower")
+    rings, soft = sd.round_end(rings, 0.0050)                   # the flared base rounded over
+    m = sh.loft(rings, "lower", soft_bands=soft)
     # stippled panels: raised pads on both flanks
     for s in (-1, 1):
         for d0, h in ((0.034, 0.022), (0.072, 0.018)):
@@ -279,8 +276,7 @@ def pistol_grip_mesh():
         d = 0.034 + 0.012 * k
         depth = 0.0300 - 0.0100 * (d + 0.008) / (GRIP_LEN + 0.008)
         c = grip_center(d) + (depth - 0.0008) * GRIP_FRONT
-        rib = sh.box(-0.0090, -0.0012, -0.0012, 0.0090, 0.0012, 0.0012, 0.0004, "lower")
-        m.merge(sh.place(rib, origin=c, x_axis=(1, 0, 0), y_axis=-GRIP_AXIS, z_axis=-GRIP_FRONT))
+        m.merge(sd.rib(c - (0.0090, 0, 0), c + (0.0090, 0, 0), 0.0024, 0.0010, GRIP_FRONT, "lower"))
     return m
 
 
@@ -365,9 +361,9 @@ def stock_mesh():
     pad = np.array([(0.4460, 0.0073), (0.4720, 0.0073), (STOCK_Z1, -0.0020), (STOCK_Z1, -0.1210), (0.4720, -0.1305),
                     (0.4460, -0.1305)])
     m.merge(sh.extrude_x(pad, (), 0.0135, round_bevel(0.0035, 2), "pad"))
-    for k in range(8):
+    for k in range(8):                                     # its moulded grip lines across the shoulder face
         y = -0.0140 - 0.0135 * k
-        m.merge(sh.box(-0.0120, y - 0.0012, STOCK_Z1 - 0.0004, 0.0120, y + 0.0012, STOCK_Z1 + 0.0008, 0.0003, "pad"))
+        m.merge(sd.rib((-0.0115, y, STOCK_Z1), (0.0115, y, STOCK_Z1), 0.0024, 0.0008, (0, 0, 1), "pad"))
     for y, z in ((0.0000, 0.4370), (-0.1100, 0.4370)):
         m.merge(_pin_x(y, z, -0.0105, 0.0105, 0.0032, "rail"))
     # the hinge knuckle at the front

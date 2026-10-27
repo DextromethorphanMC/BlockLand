@@ -1,0 +1,64 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "blockland:block/decor/vending_machine/side_upper",
+    "front_upper_left": "blockland:block/decor/vending_machine/front_upper_left",
+    "back_upper": "blockland:block/decor/vending_machine/back_upper",
+    "top": "blockland:block/decor/vending_machine/top"
+  },
+  "elements": [
+    {
+      "from": [
+        0,
+        0,
+        1
+      ],
+      "to": [
+        16,
+        16,
+        16
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#front_upper_left"
+        },
+        "south": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#back_upper",
+          "cullface": "south"
+        },
+        "east": {
+          "uv": [
+            0,
+            0,
+            16,
+            16
+          ],
+          "texture": "#particle",
+          "cullface": "east"
+        },
+        "up": {
+          "uv": [
+            0,
+            1,
+            16,
+            16
+          ],
+          "texture": "#top",
+          "cullface": "up"
+        }
+      }
+    }
+  ]
+}

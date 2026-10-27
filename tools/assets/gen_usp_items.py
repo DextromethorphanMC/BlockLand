@@ -18,7 +18,7 @@ def _skins(gun):
     return {k: v for k, v in skin_looks.weapon_skins(gun, "gun").items() if k != "default"}
 
 
-def side_items(g, mats, root="gun", hide_names=("mag_extended", "fx_shell"), offset=(0.0, 0.0, 0.0)):
+def side_items(g, mats, root="gun", hide_names=("mag_extended", "mag_drum", "fx_shell"), offset=(0.0, 0.0, 0.0)):
     """Meshes under `root` in its own space (rest pose, root reset), turned to a right-side view (muzzle right)."""
     ri = g.names[root]
     W = g.world_matrices({ri: {"translation": np.zeros(3), "rotation": np.array([0, 0, 0, 1.0])}})

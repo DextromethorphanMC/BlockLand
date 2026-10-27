@@ -19,5 +19,6 @@ def models():
         "attachment/bipod": under(),
         # the Thompson's wooden foregrip: the gun's walnut set, region underbarrel
         "attachment/tommy_grip": {"ao": {"mode": "together", "distance": 0.012},
-                                  "materials": {"wood_foregrip": ("tommy/walnut", "underbarrel")}},
+                                  "materials": {"wood_foregrip": ("tommy/walnut", "underbarrel"),
+                                                "steel_dark": ("common/steel_dark", "underbarrel")}},
     }

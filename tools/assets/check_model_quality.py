@@ -65,7 +65,11 @@ class PrecisionTests(unittest.TestCase):
         profile = [(0, 0), (0.02, 0), (0.02, 0.1), (0, 0.1)]
         coarse = sh.revolve(profile, 6, "steel")
         fine = sh.revolve(profile, 6, "steel", precision=True)
-        self.assertEqual(len(coarse.v), 24)
+        # the hexagon keeps its six sides (its profile's corners are rounded: VIEWMODEL_SPEC section 53)
+        v = np.array(coarse.v)
+        angles = np.unique(np.round(np.degrees(np.arctan2(v[:, 1], v[:, 0]))[np.hypot(v[:, 0], v[:, 1]) > 1e-9], 6))
+        self.assertEqual(len(angles), 6)
+        self.assertEqual(len(sh.revolve(profile, 6, "steel", rounding=False).v), 24)
         self.assertGreater(len(fine.v), len(coarse.v))
         self.assertGreater(sh.signed_volume(fine), 0)
         for primitive in build_primitives(fine):
@@ -185,7 +189,9 @@ def check_assets(baseline=None):
                     norm = g.accessor(pr["attributes"]["NORMAL"])
                     if not np.allclose(np.linalg.norm(norm, axis=1), 1, atol=0.002):
                         errors.append(f"{path.name}: non-unit normals")
-            if baseline:
+            if baseline and not (baseline / category / path.name).exists():
+                print(f"{category}/{path.name}: new since the baseline (not compared)")
+            elif baseline:
                 old = GLTF(baseline / category / path.name)
                 previous_contract = contract(old)
                 for field, value in contract(g).items():

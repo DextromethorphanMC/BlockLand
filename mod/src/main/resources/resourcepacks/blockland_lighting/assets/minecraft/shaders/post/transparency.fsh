@@ -63,7 +63,7 @@ vec3 blend( vec3 dst, vec4 src ) {
 // The opaque layer as seen through water (spec §15): refracted by the surface's waves (with dispersion), then seen
 // through the water's real depth — BlockLand's volume (bl_lighting.glsl's water optics: absorption per channel, the
 // biome's water colour scattered in) with Bliss's caustic pattern on the floor (ported from Bliss, Chocapic13' Shaders
-// edit, by Xonk, based on Chocapic13's shaders; see assets/blockland/shaders/include/bliss/LICENSE.md), weighed by the
+// edit, by Xonk, based on Chocapic13's shaders; see assets/blockland/shaders/include/bliss/license.md), weighed by the
 // sun's shadow at the floor and its depth under the surface.
 // `surface` is the translucent layer's view position, `surfaceNormal` its world normal and `footprint` the blocks one pixel
 // covers there (screen derivatives, taken in uniform control flow by the caller).

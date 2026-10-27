@@ -169,12 +169,18 @@ public abstract class TeamArenaGame implements GameInstance {
                 : Component.translatable("blockland.arena.hud.time_elapsed", PlayerUtil.formatTime(elapsedSeconds));
     }
 
+    /** Under the "开始！" title when the fight starts. */
+    protected Component startSubtitle() {
+        return Component.translatable(teamSettings.teamSize() == 1 ? "blockland.arena.start_sub.solo" : "blockland.arena.start_sub");
+    }
+
     /** The once-a-second action bar of a participant while PLAYING. */
     protected Component actionBar(ServerPlayer player) {
         long aliveTeams = teams.stream().filter(this::isAlive).count();
         PlayerState state = players.get(player.getUUID());
+        String alive = teamSettings.teamSize() == 1 ? "blockland.arena.hud.alive_players" : "blockland.arena.hud.alive_teams";
         return Component.empty()
-                .append(Component.translatable("blockland.arena.hud.alive_teams", aliveTeams).withStyle(ChatFormatting.AQUA))
+                .append(Component.translatable(alive, aliveTeams).withStyle(ChatFormatting.AQUA))
                 .append(MatchText.SEPARATOR)
                 .append(clockText().copy().withStyle(ChatFormatting.YELLOW))
                 .append(MatchText.SEPARATOR)
@@ -271,7 +277,7 @@ public abstract class TeamArenaGame implements GameInstance {
             PlayerState state = players.get(p.getUUID());
             if (state != null && state.alive) p.setGameMode(playingGameMode());
             PlayerUtil.title(p, Component.translatable("blockland.arena.start").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD),
-                    Component.translatable("blockland.arena.start_sub").withStyle(ChatFormatting.GRAY), 0, 30, 10);
+                    startSubtitle().copy().withStyle(ChatFormatting.GRAY), 0, 30, 10);
             PlayerUtil.sound(p, SoundEvents.PLAYER_LEVELUP, 1f, 1f);
         });
         checkWin();

@@ -12,6 +12,7 @@ dust cover under the barrel, a big squared trigger guard and a deep grip for the
 Every builder returns a meshkit.Mesh."""
 import numpy as np
 
+import organic as og
 import shapes as sh
 from meshkit import Mesh
 from p9_model import chamfer_bevel, extrude_z, fit_well, orient_radial, pin, round_bevel
@@ -149,7 +150,7 @@ def barrel_mesh():
         if len(f) > 4 and np.allclose(pv[:, 2], CROWN_Z):
             face_i = i
     loop = np.array(body.v)[list(body.f[face_i])]
-    body.f.pop(face_i), body.m.pop(face_i), body.uv.pop(face_i)
+    body.f.pop(face_i), body.m.pop(face_i), body.uv.pop(face_i), body.soft.pop(face_i)
     hole = np.stack([*sh.circle(0, 0, BORE_R, 20).T, np.full(20, CROWN_Z)], 1)
     sh.cap_polygon(body, loop, "barrel", [hole])
     m.merge(body)
@@ -233,28 +234,37 @@ def mag_outline(clear=0.0, count_corner=4):
                            (0.0030 + clear, 0.0030 + clear, 0.0060 + clear, 0.0060 + clear), count_corner)
 
 
+# the rubber wrap (sides and front strap, distance down the grip) and its finger grooves (section 55)
+PANEL_D = (0.0140, 0.0840)
+GROOVES = (0.0160, 0.0760, 3, 0.0018)
+
+
 def grip_mesh():
-    """The deep grip: a steel frame ring with wrap-around rubber panels (finger grooves on the front strap), the well."""
-    ds = [d for d, _ in GRIP_WIDTH]
-    widths = dict(GRIP_WIDTH)
-    rings, sections = [], []
+    """The deep grip: a steel frame ring with a wrap-around rubber sleeve standing proud of it (finger grooves on the
+    front strap), the well."""
+    ds = og.refine([d for d, _ in GRIP_WIDTH], PANEL_D + GROOVES[:2], 0.0035)
+    gd, gw = zip(*GRIP_WIDTH)
+    frames, sections = [], []
     for d in ds:
         c, s_dir, s_f, s_b = _ring_frame(d)
-        x, sv = _shape(0.5 * widths[d], s_f, s_b)
-        # three finger grooves across the front strap (the rubber wrap)
-        u = np.clip((d - 0.016) / 0.060, 0, 1)
-        groove = 0.0018 * (0.5 - 0.5 * np.cos(2 * np.pi * 3 * u)) * (0.016 < d < 0.076)
-        sv = np.where(sv > 0, np.maximum(sv - groove * (sv / max(s_f, 1e-6)) ** 4, 0.0), sv)
-        rings.append(c[None, :] + x[:, None] * np.array([1.0, 0, 0]) + sv[:, None] * s_dir[None, :])
-        sections.append(np.stack([x, sv], 1))
-    outer = sh.loft(rings, "polymer", cap_start=True, cap_end=False, auto_orient=False)
+        frames.append((c, s_dir))
+        sec = og.ring(0.5 * np.interp(d, gd, gw), s_f, s_b, 48, 2.2, 2.7, flat_sides=0.3)
+        # three finger grooves across the front strap (the rubber wrap), deepest on the strap's middle
+        groove = og.finger_grooves(d, *GROOVES)
+        sec[:, 1] = np.where(sec[:, 1] > 0, np.maximum(sec[:, 1] - groove * (sec[:, 1] / max(s_f, 1e-6)) ** 4, 0.0),
+                             sec[:, 1])
+        sections.append(sec)
+    # the wrap is a separate sleeve: its edge stands 0.5 mm proud of the steel back strap (a negative recess)
+    mask = og.panel_mask(sections, ds, *PANEL_D, side=0.45, front=True)
+    sections = og.recess(sections, mask, -0.0005)
+    rings = [c[None, :] + sec[:, 0:1] * np.array([1.0, 0, 0]) + sec[:, 1:2] * s_dir[None, :]
+             for (c, s_dir), sec in zip(frames, sections)]
+    outer = og.skin(rings, "polymer", mask)
     orient_radial(outer, GRIP_C0, AXIS, +1)
     top = outer.f[-1]
     pv = np.array(outer.v)[list(top)]
     if np.cross(pv[1] - pv[0], pv[2] - pv[0])[1] < 0:
         outer.f[-1] = tuple(reversed(top))
-    # the rubber wrap: sides and front strap below the frame
-    outer.set_material(lambda c, n: (abs(n[0]) > 0.30 or n[2] < -0.5) and -0.1150 < c[1] < -0.0440, "grip")
     well = fit_well(mag_outline(0.0008), ds, sections, GRIP_LEN, MAG_S, 0.036)
     to3 = lambda pts, d: (grip_center(d) + MAG_S * FRONT)[None, :] + pts[:, 0:1] * np.array([1.0, 0, 0]) \
         + pts[:, 1:2] * FRONT[None, :]

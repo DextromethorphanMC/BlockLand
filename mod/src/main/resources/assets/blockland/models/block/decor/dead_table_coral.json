@@ -1,0 +1,213 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "blockland:block/decor/coral/dead_table_side",
+    "dead_table_top": "blockland:block/decor/coral/dead_table_top"
+  },
+  "elements": [
+    {
+      "from": [
+        7,
+        0,
+        7
+      ],
+      "to": [
+        9,
+        6,
+        9
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            7,
+            10,
+            9,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            7,
+            10,
+            9,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            7,
+            10,
+            9,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            7,
+            10,
+            9,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            7,
+            7,
+            9,
+            9
+          ],
+          "texture": "#particle"
+        },
+        "down": {
+          "uv": [
+            7,
+            7,
+            9,
+            9
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        1,
+        6,
+        1
+      ],
+      "to": [
+        15,
+        8,
+        15
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            1,
+            8,
+            15,
+            10
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            1,
+            8,
+            15,
+            10
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            1,
+            8,
+            15,
+            10
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            1,
+            8,
+            15,
+            10
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#dead_table_top"
+        },
+        "down": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        4,
+        8,
+        4
+      ],
+      "to": [
+        12,
+        9,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            4,
+            7,
+            12,
+            8
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            4,
+            7,
+            12,
+            8
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            4,
+            7,
+            12,
+            8
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            4,
+            7,
+            12,
+            8
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#dead_table_top"
+        },
+        "down": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#particle"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,213 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "blockland:block/decor/coral/brain_dome_side",
+    "brain_dome_top": "blockland:block/decor/coral/brain_dome_top"
+  },
+  "elements": [
+    {
+      "from": [
+        1,
+        0,
+        1
+      ],
+      "to": [
+        15,
+        4,
+        15
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            1,
+            12,
+            15,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            1,
+            12,
+            15,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            1,
+            12,
+            15,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            1,
+            12,
+            15,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#brain_dome_top"
+        },
+        "down": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        2,
+        4,
+        2
+      ],
+      "to": [
+        14,
+        7,
+        14
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            2,
+            9,
+            14,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            2,
+            9,
+            14,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            2,
+            9,
+            14,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            2,
+            9,
+            14,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            2,
+            2,
+            14,
+            14
+          ],
+          "texture": "#brain_dome_top"
+        },
+        "down": {
+          "uv": [
+            2,
+            2,
+            14,
+            14
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        4,
+        7,
+        4
+      ],
+      "to": [
+        12,
+        9,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            4,
+            7,
+            12,
+            9
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            4,
+            7,
+            12,
+            9
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            4,
+            7,
+            12,
+            9
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            4,
+            7,
+            12,
+            9
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#brain_dome_top"
+        },
+        "down": {
+          "uv": [
+            4,
+            4,
+            12,
+            12
+          ],
+          "texture": "#particle"
+        }
+      }
+    }
+  ]
+}

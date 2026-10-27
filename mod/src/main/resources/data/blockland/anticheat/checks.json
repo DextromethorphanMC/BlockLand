@@ -72,6 +72,22 @@
       "signal": true,
       "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 0, "decay": 0.1, "weight": 0.6, "punish": true }
     },
+    "vehicle.control": {
+      "category": "movement",
+      "name": "载具操控",
+      "description": "载具模块拒绝的操控包：不在驾驶座上发送操控、油门或方向超出范围（载具移动由服务端按操控模拟，作弊无法直接改位置）。",
+      "latencySensitive": false,
+      "signal": true,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 0, "decay": 0.3, "weight": 0.4, "punish": true }
+    },
+    "vehicle.fire_rate": {
+      "category": "combat",
+      "name": "载具射速",
+      "description": "载具武器（坦克炮、机枪）在冷却结束前明显提前开火（载具模块已丢弃该发）。",
+      "latencySensitive": true,
+      "signal": true,
+      "defaults": { "enabled": true, "tolerance": 1.0, "setbackVl": 0, "kickVl": 60, "decay": 0.3, "weight": 0.5, "punish": true }
+    },
     "combat.reach": {
       "category": "combat",
       "name": "攻击距离",

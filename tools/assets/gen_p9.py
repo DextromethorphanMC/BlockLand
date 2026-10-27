@@ -2,6 +2,7 @@
 import numpy as np
 
 import armrig
+import drum_mags
 import meshkit as mk
 import p9_model as pm
 import p9_parts as pp
@@ -39,8 +40,17 @@ def build_meshes():
         "slide_stop": d(pp.slide_stop_mesh(), pm.STOP_PIVOT),
         "mag_standard": pp.mag_mesh(False),
         "mag_extended": pp.mag_mesh(True),
+        "mag_drum": drum()[0],
         "fx_shell": pp.shell_mesh(1.25),
     }
+
+
+DRUM = (0.045, 0.044)        # the 50-round drum's radius and width (section 56)
+
+
+def drum():
+    """The drum magazine (mag space) and where its drum sits (drum_mags.side_drum)."""
+    return drum_mags.side_drum(pp.mag_mesh(False), *DRUM)
 
 
 def add_materials(g):
@@ -109,6 +119,7 @@ def build(path, clips):
         if name == "mag":
             g.add_node("mag_standard", "mag", mesh=mesh_idx["mag_standard"])
             g.add_node("mag_extended", "mag", mesh=mesh_idx["mag_extended"])
+            g.add_node("mag_drum", "mag", mesh=mesh_idx["mag_drum"])
     for name, (parent, t, rot, scale) in rig.MOUNTS.items():       # section 19: attachment mounts
         g.add_node(name, parent, t, rot, scale=scale)
     for side, shoulder in (("R", rig.SHOULDER_R), ("L", rig.SHOULDER_L)):
@@ -133,6 +144,8 @@ def build(path, clips):
     for side in ("R", "L"):
         rest_vals.update(armrig.rest_values(rest, side))
     info = {}
+    # the drum's own reloads (section 56): the support hand on the drum, not under a box magazine's base
+    clips = list(clips) + drum_mags.drum_clips(clips, rig.ANCHORS, drum_mags.p9_holds(rig, drum()[1]))
     for clip in clips:
         info[clip.name] = bake_clip(g, clip, rest_vals)
     g.save(path)

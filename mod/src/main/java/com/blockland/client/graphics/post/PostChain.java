@@ -177,7 +177,8 @@ public final class PostChain implements AutoCloseable {
             decoded = atmosphere.apply(ctx, s, decoded, worldDepth, in.handDepth());
         }
 
-        // 2. anti-aliasing / upscaling
+        // 2. anti-aliasing / upscaling (world pixels on moving vehicles carry their own motion: ObjectMotionBlock)
+        ObjectMotionBlock.update(ctx);
         Upscaler.Frame resolve = new Upscaler.Frame(ctx, decoded, in.worldDepth(), in.reprojection(), in.historyValid());
         GpuTextureView color;
         try (FrameTimings.Span ignored = FrameTimings.span("bl/post/upscale")) {

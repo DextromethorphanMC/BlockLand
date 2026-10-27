@@ -37,7 +37,7 @@ MIN_TRAVEL = 0.07                  # the cocking knob's stroke in fire and reloa
 
 
 def claims(path, names):
-    return "mag_drum" in names
+    return "mag_drum" in names and "mag_stick" in names        # other guns' drums (section 56) have no stick
 
 
 def check_nodes(g, r, label):

@@ -22,7 +22,7 @@ BlockLand's volumetric clouds (RENDERING_SPEC.md §14) and water surface (§15) 
 the noise texture they sample (`assets/blockland/textures/bliss/noises.png`). They keep their authors' credit in every
 ported file and are not BlockLand's own work. Bliss's licence (Chocapic13's rules: credit required, no claiming the code
 as one's own, the same rules for anything shared on) is shipped next to them in
-`assets/blockland/shaders/include/bliss/LICENSE.md`. The water on the lens (§27) re-implements Bliss's idea in
+`assets/blockland/shaders/include/bliss/license.md`. The water on the lens (§27) re-implements Bliss's idea in
 BlockLand's own code.
 
 | Our feature | From | Authors | Source |

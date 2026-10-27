@@ -69,6 +69,13 @@
               }
             },
             {
+              "when": "silver_beads",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/jackhammer_silver_beads"
+              }
+            },
+            {
               "when": "neon",
               "model": {
                 "type": "minecraft:model",
@@ -146,6 +153,13 @@
               "model": {
                 "type": "minecraft:model",
                 "model": "blockland:item/jackhammer_held_gold_beads"
+              }
+            },
+            {
+              "when": "silver_beads",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/jackhammer_held_silver_beads"
               }
             },
             {

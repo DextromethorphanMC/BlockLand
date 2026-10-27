@@ -173,7 +173,7 @@ final class WatchedGun {
             return;
         }
         boolean empty = kind == 1;
-        viewmodel.play(Viewmodel.Action.RELOAD, empty ? gun.anims.reloadEmpty : gun.anims.reload, stats.reloadTime(empty));
+        viewmodel.play(Viewmodel.Action.RELOAD, stats.reloadClip(empty, viewmodel::hasClip), stats.reloadTime(empty));
     }
 
     /**

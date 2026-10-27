@@ -228,6 +228,19 @@
         }
       }
     },
+    "silver_beads": {
+      "name": "钢银链珠",
+      "rarity": "legendary",
+      "for": [
+        "gun"
+      ],
+      "regions": {
+        "*": {
+          "pbr": "textures/pbr/skin/camo/silver_beads",
+          "uvScale": 0.416667
+        }
+      }
+    },
     "neon": {
       "name": "霓虹回路",
       "rarity": "legendary",

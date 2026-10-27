@@ -77,8 +77,33 @@ def heavy_stock():
     # 25 mm rubber recoil pad
     pad = sh.rounded_rect(-0.0215, -0.1200, 0.0215, 0.0180, 0.0100, 3)
     m.merge(extrude_z(pad, (), 0.2450, 0.2700, round_bevel(0.0045, 2), "stock_pad"))
+    m.merge(_heavy_details(am))
     p.meshes["attachment"] = m
     return p
+
+
+def _heavy_details(am):
+    """The heavy stock's small parts: three wrench notches in the castle nut, the buffer tube's row of position holes
+    underneath, a sling slot through the toe, and grip ribs across the back of the recoil pad."""
+    m = Mesh()
+    for k in range(3):                                                           # castle nut notches
+        a = np.pi / 2 + k * 2 * np.pi / 3
+        c = np.array([0.0170 * np.cos(a), -0.0070 + 0.0170 * np.sin(a), 0.0210])
+        u = np.array([np.cos(a), np.sin(a), 0.0])
+        v = np.array([-np.sin(a), np.cos(a), 0.0])
+        notch = sh.box(-0.0016, -0.0012, -0.0041, 0.0016, 0.0003, 0.0041, 0.0002, "attachment")
+        mat = np.eye(4)
+        mat[:3, 0], mat[:3, 1], mat[:3, 2], mat[:3, 3] = v, u, (0, 0, 1), c
+        m.merge(notch.transformed(mat))
+    for k in range(6):                                                           # position holes under the tube
+        m.merge(sh.disc((0.0, -0.0070 - 0.01452, 0.0320 + k * 0.0095), (0, -1, 0), 0.0021, 12, "steel_dark"))
+    # sling slot through the toe (dark: the hole) framed by a raised lip each side
+    for sx in (-1, 1):
+        m.merge(sh.box(sx * 0.0201 - 0.0004, -0.1020, 0.2060, sx * 0.0201 + 0.0004, -0.0960, 0.2330, 0.0002, "steel_dark"))
+    for k in range(7):                                                           # pad ribs across its back
+        y = -0.1080 + k * 0.0180
+        m.merge(sh.box(-0.0175, y - 0.0028, 0.2690, 0.0175, y + 0.0028, 0.2712, 0.0010, "stock_pad"))
+    return m
 
 
 def wire_stock():
@@ -105,6 +130,8 @@ def wire_stock():
     pad = np.array([(0.2160, 0.0030), (0.2230, 0.0010), (0.2260, -0.0400), (0.2230, -0.0930), (0.2160, -0.0950),
                     (0.2185, -0.0400)])
     m.merge(sh.extrude_x(pad, (), 0.0170, round_bevel(0.0020, 2), "stock_pad"))
+    import attach_details as ad
+    m.merge(ad.wire_stock())
     p.meshes["attachment"] = m
     return p
 

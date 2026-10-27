@@ -29,7 +29,7 @@ MESH_NODES = set(STATIC) | {"hammer", "trigger", "latch", "crane", "cylinder", "
 EMPTY_NODES = {"viewmodel", "aim_iron", "mag", "muzzle", "ejection", "arm_R", "arm_R_fore", "arm_L", "arm_L_fore",
                "camera", "mount_optic", "mount_charm"}
 ABSENT = ("slide", "mount_laser", "mount_barrel", "mount_stock", "mount_underbarrel", "mag_extended")
-REGIONS = {"steel": "body", "barrel": "barrel", "grip": "grip", "steel_dark": "detail", "bore": "none",
+REGIONS = {"steel": "body", "barrel": "barrel", "grip": "grip", "grip_checker": "grip", "steel_dark": "detail", "bore": "none",
            "insert": "none", "brass": "none", "bullet": "none", "loader": "magazine"}
 NO_SET = {"bore", "insert"}             # flat colours (no texture set)
 CLIPS = ("idle", "draw", "fire", "fire_ads", "reload", "inspect", "walk", "sprint", "tac_sprint")

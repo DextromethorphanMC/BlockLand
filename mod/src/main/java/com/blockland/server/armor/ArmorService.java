@@ -4,6 +4,7 @@ import com.blockland.armor.ArmorContent;
 import com.blockland.armor.ArmorRules;
 import com.blockland.armor.VestState;
 import com.blockland.combat.HitRecords;
+import com.blockland.combat.RoundTraits;
 import com.blockland.network.ArmorPacketListeners;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.packet.ArmorPackets;
@@ -58,7 +59,8 @@ public final class ArmorService implements ArmorPacketListeners.Server {
             if (hit != null && hit.headshot() && hit.gameTime() == level.getGameTime()) return amount;
         }
         VestState before = ArmorContent.stateOf(vest);
-        ArmorRules.Absorbed result = rules.absorb(before, amount * share);
+        // an armour-piercing round wears the plates faster (combat/RoundTraits)
+        ArmorRules.Absorbed result = rules.absorb(before, amount * share, RoundTraits.current().armorDamage());
         if (!result.state().equals(before)) vest.set(ArmorContent.VEST_STATE.get(), result.state());
         if (result.soaked() > 0) {
             level.playSound(null, victim.getX(), victim.getY() + 1.1, victim.getZ(), ArmorContent.sound("armor.plate_hit"),

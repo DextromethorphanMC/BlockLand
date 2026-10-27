@@ -116,17 +116,28 @@ public final class ArmorRules {
      * its durability runs out; the carrier cuts what gets past them by {@link #vestProtection}.
      */
     public Absorbed absorb(VestState state, float covered) {
+        return absorb(state, covered, 1);
+    }
+
+    /**
+     * {@link #absorb(VestState, float)} for a round that wears plates {@code wear} times as fast as an ordinary one (an
+     * armour-piercing round: {@code combat/RoundTraits.armorDamage}): each point a plate soaks costs it {@code wear} of
+     * its durability, so it breaks sooner and lets the rest through.
+     */
+    public Absorbed absorb(VestState state, float covered, float wear) {
+        float cost = Math.max(0.05f, wear);
         List<Float> plates = new ArrayList<>(state.plates());
         float left = Math.max(0, covered);
         int broken = 0;
         while (left > 0 && !plates.isEmpty()) {
             int outer = plates.size() - 1;
             float durability = plates.get(outer);
-            if (durability > left) {
-                plates.set(outer, durability - left);
+            float holds = durability / cost;
+            if (holds > left) {
+                plates.set(outer, durability - left * cost);
                 left = 0;
             } else {
-                left -= durability;
+                left -= holds;
                 plates.remove(outer);
                 broken++;
             }

@@ -15,6 +15,10 @@ public final class AntiCheatSignals {
     public static final String MELEE_RATE = "combat.melee_rate";
     /** The parachute module's flight check failed (no sinking under the canopy, too fast sideways, climbing). */
     public static final String PARACHUTE = "movement.parachute";
+    /** A vehicle control packet the vehicle module refused (not the driver, values out of range). */
+    public static final String VEHICLE_CONTROL = "vehicle.control";
+    /** A vehicle weapon fired well before its interval was over (the vehicle module dropped the shot). */
+    public static final String VEHICLE_FIRE_RATE = "vehicle.fire_rate";
 
     private AntiCheatSignals() {
     }

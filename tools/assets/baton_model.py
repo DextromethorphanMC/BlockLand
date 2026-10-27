@@ -38,15 +38,16 @@ def handle_mesh():
     m.merge(_lathe([(0.0, -0.070), (R_HANDLE, -0.070), (R_HANDLE, z1 + 0.0065), (R_COLLAR, z1 + 0.0055),
                     (R_COLLAR, z1 + 0.0012), (R_COLLAR - 0.0008, z1), (0.0094, z1), (0.0094, z1 + 0.004),
                     (0.0, z1 + 0.004)], "hardware"))
-    # grip: rubber rings with grooves every 6 mm and a swell under the palm
+    # grip: rubber rings with grooves every 6 mm and a swell under the palm (six profile points per groove: a flat
+    # land, a crisp groove)
     zs, rs = [], []
     a, b = GRIP_Z
-    n = 25
+    n = 25 * 6
     for k in range(n + 1):
         z = a + (b - a) * k / n
         u = k / n
         swell = 1.0 + 0.06 * np.sin(np.pi * u) ** 1.5
-        groove = 0.0 if k in (0, n) else 0.0007 * (0.5 + 0.5 * np.cos(2 * np.pi * (z - a) / 0.006))
+        groove = 0.0 if k in (0, n) else 0.0009 * (0.5 + 0.5 * np.cos(2 * np.pi * (z - a) / 0.006)) ** 3
         zs.append(z)
         rs.append(R_GRIP * swell - groove)
     prof = [(0.0, a)] + [(r, z) for r, z in zip(rs, zs)]

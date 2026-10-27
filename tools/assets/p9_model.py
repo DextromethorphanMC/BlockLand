@@ -3,6 +3,7 @@
 Every builder returns a meshkit.Mesh in the design frame; gen_p9 moves meshes into node-local space."""
 import numpy as np
 
+import organic as og
 import shapes as sh
 from meshkit import Mesh
 
@@ -97,8 +98,9 @@ def slide_mesh():
             s = sh.offset_loop(s, inset)
         secs.append(np.stack([s[:, 0], s[:, 1], np.full(len(s), z)], 1))
 
-    add(SZ0, inset=0.0012)
-    add(SZ0 + 0.0012)
+    # the nose: a carry bevel tapering the slide's front 9 mm in (holsters, and the look of a modern slide)
+    for dz, ins in ((0.0, 0.0022), (0.0012, 0.0015), (0.0035, 0.0008), (0.0062, 0.0003), (0.0090, 0.0)):
+        add(SZ0 + dz, inset=ins)
     for k in range(6):                                    # front serrations
         z0 = -0.0800 + k * 0.0036
         add(z0), add(z0 + 0.0003, "groove", depth=0.0007), add(z0 + 0.0015, "groove", depth=0.0007), add(z0 + 0.0018)
@@ -250,23 +252,31 @@ def fit_well(well, ds, sections, grip_len, mag_s, depth, margin=0.0004):
     return pts - np.array([0.0, mag_s])
 
 
+# the stippled side panels (distance down the grip) and the front strap's finger grooves (section 55)
+PANEL_D = (0.0125, 0.0715)
+GROOVES = (0.0150, 0.0640, 3, 0.0009)
+
+
 def grip_mesh():
-    ds = [d for d, _ in GRIP_WIDTH]
-    widths = dict(GRIP_WIDTH)
-    rings, sections = [], []
+    ds = og.refine([d for d, _ in GRIP_WIDTH], PANEL_D + GROOVES[:2], 0.0035)
+    gd, gw = zip(*GRIP_WIDTH)
+    frames, sections = [], []
     for d in ds:
         c, s_dir, s_f, s_b = _ring_frame(d)
-        x, sv = _shape(0.5 * widths[d], s_f, s_b)
-        rings.append(c[None, :] + x[:, None] * np.array([1.0, 0, 0]) + sv[:, None] * s_dir[None, :])
-        sections.append(np.stack([x, sv], 1))
-    outer = sh.loft(rings, "polymer", cap_start=True, cap_end=False, auto_orient=False)
+        s_f = s_f - og.finger_grooves(d, *GROOVES)
+        frames.append((c, s_dir))
+        sections.append(og.ring(0.5 * np.interp(d, gd, gw), s_f, s_b, 48, 2.2, 2.6, flat_sides=0.35))
+    # the panels sit 0.45 mm into the polymer, a sloped step round them (a real panel line, not a colour change)
+    mask = og.panel_mask(sections, ds, *PANEL_D, side=0.55)
+    sections = og.recess(sections, mask, 0.00045)
+    rings = [c[None, :] + sec[:, 0:1] * np.array([1.0, 0, 0]) + sec[:, 1:2] * s_dir[None, :]
+             for (c, s_dir), sec in zip(frames, sections)]
+    outer = og.skin(rings, "polymer", mask)
     orient_radial(outer, GRIP_C0, AXIS, +1)
     top = outer.f[-1]                                    # the top cap: must face up
     pv = np.array(outer.v)[list(top)]
     if np.cross(pv[1] - pv[0], pv[2] - pv[0])[1] < 0:
         outer.f[-1] = tuple(reversed(top))
-    # stippled side panels
-    outer.set_material(lambda c, n: abs(n[0]) > 0.35 and -0.0950 < c[1] < -0.0385, "grip")
     # bottom face around the magazine well + well walls
     c_end, _, _, _ = _ring_frame(GRIP_LEN)
     # the magazine's corners nearly touch the rounded front strap: the well follows the grip there

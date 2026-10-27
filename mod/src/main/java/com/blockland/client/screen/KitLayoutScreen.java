@@ -180,6 +180,7 @@ public final class KitLayoutScreen extends Screen {
         int armor = KitSlots.ARMOR.indexOf(slot);
         if (armor >= 0) return new int[]{left, top + armor * SLOT};
         if (KitSlots.OFFHAND.equals(slot)) return new int[]{left, top + 4 * SLOT + 8};
+        if (KitSlots.BACKPACK.equals(slot)) return new int[]{left, top + 5 * SLOT + 12};
         int index = KitSlots.mainIndex(slot);
         if (index < 0) return null;
         if (index < 9) return new int[]{gridX + index * SLOT, top + 3 * SLOT + 8};
@@ -191,6 +192,7 @@ public final class KitLayoutScreen extends Screen {
     private List<String> allSlots() {
         List<String> slots = new ArrayList<>(KitSlots.ARMOR);
         slots.add(KitSlots.OFFHAND);
+        slots.add(KitSlots.BACKPACK);
         for (int i = 0; i < KitSlots.MAIN_SLOTS; i++) slots.add(String.valueOf(i));
         return slots;
     }

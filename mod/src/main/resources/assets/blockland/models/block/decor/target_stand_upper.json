@@ -1,0 +1,146 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "blockland:block/decor/target_stand/straw",
+    "face": "blockland:block/decor/target_stand/face",
+    "wood": "blockland:block/decor/target_stand/wood"
+  },
+  "elements": [
+    {
+      "from": [
+        1,
+        1,
+        6
+      ],
+      "to": [
+        15,
+        15,
+        8
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#face"
+        },
+        "south": {
+          "uv": [
+            1,
+            1,
+            15,
+            15
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            6,
+            1,
+            8,
+            15
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            8,
+            1,
+            10,
+            15
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            1,
+            6,
+            15,
+            8
+          ],
+          "texture": "#particle"
+        },
+        "down": {
+          "uv": [
+            1,
+            8,
+            15,
+            10
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        7,
+        0,
+        8
+      ],
+      "to": [
+        9,
+        9,
+        10
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            7,
+            7,
+            9,
+            16
+          ],
+          "texture": "#wood"
+        },
+        "south": {
+          "uv": [
+            7,
+            7,
+            9,
+            16
+          ],
+          "texture": "#wood"
+        },
+        "west": {
+          "uv": [
+            8,
+            7,
+            10,
+            16
+          ],
+          "texture": "#wood"
+        },
+        "east": {
+          "uv": [
+            6,
+            7,
+            8,
+            16
+          ],
+          "texture": "#wood"
+        },
+        "up": {
+          "uv": [
+            7,
+            8,
+            9,
+            10
+          ],
+          "texture": "#wood"
+        },
+        "down": {
+          "uv": [
+            7,
+            6,
+            9,
+            8
+          ],
+          "texture": "#wood"
+        }
+      }
+    }
+  ]
+}

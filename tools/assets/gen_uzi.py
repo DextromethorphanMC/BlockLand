@@ -9,6 +9,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import armrig                                      # noqa: E402
+import drum_mags                                   # noqa: E402
 import meshkit as mk                               # noqa: E402
 import textures as tx                              # noqa: E402
 import uzi_model as um                             # noqa: E402
@@ -54,8 +55,17 @@ def build_meshes():
         "muzzle_brake": d(um.muzzle_brake_mesh(), "muzzle_brake"),
         "mag_standard": um.mag_mesh(False),
         "mag_extended": um.mag_mesh(True),
+        "mag_drum": drum()[0],
         "fx_shell": um.shell_mesh(),
     }
+
+
+DRUM = (0.056, 0.052)        # the 100-round drum's radius and width (section 56)
+
+
+def drum():
+    """The drum magazine (mag space): the box magazine down to just under the grip, the drum seated there."""
+    return drum_mags.side_drum(drum_mags.trim(um.mag_mesh(False), um.GRIP_BOTTOM_LOCAL - 0.006), *DRUM)
 
 
 def add_materials(g):
@@ -90,6 +100,7 @@ def build(path, clips):
         if name == "mag":
             g.add_node("mag_standard", "mag", mesh=mesh_idx["mag_standard"])
             g.add_node("mag_extended", "mag", mesh=mesh_idx["mag_extended"])
+            g.add_node("mag_drum", "mag", mesh=mesh_idx["mag_drum"])
     for name, (parent, t, rot, scale) in rig.MOUNTS.items():       # section 19: attachment mounts
         g.add_node(name, parent, t, rot, scale=scale)
     for side, shoulder in (("R", rig.SHOULDER_R), ("L", rig.SHOULDER_L)):
@@ -110,6 +121,8 @@ def build(path, clips):
                                     "rotation": rest[f"arm_{side}"]["rotation"]}
         rest_vals[f"arm_{side}_fore"] = {"rotation": rest[f"arm_{side}_fore"]["rotation"]}
         rest_vals.update(armrig.rest_values(rest, side))
+    # the drum's own reloads (section 56): the support hand on the drum, not round a box magazine's lower body
+    clips = list(clips) + drum_mags.drum_clips(clips, rig.ANCHORS, drum_mags.uzi_holds(rig, drum()[1]))
     info = {clip.name: bake_clip(g, clip, rest_vals) for clip in clips}
     g.save(path)
     return tri_counts, info

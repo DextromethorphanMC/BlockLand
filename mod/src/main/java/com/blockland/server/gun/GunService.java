@@ -7,6 +7,7 @@ import com.blockland.combat.Ballistics;
 import com.blockland.combat.HitRecords;
 import com.blockland.combat.HitShapes;
 import com.blockland.combat.HurtCheck;
+import com.blockland.combat.RoundTraits;
 import com.blockland.server.anticheat.api.AntiCheatSignals;
 import com.blockland.server.anticheat.api.Suspicion;
 import com.blockland.server.combat.HitHistory;
@@ -241,10 +242,12 @@ public final class GunService implements GunPacketListeners.Server {
             for (int pellet = 0; pellet < pellets; pellet++) {
                 int index = round * pellets + pellet;
                 Vec3 dir = GunMath.spreadDirection(yaw, pitch, spread, fire.seed(), index);
-                Shot shot = trace(level, player, eye, dir, stats.range(), stats.ammo().medium(), fire.seenAt(index), rewind);
+                Shot shot = trace(level, player, eye, dir, stats.range(), stats.medium(), fire.seenAt(index), rewind);
                 boolean wounded = shot.entity != null && damage(level, player, stats, shot, eye);
                 BLNetwork.sendToTracking(player, new GunPackets.S2CShot(player.getId(), shot.end.x, shot.end.y, shot.end.z, shot.hitBlock,
                         shot.face, stats.suppressed(), hand, wounded));
+                // blocks that answer rounds (a target's pulse) hear about it; the gun module never knows which
+                if (shot.hitBlock) com.blockland.common.block.BulletReactive.struck(level, shot.end, net.minecraft.core.Direction.values()[shot.face], player);
             }
         }
         playFire(level, player, stats, shots);
@@ -360,11 +363,17 @@ public final class GunService implements GunPacketListeners.Server {
         }
         boolean wasSpectator = target.isSpectator();
         float before = HurtCheck.vitality(target);
-        if (!target.hurtServer(level, source, amount)) return false;
+        // what the round carries (armour-piercing, incendiary …) goes along with its hurt: armour and hulls read it
+        RoundTraits.Traits traits = stats.traits();
+        boolean[] hurt = new boolean[1];
+        RoundTraits.during(traits, () -> hurt[0] = target.hurtServer(level, source, amount));
+        if (!hurt[0]) return false;
         // minigames cancel player deaths and turn the victim into a spectator instead
         boolean killed = !target.isAlive() || target instanceof LivingEntity living && living.isDeadOrDying()
                 || !wasSpectator && target.isSpectator();
         boolean wounded = HurtCheck.hurt(target, before, killed);
+        // an incendiary round sets what it really wounded alight
+        if (wounded && !killed && traits.fireSeconds() > 0 && !target.fireImmune()) target.igniteForSeconds(traits.fireSeconds());
         GunPackets.HitKind kind = killed ? (head ? GunPackets.HitKind.HEAD_KILL : GunPackets.HitKind.KILL)
                 : head ? GunPackets.HitKind.HEAD : GunPackets.HitKind.BODY;
         BLNetwork.sendTo(shooter, new GunPackets.S2CHit(kind, amount, target.getId(), wounded, shot.end.x, shot.end.y, shot.end.z));

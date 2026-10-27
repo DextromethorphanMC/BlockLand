@@ -1,0 +1,9 @@
+{
+  "description": "原版投掷物命中玩家时的击退：雪球、鸡蛋、钓鱼竿浮漂在原版里对玩家 0 伤害、什么也不做。只在模式设置 projectileKnockback 打开的对局里生效，并照常服从模式的伤害规则（倒计时、队友、已阵亡）；命中不扣血，投掷者记为最后攻击者（被打下虚空算他的击杀）。knockback 与原版近战的基础击退同一单位（0.4）。",
+  "memorySeconds": 5,
+  "projectiles": {
+    "minecraft:snowball": { "knockback": 0.45 },
+    "minecraft:egg": { "knockback": 0.45 },
+    "minecraft:fishing_bobber": { "knockback": 0.35 }
+  }
+}

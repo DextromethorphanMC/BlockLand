@@ -11,6 +11,8 @@
     "BombPackets.C2SPlant": { "perSecond": 20, "burst": 30 },
     "BombPackets.C2SDefuse": { "perSecond": 20, "burst": 30 },
     "ParachutePackets.C2SToggle": { "perSecond": 5, "burst": 10 },
+    "VehiclePackets.C2SControl": { "perSecond": 25, "burst": 50 },
+    "VehiclePackets.C2SAction": { "perSecond": 30, "burst": 40 },
     "SupplyPackets.C2SUse": { "perSecond": 5, "burst": 10 },
     "ArmorPackets.C2SInsert": { "perSecond": 4, "burst": 8 },
     "FarTerrainPackets.C2SRequest": { "perSecond": 12, "burst": 30 },

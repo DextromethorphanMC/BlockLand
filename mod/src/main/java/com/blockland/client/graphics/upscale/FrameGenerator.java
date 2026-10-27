@@ -163,7 +163,8 @@ public final class FrameGenerator implements StreamlineHost.Client {
                 ubo.pass(reprojection, rw, rh, 1f / rw, 1f / rh);
                 Fullscreen.pass("BlockLand frame generation: motion", motion.view, DlssUpscaler.MOTION)
                         .sampler("ColorSampler", decoded).sampler("WorldDepthSampler", ctx.worldDepth)
-                        .sampler("HandVelocitySampler", ctx.handVelocity != null ? ctx.handVelocity : still()).uniform(ubo).draw();
+                        .sampler("HandVelocitySampler", ctx.handVelocity != null ? ctx.handVelocity : still()).uniform(ubo)
+                        .uniform(com.blockland.client.graphics.post.ObjectMotionBlock.BLOCK, com.blockland.client.graphics.post.ObjectMotionBlock.slice()).draw();
                 camera = DlssUpscaler.parameters(ctx, reprojection, historyValid);
             }
             presenter.present(Graphics.settings().frameGeneration, camera);

@@ -49,6 +49,8 @@ def main():
     os.makedirs(logs, exist_ok=True)
     classpath = os.pathsep.join(check_shaders.lwjgl())
     sources = glob.glob(os.path.join(BRIDGE, "*.java")) + [os.path.join(HERE, name) for name in ("DlssCheck.java", "FrameGenCheck.java", "NeuralCheck.java", "RayReconstructionCheck.java")]
+    # what the bridge calls outside itself that needs Minecraft: check-only stand-ins (stubs/)
+    sources += glob.glob(os.path.join(HERE, "stubs", "**", "*.java"), recursive=True)
     env = dict(os.environ, JAVA_TOOL_OPTIONS="")
     if subprocess.call([jdk_tool("javac"), "-nowarn", "-d", classes, "-cp", classpath] + sources, env=env) != 0:
         sys.exit("compile failed")

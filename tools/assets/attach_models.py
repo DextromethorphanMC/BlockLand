@@ -8,6 +8,7 @@ import numpy as np
 import p9_model as pm
 import p9_parts as pp
 import shapes as sh
+import attach_details as ad
 import textures as tx
 from meshkit import Mesh
 from p9_model import chamfer_bevel, extrude_z
@@ -47,7 +48,7 @@ def mini_reddot():
     hood_axis = (0.0, 0.0260)                                       # centre of the hood's window (design frame)
     m.set_material(lambda c, n: 0.0375 <= c[2] <= 0.0475 and abs(c[0]) <= 0.0099 and 0.0185 <= c[1] <= 0.0335
                    and abs(n[2]) < 0.9 and _inward(c, n, hood_axis, 0.3), "interior")
-    p.meshes["attachment"] = m.translated(-MINI_BASE)
+    p.meshes["attachment"] = m.translated(-MINI_BASE).merge(ad.mini_reddot())
     reticle = np.array([0.0, pm.REDDOT_Y, pm.REDDOT_GLASS_Z + 0.0003]) - MINI_BASE
     p.node("reticle", "attachment", reticle, pp.reticle_mesh(0.0018))
     p.node("aim", "attachment", reticle + np.array([0.0, 0.0, EYE_RELIEF]))
@@ -93,6 +94,7 @@ def reddot():
             for a in np.linspace(0, 2 * np.pi, 20, endpoint=False)]
     glass.add_poly(ring, "glass")
     m.merge(glass)
+    m.merge(ad.reddot(TUBE_H, TUBE_R))
     p.meshes["attachment"] = m
     reticle = np.array([0.0, TUBE_H, TUBE_GLASS_Z + 0.0003])
     p.node("reticle", "attachment", reticle, pp.reticle_mesh(0.0020))
@@ -132,6 +134,32 @@ def _hood_outline():
     right = [(xo - re + re * np.cos(a), ye - re + re * np.sin(a)) for a in np.linspace(0, np.pi / 2, 4)]
     left = [(-xo + re + re * np.cos(a), ye - re + re * np.sin(a)) for a in np.linspace(np.pi / 2, np.pi, 4)]
     return np.array([(-xo, yb), (xo, yb)] + right + [(xe, ye), (xe, yt), (-xe, yt), (-xe, ye)] + left)
+
+
+def _holo_details(zr, zf, zg, D, ox):
+    """What the holo's body and hood carry besides their shapes, all outside the sight lines: hood screws low on both
+    sides, grip serrations along the body's flanks behind the hood, the battery door with its latch at the front of
+    the body, and the quick-detach lever beside the clamp's thumb nut."""
+    m = Mesh()
+    head = sh.revolve([(0.0, 0.0004), (0.0007, 0.0004), (0.0008, 0.0002), (0.0011, 0.0003), (0.0014, 0.0),
+                       (0.0014, -0.0006), (0.0, -0.0006)], 16, "steel_dark")
+    for side in (-1.0, 1.0):
+        for t in (0.20, 0.75):                                                   # hood screws, low on each side wall
+            z = zg - D * t
+            x = side * (0.0200 + ox * D * t + 0.0002)
+            m.merge(sh.place(head, origin=(x, 0.0150, z), x_axis=(0, 0, -side), y_axis=(0, 1, 0), z_axis=(side, 0, 0)))
+        for k in range(7):                                                        # flank serrations
+            z = 0.0070 + k * 0.0036
+            m.merge(sh.box(side * 0.0150 - 0.0003, 0.0068, z - 0.0007, side * 0.0150 + 0.0003, 0.0150, z + 0.0007,
+                           0.0002, "attachment"))
+    # battery door on the body's front: a raised cover hinged at its front edge, a latch tab at its rear
+    m.merge(sh.box(-0.0118, 0.0106, zf + 0.0030, 0.0118, 0.0128, zf + 0.0130, 0.0006, "attachment"))
+    m.merge(_cyl_axis(0.0012, 0.0230, (0.0, 0.0118, zf + 0.0030), "x", "steel_dark", 12))
+    m.merge(sh.box(-0.0040, 0.0112, zf + 0.0128, 0.0040, 0.0136, zf + 0.0150, 0.0004, "steel_dark"))
+    # quick-detach lever: lies along the clamp from the thumb nut towards the rear
+    m.merge(sh.box(-0.0146, 0.0012, 0.0120, -0.0128, 0.0050, 0.0360, 0.0006, "steel_dark"))
+    m.merge(sh.box(-0.0150, 0.0018, 0.0330, -0.0124, 0.0060, 0.0380, 0.0006, "steel_dark"))
+    return m
 
 
 def holo():
@@ -174,6 +202,7 @@ def holo():
     sh.cap_polygon(hood, _at_z(sh.offset_loop(outD, c), zg - D), "attachment", holes3d=[_at_z(in_front, zg - D)],
                    flip=True)
     m.merge(hood)
+    m.merge(_holo_details(zr, zf, zg, D, ox))
     # the window: the hood's opening at the glass plane, facing the eye
     uv = [((x + HOLO_W / 2) / HOLO_W, (cy + HOLO_WH / 2 - y) / HOLO_WH) for x, y in inner]
     m.add_poly(_at_z(inner, zg), "glass", uvs=uv)
@@ -308,6 +337,7 @@ def scope_sniper():
     m.merge(sh.revolve(ocu, 40, "scope").translated((0.0, H, 0.0)))
     # shallow, tapering towards the rim: the AWP's fire kick keeps it inside the 4:3 frame (check_sniper framing)
     m.merge(_eyecup(0.0186, z_ocu, 0.0075, ocu[-1], taper=0.0016).translated((0.0, H, 0.0)))
+    m.merge(ad.scope_sniper(H, R))
     p.meshes["attachment"] = m
     p.node("lens_ocular", "attachment", (0.0, H, z_ocu), lens_disc(0.0186, 1, "lens"))
     p.node("lens_objective", "attachment", (0.0, H, z_obj), lens_disc(0.0276, -1, "lens_front"))
@@ -347,6 +377,7 @@ def scope_2x():
             .translated((0.0, H + 0.0212, 0.0)))
     for z in (-0.0280, 0.0200):                                                                     # tube clips
         m.merge(sh.box(-0.0045, H + 0.0130, z - 0.0025, 0.0045, H + 0.0230, z + 0.0025, 0.0006, "scope"))
+    m.merge(ad.scope_2x(H))
     p.meshes["attachment"] = m
     p.node("lens_ocular", "attachment", (0.0, H, z_ocu), lens_disc(0.0130, 1, "lens"))
     p.node("lens_objective", "attachment", (0.0, H, z_obj), lens_disc(0.0164, -1, "lens_front"))
@@ -426,19 +457,48 @@ SUP_R = 0.0165
 
 
 def suppressor():
-    """Universal can: threads on at the origin (a stub reaches back into the barrel), muzzle at the front cap."""
+    """Universal can: threads on at the origin (a stub reaches back into the barrel), muzzle at the front cap. A knurled
+    mount collar at the rear, twelve shallow flutes along the tube between the end caps, a front cap with four wrench
+    slots round a recessed crown."""
     p = Part()
     L, R = SUP_LEN, SUP_R
-    m = sh.revolve([(0.0, 0.0060), (0.0062, 0.0060), (0.0062, 0.0), (0.0125, 0.0), (0.0156, -0.0040),
-                    (R, -0.0100), (R, -L + 0.0100), (0.0156, -L + 0.0040), (0.0092, -L), (0.0056, -L),
-                    (0.0056, -L + 0.0120), (0.0, -L + 0.0120)], 28, "suppressor")
-    for z in (-0.0170, -L + 0.0170):                                                   # end-cap rings
-        m.merge(sh.revolve([(R - 0.0002, z - 0.0018), (R + 0.0004, z - 0.0012), (R + 0.0004, z + 0.0012),
-                            (R - 0.0002, z + 0.0018)], 28, "steel_dark"))
-    for k in range(10):                                                                  # wrench flats / grip rings
-        z = -0.0300 - k * 0.0028
-        m.merge(sh.revolve([(R - 0.0001, z - 0.0007), (R + 0.0003, z - 0.0004), (R + 0.0003, z + 0.0004),
-                            (R - 0.0001, z + 0.0007)], 28, "steel_dark"))
+    rear = sh.revolve([(0.0, 0.0060), (0.0062, 0.0060), (0.0062, 0.0), (0.0125, 0.0), (0.0156, -0.0040),
+                       (R, -0.0100), (R, -0.0110)], 36, "suppressor")
+    m = rear
+    # the tube: fluted between the collar and the front cap ring, round where they sit
+    flutes, depth = 12, 0.0010
+    z_top, z_bot = -0.0110, -L + 0.0100
+    f0, f1 = -0.0345, -L + 0.0260                                                       # flute run (fades in / out)
+    n = flutes * 6
+    th = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    groove = (0.5 + 0.5 * np.cos(flutes * th)) ** 3
+    zs = sorted(set(np.round(np.concatenate([[z_top, -0.0300], np.linspace(f0 + 0.004, f0 - 0.004, 6),
+                                              np.linspace(f0 - 0.006, f1 + 0.006, 8), np.linspace(f1 + 0.004, f1 - 0.004, 6),
+                                              [f1 - 0.006, z_bot]]), 6)), reverse=True)
+    rings = []
+    for z in zs:
+        w = np.clip((f0 - z) / 0.006, 0, 1) * np.clip((z - f1) / 0.006, 0, 1)
+        w = w * w * (3 - 2 * w)
+        r = R - depth * w * groove
+        rings.append(np.stack([r * np.cos(th), r * np.sin(th), np.full(n, z)], 1))
+    # closed (its caps sit inside the end caps) so the loft can wind itself outwards
+    m.merge(sh.loft(rings, "suppressor"))
+    front = sh.revolve([(0.0, -L + 0.0120), (0.0056, -L + 0.0120), (0.0056, -L + 0.0016), (0.0070, -L + 0.0016),
+                        (0.0082, -L), (0.0118, -L), (0.0156, -L + 0.0040), (R, -L + 0.0100), (R, -L + 0.0110)],
+                       36, "suppressor")
+    m.merge(front)
+    # knurled mount collar (where a hand turns it on) and the end-cap seams
+    m.merge(_knurled(R + 0.0005, -0.0300, -0.0120, 6, 0.0005, "steel_dark", 48))
+    m.merge(sh.revolve([(R - 0.0002, -L + 0.0152), (R + 0.0004, -L + 0.0158), (R + 0.0004, -L + 0.0182),
+                        (R - 0.0002, -L + 0.0188)], 36, "steel_dark"))
+    for k in range(4):                                                                  # wrench slots in the cap
+        a = k * np.pi / 2 + np.pi / 4
+        u, v = np.array([np.cos(a), np.sin(a), 0.0]), np.array([-np.sin(a), np.cos(a), 0.0])
+        slot = sh.box(-0.0011, 0.0, -0.0022, 0.0011, 0.0034, 0.0, 0.0002, "steel_dark")
+        mat = np.eye(4)
+        mat[:3, 0], mat[:3, 1], mat[:3, 2] = -v, u, (0, 0, 1)
+        mat[:3, 3] = u * 0.0098 + np.array([0.0, 0.0, -L + 0.0021])
+        m.merge(slot.transformed(mat))
     m.merge(sh.disc((0.0, 0.0, -L + 0.0119), (0, 0, -1), 0.0056, 16, "steel_dark"))     # baffle seen down the bore
     p.meshes["attachment"] = m
     p.node("muzzle", "attachment", (0.0, 0.0, -L))
@@ -466,6 +526,7 @@ def tactical_stock():
     m.merge(extrude_z(pad, (), 0.2250, 0.2420, chamfer_bevel(0.0030), "stock_pad"))
     for z in (0.0350, 0.0600):                                                             # sling loop
         m.merge(sh.box(0.0060, -0.0020, z - 0.0020, 0.0120, 0.0020, z + 0.0020, 0.0004, "steel_dark"))
+    m.merge(ad.tactical_stock())
     p.meshes["attachment"] = m
     return p
 
@@ -521,6 +582,7 @@ def charm_grass():
     m.merge(_cyl_axis(0.0011, 0.0030, (0.0, y - 0.0005, 0.0), "y", "charm_metal", 8))     # screw eye
     top = y - 0.0020
     m.merge(_block_mesh(BLOCK, (0.0, top - BLOCK / 2, 0.0), "charm_block"))
+    m.merge(ad.charm_grass(RING_Y))
     p.node("charm", "pivot", (0.0, 0.0, 0.0), m)
     return p
 

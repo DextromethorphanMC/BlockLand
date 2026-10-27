@@ -71,6 +71,10 @@ public final class CraftData {
          */
         public Grip grip;
 
+        // ammo (slot "ammo")
+        /** What an ammo attachment's rounds do besides its stat multipliers; null for every other attachment. */
+        public Round round;
+
         // stat multipliers (1 = no change)
         public float damageScale = 1;
         public float rangeScale = 1;
@@ -263,6 +267,38 @@ public final class CraftData {
     }
 
     /** A slot as a weapon declares it. */
+    /**
+     * The rounds an ammo attachment loads (slot {@code ammo}: normal, incendiary, armour-piercing, tracer, water). What a
+     * struck target makes of them goes through {@code combat/RoundTraits} while the round hurts it.
+     */
+    public static final class Round {
+        /** Multiplier on the durability armour (plates, vehicle hulls) loses to a hit (1 = an ordinary round). */
+        public float armorDamage = 1;
+        /** Seconds a struck target burns (0 = none). */
+        public float fireSeconds = 0;
+        /** Every round leaves a bright tracer that everyone sees ({@link #tracerColor}, {@link #tracerWidth}). */
+        public boolean tracer = false;
+        /** Tint of the shot's streak (#RRGGBB, empty = the gun's / skin's). */
+        public String tracerColor = "";
+        /** Width of the streak (1 = an ordinary shot's). */
+        public float tracerWidth = 1;
+        /** Water does not slow it and it never skips off a surface: in water it flies as in air ({@code combat/Ballistics}). */
+        public boolean waterproof = false;
+        /**
+         * The impact modifier ({@code impacts.json} ammo profile, e.g. {@code incendiary}) applied over the caliber's own
+         * profile; empty = none.
+         */
+        public String impact = "";
+
+        public boolean hasTracerColor() {
+            return tracerColor != null && tracerColor.length() == 7 && tracerColor.startsWith("#");
+        }
+
+        public int tracerRgb() {
+            return hasTracerColor() ? Integer.parseInt(tracerColor.substring(1), 16) : 0xFFFFFF;
+        }
+    }
+
     public static final class SlotDef {
         /** Mount node in the weapon model where model attachments sit. */
         public String node = "";

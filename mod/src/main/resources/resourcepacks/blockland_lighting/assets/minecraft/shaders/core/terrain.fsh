@@ -4,7 +4,7 @@
 // shadows, dynamic lights, emissive blocks, water / glass / metal shading, the sun through leaves and plants and the
 // sheen of smooth blocks on top (§7), rain wetness and puddles (§15), and
 // BlockLand's fog (§14). The water surface is Bliss's (Chocapic13' Shaders edit, by Xonk, based on Chocapic13's shaders),
-// ported: see blockland:bliss_water.glsl and assets/blockland/shaders/include/bliss/LICENSE.md. Unpatched (BlRole 0) or without world lighting and emission encoding, the result is exactly
+// ported: see blockland:bliss_water.glsl and assets/blockland/shaders/include/bliss/license.md. Unpatched (BlRole 0) or without world lighting and emission encoding, the result is exactly
 // vanilla's.
 
 #moj_import <minecraft:fog.glsl>
@@ -106,7 +106,7 @@ void main() {
             color.rgb += (BlSunColor.rgb * spec * 0.55 + bl_display(BlSkyColor.rgb) * fres * outdoors * 0.12) * material.w;
         } else if (water) {
             // ---- ported from Bliss (Chocapic13' Shaders edit) by Xonk, based on Chocapic13's shaders; see
-            // assets/blockland/shaders/include/bliss/LICENSE.md. The water parts of Bliss's dimensions/all_translucent.fsh
+            // assets/blockland/shaders/include/bliss/license.md. The water parts of Bliss's dimensions/all_translucent.fsh
             // (NORMALS, ALBEDO with Vanilla_like_water, SPECULAR LIGHTING); BlockLand: positions camera-relative world
             // space instead of view space, colours from the lit vanilla colour (display → linear and back), the sky from
             // bl_reflection instead of colortex4, the screen-space part from bl_ssr (spec §17), BlWater.z switches

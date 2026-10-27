@@ -23,6 +23,7 @@ MATERIALS = {
     "steel": ((0.030, 0.034, 0.045, 1), 1.0, 0.22, "body", {}),          # polished blued frame, cylinder, crane
     "barrel": ((0.030, 0.034, 0.045, 1), 1.0, 0.22, "barrel", {}),       # the barrel and its underlug and rib
     "grip": ((0.20, 0.085, 0.035, 1), 0.0, 0.55, "grip", {}),            # walnut target grips
+    "grip_checker": ((0.17, 0.075, 0.032, 1), 0.0, 0.62, "grip", {}),    # their checkered side panels (section 55)
     "steel_dark": ((0.022, 0.022, 0.025, 1), 0.85, 0.42, "detail", {}),  # hammer, trigger, latch, sights, screws
     "bore": ((0.006, 0.006, 0.006, 1), 0.5, 0.65, "none", {}),           # the bore and the chambers
     "insert": ((0.80, 0.04, 0.025, 1), 0.0, 0.40, "none", {"emissive": (0.35, 0.02, 0.01)}),   # the front sight's ramp

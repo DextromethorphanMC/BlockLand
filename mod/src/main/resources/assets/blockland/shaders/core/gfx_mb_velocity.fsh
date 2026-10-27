@@ -1,11 +1,13 @@
 #version 150
 
 #moj_import <blockland:gfx_screen.glsl>
+#moj_import <blockland:bl_object_motion.glsl>
 
 // BlockLand motion blur, pass 1 (client/graphics/post/MotionBlur): each pixel's blur while the shutter is open — rg =
 // half the smear in output pixels (clamped to the tile size), b = distance from the camera in blocks, a = 1 on the
 // first-person weapon and arms. World pixels: their depth back to a camera-relative position, moved back by the motion
-// of the entity whose box holds it (if any), then into the previous frame through the camera's motion. Weapon pixels:
+// of the vehicle that holds it (blockland:bl_object_motion.glsl: turning too) or else of the entity whose box holds it
+// (if any), then into the previous frame through the camera's motion. Weapon pixels:
 // the hand motion texture (client/render/HandMotion).
 //   Params[0] = (output size, 1 / output size)
 //   Params[1] = (jitter in uv xy, -, -)
@@ -53,8 +55,9 @@ void main() {
         fragColor = vec4(Info.y > 0.0 ? radius(texCoord - previous, Info.y) : vec2(0.0), 1e4, 0.0);
         return;
     }
-    vec3 before = position;
-    int count = int(Info.x);
+    bool carried;
+    vec3 before = bl_objectBack(position, carried);
+    int count = carried ? 0 : int(Info.x);
     for (int i = 0; i < 32; i++) {
         if (i >= count) break;
         vec3 lo = Boxes[i * 3].xyz, hi = Boxes[i * 3 + 1].xyz;

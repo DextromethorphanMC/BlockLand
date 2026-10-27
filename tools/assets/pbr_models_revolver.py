@@ -15,6 +15,7 @@ def models():
                 "steel": ("revolver/blued", "body"),
                 "barrel": ("revolver/blued", "barrel"),
                 "grip": ("tommy/walnut", "grip"),
+                "grip_checker": ("revolver/checkered_walnut", "grip"),
                 "steel_dark": ("common/steel_dark", "detail"),
                 "bore": (None, "none"),
                 "insert": (None, "none"),

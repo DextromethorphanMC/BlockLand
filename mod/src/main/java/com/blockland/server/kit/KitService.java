@@ -173,6 +173,7 @@ public final class KitService {
             case "legs" -> EquipmentSlot.LEGS;
             case "feet" -> EquipmentSlot.FEET;
             case KitSlots.OFFHAND -> EquipmentSlot.OFFHAND;
+            case KitSlots.BACKPACK -> com.blockland.backpack.Backpacks.SLOT;
             default -> null;
         };
         if (equipment != null && player.getItemBySlot(equipment).isEmpty()) {

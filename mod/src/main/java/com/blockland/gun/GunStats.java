@@ -1,5 +1,7 @@
 package com.blockland.gun;
 
+import com.blockland.combat.Ballistics;
+import com.blockland.combat.RoundTraits;
 import com.blockland.craft.AttachmentCatalog;
 import com.blockland.craft.Build;
 import com.blockland.craft.CraftCatalog;
@@ -71,6 +73,16 @@ public record GunStats(GunData.Gun gun, GunData.Ammo ammo, GunData.Magazine maga
         float scale = magazine.adsTimeScale;
         for (CraftData.Attachment a : attachments) scale *= a.adsTimeScale;
         return gun.adsTime * scale;
+    }
+
+    /**
+     * The reload clip for the fitted magazine: its own variant ({@link GunData.Magazine#clipSuffix}) when the model has
+     * one ({@code has}), else the gun's.
+     */
+    public String reloadClip(boolean empty, java.util.function.Predicate<String> has) {
+        String clip = empty ? gun.anims.reloadEmpty : gun.anims.reload;
+        String own = magazine.clipSuffix == null || magazine.clipSuffix.isEmpty() ? null : clip + magazine.clipSuffix;
+        return own != null && has.test(own) ? own : clip;
     }
 
     public float reloadTime(boolean empty) {
@@ -166,6 +178,39 @@ public record GunStats(GunData.Gun gun, GunData.Ammo ammo, GunData.Magazine maga
     @Nullable
     public CraftData.SkinFx skinFx() {
         return skin == null ? null : skin.fx;
+    }
+
+    // ---- the rounds (ammo attachments, slot "ammo") ---------------------------------------------------
+
+    /** The ammo attachment's slot id in builds. */
+    public static final String AMMO_SLOT = "ammo";
+
+    /** What the fitted ammo attachment's rounds do, or null for ordinary rounds (no ammo slot, or nothing special). */
+    @Nullable
+    public CraftData.Round round() {
+        CraftData.Attachment ammoAttachment = fitted(AMMO_SLOT);
+        return ammoAttachment == null ? null : ammoAttachment.round;
+    }
+
+    /** What a hit by these rounds carries into the target's hurt ({@code combat/RoundTraits}). */
+    public RoundTraits.Traits traits() {
+        CraftData.Attachment ammoAttachment = fitted(AMMO_SLOT);
+        CraftData.Round round = ammoAttachment == null ? null : ammoAttachment.round;
+        if (round == null) return RoundTraits.NONE;
+        return new RoundTraits.Traits(ammoAttachment.id, round.armorDamage, round.fireSeconds);
+    }
+
+    /** How the rounds fare in fluids: the caliber's, or no slowing and no skipping in water for waterproof rounds. */
+    public Ballistics.Medium medium() {
+        Ballistics.Medium medium = ammo.medium();
+        CraftData.Round round = round();
+        return round != null && round.waterproof ? new Ballistics.Medium(0, medium.lavaRange(), 0) : medium;
+    }
+
+    /** The impact profile id ({@code impacts.json} ammo) of a hit: the caliber's, with the round's modifier ({@code rifle+incendiary}). */
+    public String impactProfile() {
+        CraftData.Round round = round();
+        return round == null || round.impact == null || round.impact.isEmpty() ? ammo.id : ammo.id + "+" + round.impact;
     }
 
     /** The attachment in one slot, null when it is empty (or holds a gun-specific part). */

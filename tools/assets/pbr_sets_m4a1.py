@@ -5,6 +5,19 @@ butt pad use the common sets."""
 import numpy as np
 
 
+def _deep(pt, recipe, k=4.0):
+    """The shared moulded-polymer recipe with its EDM grain k times deeper (0.01 -> 0.04 mm): deep enough for the
+    parallax and the micro-shadows to show the mould texture at viewmodel distance (VIEWMODEL_SPEC section 53).
+    recipe None -> a function deepening Layers directly."""
+    import dataclasses
+
+    def deepen(lay):
+        return dataclasses.replace(lay, height=lay.height * k)
+    if recipe is None:
+        return deepen
+    return lambda d, rng: deepen(recipe(d, rng))
+
+
 def sets(pt):
     def hardcoat(size, rng, pmm):
         """Mil-spec hard anodising on forged 7075: the house anodised-black blast and handling (oily prints, rubbed
@@ -60,7 +73,7 @@ def sets(pt):
         "m4a1/small_parts": pt.SetDef(pt._r(small_parts), 512, 0.08, 916),
         "m4a1/phosphate": pt.SetDef(pt._r(phosphate), 1024, 0.12, 915),
         "m4a1/receiver": pt.SetDef(pt._r(hardcoat), 1024, 0.15, 911),
-        "m4a1/polymer": pt.SetDef(pt._r(pt.polymer_moulded, colour=(0.120, 0.120, 0.125)), 1024, 0.15, 912),
+        "m4a1/polymer": pt.SetDef(_deep(pt, pt._r(pt.polymer_moulded, colour=(0.120, 0.120, 0.125))), 1024, 0.15, 912),
         "m4a1/grip": pt.SetDef(pt._r(chequer), 512, 0.0512, 913),
         "m4a1/mag": pt.SetDef(pt._r(pt.painted_steel, paint=(0.155, 0.160, 0.150), coverage=0.0025, vertical=True),
                               1024, 0.15, 914),

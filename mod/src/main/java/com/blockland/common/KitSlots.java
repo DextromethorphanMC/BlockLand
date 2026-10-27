@@ -10,12 +10,13 @@ import java.util.Set;
 
 /**
  * Kit slot syntax shared by server and client: {@code 0}-{@code 35} (0-8 = hotbar, 9-35 = main inventory)
- * or {@code head}/{@code chest}/{@code legs}/{@code feet}/{@code offhand}.
- * Armour items are fixed; everything else may be rearranged by the player.
+ * or {@code head}/{@code chest}/{@code legs}/{@code feet}/{@code offhand}/{@code backpack} (the backpack slot, UI spec §2).
+ * Armour and the backpack are fixed; everything else may be rearranged by the player.
  */
 public final class KitSlots {
     public static final List<String> ARMOR = List.of("head", "chest", "legs", "feet");
     public static final String OFFHAND = "offhand";
+    public static final String BACKPACK = "backpack";
     public static final int MAIN_SLOTS = 36;
 
     private KitSlots() {
@@ -27,11 +28,13 @@ public final class KitSlots {
 
     public static boolean isValid(String slot) {
         String s = normalize(slot);
-        return ARMOR.contains(s) || OFFHAND.equals(s) || mainIndex(s) >= 0;
+        return ARMOR.contains(s) || OFFHAND.equals(s) || BACKPACK.equals(s) || mainIndex(s) >= 0;
     }
 
+    /** A fixed equipment slot: armour or the backpack (kept where the kit puts it). */
     public static boolean isArmor(String slot) {
-        return ARMOR.contains(normalize(slot));
+        String s = normalize(slot);
+        return ARMOR.contains(s) || BACKPACK.equals(s);
     }
 
     /** @return 0-35 for inventory slots, -1 otherwise */

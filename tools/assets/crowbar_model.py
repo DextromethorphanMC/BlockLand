@@ -221,8 +221,9 @@ def _prongs(pts, hd, s, s_slot, s_end):
 def tape_mesh():
     """Friction tape wound on the shaft: the hex rounded off under the layers, a raised helical seam where each turn
     overlaps the last, a step at both ends."""
-    th = np.linspace(0, 2 * np.pi, 36, endpoint=False)
-    zs = np.linspace(TAPE_Z[0], TAPE_Z[1], 43)
+    # sampled finely enough for the seam (1.5 mm wide) to resolve: ~0.8 mm along, 64 round
+    th = np.linspace(0, 2 * np.pi, 64, endpoint=False)
+    zs = np.linspace(TAPE_Z[0], TAPE_Z[1], 150)
     base = 0.55 * (r_hex(th) + TAPE_T) + 0.45 * (HEX_APOTHEM * 1.06 + TAPE_T)
     rings = []
     for z in zs:

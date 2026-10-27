@@ -155,6 +155,41 @@ vec3 directLight(vec3 n, vec3 v, vec3 l, vec3 diffuse, vec3 f0, float a, float l
     return (diffuse * (1.0 - f) * diffuseShare + specular) * nol * light;
 }
 
+// Micro-shadowing (VIEWMODEL_SPEC section 53): a cavity of the material (its AO) facing away from a light is in that
+// light's shadow — the crevices of a stipple, a knurl, a weave darken where the light grazes them, so the normal map's
+// relief reads as depth under directional light, not only as a tilt of the highlight.
+float microShadow(float ao, float nol) {
+    return clamp(nol + 2.0 * ao * ao - 1.0, 0.0, 1.0);
+}
+
+// Parallax occlusion mapping on the LabPBR height (the _n alpha: 255 at the set's top, HEIGHT_STEP 0.002 mm per step
+// below it, ~0.51 mm full range; VIEWMODEL_SPEC section 53): the texture is looked up where the eye's ray meets the
+// relief, at its true depth. `metresPerUv` from the screen derivatives (any UV mapping), `fade` 0..1 (off for distant
+// weapons, where a pixel covers more than the relief), the gradients of the unshifted coordinates for the lookups.
+vec2 parallaxUv(vec2 uv, vec3 v, vec3 t, vec3 b, vec3 n, float metresPerUv, float fade, vec2 ddx, vec2 ddy) {
+    vec3 view = vec3(dot(v, normalize(t)), dot(v, normalize(b)), dot(v, n));
+    if (view.z < 0.08 || fade <= 0.0) return uv;
+    float depth = 0.00051 / metresPerUv * fade;                     // full range in UV units
+    vec2 shift = -view.xy / view.z * depth;
+    int steps = int(mix(24.0, 8.0, view.z));
+    float step = 1.0 / float(steps);
+    float layer = 0.0;
+    float below = 1.0 - textureGrad(NormalSampler, uv, ddx, ddy).a;  // depth of the relief under this point, 0..1
+    float before = below;
+    vec2 at = uv;
+    for (int i = 0; i < 24; i++) {
+        if (i >= steps || layer >= below) break;
+        before = below - layer;
+        layer += step;
+        at = uv + shift * layer;
+        below = 1.0 - textureGrad(NormalSampler, at, ddx, ddy).a;
+    }
+    // between the last two layers: where the ray crosses the relief
+    float after = below - layer;
+    float w = clamp(after / min(after - before, -1e-5), 0.0, 1.0);
+    return mix(at, at - shift * step, w);
+}
+
 // Interference colours of a thin coating (soap film, anodised titanium): cos of the viewing angle, thickness in um.
 vec3 thinFilm(float cosTheta, float thickness) {
     float n = 1.45;
@@ -405,9 +440,29 @@ void main() {
     bool encode = (flags & 48) == 48 && bl_encodeEmission();
     // lit by the world: DrawList asked SceneLighting.weaponsLit() (the provider hands a block with the world's light)
     bool worldLit = (flags & 64) != 0;
-    vec4 albedo = texture(Sampler0, texCoord0) * ColorModulator;
     // the skin effect's id, and in its fraction how far the effect surges this frame (asset spec §38; DrawList.add)
     int effect = int(floor(TextureMat[3][3] + 0.001));
+    // the surface frame (in uniform control flow: screen derivatives), then the relief's parallax: every texture of the
+    // set is looked up where the eye's ray meets it (not on sprays, blood or the galaxy's own parallax)
+    vec3 n = normalize(viewNormal);
+    if (!gl_FrontFacing) {
+        n = -n;
+    }
+    vec3 geometric = n;
+    vec3 v = normalize(-viewPos);
+    vec3 t, b;
+    bool frame = cotangentFrame(geometric, viewPos, texCoord0, t, b);
+    vec2 duvdx = dFdx(texCoord0), duvdy = dFdy(texCoord0);
+    vec3 dpdx = dFdx(viewPos), dpdy = dFdy(viewPos);
+    float uvArea = abs(duvdx.x * duvdy.y - duvdx.y * duvdy.x);
+    float metresPerUv = sqrt(length(cross(dpdx, dpdy)) / max(uvArea, 1e-20));
+    float pixelSize = max(length(dpdx), length(dpdy));
+    float parallaxFade = 1.0 - smoothstep(0.0006, 0.0015, pixelSize);
+    vec2 uv = texCoord0;
+    if ((flags & 2) != 0 && frame && uvArea > 1e-20 && effect != 3 && effect != 5 && effect != 7) {
+        uv = parallaxUv(texCoord0, v, t, b, geometric, metresPerUv, parallaxFade, duvdx, duvdy);
+    }
+    vec4 albedo = textureGrad(Sampler0, uv, duvdx, duvdy) * ColorModulator;
     float surge = clamp((TextureMat[3][3] - float(effect)) / 0.98, 0.0, 1.0);
     // sprays (asset spec §29, effect 5): the vertex AO byte carries the decal's facing fade, not occlusion
     bool decal = effect == 5;
@@ -441,21 +496,14 @@ void main() {
         }
         return;
     }
-    vec3 n = normalize(viewNormal);
-    if (!gl_FrontFacing) {
-        n = -n;
-    }
-    vec3 geometric = n;
-    vec3 v = normalize(-viewPos);
-    vec3 t, b;
-    bool frame = cotangentFrame(geometric, viewPos, texCoord0, t, b);
-
     // LabPBR normal map: tilt (DirectX: +y = down the texture = +v), material AO
     // (textures are sampled under per-draw conditions only, so mip selection always has its derivatives)
     float ao = decal || blood ? 1.0 : vertexAo;
+    float materialAo = 1.0;                // the relief's own cavities only (micro-shadowing)
     if ((flags & 2) != 0) {
-        vec4 nt = texture(NormalSampler, texCoord0);
+        vec4 nt = textureGrad(NormalSampler, uv, duvdx, duvdy);
         ao *= nt.b;
+        materialAo = nt.b;
         if (frame) {
             vec2 xy = nt.rg * 2.0 - 1.0;
             vec3 ts = vec3(xy, sqrt(max(0.0, 1.0 - dot(xy, xy))));
@@ -470,7 +518,7 @@ void main() {
     vec3 f0 = vec3(0.04);
     float emission = 0.0;
     if ((flags & 4) != 0) {
-        vec4 st = texture(SpecularSampler, texCoord0);
+        vec4 st = textureGrad(SpecularSampler, uv, duvdx, duvdy);
         roughness = 1.0 - st.r;
         float id = st.g * 255.0;
         if (id < 229.5) {
@@ -727,17 +775,19 @@ void main() {
         }
     }
 
-    // geometric specular anti-aliasing: curved and bumpy surfaces widen their highlights instead of sparkling
-    vec3 dndx = dFdx(n), dndy = dFdy(n);
+    // geometric specular anti-aliasing: curved surfaces widen their highlights instead of sparkling. From the geometric
+    // normal only: the normal map's detail is the relief the highlight should show (its averaged-away detail already
+    // roughens the mips: Toksvig, Textures), and counting it here washed every normal-mapped surface flat
+    vec3 dndx = dFdx(geometric), dndy = dFdy(geometric);
     float variance = 0.25 * (dot(dndx, dndx) + dot(dndy, dndy));
     float alpha = roughness * roughness;
     alpha = sqrt(clamp(alpha * alpha + min(2.0 * variance, 0.18), 0.0, 1.0));
     float directAlpha = max(alpha, 0.045);
 
     float directAo = mix(1.0, ao, 0.35);
-    vec3 studio = (directLight(n, v, KEY, diffuse, f0, directAlpha, KEY_LIGHT, 1.0)
-            + directLight(n, v, FILL, diffuse, f0, directAlpha, FILL_LIGHT, 1.0)
-            + directLight(n, v, RIM, diffuse, f0, directAlpha, RIM_LIGHT, 0.0)) * directAo;
+    vec3 studio = (directLight(n, v, KEY, diffuse, f0, directAlpha, KEY_LIGHT, 1.0) * microShadow(materialAo, dot(geometric, KEY))
+            + directLight(n, v, FILL, diffuse, f0, directAlpha, FILL_LIGHT, 1.0) * microShadow(materialAo, dot(geometric, FILL))
+            + directLight(n, v, RIM, diffuse, f0, directAlpha, RIM_LIGHT, 0.0) * microShadow(materialAo, dot(geometric, RIM))) * directAo;
     vec3 display;
     if (worldLit) {
         // positions and directions in camera-relative world space (the viewmodel's sit just in front of the eye)
@@ -756,7 +806,8 @@ void main() {
         float skyAccess = clamp((floor(ModelOffset.y) - 6.0) / 9.0, 0.0, 1.0);
         vec3 sunView = mat3(BlViewRotation) * BlSunDir.xyz;
         vec3 sun = BlSunColor.rgb * (SUN_SHARE * skyAccess * shadow);
-        vec3 direct = directLight(n, v, sunView, diffuse, f0, directAlpha, 1.0, 1.0) * sun * directAo;
+        vec3 direct = directLight(n, v, sunView, diffuse, f0, directAlpha, 1.0, 1.0) * sun * directAo
+                * microShadow(materialAo, dot(geometric, sunView));
         // the sky: cool (the terrain's shade tint), from the part of the dome a face sees
         float up = worldNormal.y;
         float skyView = up >= 0.0 ? mix(SKY_SIDE, SKY_UP, up) : mix(SKY_SIDE, SKY_DOWN, -up);

@@ -302,6 +302,68 @@ public final class CoverArt {
         return png(image);
     }
 
+    /**
+     * Tall block pillars rising out of a void at sunset, a player on top of each of the near ones and golden lucky items
+     * floating between them; {@code many} draws a whole ring of them, otherwise two facing each other.
+     */
+    public static byte[] pillars(boolean many, long seed) {
+        BufferedImage image = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = graphics(image);
+        g.setPaint(new GradientPaint(0, 0, new Color(0x241A4A), 0, H, new Color(0xF2994A)));
+        g.fillRect(0, 0, W, H);
+        g.setPaint(new RadialGradientPaint(new Point2D.Float(W * 0.5f, H * 0.78f), 210, new float[]{0f, 1f},
+                new Color[]{new Color(255, 214, 120, 170), new Color(255, 214, 120, 0)}));
+        g.fillRect(0, 0, W, H);
+        Random random = new Random(seed);
+        for (int i = 0; i < 40; i++) {
+            float s = 1 + random.nextFloat() * 1.6f;
+            g.setColor(new Color(255, 255, 255, 30 + random.nextInt(120)));
+            g.fill(new Ellipse2D.Float(random.nextInt(W), random.nextInt((int) (H * 0.4f)), s, s));
+        }
+        // far pillars first (thin, hazy), near ones last; x as a fraction of the width, top as a fraction of the height
+        float[][] layout = many
+                ? new float[][]{{0.07f, 0.42f, 9}, {0.24f, 0.36f, 10}, {0.35f, 0.46f, 8}, {0.63f, 0.44f, 8}, {0.76f, 0.34f, 10},
+                {0.93f, 0.40f, 9}, {0.5f, 0.5f, 7}, {0.14f, 0.3f, 18}, {0.86f, 0.27f, 20}, {0.43f, 0.36f, 14}}
+                : new float[][]{{0.32f, 0.48f, 9}, {0.68f, 0.46f, 9}, {0.18f, 0.3f, 22}, {0.82f, 0.32f, 22}};
+        for (float[] p : layout) {
+            float x = W * p[0], top = H * p[1], w = p[2];
+            boolean near = w >= 14;
+            Color stone = near ? new Color(0x3A3640) : new Color(0x6B5A78);
+            for (float y = top; y < H; y += w) {
+                Color face = ((int) ((y - top) / w) % 3 == 0) ? stone.brighter() : stone;
+                block(g, x - w / 2, y, w, w, face, stone.darker());
+            }
+            g.setColor(new Color(0x5DA33A));
+            g.fill(new Rectangle2D.Float(x - w * 1.8f, H * 0.86f, w * 3.6f, w * 0.5f));
+            if (!near) continue;
+            // a player on top: legs, body, head
+            g.setColor(new Color(0x2B2B3A));
+            g.fill(new Rectangle2D.Float(x - w * 0.22f, top - w * 0.9f, w * 0.44f, w * 0.9f));
+            g.setColor(new Color(0x3F6FD8));
+            g.fill(new Rectangle2D.Float(x - w * 0.3f, top - w * 1.8f, w * 0.6f, w * 0.95f));
+            g.setColor(new Color(0xE0B48C));
+            g.fill(new Rectangle2D.Float(x - w * 0.24f, top - w * 2.35f, w * 0.48f, w * 0.5f));
+        }
+        // lucky items: glowing golden blocks with a question mark
+        float[][] items = many ? new float[][]{{0.29f, 0.56f, 18}, {0.6f, 0.62f, 14}, {0.69f, 0.36f, 12}} : new float[][]{{0.5f, 0.45f, 24}};
+        for (float[] it : items) {
+            float x = W * it[0], y = H * it[1], s = it[2];
+            g.setPaint(new RadialGradientPaint(new Point2D.Float(x, y), s * 2.2f, new float[]{0f, 1f},
+                    new Color[]{new Color(255, 220, 90, 200), new Color(255, 220, 90, 0)}));
+            g.fill(new Ellipse2D.Float(x - s * 2.2f, y - s * 2.2f, s * 4.4f, s * 4.4f));
+            block(g, x - s / 2, y - s / 2, s, s, new Color(0xF4C542), new Color(0xA8740B));
+            g.setColor(new Color(0x6B3E00));
+            g.setFont(g.getFont().deriveFont(java.awt.Font.BOLD, s * 0.8f));
+            java.awt.FontMetrics metrics = g.getFontMetrics();
+            g.drawString("?", x - metrics.stringWidth("?") / 2f, y + metrics.getAscent() * 0.36f);
+        }
+        // the void swallows the pillars' feet
+        g.setPaint(new GradientPaint(0, H * 0.8f, new Color(12, 8, 26, 0), 0, H, new Color(12, 8, 26, 235)));
+        g.fillRect(0, (int) (H * 0.8f), W, H);
+        g.dispose();
+        return png(image);
+    }
+
     /** The practice group: a shot-up bullseye and a staircase of blocks on a calm blue gradient. */
     public static byte[] practice(long seed) {
         BufferedImage image = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);

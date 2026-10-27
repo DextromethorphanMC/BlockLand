@@ -20,10 +20,12 @@ def check(path, arms, r):
     check_glb.check_gun(path, arms, r)
     g = GLTF(path)
     tris = {n["name"]: sum(len(p["indices"]) for p in g.mesh_primitives(n["mesh"])) for n in g.nodes if "mesh" in n}
-    drawn = sum(v for k, v in tris.items() if k not in ("fx_shell", "mag_extended"))
+    drawn = sum(v for k, v in tris.items() if k not in ("fx_shell", "mag_extended", "mag_drum"))
     r.check(drawn <= BUDGET, f"usp: {drawn} triangles with the standard magazine (budget {BUDGET})")
     r.check(max(tris["mag_standard"], tris["mag_extended"]) + drawn - tris["mag_standard"] <= BUDGET + 300,
             "usp: too heavy with the extended magazine")
+    if "mag_drum" in tris:                         # section 56
+        r.check(tris["mag_drum"] + drawn - tris["mag_standard"] <= BUDGET + 300, "usp: too heavy with the drum")
     W = g.world_matrices({})
     crown = W[g.names["muzzle"]][:3, 3]
     r.note(f"usp: {drawn} triangles (standard magazine), muzzle at {np.round(crown, 3)}")

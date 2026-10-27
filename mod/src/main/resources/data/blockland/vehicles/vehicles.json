@@ -1,0 +1,531 @@
+{
+  "_comment": "Vehicles (tools/vehicles/VEHICLE_SPEC.md). Positions are model space: metres, +Y up, front -Z, origin on the ground under the middle of the wheelbase; the GLB's seat_/muzzle_/turret nodes sit at these same points. Speeds blocks/s, accelerations blocks/s², angles degrees, times seconds.",
+  "vehicles": {
+    "motorcycle": {
+      "name": "摩托车",
+      "model": "blockland:models/vehicle/motorcycle.glb",
+      "size": [
+        1.2,
+        1.3
+      ],
+      "mass": 220,
+      "health": 60,
+      "armor": 0.05,
+      "movement": {
+        "kind": "bike",
+        "maxSpeed": 28,
+        "reverseSpeed": 3,
+        "accel": 9,
+        "brake": 16,
+        "turnRate": 95,
+        "grip": 0.8,
+        "stepHeight": 0.6,
+        "wheelRadius": 0.34,
+        "wadeDepth": 0.7,
+        "lean": 22
+      },
+      "seats": [
+        {
+          "node": "seat_0",
+          "role": "driver",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            0,
+            0.935,
+            0.235
+          ],
+          "yawLimit": 110
+        }
+      ],
+      "hitBoxes": [
+        {
+          "center": [
+            0,
+            0.6,
+            0
+          ],
+          "half": [
+            0.34,
+            0.6,
+            1.05
+          ]
+        }
+      ],
+      "effects": {
+        "exhaust": [
+          [
+            0.191,
+            0.745,
+            0.775
+          ]
+        ],
+        "headlights": [
+          [
+            0,
+            0.99,
+            -0.57
+          ]
+        ]
+      },
+      "sounds": [
+        "engine",
+        "start",
+        "horn",
+        "hit",
+        "destroyed"
+      ]
+    },
+    "offroad": {
+      "name": "越野车",
+      "model": "blockland:models/vehicle/offroad.glb",
+      "size": [
+        2.8,
+        2.65
+      ],
+      "mass": 1800,
+      "health": 160,
+      "armor": 0.25,
+      "movement": {
+        "kind": "wheeled",
+        "maxSpeed": 24,
+        "reverseSpeed": 7,
+        "accel": 7,
+        "brake": 14,
+        "turnRate": 70,
+        "grip": 0.9,
+        "stepHeight": 1.0,
+        "wheelRadius": 0.5,
+        "wadeDepth": 1.25
+      },
+      "seats": [
+        {
+          "node": "seat_0",
+          "role": "driver",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            -0.5,
+            1.225,
+            0.025
+          ],
+          "yawLimit": 120
+        },
+        {
+          "node": "seat_1",
+          "role": "passenger",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            0.5,
+            1.225,
+            0.025
+          ],
+          "yawLimit": 150
+        },
+        {
+          "node": "seat_2",
+          "role": "passenger",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            -0.5,
+            1.225,
+            1.1
+          ],
+          "yawLimit": 150
+        },
+        {
+          "node": "seat_3",
+          "role": "passenger",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            0.5,
+            1.225,
+            1.1
+          ],
+          "yawLimit": 150
+        }
+      ],
+      "hitBoxes": [
+        {
+          "center": [
+            0.0,
+            0.8125,
+            0.0
+          ],
+          "half": [
+            1.1875,
+            0.775,
+            2.525
+          ]
+        }
+      ],
+      "effects": {
+        "exhaust": [
+          [
+            0.825,
+            0.5,
+            2.575
+          ]
+        ],
+        "headlights": [
+          [
+            -0.775,
+            1.1625,
+            -2.55
+          ],
+          [
+            0.775,
+            1.1625,
+            -2.55
+          ]
+        ]
+      },
+      "sounds": [
+        "engine",
+        "start",
+        "horn",
+        "hit",
+        "destroyed"
+      ]
+    },
+    "speedboat": {
+      "name": "发动机小游艇",
+      "model": "blockland:models/vehicle/speedboat.glb",
+      "size": [
+        2.4,
+        1.4
+      ],
+      "mass": 1100,
+      "health": 120,
+      "armor": 0.1,
+      "movement": {
+        "kind": "boat",
+        "maxSpeed": 22,
+        "reverseSpeed": 4,
+        "accel": 6,
+        "brake": 6,
+        "turnRate": 55,
+        "grip": 0.18,
+        "stepHeight": 0,
+        "draft": 0.35,
+        "planing": 9
+      },
+      "seats": [
+        {
+          "node": "seat_0",
+          "role": "driver",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            0.46,
+            0.92,
+            0.3
+          ],
+          "yawLimit": 120
+        },
+        {
+          "node": "seat_1",
+          "role": "passenger",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            -0.46,
+            0.92,
+            0.3
+          ],
+          "yawLimit": 150
+        },
+        {
+          "node": "seat_2",
+          "role": "passenger",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            -0.58,
+            0.86,
+            2.12
+          ],
+          "yawLimit": 160
+        },
+        {
+          "node": "seat_3",
+          "role": "passenger",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            0.0,
+            0.86,
+            2.12
+          ],
+          "yawLimit": 160
+        },
+        {
+          "node": "seat_4",
+          "role": "passenger",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            0.58,
+            0.86,
+            2.12
+          ],
+          "yawLimit": 160
+        }
+      ],
+      "hitBoxes": [
+        {
+          "center": [
+            0,
+            0.5,
+            -0.1
+          ],
+          "half": [
+            1.1,
+            0.5,
+            2.8
+          ]
+        }
+      ],
+      "effects": {
+        "exhaust": [
+          [
+            0.0,
+            0.93,
+            3.22
+          ]
+        ],
+        "headlights": [
+          [
+            0.0,
+            1.213,
+            -2.72
+          ]
+        ],
+        "wake": [
+          0,
+          0.1,
+          2.7
+        ]
+      },
+      "sounds": [
+        "engine",
+        "start",
+        "horn",
+        "hit",
+        "destroyed"
+      ]
+    },
+    "tank": {
+      "name": "坦克",
+      "model": "blockland:models/vehicle/tank.glb",
+      "size": [
+        3.4,
+        2.4
+      ],
+      "mass": 30000,
+      "health": 600,
+      "armor": 0.75,
+      "movement": {
+        "kind": "tracked",
+        "maxSpeed": 11,
+        "reverseSpeed": 5,
+        "accel": 3.2,
+        "brake": 9,
+        "turnRate": 38,
+        "grip": 0.95,
+        "stepHeight": 1.0,
+        "wheelRadius": 0.33,
+        "wadeDepth": 1.4
+      },
+      "seats": [
+        {
+          "node": "seat_0",
+          "role": "driver",
+          "exposed": false,
+          "camera": "third",
+          "pos": [
+            -0.42,
+            1.02,
+            -1.95
+          ],
+          "yawLimit": 180
+        },
+        {
+          "node": "seat_1",
+          "role": "gunner",
+          "exposed": false,
+          "camera": "third",
+          "pos": [
+            -0.38,
+            -0.08,
+            -0.15
+          ],
+          "yawLimit": 180,
+          "mount": "turret"
+        },
+        {
+          "node": "seat_2",
+          "role": "mg",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            0.52,
+            0.53,
+            0.17
+          ],
+          "yawLimit": 180,
+          "mount": "turret"
+        }
+      ],
+      "hitBoxes": [
+        {
+          "center": [
+            0,
+            0.72,
+            0
+          ],
+          "half": [
+            1.61,
+            0.72,
+            3.05
+          ]
+        },
+        {
+          "center": [
+            0,
+            1.82,
+            0.0
+          ],
+          "half": [
+            1.15,
+            0.42,
+            1.65
+          ]
+        }
+      ],
+      "weapons": [
+        {
+          "id": "cannon",
+          "seat": 1,
+          "pivotYaw": "turret",
+          "pivotPitch": "cannon",
+          "muzzle": "muzzle_cannon",
+          "pivot": [
+            0,
+            1.42,
+            0.25
+          ],
+          "pitchPivot": [
+            0,
+            0.46,
+            -1.2
+          ],
+          "muzzleOffset": [
+            0,
+            0,
+            -4.35
+          ],
+          "pitchLimit": [
+            -8,
+            20
+          ],
+          "turnRate": 28,
+          "kind": "shell",
+          "damage": 160,
+          "fireInterval": 4.5,
+          "range": 320,
+          "ammo": "sniper",
+          "magazine": 1,
+          "reload": 4.5,
+          "shellSpeed": 140,
+          "shellGravity": 6,
+          "zoom": 3.0,
+          "explosion": {
+            "radius": 5.0,
+            "innerRadius": 1.6,
+            "damage": 70,
+            "minDamage": 10,
+            "knockback": 1.6,
+            "hullDamage": 240
+          }
+        },
+        {
+          "id": "mg",
+          "seat": 2,
+          "mount": "turret",
+          "pivotYaw": "mg",
+          "pivotPitch": "mg",
+          "muzzle": "muzzle_mg",
+          "pivot": [
+            0.52,
+            0.9,
+            0.12
+          ],
+          "pitchPivot": [
+            0,
+            0,
+            0
+          ],
+          "muzzleOffset": [
+            0,
+            0.05,
+            -1.13
+          ],
+          "pitchLimit": [
+            -12,
+            45
+          ],
+          "turnRate": 160,
+          "kind": "hitscan",
+          "damage": 9,
+          "fireInterval": 0.09,
+          "range": 180,
+          "spread": 0.8,
+          "ammo": "rifle",
+          "magazine": 100,
+          "reload": 5.0,
+          "zoom": 1.6
+        }
+      ],
+      "effects": {
+        "exhaust": [
+          [
+            -0.55,
+            1.02,
+            2.98
+          ],
+          [
+            0.55,
+            1.02,
+            2.98
+          ]
+        ],
+        "headlights": [
+          [
+            -0.94,
+            1.3,
+            -2.8
+          ],
+          [
+            0.94,
+            1.3,
+            -2.8
+          ]
+        ]
+      },
+      "sounds": [
+        "engine",
+        "start",
+        "hit",
+        "destroyed",
+        "fire_cannon",
+        "reload_cannon",
+        "fire_mg",
+        "reload_mg"
+      ]
+    }
+  }
+}

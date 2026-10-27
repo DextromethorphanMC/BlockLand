@@ -9,6 +9,7 @@ leaving the drum's mouth at its upper left and arcing up into the feed tray (sep
 meshkit.Mesh in the design frame; gen_rpd moves meshes into node-local space."""
 import numpy as np
 
+import rifle_forms as rf
 import shapes as sh
 from ak_model import _cyl_x, _cyl_z, _loft_z, _rivet, _ring_xy, _hg_section
 from meshkit import Mesh
@@ -202,69 +203,65 @@ def front_post_mesh():
 
 # ------------------------------------------------------------------------------------ furniture
 def handguard_mesh():
-    """Wooden handguard round the barrel and the gas cylinder, with palm swells."""
-    zs = np.linspace(HG_Z0, HG_Z1, 11)
-    rings = []
-    for k, z in enumerate(zs):
-        u = k / (len(zs) - 1)
+    """Wooden handguard round the barrel and the gas cylinder, with palm swells, the cooling grooves on its sides and
+    rounded ends."""
+    def sec(u):
         swell = 1.0 + 0.08 * np.sin(np.pi * np.clip((u - 0.10) / 0.80, 0, 1))
-        sec = _hg_section(0.0232 * swell, GAS_Y - 0.0175, 0.0120)
-        if k in (0, len(zs) - 1):
-            sec = sh.offset_loop(sec, 0.0012)
-        rings.append(_ring_xy(sec, z))
-    m = sh.loft(rings, "wood")
+        return rf.section(0.0232 * swell, 0.0120, GAS_Y - 0.0175, n=2.4, count=32, flat_top=0.9)
+    m = rf.frame_loft(rf.straight_stations(sec, HG_Z0, HG_Z1, 16), "wood", 0.0022, 0.0022)
     for k in range(5):                                       # cooling grooves on the sides
         z = HG_Z0 + 0.030 + k * 0.026
-        for s in (-1, 1):
-            x0, x1 = sorted((s * 0.0228, s * 0.0242))
-            m.merge(sh.box(x0, -0.0120, z, x1, -0.0060, z + 0.0140, 0.0003, "wood"))
+        for s_ in (-1, 1):
+            x0, x1 = sorted((s_ * 0.0226, s_ * 0.0240))
+            m.merge(sh.box(x0, -0.0120, z, x1, -0.0060, z + 0.0140, 0.0004, "wood"))
     return m
 
 
 def stock_mesh():
-    """Wooden stock: straight comb, deep belly and a steel butt plate."""
+    """Wooden stock: narrow wrist behind the receiver, straight comb, deep belly, flat-sided rounded section with every
+    edge rounded; steel butt plate with its trap door and screws, the sling swivel under the wrist."""
     z0, z1 = REC_Z1 - 0.0015, REC_Z1 + 0.2700
     top = lambda u: 0.0120 - 0.0220 * u ** 1.2
     bot = lambda u: (REC_Y0 + 0.0060) - 0.0900 * u ** 0.80 - 0.012 * u ** 3
-    half = lambda u: 0.0160 + 0.0045 * u
-    rings = []
-    n = 10
-    for k in range(n + 1):
-        u = k / n
-        y0, y1, w = bot(u), top(u), half(u)
-        sec = sh.rounded_rect(-w, y0, w, y1, min(0.0085, 0.45 * w), 2)
-        if k == 0:
-            sec = sh.offset_loop(sec, 0.0010)
-        rings.append(_ring_xy(sec, z0 + u * (z1 - z0)))
-    m = sh.loft(rings, "wood")
+    half = lambda u: 0.0156 + 0.0040 * u + 0.0012 * np.sin(np.pi * u)
+
+    def sec(u):
+        return rf.section(half(u), top(u), bot(u), n=3.2, count=32, flat_top=0.4)
+    m = rf.frame_loft(rf.straight_stations(sec, z0, z1, 20), "wood", 0.0012, 0.0020)
     y0, y1, w = bot(1.0), top(1.0), half(1.0)
-    plate = sh.rounded_rect(-w - 0.0005, y0 - 0.0005, w + 0.0005, y1 + 0.0005, min(0.0085, 0.45 * w), 2)
-    m.merge(extrude_z(plate, (), z1 - 0.0005, z1 + 0.0045, chamfer_bevel(0.0008), "steel"))
+    plate = rf.section(w + 0.0004, y1 + 0.0004, y0 - 0.0004, n=3.2, count=32, flat_top=0.4)
+    m.merge(rf.frame_loft(rf.straight_stations(lambda u: plate, z1 - 0.0010, z1 + 0.0045, 1), "steel", 0.0, 0.0012))
+    door = rf.section(0.0080, y1 - 0.0130, y1 - 0.0450, n=3.0, count=20)
+    m.merge(rf.frame_loft(rf.straight_stations(lambda u: door, z1 + 0.0043, z1 + 0.0055, 1), "steel", 0.0, 0.0006))
+    for yy in (y1 - 0.0065, y0 + 0.0130):
+        m.merge(rf.screw(np.array([0.0, yy, z1 + 0.0045]), (0, 0, 1), 0.0025, 0.0006, "slot", "steel"))
     m.merge(sh.box(-0.0050, y1 - 0.0005, z1 - 0.0420, 0.0050, y1 + 0.0010, z1 - 0.0050, 0.0004, "steel"))
-    m.merge(_cyl_x(0.0045, -w - 0.0010, w + 0.0010, (0.5 * (y0 + y1) - 0.010, z0 + 0.12), "steel_dark", 10))  # sling
+    # sling swivel under the wrist: a base plate and the loop
+    zs = z0 + 0.12
+    ys = bot(0.12 / (z1 - z0))
+    m.merge(sh.box(-0.0045, ys - 0.0012, zs - 0.0110, 0.0045, ys + 0.0010, zs + 0.0110, 0.0005, "steel"))
+    m.merge(rf.swivel(np.array([0.0, ys - 0.0090, zs]), (1, 0, 0), 0.0080, 0.0014, "steel"))
     return m
 
 
 def pistol_grip_mesh():
-    rings = []
-    n = 9
+    """Wooden pistol grip: teardrop section, side ribs, flared heel, rounded bottom."""
+    def sec(u):
+        depth = 0.0175 + 0.0022 * np.sin(np.pi * u) + 0.0015 * u ** 4
+        w = 0.0126 + 0.0013 * np.sin(np.pi * u)
+        p = sh.superellipse(w, depth, 2.5, 40)
+        front = p[:, 1] < 0
+        p[:, 0] = np.where(front, p[:, 0] * (1.0 - 0.22 * (-p[:, 1] / depth) ** 2), p[:, 0])
+        side = np.abs(p[:, 0]) > 0.75 * w
+        p[:, 0] = p[:, 0] * (1.0 + np.where(side, 0.035 * np.cos(p[:, 1] / depth * np.pi * 4.5) ** 2, 0.0))
+        return p
+    stations = []
+    n = 16
     for k in range(n + 1):
-        d = -0.0040 + (GRIP_LEN + 0.0040) * k / n
-        c = grip_center(d)
         u = k / n
-        depth = 0.0175 + 0.0020 * np.sin(np.pi * u)
-        w = 0.0128 + 0.0012 * np.sin(np.pi * u)
-        sec = sh.superellipse(w, depth, 2.4, 20)
-        if k == n:
-            sec = sh.offset_loop(sec, 0.0020)
-        rings.append(np.array([c + p[0] * np.array([1.0, 0, 0]) + p[1] * (-GRIP_FRONT) for p in sec]))
-    m = sh.loft(rings, "wood")
-    for k in range(4):
-        d = 0.020 + k * 0.018
-        c = grip_center(d) + GRIP_FRONT * 0.0180
-        rib = sh.box(-0.0098, -0.0012, -0.0012, 0.0098, 0.0012, 0.0012, 0.0004, "wood")
-        m.merge(sh.place(rib, origin=c, x_axis=(1, 0, 0), y_axis=-GRIP_AXIS, z_axis=-GRIP_FRONT))
-    return m
+        d = -0.0040 + (GRIP_LEN + 0.0040) * u
+        stations.append((sec(u), grip_center(d), np.array([1.0, 0, 0]), -GRIP_FRONT))
+    return rf.frame_loft(stations, "wood", 0.0, 0.0045)
 
 
 # ------------------------------------------------------------------------------------ moving parts

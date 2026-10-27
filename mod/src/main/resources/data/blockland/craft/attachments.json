@@ -245,6 +245,42 @@
       "name": "草方块挂件",
       "description": "一块会随动作晃来晃去的小草方块，纯装饰。",
       "model": "models/attachment/charm_grass.glb"
+    },
+    "ammo_normal": {
+      "slot": "ammo",
+      "name": "普通子弹",
+      "description": "标准弹头：各项性能均衡。",
+      "round": {}
+    },
+    "ammo_incendiary": {
+      "slot": "ammo",
+      "name": "燃烧弹",
+      "description": "命中并造成伤害时使目标燃烧 3 秒；弹道带橙色光迹；伤害 -10%。",
+      "rarity": "rare",
+      "damageScale": 0.9,
+      "round": {"fireSeconds": 3, "tracerColor": "#FF8A2A", "tracerWidth": 1.25, "impact": "incendiary"}
+    },
+    "ammo_armor_piercing": {
+      "slot": "ammo",
+      "name": "穿甲弹",
+      "description": "对防弹插板与载具装甲造成 2.2 倍耐久损耗；射程 +5%；对肉体伤害 -8%。",
+      "rarity": "rare",
+      "damageScale": 0.92,
+      "rangeScale": 1.05,
+      "round": {"armorDamage": 2.2, "impact": "armor_piercing"}
+    },
+    "ammo_tracer": {
+      "slot": "ammo",
+      "name": "曳光弹",
+      "description": "每一发都拖出明亮的红色光迹，方便修正弹道——敌人也能看见你的位置。",
+      "round": {"tracer": true, "tracerColor": "#FF3B1E", "tracerWidth": 2.2}
+    },
+    "ammo_water": {
+      "slot": "ammo",
+      "name": "水梭弹",
+      "description": "专为水下射击设计：在水中不减速、不打水漂，射程与伤害与在空气中的普通子弹相同。",
+      "rarity": "rare",
+      "round": {"waterproof": true}
     }
   }
 }

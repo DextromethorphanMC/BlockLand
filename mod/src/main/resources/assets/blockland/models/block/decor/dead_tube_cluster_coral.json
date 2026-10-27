@@ -1,0 +1,281 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "blockland:block/decor/coral/dead_tube_cluster_side",
+    "dead_tube_cluster_top": "blockland:block/decor/coral/dead_tube_cluster_top"
+  },
+  "elements": [
+    {
+      "from": [
+        3,
+        0,
+        3
+      ],
+      "to": [
+        6,
+        11,
+        6
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            10,
+            5,
+            13,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            3,
+            5,
+            6,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            3,
+            5,
+            6,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            10,
+            5,
+            13,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            3,
+            3,
+            6,
+            6
+          ],
+          "texture": "#dead_tube_cluster_top"
+        },
+        "down": {
+          "uv": [
+            3,
+            10,
+            6,
+            13
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        8,
+        0,
+        2
+      ],
+      "to": [
+        11,
+        8,
+        5
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            5,
+            8,
+            8,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            8,
+            8,
+            11,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            2,
+            8,
+            5,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            11,
+            8,
+            14,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            8,
+            2,
+            11,
+            5
+          ],
+          "texture": "#dead_tube_cluster_top"
+        },
+        "down": {
+          "uv": [
+            8,
+            11,
+            11,
+            14
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        10,
+        0,
+        8
+      ],
+      "to": [
+        13,
+        12,
+        11
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            3,
+            4,
+            6,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            10,
+            4,
+            13,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            8,
+            4,
+            11,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            5,
+            4,
+            8,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            10,
+            8,
+            13,
+            11
+          ],
+          "texture": "#dead_tube_cluster_top"
+        },
+        "down": {
+          "uv": [
+            10,
+            5,
+            13,
+            8
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        4,
+        0,
+        9
+      ],
+      "to": [
+        7,
+        7,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            9,
+            9,
+            12,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            4,
+            9,
+            7,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            9,
+            9,
+            12,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            4,
+            9,
+            7,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            4,
+            9,
+            7,
+            12
+          ],
+          "texture": "#dead_tube_cluster_top"
+        },
+        "down": {
+          "uv": [
+            4,
+            4,
+            7,
+            7
+          ],
+          "texture": "#particle"
+        }
+      }
+    }
+  ]
+}

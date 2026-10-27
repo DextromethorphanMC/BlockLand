@@ -15,6 +15,7 @@ import numpy as np
 
 import mesh_decimate as md
 import shapes as sh
+import smg_detail as sd
 import tommy_source as ts
 from meshkit import Mesh
 from p9_model import chamfer_bevel
@@ -258,20 +259,75 @@ def foregrip_mesh(path):
     return _soup_mesh(source_parts(path)["foregrip"], "wood", warp=slim)
 
 
+# our pistol grip, along its axis (d down GRIP_AXIS from GRIP_TOP; f along GRIP_FRONT): the source grip's footprint,
+# slimmed front to back (GRIP_DEPTH_SCALE), with the M1928's finger grooves down the front and a palm swell at the back
+GRIP_D = (-0.0050, 0.0040, 0.0210, 0.0390, 0.0570, 0.0740, 0.0920, 0.1093)
+GRIP_FRONT_F = (0.0240, 0.0300, 0.0360, 0.0290, 0.0250, 0.0260, 0.0200, 0.0150)
+GRIP_BACK_F = (-0.0265, -0.0265, -0.0230, -0.0260, -0.0340, -0.0375, -0.0320, -0.0220)
+GRIP_GROOVES = (0.0330, 0.0540, 0.0760)          # finger grooves (between the fingers) down the front strap
+GRIP_JOIN_Y = -0.0466                            # the frame's underside, where the grip goes in
+
+
+def _grip_ring(d):
+    front = GRIP_DEPTH_SCALE * float(np.interp(d, GRIP_D, GRIP_FRONT_F))
+    front -= sum(0.0019 * np.exp(-((d - g) / 0.0065) ** 2) for g in GRIP_GROOVES)
+    back = GRIP_DEPTH_SCALE * float(np.interp(d, GRIP_D, GRIP_BACK_F))
+    w = 0.0134 - 0.0026 * float(np.clip((d - 0.085) / 0.024, 0.0, 1.0)) ** 2
+    sec = sh.superellipse(w, 0.5 * (front - back), 2.4, 40)
+    c = GRIP_TOP + d * GRIP_AXIS + 0.5 * (front + back) * GRIP_FRONT
+    return np.array([c + p[0] * np.array([1.0, 0.0, 0.0]) + p[1] * GRIP_FRONT for p in sec])
+
+
 def grip_mesh(path):
-    """The source's chunky pistol grip, slimmed front to back about its axis."""
-    def slim(p):
-        d = p - GRIP_TOP
-        along = d @ GRIP_AXIS
-        front = d @ GRIP_FRONT
-        return GRIP_TOP + np.outer(along, GRIP_AXIS) + np.outer(front * GRIP_DEPTH_SCALE, GRIP_FRONT) \
-            + np.outer(d[:, 0], (1.0, 0.0, 0.0))
-    return _soup_mesh(source_parts(path)["grip"], "wood", warp=slim)
+    """Walnut pistol grip (ours, on the source's footprint): rounded sections down a raked axis, the finger grooves
+    of the M1928 down its front, a palm swell at the back, the base rounded over, the grip screw's escutcheons."""
+    ds = np.concatenate([np.linspace(0.0120, 0.0960, 24), [0.1020, 0.1060, GRIP_D[-1]]])
+    rings = [_grip_ring(d) for d in ds]
+    # the top: the first section carried straight up to the frame's underside (a level cut, hidden in the frame)
+    top = rings[0].copy()
+    top[:, 1] = GRIP_JOIN_Y
+    rings.insert(0, top)
+    rings, soft = sd.round_end(rings, 0.0060)
+    m = sh.loft(rings, "wood", soft_bands=soft)
+    nut = sh.revolve([(0.0, 0.0006), (0.0026, 0.0004), (0.0032, -0.0002), (0.0, -0.0004)], 12, "steel_dark")
+    c = GRIP_TOP + 0.0480 * GRIP_AXIS - 0.0010 * GRIP_FRONT
+    for side in (-1, 1):
+        m.merge(sh.place(nut, origin=c + np.array([side * 0.0133, 0.0, 0.0]), x_axis=(0, 1, 0), y_axis=(0, 0, 1),
+                         z_axis=(side, 0, 0)))
+    return m
+
+
+# our buttstock, on the source stock's side outline (design frame z, y): the comb straight back from the receiver's
+# tang and falling to the heel, the belly from the wrist down to the toe; wider towards the butt
+STOCK_Z0, STOCK_Z1 = 0.2270, 0.5275               # front (against the receiver) / the butt plate's rear face
+STOCK_PLATE = 0.0050                              # steel butt plate thickness
+STOCK_TOP = ((0.2270, -0.0275), (0.3100, -0.0270), (0.3600, -0.0310), (0.4500, -0.0520), (STOCK_Z1, -0.0800))
+STOCK_BOT = ((0.2270, -0.0460), (0.2376, -0.0620), (0.2454, -0.0696), (0.3800, -0.1310), (STOCK_Z1, -0.1975))
+
+
+def _stock_ring(z, inflate=0.0):
+    top = float(np.interp(z, *zip(*STOCK_TOP))) + inflate
+    bot = float(np.interp(z, *zip(*STOCK_BOT))) - inflate
+    u = (z - STOCK_Z0) / (STOCK_Z1 - STOCK_Z0)
+    w = 0.0150 + 0.0036 * u ** 0.7 + inflate
+    # rounded comb and belly, fuller flanks: a superellipse squarer across than along (the stock is deep)
+    sec = sh.superellipse(w, 0.5 * (top - bot), 2.9, 44, cy=0.5 * (top + bot))
+    return np.stack([sec[:, 0], sec[:, 1], np.full(len(sec), z)], 1)
 
 
 def stock_mesh(path):
-    parts = source_parts(path)
-    return _soup_mesh(parts["stock"], "wood").merge(_soup_mesh(parts["stock_pin"], "steel_dark"))
+    """Walnut buttstock (ours, on the source's outline): rounded sections from the wrist at the receiver's tang to the
+    butt, its rear end rounded into the steel butt plate (two screws); the source's stock pin."""
+    zs = list(np.linspace(STOCK_Z0, STOCK_Z1 - STOCK_PLATE, 24))
+    rings, soft = sd.round_end([_stock_ring(z) for z in zs], 0.0040)
+    m = sh.loft(rings, "wood", soft_bands=soft)
+    plate = [_stock_ring(z, inflate=0.0005) for z in (STOCK_Z1 - STOCK_PLATE - 0.0006, STOCK_Z1 - 0.0010, STOCK_Z1)]
+    plate, psoft = sd.round_end(plate, 0.0012)
+    m.merge(sh.loft(plate, "steel", soft_bands=psoft))
+    for y in (-0.1000, -0.1720):                                # the butt plate's screws
+        m.merge(sh.revolve([(0.0, 0.0006), (0.0028, 0.0004), (0.0032, -0.0002), (0.0, -0.0004)], 12, "steel_dark")
+                .translated((0.0, y, STOCK_Z1)))
+    return m.merge(_soup_mesh(source_parts(path)["stock_pin"], "steel_dark"))
 
 
 def bolt_mesh(path):
@@ -318,7 +374,7 @@ def muzzle_brake_mesh():
     upwards to hold the muzzle down) and a dished front face around the bore."""
     flat = COMP_R * 0.62                                     # height of the flat top
     sec = []
-    for a in np.linspace(0, 2 * np.pi, 20, endpoint=False):
+    for a in np.linspace(0, 2 * np.pi, 48, endpoint=False):
         x, y = COMP_R * np.cos(a), COMP_R * np.sin(a)
         sec.append((x, min(y, flat)))
     sec = np.array(sec)

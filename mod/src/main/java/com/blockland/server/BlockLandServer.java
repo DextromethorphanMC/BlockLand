@@ -125,8 +125,10 @@ public final class BlockLandServer {
     public final ParachuteService parachutes;
     public final com.blockland.server.supply.AmmoCrateService supply;
     public final com.blockland.server.armor.ArmorService armor;
+    public final com.blockland.server.vehicle.VehicleService vehicles;
     public final com.blockland.server.graffiti.GraffitiService graffiti;
     public final KillTracker kills;
+    public final com.blockland.server.combat.ProjectileHits projectileHits;
     public final com.blockland.server.spectate.SpectateService spectate;
     public final CosmeticsService cosmetics;
     public final InventoryService inventory;
@@ -147,6 +149,7 @@ public final class BlockLandServer {
                 .register(new BombGameType())
                 .register(new WorldGameType())
                 .register(new com.blockland.games.battleroyale.BattleRoyaleGameType())
+                .register(new com.blockland.games.pillars.LuckyPillarsGameType())
                 .register(new BridgePracticeGameType())
                 .register(new AimPracticeGameType());
         this.jobs = new WorldJobScheduler(BlockLandConfig.BLOCK_OPERATIONS_PER_TICK::get);
@@ -195,6 +198,12 @@ public final class BlockLandServer {
         this.parachutes = new ParachuteService(server);
         this.supply = new com.blockland.server.supply.AmmoCrateService(server);
         this.armor = new com.blockland.server.armor.ArmorService(server);
+        // vehicles (载具): in a match the mode's allowVehicles decides, outside matches a config option
+        this.vehicles = new com.blockland.server.vehicle.VehicleService(player -> {
+            if (!games.isPlaying(player)) return BlockLandConfig.VEHICLES_OUTSIDE_MATCHES.get();
+            GameInstance game = games.gameOf(player);
+            return game != null && game.mode().flag("allowVehicles", false);
+        });
         // wall graffiti: only in a match whose mode allows it; owned = free or an entitlement
         this.graffiti = new com.blockland.server.graffiti.GraffitiService(server, player -> {
             GameInstance game = games.gameOf(player);
@@ -205,6 +214,11 @@ public final class BlockLandServer {
         this.craft = new CraftService(server, profiles, profiles::hasEntitlement);
         this.profiles.setEntitlementListener(craft::entitlementsChanged);
         this.kills = new KillTracker(server, games);
+        // snowballs, eggs and fishing bobbers knock players back in modes that turn it on (projectileKnockback)
+        this.projectileHits = new com.blockland.server.combat.ProjectileHits((player, source) -> {
+            GameInstance game = games.gameOf(player);
+            return game != null && game.mode().flag("projectileKnockback", false) && games.allowDamage(player, source);
+        });
         this.spectate = new com.blockland.server.spectate.SpectateService(server, games, profiles);
         // 库存 / 个人主页: what players own (entitlements + free items) and wear (cosmetics slots)
         this.cosmetics = new CosmeticsService(server, backend);
@@ -384,10 +398,18 @@ public final class BlockLandServer {
             }
             return false;
         });
+        // riders inside a vehicle's hull are out of reach of rounds and blades (vehicle spec §6)
+        LivingAttackEvent.BUS.addListener(event -> instance != null && !event.getEntity().level().isClientSide()
+                && instance.vehicles.shelters(event.getEntity(), event.getSource()));
         LivingAttackEvent.BUS.addListener(event -> {
             if (instance == null || !(event.getEntity() instanceof ServerPlayer player)) return false;
             if (instance.games.isPlaying(player)) return !instance.games.allowDamage(player, event.getSource());
             return BlockLandConfig.LOBBY_PROTECT.get() && !event.getSource().is(DamageTypeTags.BYPASSES_INVULNERABILITY);
+        });
+        net.minecraftforge.event.entity.ProjectileImpactEvent.BUS.addListener(event -> {
+            if (instance != null && !event.getProjectile().level().isClientSide()) {
+                instance.projectileHits.onImpact(event.getProjectile(), event.getRayTraceResult());
+            }
         });
         // locked hands (粘液缠身): no vanilla attack, item use or block interaction either
         AttackEntityEvent.BUS.addListener(event -> {
@@ -477,6 +499,8 @@ public final class BlockLandServer {
         BLNetwork.setParachuteServerListener(created.parachutes);
         BLNetwork.setSupplyServerListener(created.supply);
         BLNetwork.setArmorServerListener(created.armor);
+        BLNetwork.setVehicleServerListener(created.vehicles);
+        com.blockland.vehicle.Vehicles.setServer(created.vehicles);
         BLNetwork.setFarTerrainServerListener(created.farTerrain);
         NetHooks.setListener(created.antiCheat);
         Suspicion.setSink(created.antiCheat);
@@ -539,6 +563,8 @@ public final class BlockLandServer {
         current.supply.clear();
         BLNetwork.setArmorServerListener(null);
         current.armor.clear();
+        BLNetwork.setVehicleServerListener(null);
+        com.blockland.vehicle.Vehicles.setServer(null);
         BLNetwork.setGraffitiServerListener(null);
         BLNetwork.setSpectateServerListener(null);
         current.spectate.clear();

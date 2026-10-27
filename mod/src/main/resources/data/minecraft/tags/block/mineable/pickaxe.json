@@ -9,6 +9,10 @@
     "blockland:container_white",
     "blockland:container_gray",
     "blockland:container_brown",
-    "blockland:revive_antenna"
+    "blockland:revive_antenna",
+    "blockland:vending_machine",
+    "blockland:stone_layer",
+    "blockland:reef_coral",
+    "blockland:dead_reef_coral"
   ]
 }

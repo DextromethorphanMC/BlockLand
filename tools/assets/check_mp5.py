@@ -84,7 +84,7 @@ def check_nodes(g, r, label):
             r.check(abs(np.linalg.norm(n["rotation"]) - 1) < 1e-5, f"{label}: {n.get('name')} rotation not normalized")
         nm = str(n.get("name", ""))
         if nm.startswith(("mag_", "tube_")):     # loadouts.hidden_nodes treats these prefixes as magazines
-            r.check(nm in ("mag_standard", "mag_extended"), f"{label}: node {nm} would be hidden as a magazine")
+            r.check(nm in ("mag_standard", "mag_extended", "mag_drum"), f"{label}: node {nm} would be hidden as a magazine")
     for side in "RL":
         t = g.nodes[g.names[f"arm_{side}_fore"]].get("translation", [0, 0, 0])
         r.check(np.allclose(t, [0, -0.30, 0], atol=1e-6), f"{label}: arm_{side}_fore translation {t}")

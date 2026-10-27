@@ -132,6 +132,9 @@ final class GunParticles {
         private final double length;
         private final int rgb;
         private final float width;
+        /** Length of the streak (blocks) and its head's opacity: a tracer round burns long and bright. */
+        private final double trail;
+        private final float bright;
 
         Tracer(ClientLevel level, Vec3 from, Vec3 to) {
             this(level, from, to, DEFAULT_TRACER, 1);
@@ -139,11 +142,18 @@ final class GunParticles {
 
         /** A tracer in a special skin's colour and width (asset spec §30). */
         Tracer(ClientLevel level, Vec3 from, Vec3 to, int rgb, float width) {
+            this(level, from, to, rgb, width, false);
+        }
+
+        /** {@code burning}: a tracer round's — a long, bright streak (its own colour), not an ordinary shot's glint. */
+        Tracer(ClientLevel level, Vec3 from, Vec3 to, int rgb, float width, boolean burning) {
             super(level, from.x, from.y, from.z);
             this.from = from;
             this.to = to;
             this.rgb = rgb;
             this.width = width;
+            this.trail = burning ? 9 : 3.5;
+            this.bright = burning ? 1 : 0.85f;
             this.length = from.distanceTo(to);
             this.lifetime = Math.max(2, (int) Math.ceil(length / SPEED) + 1);
             this.hasPhysics = false;
@@ -162,13 +172,13 @@ final class GunParticles {
         @Override
         public void renderCustom(PoseStack pose, MultiBufferSource buffers, Camera camera, float partialTick) {
             double head = Math.min(length, (age + partialTick) * SPEED);
-            double tail = Math.max(0, head - Math.min(3.5, length * 0.5));
+            double tail = Math.max(0, head - Math.min(trail, length * 0.5));
             if (head <= tail) return;
             Vec3 dir = to.subtract(from).normalize();
             float fade = 1 - (float) Math.max(0, (age + partialTick - (lifetime - 1)));
             int tailRgb = rgb == DEFAULT_TRACER ? 0xFFE6A0 : rgb;
             beam(buffers.getBuffer(RenderType.lightning()), pose.last().pose(), from.add(dir.scale(tail)), from.add(dir.scale(head)),
-                    camera.getPosition(), 0.028f * width, argb(0, tailRgb), argb(0.85f * fade, rgb));
+                    camera.getPosition(), 0.028f * width, argb(0, tailRgb), argb(bright * fade, rgb));
         }
 
         @Override

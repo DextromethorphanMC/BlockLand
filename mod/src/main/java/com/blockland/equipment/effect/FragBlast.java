@@ -1,6 +1,7 @@
 package com.blockland.equipment.effect;
 
 import com.blockland.BlockLand;
+import com.blockland.combat.Blasts;
 import com.blockland.combat.HitRecords;
 import com.blockland.common.Sounds;
 import com.google.gson.JsonObject;
@@ -59,6 +60,8 @@ final class FragBlast {
             victim.push(away.x * push, Math.max(away.y, 0.25) * push * 0.6 + 0.08 * push, away.z * push);
             if (victim instanceof ServerPlayer player) player.hurtMarked = true;
         }
+        // and what is not a body (vehicle hulls) takes it its own way; "hullDamage" if the blast hits those harder
+        Blasts.reach(level, centre, radius, inner, Params.f(params, "hullDamage", damage), owner, thrown);
     }
 
     /** Share (0, 1/3, 2/3, 1) of the eyes, middle and feet the blast has a clear line to. */

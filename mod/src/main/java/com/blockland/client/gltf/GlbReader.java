@@ -100,6 +100,10 @@ public final class GlbReader {
                 material.pbr = string(extras, "pbr", "").trim();
                 material.region = string(extras, "region", "").trim();
                 material.uvScale = number(extras, "uvScale", 1);
+                if (extras.has("scroll") && extras.get("scroll").isJsonObject()) {
+                    material.scrollPerMetre = number(extras.getAsJsonObject("scroll"), "vPerMetre", 0);
+                    if (!Float.isFinite(material.scrollPerMetre)) material.scrollPerMetre = 0;
+                }
                 if (!(material.uvScale > 0) || Float.isInfinite(material.uvScale)) material.uvScale = 1;
             }
             model.materials.add(material);

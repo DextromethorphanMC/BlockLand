@@ -132,6 +132,14 @@ def handle_mesh(side):
                         (0.0022, 0.0064), (0, 0.0064)], 16, "pins", precision=True).transformed(_x_axis((0, py, 0))))
     m.merge(sh.revolve([(0, -0.0062), (0.0015, -0.0062), (0.0019, -0.0059), (0.0019, 0.0059),
                         (0.0015, 0.0062), (0, 0.0062)], 12, "pins", precision=True).transformed(_x_axis((0, yc, 0.1215))))
+    # liner screws through the inlays between the skeleton slots (two a side), and a tang stop pin in each handle
+    import detail_parts as dp
+    head = dp.socket_screw(0.0016, "pins")
+    for z in (0.5 * (SLOTS[0][1] + SLOTS[1][0]), 0.5 * (SLOTS[1][1] + SLOTS[2][0])):
+        for sx in (-1, 1):
+            m.merge(dp.on_surface(head, (sx * (LINER_X[1] + 0.00054), yc, z), (sx, 0, 0)))
+    for sx in (-1, 1):
+        m.merge(dp.on_surface(dp.rivet(0.0011, "pins"), (sx * (LINER_X[1] + 0.00054), yc, 0.0060), (sx, 0, 0)))
     return m
 
 

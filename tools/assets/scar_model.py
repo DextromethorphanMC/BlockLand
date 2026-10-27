@@ -12,6 +12,7 @@ round, the slot shows the carrier, the rear sight is a through aperture, the fla
 returns a meshkit.Mesh in the design frame; gen_scar moves meshes into node-local space."""
 import numpy as np
 
+import rifle_forms as rf
 import shapes as sh
 from meshkit import Mesh
 from p9_model import chamfer_bevel, extrude_z, round_bevel
@@ -468,21 +469,16 @@ def trigger_mesh():
 def pistol_grip_mesh():
     """Polymer pistol grip: a swelling oval section along the 20 degree axis, a finger ridge under the guard, the
     bottom cap and the moulded texture panels on both sides (raised pebbled pads)."""
-    rings = []
-    n = 12
+    stations = []
+    n = 18
     for k in range(n + 1):
         u = k / n
         d = -0.0050 + (GRIP_LEN + 0.0050) * u
         c = grip_center(d)
         depth = 0.0172 + 0.0026 * np.sin(np.pi * min(u * 1.2, 1.0)) - 0.0008 * u
         w = 0.0125 + 0.0018 * np.sin(np.pi * u)
-        sec = sh.superellipse(w, depth, 2.5, 24, n_front=2.2)
-        if k == n:
-            sec = sh.offset_loop(sec, 0.0030)
-        elif k == n - 1:
-            sec = sh.offset_loop(sec, 0.0007)
-        rings.append(np.array([c + p[0] * np.array([1.0, 0, 0]) + p[1] * (-GRIP_FRONT) for p in sec]))
-    m = sh.loft(rings, "grip")
+        stations.append((sh.superellipse(w, depth, 2.5, 36, n_front=2.2), c, np.array([1.0, 0, 0]), -GRIP_FRONT))
+    m = rf.frame_loft(stations, "grip", 0.0, 0.0045)
     for s in (-1, 1):                                       # texture pads on the flanks
         pad = sh.rounded_rect(-0.0130, -0.0300, 0.0110, 0.0280, 0.0080, 3)    # (along -front, along axis)
         mid = grip_center(0.052) + s * np.array([0.0128, 0.0, 0.0])
@@ -509,16 +505,18 @@ def stock_mesh():
     def half(z):
         u = (z - z0) / (z1 - z0)
         return 0.0140 + 0.0030 * u
-    zs = list(np.linspace(z0, zj, 6)) + [zj + 0.0002] + list(np.linspace(zj + 0.006, z1, 6))
-    rings = []
-    for k, z in enumerate(zs):
-        grow = 0.0 if z <= zj else 0.0018
+    def sec(z, grow, pocket):
         y0, y1, w = bot(z) - grow, top(z) + grow, half(z) + grow
-        sec = sh.rounded_rect(-w, y0, w, y1, (0.0045, 0.0045, 0.0075, 0.0075), 3)
-        if k == 0:
-            sec = sh.offset_loop(sh.ccw(sec), 0.0010)
-        rings.append(ring_z(sec, z))
-    m = sh.loft(rings, "stock")
+        # rounded box section (squarish superellipse), a shallow pocket moulded into each flank
+        return rf.section(w, y1, y0, n=4.0, count=36, flat_top=0.5, dent=pocket, dent_y=0.5 * (y0 + y1) - 0.004,
+                          dent_w=0.40 * (y1 - y0))
+    front = [(sec(z, 0.0, 0.0010 * np.sin(np.pi * (z - z0) / (zj - z0))), np.array([0.0, 0.0, z]),
+              np.array([1.0, 0, 0]), np.array([0, 1.0, 0])) for z in np.linspace(z0, zj + 0.0040, 9)]
+    m = rf.frame_loft(front, "stock", 0.0030, 0.0)
+    # the butt section telescoped over it: its front edge rounded, the pocket deeper
+    butt = [(sec(z, 0.0018, 0.0014 * np.sin(np.pi * np.clip((z - zj) / (z1 - zj), 0.08, 0.92))), np.array([0.0, 0.0, z]),
+             np.array([1.0, 0, 0]), np.array([0, 1.0, 0])) for z in np.linspace(zj, z1, 9)]
+    m.merge(rf.frame_loft(butt, "stock", 0.0020, 0.0))
     # the step face where the butt section starts (a ring round the front body)
     # cheek riser pad on the comb, its release button at the front
     rz0, rz1 = 0.3300, 0.4750
@@ -536,8 +534,8 @@ def stock_mesh():
     m.merge(extrude_z(leaf, (), UP_Z1 + 0.0080, z0 + 0.0040, chamfer_bevel(0.0006), "steel"))
     # rubber butt pad: follows the butt outline, slightly larger, a sloping heel
     y0, y1, w = bot(z1) - 0.0024, top(z1) + 0.0024, half(z1) + 0.0024
-    pad = sh.rounded_rect(-w, y0, w, y1, (0.0050, 0.0050, 0.0085, 0.0085), 3)
-    m.merge(extrude_z(pad, (), z1 - 0.0004, BUTT_Z, round_bevel(0.0025, 2), "stock_pad"))
+    pad = rf.section(w, y1, y0, n=4.0, count=36, flat_top=0.5)
+    m.merge(rf.frame_loft(rf.straight_stations(lambda u: pad, z1 - 0.0004, BUTT_Z, 2), "stock_pad", 0.0, 0.0040))
     return m
 
 

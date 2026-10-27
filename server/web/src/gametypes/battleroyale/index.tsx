@@ -1,9 +1,9 @@
 import { Field, NumberInput } from '../../components/ui'
+import { LootTableField } from '../common/LootTableField'
 import { MapPoolField } from '../common/MapPoolField'
 import { MovementFields } from '../common/Movement'
 import type { GameTypeUi, SettingsFormProps } from '../index'
 import { BattleRoyaleMapPanel, useBattleRoyaleOverlay } from './BattleRoyaleMapPanel'
-import { LootTableField } from './LootTableField'
 import { BATTLE_ROYALE, readSettings, readSpots, type BattleRoyaleSettings } from './model'
 
 const PRESETS = [2, 8, 16, 32]
@@ -84,7 +84,11 @@ function BattleRoyaleSettingsForm({ settings, onChange, maps }: SettingsFormProp
           <NumberInput value={s.autoLootSpots} min={0} max={400} onChange={(v) => set({ autoLootSpots: Math.round(v) })} />
         </Field>
       </div>
-      <LootTableField loot={s.loot} onChange={(loot) => set({ loot })} />
+      <LootTableField
+        loot={s.loot}
+        onChange={(loot) => set({ loot })}
+        hint="每个物资点按权重抽取若干项（见上方「每个物资点物品数」），每项的数量在最少与最多之间随机。"
+      />
 
       <MapPoolField
         gameType={BATTLE_ROYALE}

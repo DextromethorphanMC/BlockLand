@@ -40,6 +40,14 @@ public final class BLEntities {
             .clientTrackingRange(8)
             .build(key("ghast_lord")));
 
+    /** 瞎子: an eyeless, blindfolded zombie variant that heals its allies and blinds whoever comes close. */
+    public static final RegistryObject<EntityType<Blind>> BLIND = TYPES.register("blind", () -> EntityType.Builder
+            .<Blind>of(Blind::new, MobCategory.MONSTER)
+            .sized(0.6F, 1.95F)
+            .eyeHeight(1.74F)
+            .clientTrackingRange(8)
+            .build(key("blind")));
+
     /** A vanilla ghast fireball whose landing its shooter decides (the ghast lord's skill). */
     public static final RegistryObject<EntityType<SkillFireball>> SKILL_FIREBALL = TYPES.register("skill_fireball", () -> EntityType.Builder
             .<SkillFireball>of(SkillFireball::new, MobCategory.MISC)
@@ -88,6 +96,7 @@ public final class BLEntities {
             event.put(SLIME_LICKER.get(), Zombie.createAttributes().build());
             event.put(CREEPER_ZOMBIE.get(), Zombie.createAttributes().build());
             event.put(GHAST_LORD.get(), Ghast.createAttributes().build());
+            event.put(BLIND.get(), Zombie.createAttributes().build());
             event.put(PRACTICE_TARGET.get(), PracticeTarget.createAttributes().build());
         });
     }

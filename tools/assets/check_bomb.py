@@ -13,6 +13,7 @@ from check_equipment import check_crosshair
 from check_glb import CAM_ROLL, CAM_TURN
 from check_glb import check_container, check_curve_rate, check_eye_distance, check_hand_joints, check_meshes, euler_deg
 from glbread import GLTF
+from model_quality import BUDGETS                 # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BOMB_JSON = os.path.join(HERE, "..", "..", "mod", "src", "main", "resources", "data", "blockland", "bomb", "bomb.json")
@@ -27,7 +28,7 @@ PARTS = {"bomb": "viewmodel", "body": "bomb", "keypad": "bomb", "wires": "bomb",
 MATERIALS = {"explosive": "body", "tape": "tape", "housing": "keypad", "keys": "keypad", "screen": "none", "led": "none",
              "wire_red": "wires", "wire_yellow": "wires", "wire_blue": "wires"}
 NO_SET = {"screen", "led", "wire_red", "wire_yellow", "wire_blue"}       # self-lit, or plain plastic insulation
-MAX_TRIS = 4000
+MAX_TRIS = BUDGETS["equipment"]               # VIEWMODEL_SPEC section 24 budgets (rounded edges, section 53)
 KEY_TOP = 0.0422                                  # the keys' top face in the keypad's space (bomb_model)
 
 

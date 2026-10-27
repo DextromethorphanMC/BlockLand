@@ -34,6 +34,13 @@ public final class WeaponPreviewRenderer extends PictureInPictureRenderer<Weapon
     private final CachedPerspectiveProjectionMatrixBuffer projection = new CachedPerspectiveProjectionMatrixBuffer("BlockLand weapon preview", 0.01f, 40f);
     @Nullable
     private State rendered;
+    /** The assembly of the last {@link State#framedBy} build (framing only, never drawn). */
+    @Nullable
+    private WeaponAssembly framingAssembly;
+    @Nullable
+    private Build framingBuild;
+    @Nullable
+    private String framingWeapon;
     /** The rendered skin has shader effects (the cached image would freeze them). */
     private boolean animated;
     /** Texture sets finished when it was rendered: one finishing later (loaded in the background) shows on a redraw. */
@@ -42,9 +49,12 @@ public final class WeaponPreviewRenderer extends PictureInPictureRenderer<Weapon
     /**
      * @param orientation the view rotation to use instead of {@code pitch} / {@code yaw} (e.g. a weapon side seen square
      *                    on while placing sprays); null = from the angles
+     * @param framedBy    the build whose meshes the camera frames ({@link #frameOf}); null = {@code build} itself. An option
+     *                    tried on under the mouse keeps the edited build's framing, so the picture (and whatever is laid out
+     *                    against it) does not jump while the mouse moves over the options
      */
     public record State(String weaponId, Build build, float yaw, float pitch, float zoom, @Nullable Quaternionfc orientation,
-                        int x0, int y0, int x1, int y1, float scale, @Nullable ScreenRectangle scissorArea,
+                        @Nullable Build framedBy, int x0, int y0, int x1, int y1, float scale, @Nullable ScreenRectangle scissorArea,
                         @Nullable ScreenRectangle bounds) implements PictureInPictureRenderState {
         public static State of(String weaponId, Build build, float yaw, float pitch, float zoom, int x0, int y0, int x1, int y1,
                                @Nullable ScreenRectangle scissor) {
@@ -53,8 +63,13 @@ public final class WeaponPreviewRenderer extends PictureInPictureRenderer<Weapon
 
         public static State of(String weaponId, Build build, float yaw, float pitch, float zoom, @Nullable Quaternionfc orientation,
                                int x0, int y0, int x1, int y1, @Nullable ScreenRectangle scissor) {
-            return new State(weaponId, build, yaw, pitch, zoom, orientation == null ? null : new Quaternionf(orientation),
+            return new State(weaponId, build, yaw, pitch, zoom, orientation == null ? null : new Quaternionf(orientation), null,
                     x0, y0, x1, y1, 1f, scissor, PictureInPictureRenderState.getBounds(x0, y0, x1, y1, scissor));
+        }
+
+        /** This state framed by {@code framing}'s meshes instead of its own build's. */
+        public State framedBy(Build framing) {
+            return new State(weaponId, build, yaw, pitch, zoom, orientation, framing, x0, y0, x1, y1, scale, scissorArea, bounds);
         }
     }
 
@@ -126,6 +141,18 @@ public final class WeaponPreviewRenderer extends PictureInPictureRenderer<Weapon
         return state.equals(rendered) && !animated && renderedLoads == com.blockland.client.render.Textures.loads();
     }
 
+    /** The assembly the camera frames: the state's own, or its {@link State#framedBy} build's (kept while it stays the same). */
+    private WeaponAssembly framing(Craftable weapon, State state, WeaponAssembly own) {
+        Build by = state.framedBy();
+        if (by == null || by.equals(state.build())) return own;
+        if (framingAssembly == null || !by.equals(framingBuild) || !weapon.id().equals(framingWeapon)) {
+            framingAssembly = WeaponAssembly.of(weapon, CraftCatalog.complete(weapon, by), null, false);
+            framingBuild = by;
+            framingWeapon = weapon.id();
+        }
+        return framingAssembly == null ? own : framingAssembly;
+    }
+
     @Override
     protected void renderToTexture(State state, PoseStack poseStack) {
         Craftable weapon = CraftCatalog.get(state.weaponId()).orElse(null);
@@ -137,7 +164,8 @@ public final class WeaponPreviewRenderer extends PictureInPictureRenderer<Weapon
         if (assembly == null || color == null) return;
         int width = color.texture().getWidth(0), height = color.texture().getHeight(0);
 
-        Matrix4f view = viewFor(assembly, state.yaw(), state.pitch(), state.zoom(), state.orientation());
+        float[] frame = frameOf(framing(weapon, state, assembly));
+        Matrix4f view = frame == null ? null : viewFor(frame, state.yaw(), state.pitch(), state.zoom(), state.orientation());
         if (view == null) return;
         animated = assembly.animated();
         renderedLoads = com.blockland.client.render.Textures.loads();

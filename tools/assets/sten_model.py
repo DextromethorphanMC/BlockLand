@@ -15,6 +15,7 @@ meshes into node-local space."""
 import numpy as np
 
 import shapes as sh
+import smg_detail as sd
 import sten_geom as sg
 from ak_model import _cyl_x, _cyl_z, _rivet
 from meshkit import Mesh
@@ -271,7 +272,9 @@ def trigger_housing_mesh():
     guard_in = [(0.2675, TH_Y0 + 0.0005), (0.2675, TH_Y0 - 0.0065), (0.2725, TH_Y0 - 0.0160),
                 (0.2840, TH_Y0 - 0.0212), (0.3010, TH_Y0 - 0.0212), (0.3112, TH_Y0 - 0.0170),
                 (0.3160, TH_Y0 - 0.0085), (0.3160, TH_Y0 + 0.0005)]
-    m.merge(sh.extrude_x(guard_out, [guard_in], 0.0042, chamfer_bevel(0.0007), "steel"))
+    # a bent strap: its bends smoothed (corner cutting) rather than eight facets
+    m.merge(sh.extrude_x(sd.smooth_open(guard_out, 2), [sd.smooth_open(guard_in, 2)], 0.0042, chamfer_bevel(0.0007),
+                         "steel"))
     # pins through the housing, the selector button (left: semi, right: auto)
     for y, z in ((-0.0300, 0.1960), (TRIGGER_PIVOT[1], TRIGGER_PIVOT[2]), (-0.0290, 0.3090)):
         for s in (-1, 1):
@@ -312,7 +315,8 @@ def grip_mesh():
         c = grip_center(d)
         sec = _grip_section(a, b)
         rings.append(np.array([c + p[0] * np.array([1.0, 0.0, 0.0]) + p[1] * GRIP_FRONT for p in sec]))
-    m.merge(sh.loft(rings, "wood"))
+    rings, soft = sd.round_end(rings, 0.0030)                   # the heel rounded over, no flat-sawn end
+    m.merge(sh.loft(rings, "wood", soft_bands=soft))
     c = grip_center(0.0420)
     for s in (-1, 1):
         m.merge(_rivet(s * 0.0144, c[1], c[2], s, 0.0030, "steel_dark"))

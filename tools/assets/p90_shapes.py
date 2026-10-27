@@ -113,7 +113,8 @@ def extrude_var(outer, holes=(), hw=0.01, edge=((0.0, 0.0),), material="default"
             for i in range(N):
                 a, b = base + k * N + i, base + k * N + (i + 1) % N
                 c, d = base + (k + 1) * N + (i + 1) % N, base + (k + 1) * N + i
-                mesh.add_face([a, d, c, b], material)
+                # the facets of the edge round shade as one curve (VIEWMODEL_SPEC section 53)
+                mesh.add_face([a, d, c, b], material, soft=seq[k][2] > 0 or seq[k + 1][2] > 0)
     for end, flip in ((0, False), (len(seq) - 1, True)):
         o2 = [np.stack([s[end][:, 2], s[end][:, 1]], 1) for s in secs_per_loop]
         base = mesh.add_vertices(np.concatenate([s[end] for s in secs_per_loop]))

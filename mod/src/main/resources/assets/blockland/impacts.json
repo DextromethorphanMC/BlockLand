@@ -236,7 +236,9 @@
     "blunt": {"energy": 0.6, "count": 0.55, "size": 0.95, "dust": 0.6, "sparks": 0.55, "blade": true, "thrust": true},
     "blunt_heavy": {"energy": 0.85, "count": 0.85, "size": 1.05, "dust": 0.95, "sparks": 0.8, "blade": true, "thrust": true},
     "punch": {"energy": 0.3, "count": 0.25, "size": 0.7, "dust": 0.3, "sparks": 0.12, "blade": true, "thrust": true},
-    "punch_heavy": {"energy": 0.45, "count": 0.4, "size": 0.8, "dust": 0.45, "sparks": 0.2, "blade": true, "thrust": true}
+    "punch_heavy": {"energy": 0.45, "count": 0.4, "size": 0.8, "dust": 0.45, "sparks": 0.2, "blade": true, "thrust": true},
+    "incendiary": {"energy": 1.0, "count": 0.9, "size": 1.0, "dust": 0.8, "sparks": 3.5},
+    "armor_piercing": {"energy": 1.15, "count": 1.1, "size": 0.9, "dust": 0.9, "sparks": 2.0}
   },
   "fallbackAmmo": "rifle",
   "environment": {

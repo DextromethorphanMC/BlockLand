@@ -35,6 +35,11 @@ RECT_BEVEL = 0.0008                # the window's rear edge, chamfered towards t
 BODY_TOP = 0.0115                  # the base housing stays under the sight lines to the window's bottom edge
 
 
+def _details():
+    import attach_details as ad
+    return ad
+
+
 def _flare(loop, t, cy, dx, dy):
     p = np.array(loop, float)
     p[:, 0] += np.sign(p[:, 0]) * dx * t
@@ -88,6 +93,7 @@ def reddot_rect():
     m.merge(frame)
     uv = [((x + RECT_W / 2) / RECT_W, (cy + RECT_H / 2 - y) / RECT_H) for x, y in inner]
     m.add_poly(_at_z(inner, zg), "glass", uvs=uv)
+    m.merge(_details().reddot_rect(cy, zg, D, RECT_W, BODY_TOP))
     p.meshes["attachment"] = m
     reticle = np.array([0.0, cy, zg + 0.0003])
     p.node("reticle", "attachment", reticle, pp.reticle_mesh(0.0016))
@@ -107,20 +113,38 @@ def _clamp(length=0.0360, depth=0.0085):
 
 
 def vertical_grip():
-    """Vertical foregrip: a clamp and a tapered, finger-grooved grip hanging straight down ~0.10 m, end cap."""
+    """Vertical foregrip: a clamp and a tapered grip hanging straight down ~0.10 m — oval in section (deeper front to
+    back), three finger grooves on its front, ribbed panels on both sides where the palm and thumb sit, a knurled
+    storage cap at the bottom."""
     p = _attach().Part()
     m = _clamp()
-    prof = [(0.0, 0.0)]
-    for k in range(9):                       # radius down the grip (local z = down): taper with three finger swells
-        y = 0.008 + k * 0.0115
-        swell = 0.0008 * np.sin(np.pi * k / 2.6) ** 2 if k < 8 else 0.0
-        prof.append((0.0158 - 0.0020 * k / 8 + swell, y))
-    prof += [(0.0150, 0.1000), (0.0142, 0.1040), (0.0, 0.1040)]
-    grip = sh.revolve(prof, 20, "attachment")
-    grip = sh.place(grip, x_axis=(1, 0, 0), y_axis=(0, 0, 1), z_axis=(0, -1, 0))          # local z -> world -Y
-    m.merge(grip.translated((0.0, -0.0020, 0.0)))
-    cap = sh.revolve([(0.0, 0.0), (0.0138, 0.0), (0.0145, 0.0030), (0.0130, 0.0060), (0.0, 0.0060)], 20, "steel_dark")
-    m.merge(sh.place(cap, x_axis=(1, 0, 0), y_axis=(0, 0, 1), z_axis=(0, -1, 0)).translated((0.0, -0.1040, 0.0)))
+    n = 72
+    phi = np.linspace(0, 2 * np.pi, n, endpoint=False)
+    cx, sz = np.cos(phi), np.sin(phi)                     # x = a cos, z = b sin: the front (-Z) is sin < 0
+    front = np.clip(-sz, 0, 1) ** 1.5
+    sides = np.abs(cx) ** 6
+    ribs = 0.5 + 0.5 * np.cos(np.arcsin(np.clip(sz, -1, 1)) * 22)
+    ys = np.concatenate([np.linspace(-0.0020, -0.0100, 3), np.linspace(-0.0110, -0.0920, 46), [-0.0960, -0.0990]])
+    rings = []
+    for y in ys:
+        t = (-y - 0.002) / 0.097
+        k = 1.0 - 0.10 * t
+        groove = 0.0
+        if -0.0860 < y < -0.0150:
+            g = (y + 0.0150) / -0.0235                                  # three grooves 23.5 mm apart
+            groove = 0.0016 * (0.5 - 0.5 * np.cos(2 * np.pi * g)) ** 0.8
+        panel = 0.00045 * ribs * sides * (1 if -0.0880 < y < -0.0140 else 0)
+        a_, b_ = 0.0150 * k, 0.0162 * k
+        r_scale = 1.0 - (groove / b_) * front
+        x = (a_ + panel) * cx
+        z = (b_ * r_scale + panel * np.abs(sz)) * sz
+        rings.append(np.stack([x, np.full(n, y), z], 1))
+    grip = sh.loft(rings, "attachment")
+    m.merge(grip)
+    cap = _attach()._knurled(0.0138, 0.0, 0.0070, 4, 0.0004, "steel_dark", 48)
+    m.merge(sh.place(cap, x_axis=(1, 0, 0), y_axis=(0, 0, 1), z_axis=(0, -1, 0)).translated((0.0, -0.0985, 0.0)))
+    end = sh.revolve([(0.0, 0.0), (0.0128, 0.0), (0.0132, 0.0025), (0.0110, 0.0040), (0.0, 0.0040)], 24, "steel_dark")
+    m.merge(sh.place(end, x_axis=(1, 0, 0), y_axis=(0, 0, 1), z_axis=(0, -1, 0)).translated((0.0, -0.1055, 0.0)))
     p.meshes["attachment"] = m
     return p
 
@@ -139,6 +163,7 @@ def angled_grip():
         rib = np.array([(z - 0.0016, y + 0.0012), (z + 0.0016, y + 0.0010), (z + 0.0012, y - 0.0012),
                         (z - 0.0020, y - 0.0010)])
         m.merge(sh.extrude_x(rib, (), 0.0118, chamfer_bevel(0.0003), "steel_dark"))
+    m.merge(_details().angled_grip())
     p.meshes["attachment"] = m
     return p
 
@@ -156,6 +181,7 @@ def bipod():
         m.merge(upper)
         m.merge(lower)
         m.merge(sh.box(x * 1.08 - 0.0050, -0.0235, -0.1840, x * 1.08 + 0.0050, -0.0135, -0.1690, 0.0020, "stock_pad"))
+    m.merge(_details().bipod())
     p.meshes["attachment"] = m
     return p
 
@@ -168,6 +194,7 @@ def tommy_grip():
     p = _attach().Part()
     m = tm.foregrip_mesh(tm.default_source()).translated(-tm.FORE_MOUNT)
     m.set_material(lambda c, n: True, "wood_foregrip")
+    m.merge(_details().tommy_grip())
     p.meshes["attachment"] = m
     return p
 

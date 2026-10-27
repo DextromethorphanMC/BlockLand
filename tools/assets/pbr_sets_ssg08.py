@@ -56,6 +56,19 @@ def nitrided_barrel(pt, size, rng, pmm):
     return pt.Layers(alb, h, rough, np.ones((size, size), bool), relief=0.0018 * lathe + 0.0005 * grain)
 
 
+def _deep(pt, recipe, k=4.0):
+    """The shared moulded-polymer recipe with its EDM grain k times deeper (0.01 -> 0.04 mm): deep enough for the
+    parallax and the micro-shadows to show the mould texture at viewmodel distance (VIEWMODEL_SPEC section 53).
+    recipe None -> a function deepening Layers directly."""
+    import dataclasses
+
+    def deepen(lay):
+        return dataclasses.replace(lay, height=lay.height * k)
+    if recipe is None:
+        return deepen
+    return lambda d, rng: deepen(recipe(d, rng))
+
+
 def sets(pt):
     alu = lambda colour, wear=1.0: (lambda d, rng: anodized_alu(pt, d.size, rng, pt.px_mm(d), colour, wear))
     return {
@@ -65,6 +78,6 @@ def sets(pt):
         "ssg08/barrel": pt.SetDef(lambda d, rng: nitrided_barrel(pt, d.size, rng, pt.px_mm(d)), 1024, 0.12, 1804,
                                   detail=0.7),
         "ssg08/grip": pt.SetDef(pt._r(pt.stipple, colour=(0.115, 0.115, 0.12)), 1024, 0.15, 1805),
-        "ssg08/cheek": pt.SetDef(pt._r(pt.polymer_moulded, colour=(0.125, 0.125, 0.13)), 512, 0.15, 1806),
-        "ssg08/mag": pt.SetDef(pt._r(pt.polymer_moulded, colour=(0.135, 0.135, 0.14)), 512, 0.12, 1807),
+        "ssg08/cheek": pt.SetDef(_deep(pt, pt._r(pt.polymer_moulded, colour=(0.125, 0.125, 0.13))), 512, 0.15, 1806),
+        "ssg08/mag": pt.SetDef(_deep(pt, pt._r(pt.polymer_moulded, colour=(0.135, 0.135, 0.14))), 512, 0.12, 1807),
     }

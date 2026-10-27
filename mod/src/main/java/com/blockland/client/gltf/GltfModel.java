@@ -82,6 +82,8 @@ public final class GltfModel {
         public String region = "";
         /** Multiplier on the material's UVs (texture set tiling). */
         public float uvScale = 1;
+        /** How far its v runs per metre along a moving surface (a track's links: {@code extras.scroll.vPerMetre}), 0 = none. */
+        public float scrollPerMetre;
 
         public boolean isEmissive() {
             return emissive[0] + emissive[1] + emissive[2] > 0.001f;

@@ -1,7 +1,7 @@
 #version 150
 
 // Ported from Bliss (Chocapic13' Shaders edit) by Xonk, based on Chocapic13's shaders; see
-// assets/blockland/shaders/include/bliss/LICENSE.md. Bliss' cloud pass (dimensions/composite2.fsh: its dithers and the
+// assets/blockland/shaders/include/bliss/license.md. Bliss' cloud pass (dimensions/composite2.fsh: its dithers and the
 // renderClouds call, with CLOUDS_INTERSECT_TERRAIN) around Bliss' clouds (include/bliss_clouds.glsl, imported by
 // scene.glsl in full here). What BlockLand changed is marked "BlockLand:".
 //

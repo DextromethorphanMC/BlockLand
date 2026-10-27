@@ -1,0 +1,213 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "blockland:block/decor/coral/dead_pillar_side",
+    "dead_pillar_top": "blockland:block/decor/coral/dead_pillar_top"
+  },
+  "elements": [
+    {
+      "from": [
+        3,
+        0,
+        4
+      ],
+      "to": [
+        7,
+        13,
+        8
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            9,
+            3,
+            13,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            3,
+            3,
+            7,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            4,
+            3,
+            8,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            8,
+            3,
+            12,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            3,
+            4,
+            7,
+            8
+          ],
+          "texture": "#dead_pillar_top"
+        },
+        "down": {
+          "uv": [
+            3,
+            8,
+            7,
+            12
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        9,
+        0,
+        7
+      ],
+      "to": [
+        12,
+        9,
+        10
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            4,
+            7,
+            7,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            9,
+            7,
+            12,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            7,
+            7,
+            10,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            6,
+            7,
+            9,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            9,
+            7,
+            12,
+            10
+          ],
+          "texture": "#dead_pillar_top"
+        },
+        "down": {
+          "uv": [
+            9,
+            6,
+            12,
+            9
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        6,
+        0,
+        10
+      ],
+      "to": [
+        9,
+        7,
+        13
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            7,
+            9,
+            10,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            6,
+            9,
+            9,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            10,
+            9,
+            13,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            3,
+            9,
+            6,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            6,
+            10,
+            9,
+            13
+          ],
+          "texture": "#dead_pillar_top"
+        },
+        "down": {
+          "uv": [
+            6,
+            3,
+            9,
+            6
+          ],
+          "texture": "#particle"
+        }
+      }
+    }
+  ]
+}

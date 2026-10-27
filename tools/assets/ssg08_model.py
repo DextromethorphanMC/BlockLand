@@ -549,7 +549,7 @@ def stock_mesh():
     hole = [(z0 + 0.0350, -0.0420), (z0 + 0.0560, -0.0580), (0.4950, -0.1080), (0.5300, -0.1170),
             (BUTT_Z - 0.0200, -0.1120), (BUTT_Z - 0.0200, -0.0040), (BUTT_Z - 0.0280, 0.0010), (0.3980, 0.0010),
             (0.3700, -0.0110), (0.3450, -0.0280), (z0 + 0.0480, -0.0310)]
-    m = sh.extrude_x(chaikin(outer, 1, keep=(0, 1, 5, 6)), [chaikin(hole, 1)], STOCK_HW, bevel_round(0.0030, 2),
+    m = sh.extrude_x(chaikin(outer, 2, keep=(0, 1, 5, 6)), [chaikin(hole, 2)], STOCK_HW, bevel_round(0.0040, 3),
                      "stock")
     # hinge block on the front (wider than the frame) with the knuckles on the right
     blk = sh.rounded_rect(-LOW_W + 0.0010, LOW_Y0 + 0.0010, LOW_W - 0.0010, TANG_Y1 - 0.0010, 0.0035, 2)
@@ -622,15 +622,16 @@ def grip_mesh():
     """Ergonomic polymer pistol grip, near vertical: a palm swell on the right, three finger grooves on the front
     strap, a thumb rest on the left, a flared base; the side panels are stippled (texture set)."""
     rings = []
-    n = 12
+    n = 22
     for k in range(n + 1):
         u = k / n
         d = -0.0060 + (GRIP_LEN + 0.0080) * u
         c = grip_center(d)
-        depth = 0.0215 + 0.0020 * np.sin(np.pi * u) + (0.0030 if u > 0.92 else 0.0)
-        w = 0.0142 + 0.0016 * np.sin(np.pi * min(1.0, u * 1.2)) + (0.0020 if u > 0.92 else 0.0)
+        flare = np.clip((u - 0.80) / 0.20, 0, 1) ** 2
+        depth = 0.0215 + 0.0020 * np.sin(np.pi * u) + 0.0030 * flare
+        w = 0.0142 + 0.0016 * np.sin(np.pi * min(1.0, u * 1.2)) + 0.0020 * flare
         groove = 0.0018 * max(0.0, np.sin(np.pi * 3 * (u - 0.22) / 0.62)) if 0.22 < u < 0.84 else 0.0
-        sec = sh.superellipse(w, depth, 2.6, 22, n_front=2.6)
+        sec = sh.superellipse(w, depth, 2.6, 40, n_front=2.6)
         pts = []
         for x, y in sec:
             yy = y - (groove if y > 0.4 * depth else 0.0)                      # finger grooves on the front strap

@@ -22,26 +22,28 @@ import java.util.Map;
 final class MonsterSkills {
     /** One kind of skill. */
     interface Kind {
-        void use(ServerPlayer player, MonsterCatalog.Skill skill, MonsterBlasts blasts);
+        void use(ServerPlayer player, MonsterCatalog.Skill skill, MonsterBlasts blasts, MonsterAuras auras);
     }
 
-    private static final Map<String, Kind> KINDS = Map.of("effect", (p, s, b) -> effect(p, s), "projectile", (p, s, b) -> projectile(p, s),
-            "self_destruct", (p, s, b) -> b.lightFuse(p, s), "fireball", (p, s, b) -> b.fireball(p, s));
+    private static final Map<String, Kind> KINDS = Map.of("effect", (p, s, b, a) -> effect(p, s),
+            "projectile", (p, s, b, a) -> projectile(p, s), "self_destruct", (p, s, b, a) -> b.lightFuse(p, s),
+            "fireball", (p, s, b, a) -> b.fireball(p, s), "heal_allies", (p, s, b, a) -> a.healAllies(p, s));
 
     private MonsterSkills() {
     }
 
     /**
      * @param blasts the match's monster explosions (self_destruct lights a fuse there, fireball launches one)
+     * @param auras  the match's monster auras (heal_allies heals the monster's allies there)
      * @return false when the skill's type is unknown (nothing happens)
      */
-    static boolean use(ServerPlayer player, MonsterCatalog.Skill skill, MonsterBlasts blasts) {
+    static boolean use(ServerPlayer player, MonsterCatalog.Skill skill, MonsterBlasts blasts, MonsterAuras auras) {
         Kind kind = KINDS.get(skill.type);
         if (kind == null) {
             BlockLand.LOGGER.warn("[BlockLand] Unknown monster skill type {}", skill.type);
             return false;
         }
-        kind.use(player, skill, blasts);
+        kind.use(player, skill, blasts, auras);
         ServerLevel level = player.level();
         ResourceLocation sound = ResourceLocation.tryParse(skill.sound);
         // registered or only in sounds.json (a monster's own sound added through assets)

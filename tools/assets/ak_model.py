@@ -4,6 +4,7 @@ bore axis on x = y = 0, z = 0 at the front face of the receiver. Real-world scal
 Every builder returns a meshkit.Mesh in the design frame; gen_ak47 moves meshes into node-local space."""
 import numpy as np
 
+import rifle_forms as rf
 import shapes as sh
 from meshkit import Mesh
 from p9_model import chamfer_bevel, extrude_z, round_bevel
@@ -91,6 +92,10 @@ def receiver_mesh():
         for z, y in ((0.0090, -0.0270), (0.0280, -0.0270), (0.0090, -0.0050), (0.0280, -0.0050),
                      (0.2120, -0.0300), (0.2240, -0.0130), (0.1250, -0.0300)):
             m.merge(_rivet(s * (REC_W + 0.0006), y, z, s))
+    # the AKM's stamped oval dimples over the magazine well (they guide the magazine's front), both sides
+    for side in (-1, 1):
+        m.merge(rf.dimple(np.array([side * (REC_W + 0.0001), -0.0205, 0.0215]), (side, 0, 0), 0.0105, 0.0058, 0.0009,
+                          "steel", up=(0, 1, 0)))
     # magazine release paddle (behind the magazine) and the stamped trigger guard
     m.merge(sh.box(-0.0055, REC_Y0 - 0.0120, 0.0625, 0.0055, REC_Y0 + 0.0005, 0.0670, 0.0008, "steel"))
     m.merge(sh.box(-0.0060, REC_Y0 - 0.0150, 0.0595, 0.0060, REC_Y0 - 0.0105, 0.0680, 0.0010, "steel"))
@@ -156,9 +161,15 @@ def barrel_mesh():
         m.merge(extrude_z(band, (), z0, z1, chamfer_bevel(0.0008), "steel"))
     m.merge(sh.box(0.0255, -0.0120, HG_Z1 - 0.0010, 0.0285, 0.0080, HG_Z1 + 0.0070, 0.0006, "steel"))
     # gas block: collar on the barrel, gas port tower up to the tube
-    gb = [(-0.0110, -0.0110), (0.0110, -0.0110), (0.0120, 0.0000), (0.0100, GAS_Y + 0.0065),
-          (-0.0100, GAS_Y + 0.0065), (-0.0120, 0.0000)]
-    m.merge(extrude_z(np.array(gb), (), -0.2380, HG_Z0 - 0.0085, chamfer_bevel(0.0012), "steel"))
+    # gas block: a collar round the barrel rising into the port tower up to the tube, corners filleted, ends rounded
+    collar = [(0.0118 * np.cos(a), 0.0118 * np.sin(a)) for a in np.linspace(np.radians(200), np.radians(340), 7)]
+    top_y = GAS_Y + 0.0068
+    outline = np.array(collar + [(0.0122, -0.0010), (0.0100, top_y - 0.0060)]
+                       + [(0.0100 * np.cos(a), top_y - 0.0060 + 0.0060 * np.sin(a)) for a in np.linspace(0.25, np.pi - 0.25, 7)]
+                       + [(-0.0100, top_y - 0.0060), (-0.0122, -0.0010)])
+    outline = sh.fillet_loop(sh.ccw(outline), 0.0015)
+    gb = lambda u: outline
+    m.merge(rf.frame_loft(rf.straight_stations(gb, -0.2380, HG_Z0 - 0.0085, 4), "steel", 0.0016, 0.0012))
     m.merge(_cyl_z(0.0060, -0.2440, -0.2380, "steel", 14, y=GAS_Y, chamfer=0.0010))    # gas plug
     return m
 
@@ -254,74 +265,72 @@ def _hg_section(width, y0, y1, n=14):
 
 
 def handguard_mesh():
-    """Wood: lower handguard with palm swells + upper handguard around the gas tube."""
-    zs = np.linspace(HG_Z0, HG_Z1, 11)
-    rings = []
-    for k, z in enumerate(zs):
-        u = k / (len(zs) - 1)
+    """Wood: lower handguard with palm swells and the finger groove along each side + upper handguard round the gas
+    tube; every end rounded (no slab faces)."""
+    def lower(u):
         swell = 1.0 + 0.10 * np.sin(np.pi * np.clip((u - 0.10) / 0.80, 0, 1))
-        sec = _hg_section(0.0225 * swell, -0.0315, 0.0100)
-        if k in (0, len(zs) - 1):
-            sec = sh.offset_loop(sec, 0.0012)
-        rings.append(_ring_xy(sec, z))
-    m = sh.loft(rings, "wood")
-    up = []
-    for k, z in enumerate(np.linspace(-0.1920, -0.0470, 6)):
-        w = 0.0145
-        sec = sh.superellipse(w, 0.0130, 2.6, 20, 0.0, GAS_Y + 0.0010)
-        if k in (0, 5):
-            sec = sh.offset_loop(sec, 0.0012)
-        up.append(_ring_xy(sec, z))
-    m.merge(sh.loft(up, "wood"))
+        sec = rf.section(0.0225 * swell, 0.0100, -0.0330, n=2.4, count=32, flat_top=0.9, dent=0.0026,
+                         dent_y=0.0010, dent_w=0.0080)
+        return sec
+    m = rf.frame_loft(rf.straight_stations(lower, HG_Z0, HG_Z1, 16), "wood", 0.0022, 0.0022)
+
+    def upper(u):
+        return sh.superellipse(0.0145 - 0.0006 * np.sin(np.pi * u), 0.0130, 2.6, 24, 0.0, GAS_Y + 0.0010)
+    m.merge(rf.frame_loft(rf.straight_stations(upper, -0.1920, -0.0470, 8), "wood", 0.0020, 0.0020))
     return m
 
 
 def stock_mesh():
-    """AKM fixed wooden stock with the steel butt plate."""
+    """AKM fixed wooden stock: narrow wrist behind the receiver, straight comb, the underline curving down to the
+    butt, flat-sided rounded section, every edge rounded; steel butt plate with its trap door and the sling loop."""
     z0, z1 = REC_Z1 - 0.0015, REC_Z1 + 0.2520
     top = lambda u: 0.0105 - 0.0300 * u ** 1.15
     bot = lambda u: (REC_Y0 + 0.0070) - 0.0870 * u ** 0.85 - 0.010 * u ** 3
-    half = lambda u: 0.0150 + 0.0050 * u
-    rings = []
-    n = 10
-    for k in range(n + 1):
-        u = k / n
+    half = lambda u: 0.0148 + 0.0040 * u + 0.0012 * np.sin(np.pi * u)
+
+    def sec(u):
         y0, y1, w = bot(u), top(u), half(u)
-        r = min(0.0080, 0.45 * w)
-        sec = sh.rounded_rect(-w, y0, w, y1, r, 2)
-        if k == 0:
-            sec = sh.offset_loop(sec, 0.0010)
-        rings.append(_ring_xy(sec, z0 + u * (z1 - z0)))
-    m = sh.loft(rings, "wood")
+        return rf.section(w, y1, y0, n=3.2, count=32, flat_top=0.4)
+    stations = rf.straight_stations(sec, z0, z1, 20)
+    m = rf.frame_loft(stations, "wood", 0.0012, 0.0020)
     y0, y1, w = bot(1.0), top(1.0), half(1.0)
-    plate = sh.rounded_rect(-w - 0.0005, y0 - 0.0005, w + 0.0005, y1 + 0.0005, min(0.0080, 0.45 * w), 2)
-    m.merge(extrude_z(plate, (), z1 - 0.0005, z1 + 0.0040, chamfer_bevel(0.0008), "steel"))
+    plate = rf.section(w + 0.0004, y1 + 0.0004, y0 - 0.0004, n=3.2, count=32, flat_top=0.4)
+    m.merge(rf.frame_loft(rf.straight_stations(lambda u: plate, z1 - 0.0010, z1 + 0.0040, 1), "steel", 0.0, 0.0012))
+    # trap door in the plate (cleaning kit) and its two screws
+    door = rf.section(0.0075, y1 - 0.0120, y1 - 0.0420, n=3.0, count=20)
+    m.merge(rf.frame_loft(rf.straight_stations(lambda u: door, z1 + 0.0038, z1 + 0.0050, 1), "steel", 0.0, 0.0006))
+    for yy in (y1 - 0.0060, y0 + 0.0120):
+        m.merge(rf.screw(np.array([0.0, yy, z1 + 0.0040]), (0, 0, 1), 0.0024, 0.0006, "slot", "steel"))
     m.merge(sh.box(-0.0050, y1 - 0.0005, z1 - 0.0400, 0.0050, y1 + 0.0010, z1 - 0.0050, 0.0004, "steel"))  # tang
+    # sling loop on the left side near the butt
+    m.merge(sh.box(-half(0.9) - 0.0012, bot(0.9) + 0.0150, z0 + 0.88 * (z1 - z0) - 0.0060,
+                   -half(0.9) + 0.0004, bot(0.9) + 0.0250, z0 + 0.88 * (z1 - z0) + 0.0060, 0.0005, "steel"))
+    m.merge(rf.swivel(np.array([-half(0.9) - 0.0030, bot(0.9) + 0.0200, z0 + 0.88 * (z1 - z0)]), (1, 0, 0),
+                      0.0070, 0.0013, "steel"))
     return m
 
 
 def pistol_grip_mesh():
-    """Wood pistol grip, raked 20 degrees, with finger ribs on the front strap."""
-    rings = []
-    n = 9
+    """Pistol grip, raked 20 degrees: teardrop section (narrow front strap, full back), the moulded ribs running down
+    its sides, a flared heel and a rounded bottom."""
+    def sec(u):
+        depth = 0.0170 + 0.0022 * np.sin(np.pi * u) + 0.0015 * u ** 4
+        w = 0.0122 + 0.0013 * np.sin(np.pi * u)
+        p = sh.superellipse(w, depth, 2.5, 40)
+        # teardrop: the front (negative second coordinate) narrows
+        front = p[:, 1] < 0
+        p[:, 0] = np.where(front, p[:, 0] * (1.0 - 0.22 * (-p[:, 1] / depth) ** 2), p[:, 0])
+        # vertical ribs moulded into the sides
+        side = np.abs(p[:, 0]) > 0.75 * w
+        p[:, 0] = p[:, 0] * (1.0 + np.where(side, 0.035 * np.cos(p[:, 1] / depth * np.pi * 4.5) ** 2, 0.0))
+        return p
+    stations = []
+    n = 16
     for k in range(n + 1):
-        d = -0.0040 + (GRIP_LEN + 0.0040) * k / n
-        c = grip_center(d)
         u = k / n
-        depth = 0.0170 + 0.0020 * np.sin(np.pi * u)
-        w = 0.0125 + 0.0012 * np.sin(np.pi * u)
-        sec = sh.superellipse(w, depth, 2.4, 20)
-        if k == n:
-            sec = sh.offset_loop(sec, 0.0020)
-        pts = np.array([c + p[0] * np.array([1.0, 0, 0]) + p[1] * (-GRIP_FRONT) for p in sec])
-        rings.append(pts)
-    m = sh.loft(rings, "wood")
-    for k in range(4):                                  # front-strap finger ribs
-        d = 0.020 + k * 0.018
-        c = grip_center(d) + GRIP_FRONT * 0.0175
-        rib = sh.box(-0.0095, -0.0012, -0.0012, 0.0095, 0.0012, 0.0012, 0.0004, "wood")
-        m.merge(sh.place(rib, origin=c, x_axis=(1, 0, 0), y_axis=-GRIP_AXIS, z_axis=-GRIP_FRONT))
-    return m
+        d = -0.0040 + (GRIP_LEN + 0.0040) * u
+        stations.append((sec(u), grip_center(d), np.array([1.0, 0, 0]), -GRIP_FRONT))
+    return rf.frame_loft(stations, "wood", 0.0, 0.0045)
 
 
 # ------------------------------------------------------------------------------------ moving parts
@@ -360,9 +369,9 @@ def trigger_mesh():
 def _mag_spine(extended):
     """Centre line of the curved magazine in (z, y) of mag space (top at the origin), tangent angles."""
     length = 0.2050 if extended else 0.1650
-    n = 14 if extended else 11
+    n = 22 if extended else 18
     pts, angs = [], []
-    curve = 0.32 if extended else 0.42        # radius of the forward sweep
+    curve = 0.26 if extended else 0.30        # radius of the forward sweep (the AKM's banana curve)
     straight = 0.030
     for k in range(n + 1):
         s = length * k / n
@@ -388,7 +397,7 @@ def mag_mesh(extended=False):
         fwd = np.array([0.0, np.sin(a), -np.cos(a)])             # front direction of this section
         c = np.array([0.0, y, z])
         rings.append(np.array([c + p[0] * np.array([1.0, 0, 0]) + p[1] * fwd for p in sec]))
-        if 2 <= k <= len(spine) - 2 and k % 2 == 0:
+        if 3 <= k <= len(spine) - 3 and k % 3 == 0:
             ribs.append((c, fwd, depth))
     m = sh.loft(rings, "mag")
     for c, fwd, depth in ribs:                                     # pressed side ribs

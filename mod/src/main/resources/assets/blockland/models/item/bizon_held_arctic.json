@@ -1,0 +1,7 @@
+{
+  "parent": "blockland:item/bizon_held",
+  "textures": {
+    "0": "blockland:item/bizon_held_arctic",
+    "particle": "blockland:item/bizon_held_arctic"
+  }
+}

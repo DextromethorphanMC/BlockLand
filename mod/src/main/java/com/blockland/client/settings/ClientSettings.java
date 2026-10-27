@@ -54,6 +54,8 @@ public final class ClientSettings {
         public ImpactSettings impacts = new ImpactSettings();
         /** The 性能 tab: which optimizations run, timings on the F3 screen. */
         public PerfSettings performance = new PerfSettings();
+        /** The inventory screen's brightness (UI spec §1), 0..1: black … light grey panels; the only thing it lets one change. */
+        public float inventoryBrightness = 0.25f;
     }
 
     private static Data data;

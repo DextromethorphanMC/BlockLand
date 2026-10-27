@@ -26,7 +26,7 @@ import java.util.Optional;
 
 /**
  * Volumetric clouds (rendering spec §14): Bliss's clouds (a Chocapic13's shaders edit, by Xonk; its cloud code is ported
- * as {@code blockland:bliss_clouds.glsl}, see {@code shaders/include/bliss/LICENSE.md}) — two cumulus layers and an
+ * as {@code blockland:bliss_clouds.glsl}, see {@code shaders/include/bliss/license.md}) — two cumulus layers and an
  * altostratus sheet — marched per pixel at a share of the internal resolution in the frame's after-level phase (stopped
  * by the world's depth), accumulated over frames, and folded into the picture by the post chain's decode pass
  * (transmittance, then the light they scatter). Their noise is Bliss's own texture ({@link BlissNoise}). Lit by the scene

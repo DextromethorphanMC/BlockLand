@@ -41,6 +41,20 @@
               }
             },
             {
+              "when": "gold_beads",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/tommy_gold_beads"
+              }
+            },
+            {
+              "when": "silver_beads",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/tommy_silver_beads"
+              }
+            },
+            {
               "when": "neon",
               "model": {
                 "type": "minecraft:model",
@@ -90,6 +104,20 @@
               "model": {
                 "type": "minecraft:model",
                 "model": "blockland:item/tommy_held_magma"
+              }
+            },
+            {
+              "when": "gold_beads",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/tommy_held_gold_beads"
+              }
+            },
+            {
+              "when": "silver_beads",
+              "model": {
+                "type": "minecraft:model",
+                "model": "blockland:item/tommy_held_silver_beads"
               }
             },
             {

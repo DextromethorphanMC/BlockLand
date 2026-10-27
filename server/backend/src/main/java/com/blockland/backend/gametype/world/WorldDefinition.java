@@ -30,6 +30,8 @@ public class WorldDefinition implements GameTypeDefinition {
     public static final Set<String> GAME_MODES = Set.of("SURVIVAL", "ADVENTURE", "CREATIVE");
     private static final Pattern RESOURCE_ID = Pattern.compile("^[a-z0-9_.\\-]+:[a-z0-9_./\\-]+$");
     private static final boolean ALLOW_SLIDE = false;
+    /** The open world is where vehicles are driven around: on unless the mode turns them off. */
+    private static final boolean ALLOW_VEHICLES = true;
 
     private final ObjectMapper mapper;
 
@@ -66,7 +68,7 @@ public class WorldDefinition implements GameTypeDefinition {
         node.put("pvp", true);
         node.put("keepInventory", false);
         node.put("maxPlayers", 50);
-        MovementSettings.putDefaults(node, ALLOW_SLIDE);
+        MovementSettings.putDefaults(node, ALLOW_SLIDE, ALLOW_VEHICLES);
         return node;
     }
 
@@ -94,7 +96,7 @@ public class WorldDefinition implements GameTypeDefinition {
         out.put("pvp", TeamArenaSettings.boolField(in, "pvp", true));
         out.put("keepInventory", TeamArenaSettings.boolField(in, "keepInventory", false));
         out.put("maxPlayers", TeamArenaSettings.intField(in, "maxPlayers", 50, 1, 200, "最大人数", errors));
-        MovementSettings.normalizeInto(in, out, ALLOW_SLIDE);
+        MovementSettings.normalizeInto(in, out, ALLOW_SLIDE, ALLOW_VEHICLES);
         return out;
     }
 

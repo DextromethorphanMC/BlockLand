@@ -13,6 +13,7 @@ lug cap, the polymer trigger group (paddle release, SEF selector, the wide guard
 import numpy as np
 
 import shapes as sh
+import smg_detail as sd
 from ak_model import _ring_xy, _rivet
 from meshkit import Mesh
 from model_quality import arc_segments
@@ -532,15 +533,17 @@ def smooth(e0, e1, x):
 
 def handguard_mesh():
     """Slim polymer handguard with its front hand stop, palm swell, a rear lip and the retaining pin."""
-    zs = [HG_Z0, HG_Z0 + 0.0012, HG_Z0 + 0.0040, HG_Z0 + 0.0085, -0.1200, -0.0900, -0.0600, -0.0350,
+    zs = [HG_Z0, HG_Z0 + 0.0040, HG_Z0 + 0.0085, -0.1200, -0.0900, -0.0600, -0.0350,
           HG_Z1 - 0.0050, HG_Z1 - 0.0010, HG_Z1]
     rings = []
     for k, z in enumerate(zs):
         sec = _hg_section(z)
-        if k in (0, len(zs) - 1):
+        if k == len(zs) - 1:
             sec = sh.offset_loop(sec, 0.0010)
         rings.append(_ring_xy(sec, z))
-    m = sh.loft(rings, "handguard")
+    # the hand stop's front face rounded over (the rear end butts against the receiver)
+    rings, soft = sd.round_end(rings, 0.0028, at_end=False)
+    m = sh.loft(rings, "handguard", soft_bands=soft)
     for s in (-1, 1):
         m.merge(_stud(0.0060, HG_Z1 - 0.0100, s * HG_W, s, 0.0022, 0.0008, sink=0.0012))
     return m
@@ -566,8 +569,9 @@ def stock_mesh():
     m.merge(sh.extrude_x(prof, (), 0.0180, round_bevel(0.0045, 3), "stock"))
     # rubber pad face: shallow ribs across the butt
     for k in range(4):
-        y = -0.0720 + k * 0.0240
-        m.merge(sh.box(-0.0125, y, STOCK_Z1 - 0.0010, 0.0125, y + 0.0080, STOCK_Z1 + 0.0012, 0.0006, "stock"))
+        y = -0.0680 + k * 0.0240
+        m.merge(sd.rib((-0.0120, y, STOCK_Z1 - 0.0004), (0.0120, y, STOCK_Z1 - 0.0004), 0.0080, 0.0014, (0, 0, 1),
+                       "stock", seg=9))
     return m
 
 
@@ -606,11 +610,11 @@ def pistol_grip_mesh():
         w = 0.0128 + 0.0010 * np.sin(np.pi * u) + 0.0012 * smooth(0.85, 1.0, u)
         sec = sh.superellipse(w, depth, 2.5, 24, n_front=2.2)
         rings.append(np.array([c + p[0] * np.array([1.0, 0, 0]) + p[1] * GRIP_FRONT for p in sec]))
-    for inset, dd in ((0.0018, 0.0030), (0.0055, 0.0052)):            # rounded base
-        c = grip_center(GRIP_LEN + dd)
-        sec = sh.offset_loop(sh.superellipse(w, depth, 2.5, 24, n_front=2.2), inset)
-        rings.append(np.array([c + p[0] * np.array([1.0, 0, 0]) + p[1] * GRIP_FRONT for p in sec]))
-    return sh.loft(rings, "polymer")
+    c = grip_center(GRIP_LEN + 0.0052)                                 # the base, rounded over
+    rings.append(np.array([c + p[0] * np.array([1.0, 0, 0]) + p[1] * GRIP_FRONT
+                           for p in sh.superellipse(w, depth, 2.5, 24, n_front=2.2)]))
+    rings, soft = sd.round_end(rings, 0.0050)
+    return sh.loft(rings, "polymer", soft_bands=soft)
 
 
 # ------------------------------------------------------------------------------------ moving parts
@@ -654,9 +658,9 @@ def paddle_mesh():
             (p[2] + 0.0030, p[1] - 0.0120), (p[2] + 0.0018, p[1] - 0.0060)]
     m = sh.extrude_x(np.array(prof), (), 0.0080, round_bevel(0.0010, 2), "steel_dark")
     for k in range(3):                                             # finger ribs on its rear face
-        y = p[1] - 0.0090 - 0.0024 * k
-        m.merge(sh.box(-0.0070, y, p[2] + 0.0018 + 0.0010 * k, 0.0070, y + 0.0010, p[2] + 0.0040 + 0.0012 * k, 0.0003,
-                       "steel_dark"))
+        y = p[1] - 0.0085 - 0.0024 * k
+        z = p[2] + 0.0030 + 0.0011 * k
+        m.merge(sd.rib((-0.0068, y, z), (0.0068, y, z), 0.0012, 0.0007, (0, -0.35, 1), "steel_dark"))
     return m
 
 

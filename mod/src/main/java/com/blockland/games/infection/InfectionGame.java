@@ -148,6 +148,21 @@ final class InfectionGame implements GameInstance {
         }
     });
 
+    /** Monster auras (the heal_allies skill, the blind_aura passive). */
+    private final MonsterAuras auras = new MonsterAuras(new MonsterAuras.Rules() {
+        @Override
+        public boolean isAlly(UUID monster, LivingEntity other) {
+            Fighter from = players.get(monster), target = players.get(other.getUUID());
+            return from != null && target != null && target.active() && target.side == from.side;
+        }
+
+        @Override
+        public boolean isEnemy(UUID monster, LivingEntity other) {
+            Fighter from = players.get(monster), target = players.get(other.getUUID());
+            return from != null && target != null && target.active() && target.side != from.side;
+        }
+    });
+
     private record Spawn(BlockPos pos, float yaw) {
     }
 
@@ -335,6 +350,9 @@ final class InfectionGame implements GameInstance {
                 continue;
             }
             if (fighter.selectUntil >= 0 && now >= fighter.selectUntil) becomeMonster(player, fighter, offered.get(0));
+            if (fighter.side == Side.MONSTER && fighter.active() && fighter.monster != null && fighter.monster.passive != null) {
+                auras.tick(player, fighter.monster.passive, now);
+            }
         }
         if (phase != Phase.PLAYING || ++phaseTicks % 20 != 0) return;
         roundSeconds++;
@@ -517,7 +535,7 @@ final class InfectionGame implements GameInstance {
         int now = services.server().getTickCount();
         if (now < fighter.skillReadyAt) return;
         MonsterCatalog.Skill skill = fighter.monster.skill;
-        if (!MonsterSkills.use(player, skill, blasts)) return;
+        if (!MonsterSkills.use(player, skill, blasts, auras)) return;
         fighter.skillReadyAt = now + Math.round(skill.cooldown * 20);
         BLNetwork.sendTo(player, new InfectionPackets.S2CSkill(skill.cooldown, skill.activeSeconds()));
     }

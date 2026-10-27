@@ -88,9 +88,15 @@ def blade_mesh():
 
 # ----------------------------------------------------------------------------------------- guard
 def guard_mesh():
-    """Straight crossguard (oval bar seen from the side) with a ball at each end."""
-    prof = sh.rounded_rect(GUARD[0], -GUARD_Y, GUARD[1], GUARD_Y, 0.0040, 2)       # (z, y)
-    m = sh.extrude_x(prof, (), 0.0062, round_bevel(0.0018, 1), "guard")
+    """Straight crossguard with a ball at each end: an oval bar, fullest in the middle, tapering towards the balls."""
+    zc, hz = 0.5 * (GUARD[0] + GUARD[1]), 0.5 * (GUARD[1] - GUARD[0])
+    oval = sh.superellipse(0.0062, hz, 2.3, 28)
+    rings = []
+    for y in np.linspace(-GUARD_Y - 0.0006, GUARD_Y + 0.0006, 33):
+        t = min(1.0, abs(y) / GUARD_Y)
+        kx, kz = 1 - 0.38 * t ** 1.6, 1 - 0.26 * t ** 1.6
+        rings.append(np.stack([oval[:, 0] * kx, np.full(len(oval), y), zc + oval[:, 1] * kz], 1))
+    m = sh.loft(rings, "guard")
     for sy in (-1, 1):
         ball = sh.revolve([(0.0, -0.0052), (0.0030, -0.0043), (0.0045, -0.0026), (0.0052, 0.0), (0.0045, 0.0026),
                            (0.0030, 0.0043), (0.0, 0.0052)], 12, "guard", precision=True)
@@ -112,17 +118,17 @@ def _grip_scale(z):
     s = 1.0 + 0.07 * np.sin(np.pi * u) ** 1.5
     zone = _smooth(0.06, 0.12, u) * (1 - _smooth(0.88, 0.94, u))
     phase = (u - 0.09) * RIBS / 0.82
-    s += 0.045 * zone * (0.5 + 0.5 * np.cos(2 * np.pi * phase)) ** 2
+    s += 0.075 * zone * (0.5 + 0.5 * np.cos(2 * np.pi * phase)) ** 3
     return s
 
 
 def grip_mesh():
-    """Ribbed rubber grip: superellipse sections lofted along Z (three rings per rib)."""
-    loop = sh.superellipse(GRIP_A, GRIP_B, 2.6, 14)
+    """Ribbed rubber grip: superellipse sections lofted along Z (six rings per rib: crisp ridges, soft valleys)."""
+    loop = sh.superellipse(GRIP_A, GRIP_B, 2.6, 28)
     zs = [GRIP_Z[0], GRIP_Z[0] + 0.0012, GRIP_Z[0] + 0.0040]
     u0, u1 = 0.09, 0.91
-    for k in range(RIBS * 3 + 1):
-        zs.append(GRIP_Z[0] + (u0 + (u1 - u0) * k / (RIBS * 3)) * (GRIP_Z[1] - GRIP_Z[0]))
+    for k in range(RIBS * 6 + 1):
+        zs.append(GRIP_Z[0] + (u0 + (u1 - u0) * k / (RIBS * 6)) * (GRIP_Z[1] - GRIP_Z[0]))
     zs += [GRIP_Z[1] - 0.0040, GRIP_Z[1] - 0.0012, GRIP_Z[1]]
     rings = []
     for z in sorted(set(np.round(zs, 6))):
@@ -135,11 +141,12 @@ def grip_mesh():
 
 # ----------------------------------------------------------------------------------------- pommel
 def pommel_mesh():
-    """Steel pommel cap (swells, then domes) and the lanyard loop behind it."""
-    loop = sh.superellipse(GRIP_A, GRIP_B, 2.6, 16)
+    """Steel pommel cap (swells, two turned grooves, then domes) and the lanyard loop behind it."""
+    loop = sh.superellipse(GRIP_A, GRIP_B, 2.6, 28)
     z0, z1 = POMMEL_Z
-    keys = [(z0, 0.98), (z0 + 0.0015, 1.06), (z0 + 0.0060, 1.10), (z0 + 0.0110, 1.02), (z0 + 0.0150, 0.80),
-            (z1 - 0.0008, 0.48), (z1, 0.30)]
+    keys = [(z0, 0.98), (z0 + 0.0015, 1.06), (z0 + 0.0030, 1.08), (z0 + 0.0036, 1.03), (z0 + 0.0042, 1.08),
+            (z0 + 0.0060, 1.10), (z0 + 0.0078, 1.09), (z0 + 0.0084, 1.04), (z0 + 0.0090, 1.08), (z0 + 0.0110, 1.02),
+            (z0 + 0.0150, 0.80), (z1 - 0.0008, 0.48), (z1, 0.30)]
     rings = [np.stack([loop[:, 0] * k, loop[:, 1] * k, np.full(len(loop), z)], 1) for z, k in keys]
     m = sh.loft(rings, "pommel")
     # lanyard loop: a flat ring standing in the y-z plane (its hole runs along X), a short neck into the cap

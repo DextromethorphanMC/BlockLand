@@ -4,6 +4,7 @@ left-handed twin under `gun_L` (every node suffixed `_L`, see dual_rig)."""
 import numpy as np
 
 import armrig
+import drum_mags
 import dual_clips
 import dual_rig as dr
 import meshkit as mk
@@ -41,6 +42,8 @@ def usp_gunset():
         "slide_stop": d(up.slide_stop_mesh(), um.STOP_PIVOT),
         "mag_standard": up.mag_mesh(False),
         "mag_extended": up.mag_mesh(True),
+        # section 56: the drum (no hand touches a dual's magazine: the reloads need no drum variants)
+        "mag_drum": drum_mags.side_drum(up.mag_mesh(False), 0.045, 0.044)[0],
     }
     return {"meshes": meshes, "shell": up.shell_mesh(1.25), "materials": USP_MATERIALS, "layout": usp_layout()}
 
@@ -95,8 +98,9 @@ def build(path, gunset=None, clips=None):
             if name == "slide":
                 g.add_node("sight_iron" + sfx, "slide" + sfx, mesh=mesh_idx["sight_iron" + sfx])
             if name == "mag":
-                for mag in ("mag_standard", "mag_extended"):
-                    g.add_node(mag + sfx, "mag" + sfx, mesh=mesh_idx[mag + sfx])
+                for mag in ("mag_standard", "mag_extended", "mag_drum"):
+                    if mag + sfx in mesh_idx:
+                        g.add_node(mag + sfx, "mag" + sfx, mesh=mesh_idx[mag + sfx])
         for name, (parent, t, rot) in rig.mounts.items():        # section 19 mounts (and their `_L` twins)
             if left and name == "mount_charm":
                 continue

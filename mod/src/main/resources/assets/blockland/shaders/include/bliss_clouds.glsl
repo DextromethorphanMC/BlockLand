@@ -1,5 +1,5 @@
 // Ported from Bliss (Chocapic13' Shaders edit) by Xonk, based on Chocapic13's shaders; see
-// assets/blockland/shaders/include/bliss/LICENSE.md. Not BlockLand's own code: Bliss v2.1.2's lib/volumetricClouds.glsl
+// assets/blockland/shaders/include/bliss/license.md. Not BlockLand's own code: Bliss v2.1.2's lib/volumetricClouds.glsl
 // (cloud layers, density, lighting, blending order, cloud shadows) with the defaults of its lib/settings.glsl, kept as
 // close to the original as the interface allows; what BlockLand changed is marked "BlockLand:". Rendering spec §14.
 //

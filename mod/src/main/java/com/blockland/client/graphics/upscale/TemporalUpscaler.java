@@ -22,6 +22,7 @@ public final class TemporalUpscaler implements Upscaler {
             .withSampler("HistorySampler")
             .withSampler("WorldDepthSampler")
             .withSampler("HandVelocitySampler")
+            .withUniform(com.blockland.client.graphics.post.ObjectMotionBlock.BLOCK, com.mojang.blaze3d.shaders.UniformType.UNIFORM_BUFFER)
             .build();
     /** The same pass reading the hand's motion only on hand pixels ({@link Optimization#POST_DEAD_WORK}). */
     private static final RenderPipeline TAA_HAND_BRANCH = Fullscreen.pipeline("gfx_taa")
@@ -31,6 +32,7 @@ public final class TemporalUpscaler implements Upscaler {
             .withSampler("HistorySampler")
             .withSampler("WorldDepthSampler")
             .withSampler("HandVelocitySampler")
+            .withUniform(com.blockland.client.graphics.post.ObjectMotionBlock.BLOCK, com.mojang.blaze3d.shaders.UniformType.UNIFORM_BUFFER)
             .build();
     /** Share of the current frame in the blend (the history keeps the rest). */
     private static final float BLEND = 0.1f;
@@ -97,6 +99,7 @@ public final class TemporalUpscaler implements Upscaler {
                 .sampler("WorldDepthSampler", depth)
                 .sampler("HandVelocitySampler", ctx.handVelocity != null ? ctx.handVelocity : still())
                 .uniform(ubo)
+                .uniform(com.blockland.client.graphics.post.ObjectMotionBlock.BLOCK, com.blockland.client.graphics.post.ObjectMotionBlock.slice())
                 .draw();
         valid = true;
         return history[current].view();

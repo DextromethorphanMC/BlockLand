@@ -1,5 +1,8 @@
 {
   "materials": [
+    { "textures": ["blockland:block/decor/vending_machine/front_upper_left", "blockland:block/decor/vending_machine/front_upper_right",
+                   "blockland:block/decor/vending_machine/front_lower_left", "blockland:block/decor/vending_machine/front_lower_right"],
+      "emission": 0.8, "threshold": 0.82 },
     { "textures": ["minecraft:block/glowstone", "minecraft:block/sea_lantern", "minecraft:block/shroomlight",
                    "minecraft:block/ochre_froglight_side", "minecraft:block/ochre_froglight_top",
                    "minecraft:block/verdant_froglight_side", "minecraft:block/verdant_froglight_top",

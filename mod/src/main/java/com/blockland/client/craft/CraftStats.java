@@ -45,7 +45,10 @@ final class CraftStats {
                 new Stat("recoil", 1 - now.recoilVertical() / 4f, 1 - next.recoilVertical() / 4f, String.format("%.2f", next.recoilVertical())),
                 new Stat("ads_speed", 1 - now.adsTime() / 0.5f, 1 - next.adsTime() / 0.5f, Math.round(next.adsTime() * 1000) + " ms"),
                 new Stat("reload", 1 - now.reloadTime(false) / 4f, 1 - next.reloadTime(false) / 4f, String.format("%.2f s", next.reloadTime(false))),
-                new Stat("capacity", now.capacity() / 50f, next.capacity() / 50f, String.valueOf(next.capacity())));
+                new Stat("capacity", now.capacity() / 50f, next.capacity() / 50f, String.valueOf(next.capacity())),
+                // what the rounds wear off plates and hulls (armour-piercing rounds: the ammo slot)
+                new Stat("armor", now.traits().armorDamage() / 3f, next.traits().armorDamage() / 3f,
+                        String.format("×%.1f", next.traits().armorDamage())));
         if (compact) stats = List.of(stats.get(0), stats.get(1), stats.get(2), stats.get(4), stats.get(5), stats.get(6));
         Draw.rect(g, x, y, w, h, ColorMath.fade(PANEL, a));
         int rowH = Math.max(9, Math.min(14, (h - 6) / stats.size()));
@@ -74,7 +77,7 @@ final class CraftStats {
 
     /** Rows a gun panel needs (to size it). */
     static int gunRows(boolean compact) {
-        return compact ? 6 : 9;
+        return compact ? 6 : 10;
     }
 
     static void drawKnife(GuiGraphics g, MeleeData.Knife knife, int x, int y, int w, float a) {

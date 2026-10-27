@@ -20,6 +20,7 @@ EQUIPMENT_DIR = os.path.join(os.path.dirname(GUN_DIR), "equipment")      # secti
 BOMB_DIR = os.path.join(os.path.dirname(GUN_DIR), "bomb")                # section 39
 BLOCK_DIR = os.path.join(os.path.dirname(GUN_DIR), "block")              # section 46 (block entity models)
 ARMOR_DIR = os.path.join(os.path.dirname(GUN_DIR), "armor")              # section 50 (body armour)
+VEHICLE_DIR = os.path.join(os.path.dirname(GUN_DIR), "vehicle")          # section 56 (vehicles)
 FOV_Y = 54.0                       # section 2: viewmodel projection (vertical), used for the on-screen estimate
 CAM_TURN, CAM_ROLL = 2.5, 4.5      # section 31: largest camera pitch / yaw and roll of a clip (degrees)
 PARENTS = {
@@ -137,6 +138,11 @@ def check_nodes(g, r):
             r.check(has_mesh, f"p9: node {nm} should carry a mesh")
         if nm in EMPTY_NODES:
             r.check(not has_mesh, f"p9: node {nm} should be empty")
+    # section 56: a drum magazine, where the gun takes one, is a third magazine under `mag`
+    if "mag_drum" in g.names:
+        i = g.names["mag_drum"]
+        r.check(g.parent.get(i) == g.names["mag"], "p9: mag_drum must hang under mag")
+        r.check("mesh" in g.nodes[i], "p9: mag_drum should carry a mesh")
     for n in g.nodes:
         if "rotation" in n:
             r.check(abs(np.linalg.norm(n["rotation"]) - 1) < 1e-5, f"p9: node {n.get('name')} rotation not normalized")
@@ -481,6 +487,9 @@ def main(argv):
         paths += sorted(
             os.path.join(ARMOR_DIR, f) for f in (os.listdir(ARMOR_DIR) if os.path.isdir(ARMOR_DIR) else [])
             if f.endswith(".glb"))
+        paths += sorted(
+            os.path.join(VEHICLE_DIR, f) for f in (os.listdir(VEHICLE_DIR) if os.path.isdir(VEHICLE_DIR) else [])
+            if f.endswith(".glb"))
     arms = GLTF(arms_path) if os.path.exists(arms_path) else None
     failed = 0
     if arms is not None:
@@ -529,7 +538,8 @@ CHECK_MODULES = ("check_tommy", "check_shotgun", "check_dual", "check_usp", "che
                  "check_bomb", "check_uzi", "check_p90", "check_mp5", "check_sten", "check_ssg08", "check_calico", "check_scar", "check_m4a1", "check_jackhammer",
                  "check_crowbar", "check_knuckles",
                  "check_handcannon", "check_vector", "check_baton", "check_ammo_crate",
-                 "check_deagle", "check_revolver", "check_armor", "check_revive_antenna")
+                 "check_deagle", "check_revolver", "check_armor", "check_revive_antenna", "check_bizon",
+                 "check_vehicle_models")
 
 
 def _claimed_by(path, names):

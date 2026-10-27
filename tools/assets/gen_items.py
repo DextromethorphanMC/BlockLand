@@ -39,7 +39,7 @@ def side_view_items(g, mats):
     """Gun meshes in gun space (rest pose, no viewmodel offset), rotated to a right-side view."""
     gi = g.names["gun"]
     W = g.world_matrices({gi: {"translation": np.zeros(3), "rotation": np.array([0, 0, 0, 1.0])}})
-    hide = hidden_set(g, {"mag_extended", "sight_reddot", "laser", "fx_shell"})
+    hide = hidden_set(g, {"mag_extended", "mag_drum", "sight_reddot", "laser", "fx_shell"})
     view = np.array([[0, 0, -1.0], [0, 1.0, 0], [1.0, 0, 0]])          # look from +X, muzzle to the right
     items = []
     for i, n in enumerate(g.nodes):

@@ -90,7 +90,7 @@ def boss_mesh(x):
     y0 = front_edge(x) + 0.0010
     rings = []
     for k, (dy, s) in enumerate(((0.0, 1.0), (-0.0012, 0.98), (-0.0022, 0.88), (-0.0029, 0.66), (-0.0033, 0.38))):
-        loop = sh.superellipse(0.0049 * s, 0.0040 * s, 2.4, 16)          # (x, z) footprint
+        loop = sh.superellipse(0.0049 * s, 0.0040 * s, 2.4, 32)          # (x, z) footprint
         rings.append(np.stack([x + loop[:, 0], np.full(len(loop), y0 + dy - (BOSS - 0.0032)),
                                ZC + loop[:, 1]], 1))
     return sh.loft(rings, "face")
@@ -124,7 +124,7 @@ def wrap_mesh():
     y0, y1 = BAR_Y
     yc, hy, hz = 0.5 * (y0 + y1), 0.5 * (y1 - y0) + CORD_R * 0.85, 0.5 * (Z1 - Z0) + CORD_R * 0.85
     x0, x1 = WINDOW[0] + 0.0012, WINDOW[1] - 0.0012
-    per = 10
+    per = 20
     n = TURNS * per
     a = np.linspace(0, 2 * np.pi * TURNS, n + 1)
     xs = np.linspace(x0, x1, n + 1)
@@ -133,7 +133,13 @@ def wrap_mesh():
     ry = hy * np.sign(c) * np.abs(c) ** (2 / k)
     rz = hz * np.sign(s) * np.abs(s) ** (2 / k)
     path = np.stack([xs, yc + ry, ZC + rz], 1)
-    return _sweep(path, CORD_R, 6, "wrap")
+    m = _sweep(path, CORD_R, 10, "wrap")
+    # the cord's two ends, melted and tucked: a small bead at each end of the wrap
+    bead = sh.revolve([(0.0, -CORD_R * 1.5), (CORD_R * 1.35, -CORD_R * 0.6), (CORD_R * 1.45, 0.0),
+                       (CORD_R * 1.35, CORD_R * 0.6), (0.0, CORD_R * 1.5)], 14, "wrap")
+    for p_ in (path[0], path[-1]):
+        m.merge(bead.translated(p_))
+    return m
 
 
 def duster_mesh():

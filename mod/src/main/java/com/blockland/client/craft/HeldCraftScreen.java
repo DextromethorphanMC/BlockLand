@@ -189,16 +189,19 @@ public final class HeldCraftScreen extends Screen {
         }
         boolean square = orientation != null && sideBlend > 0.998f;
         float drawYaw = square ? 0 : shownYaw, drawPitch = square ? 0 : shownPitch;
+        // framed like the edited build: an option tried on under the mouse must not move the picture, the callouts laid out
+        // against it, or the option list docked to them (the list would slide under the mouse and try on the next option)
         g.getRenderState().submitPicturesInPictureState(WeaponPreviewRenderer.State.of(weapon.id(), shown, drawYaw, drawPitch, zoom,
-                orientation, previewX, previewY, previewX + previewW, previewY + previewH, g.getScissorStack().peek()));
+                orientation, previewX, previewY, previewX + previewW, previewY + previewH, g.getScissorStack().peek())
+                .framedBy(session.edited));
         g.fill(previewX + previewW / 5, previewY + previewH - 2, previewX + previewW * 4 / 5, previewY + previewH - 1, ColorMath.fade(0x30FFFFFF, t));
 
         int bottomBand = height - pad - SkinCarousel.HEIGHT;
         if (sprayMode) {
             renderSprays(g, mouseX, mouseY, weapon, pad, columnW, c);
         } else {
-            // the callouts, to the real mounts of what is shown
-            WeaponAssembly current = assembly(weapon, shown);
+            // the callouts, to the real mounts of the edited build (never of the option under the mouse: see above)
+            WeaponAssembly current = assembly(weapon, session.edited);
             if (current != null && frame != null) {
                 Matrix4f view = WeaponPreviewRenderer.viewFor(frame, drawYaw, drawPitch, zoom, orientation);
                 callouts.render(g, mouseX, mouseY, session, current, view, frame, previewX, previewY, previewW, previewH,

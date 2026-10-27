@@ -7,7 +7,7 @@
 
 // Caustics under water (client/graphics/water/UnderwaterCaustics, rendering spec §15), right after the level while the
 // camera is in water. The caustics are Bliss's — ported from Bliss (Chocapic13' Shaders edit) by Xonk, based on
-// Chocapic13's shaders; see assets/blockland/shaders/include/bliss/LICENSE.md: dimensions/composite1.fsh's
+// Chocapic13's shaders; see assets/blockland/shaders/include/bliss/license.md: dimensions/composite1.fsh's
 //   DirectLightColor *= mix(1.0, waterCaustics(feetPlayerPos + cameraPosition, WsunVec)*WATER_CAUSTICS_BRIGHTNESS + 0.25,
 //                           clamp(estimatedDepth,0,1));
 // BlockLand: applied after the fact to the lit display colour (in linear light), the sun's share weighed by its shadow at

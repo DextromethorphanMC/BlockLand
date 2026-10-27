@@ -199,19 +199,19 @@ def receiver_mesh():
     m = Mesh()
     # top cap: a slab with rounded top edges over the side plates
     cap = sh.rounded_rect(-REC_W, CAP_Y, REC_W, TOP, (0.0, 0.0, 0.0050, 0.0050), 4)
-    m.merge(extrude_z(cap, (), REC_Z0, REC_Z1, chamfer_bevel(0.0008), "steel"))
+    m.merge(extrude_z(cap, (), REC_Z0, REC_Z1, soft_bevel(0.0020), "steel"))
     # side plates with the vents (through: the barrel shows behind them)
     plate = np.array([(REC_Z0 + 0.0040, SEAM_Y - 0.0006), (REC_Z1 - 0.0040, SEAM_Y - 0.0006),
                       (REC_Z1 - 0.0040, CAP_Y), (REC_Z0 + 0.0040, CAP_Y)])
     holes = [circle_loop(z, y, r, 12) for y, r in VENT_ROWS for z in VENT_Z]
     for s in (-1, 1):
-        m.merge(sh.extrude_x(plate, holes, PLATE_T / 2, ((0.0, 0.0),), "steel", x_center=s * (REC_W - PLATE_T / 2)))
+        m.merge(sh.extrude_x(plate, holes, PLATE_T / 2, soft_bevel(0.0006), "steel", x_center=s * (REC_W - PLATE_T / 2)))
     # front and rear walls of the vented section
     for z0, z1 in ((REC_Z0, REC_Z0 + 0.0040), (REC_Z1 - 0.0040, REC_Z1)):
         m.merge(sh.box(-REC_W, SEAM_Y - 0.0006, z0, REC_W, CAP_Y, z1, 0.0009, "steel"))
     # lower receiver block (soft edges), its seam under the plates
     low = np.array([(REC_Z0, REC_BOT), (REC_Z1, REC_BOT), (REC_Z1, SEAM_Y + 0.0010), (REC_Z0, SEAM_Y + 0.0010)])
-    m.merge(sh.extrude_x(fillet(low, (0.0030, 0.0, 0.0, 0.0010), 2), (), LOW_W, soft_bevel(0.0016), "steel"))
+    m.merge(sh.extrude_x(fillet(low, (0.0060, 0.0, 0.0, 0.0010), 3), (), LOW_W, soft_bevel(0.0034), "steel"))
     # fixed rail under the forend, with its slot
     m.merge(sh.box(-STRIP_W, STRIP_Y0, STRIP_Z1, STRIP_W, STRIP_Y1, REC_Z0 + 0.0020, 0.0012, "steel"))
     for s in (-1, 1):
@@ -244,7 +244,7 @@ def handle_mesh():
     outline = fillet(prof, (0.0, 0.0060, 0.0120, 0.0030, 0.0020, 0.0), 4)
     holes = [stadium((-0.0682, 0.04895), (-0.1703, 0.04895), 0.01065, 8)]
     holes += [circle_loop(z, 0.0498, 0.0140, 24) for z in (-0.2110, -0.2660, -0.3190)]
-    m = sh.extrude_x(outline, holes, HANDLE_W, chamfer_bevel(0.0015), "steel")
+    m = sh.extrude_x(outline, holes, HANDLE_W, soft_bevel(0.0032), "steel")
     # picatinny section: base and crossbars at the standard 10 mm pitch
     m.merge(sh.box(-RAIL_W, HANDLE_TOP - 0.0010, RAIL_Z1, RAIL_W, RAIL_TOP - 0.0030, RAIL_Z0, 0.0008, "steel_dark"))
     n = int((RAIL_Z0 - RAIL_Z1 - 0.004) / 0.010)
@@ -297,7 +297,7 @@ def stock_mesh():
     outer = fillet([(SHROUD_Z1, BUTT_BOT), (BUTT_Z, BUTT_BOT), (BUTT_Z, SHROUD_TOP), (SHROUD_Z1, SHROUD_TOP)],
                    (0.0, 0.0080, 0.0040, 0.0), 4)
     recess = fillet([(0.1230, -0.0580), (0.2080, -0.0580), (0.2080, -0.0085), (0.1230, -0.0085)], 0.0060, 3)
-    m.merge(sh.extrude_x(outer, [recess], STOCK_W, soft_bevel(0.0030), "stock"))
+    m.merge(sh.extrude_x(outer, [recess], STOCK_W, soft_bevel(0.0050), "stock"))
     panel = fillet([(0.1220, -0.0590), (0.2090, -0.0590), (0.2090, -0.0075), (0.1220, -0.0075)], 0.0060, 3)
     window = fillet([(0.1360, -0.0426), (0.1790, -0.0426), (0.1790, -0.0190), (0.1360, -0.0190)], 0.0060, 3)
     m.merge(sh.extrude_x(panel, [window], STOCK_W - 0.0040, soft_bevel(0.0012), "stock"))
@@ -315,7 +315,7 @@ def pad_mesh():
     """Rubber butt pad (separate material: never skinned)."""
     outline = fillet([(BUTT_Z - 0.0010, BUTT_BOT - 0.0004), (PAD_Z, BUTT_BOT + 0.0040), (PAD_Z, SHROUD_TOP - 0.0030),
                       (BUTT_Z - 0.0010, SHROUD_TOP + 0.0004)], (0.0, 0.0040, 0.0030, 0.0), 3)
-    return sh.extrude_x(outline, (), STOCK_W + 0.0004, soft_bevel(0.0030), "rubber")
+    return sh.extrude_x(outline, (), STOCK_W + 0.0004, soft_bevel(0.0050), "rubber")
 
 
 # ---------------------------------------------------------------------------------- lower frame
@@ -333,14 +333,14 @@ def lower_mesh():
     outline = fillet(out, (0.0, 0.0030, 0.0030, 0.0030, 0.0020, 0.0040, 0.0050, 0.0060, 0.0020, 0.0), 3)
     holes = [fillet(OPENING, (0.0040, 0.0100, 0.0040, 0.0060, 0.0, 0.0040, 0.0030), 3),
              fillet(GUARD, (0.0040, 0.0040, 0.0040, 0.0060, 0.0050, 0.0040), 3)]
-    m = sh.extrude_x(outline, holes, FRAME_W, soft_bevel(0.0022), "steel")
+    m = sh.extrude_x(outline, holes, FRAME_W, soft_bevel(0.0036), "steel")
     # rubber grip panels: a slot-shaped pad along the grip axis with a raised centre, both sides
     a, b = grip_center(0.010), grip_center(0.058)
     for s in (-1, 1):
         pad = stadium((a[2], a[1]), (b[2], b[1]), 0.0150, 8)
-        m.merge(sh.extrude_x(pad, (), 0.0016, chamfer_bevel(0.0009), "grip", x_center=s * (FRAME_W + 0.0012)))
+        m.merge(sh.extrude_x(pad, (), 0.0016, soft_bevel(0.0011), "grip", x_center=s * (FRAME_W + 0.0012)))
         core = stadium((a[2], a[1]), (b[2], b[1]), 0.0095, 8)
-        m.merge(sh.extrude_x(core, (), 0.0008, chamfer_bevel(0.0005), "grip", x_center=s * (FRAME_W + 0.0030)))
+        m.merge(sh.extrude_x(core, (), 0.0008, soft_bevel(0.0006), "grip", x_center=s * (FRAME_W + 0.0030)))
         for z, y in ((-0.2020, -0.0600), (-0.1180, -0.0560), (-0.0600, -0.1423)):
             m.merge(screw((s * FRAME_W, y, z), s, 0.0014))
     # rotary selector (left): a boss with a cross-shaped lever in a round recess

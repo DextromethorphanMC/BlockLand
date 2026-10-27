@@ -132,6 +132,29 @@ def carrier_mesh():
     m.merge(strap([(0.0, BAG_Y[1] - 0.03, zb + BAG_T), (0.0, BAG_Y[1] - 0.008, zb + BAG_T + 0.026),
                    (0.0, BAG_Y[1] + 0.012, zb + BAG_T + 0.03), (0.0, BAG_Y[1] + 0.02, zb + BAG_T + 0.004)],
                   0.06, 0.008, "webbing"))
+    m.merge(_carrier_details(zf, zb))
+    return m
+
+
+def _carrier_details(zf, zb):
+    """The carrier's sewn and small parts: bar tacks splitting each MOLLE row into 1-inch channels (front and back),
+    a shock-cord retention loop over each pouch flap, a patch on the admin flap."""
+    from stock_models import rod
+    m = Mesh()
+    for k in range(3):
+        y = -0.52 + k * 0.032
+        for x in np.arange(-BAG_X + 0.030, BAG_X - 0.020, 0.038):                       # front rows
+            m.merge(sh.box(x - 0.0025, y + 0.001, zf - BAG_T - 0.0042, x + 0.0025, y + 0.019, zf - BAG_T - 0.002, 0.0006,
+                           "webbing"))
+        for x in np.arange(-BAG_X + 0.045, BAG_X - 0.035, 0.038):                       # back rows
+            m.merge(sh.box(x - 0.0025, y + 0.021, zb + BAG_T + 0.002, x + 0.0025, y + 0.039, zb + BAG_T + 0.0042, 0.0006,
+                           "webbing"))
+    for k in (-1, 0, 1):                                                                 # shock-cord loops
+        cx = k * 0.105
+        z0 = zf - BAG_T - 0.004 - 0.047
+        m.merge(rod([(cx - 0.020, -0.426, z0 + 0.003), (cx - 0.010, -0.421, z0 - 0.001), (cx + 0.010, -0.421, z0 - 0.001),
+                     (cx + 0.020, -0.426, z0 + 0.003)], 0.0016, "hardware", seg=8))
+    m.merge(pad(-0.045, 0.045, -0.365, -0.305, zf - BAG_T - 0.019, zf - BAG_T - 0.015, 0.006, 0.0015, "webbing"))
     return m
 
 
@@ -222,7 +245,23 @@ def plate_mesh():
     # a label patch on the body side
     label = sh.box(-0.07, -0.03, PLATE_T / 2 - 0.0005, 0.07, 0.06, PLATE_T / 2 + 0.0008, 0.001, "label")
     m.merge(label)
+    m.merge(_seam(outline))
     return bend(_refine(m))
+
+
+def _seam(outline, inset=0.009, r=0.0007, step=0.006):
+    """The coat's moulded edge bead round the strike face, a finger's width in from the rim (it catches the light
+    where the plate curves away); sampled finely so it follows the bend."""
+    from stock_models import rod
+    o = sh.offset_loop(sh.ccw(outline), inset)
+    loop = np.vstack([o, o[:1]])
+    pts = []
+    for a, b in zip(loop[:-1], loop[1:]):
+        n = max(1, int(np.ceil(np.linalg.norm(b - a) / step)))
+        for t in np.arange(n) / n:
+            pts.append((*(a + (b - a) * t), -PLATE_T / 2 - r * 0.35))
+    pts.append(pts[0])
+    return rod(pts, r, "plate", seg=6, smooth=False)
 
 
 def _refine(m, step=0.025):

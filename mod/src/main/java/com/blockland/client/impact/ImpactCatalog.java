@@ -47,6 +47,7 @@ final class ImpactCatalog {
     }
 
     static void reload(ResourceManager manager) {
+        combined.clear();
         ImpactData read = null;
         Optional<Resource> resource = manager.getResource(FILE);
         if (resource.isPresent()) {
@@ -126,11 +127,24 @@ final class ImpactCatalog {
         });
     }
 
+    /**
+     * The profile of an ammo id; {@code base+modifier} (a caliber and its round, e.g. {@code rifle+incendiary}) is the
+     * caliber's profile with the modifier's numbers multiplied in (a modifier names only what it changes, the rest is 1).
+     */
     static ImpactData.Ammo ammo(@Nullable String id) {
+        int plus = id == null ? -1 : id.indexOf('+');
+        if (plus > 0) {
+            ImpactData.Ammo base = ammo(id.substring(0, plus));
+            ImpactData.Ammo modifier = data.ammo.get(id.substring(plus + 1));
+            return modifier == null ? base : combined.computeIfAbsent(id, key -> ImpactData.Ammo.times(base, modifier));
+        }
         ImpactData.Ammo ammo = id == null ? null : data.ammo.get(id);
         if (ammo == null) ammo = data.ammo.get(data.fallbackAmmo);
         return ammo == null ? new ImpactData.Ammo() : ammo;
     }
+
+    /** {@code base+modifier} profiles made so far (cleared on reload). */
+    private static final java.util.Map<String, ImpactData.Ammo> combined = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static Predicate<BlockState> blockTest(String match) {
         int colon = match.indexOf(':');

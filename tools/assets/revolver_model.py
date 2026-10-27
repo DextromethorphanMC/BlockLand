@@ -9,6 +9,7 @@ cylinder), the ejector rod and star; the spur hammer, the trigger, the thumb lat
 in the chambers, the speed loader with six rounds and the spent case."""
 import numpy as np
 
+import organic as og
 import shapes as sh
 from meshkit import Mesh
 from p9_model import extrude_z, round_bevel
@@ -73,6 +74,10 @@ FRAME_PROFILE = [   # (z, y), the frame seen from the right: front of the frame,
 WINDOW = sh.rounded_rect(CYL_FRONT - 0.0015, -0.0365, CYL_REAR + 0.0012, 0.0095, 0.0030, 3)          # (z, y)
 GUARD_HOLE = [(-0.0035, -0.0470), (-0.0035, -0.0600), (0.0010, -0.0675), (0.0110, -0.0695), (0.0200, -0.0670),
               (0.0240, -0.0600), (0.0245, -0.0520), (0.0200, -0.0470)]
+# the trigger guard as a drawn curve, not a polygon (section 55): its outer run (from under the frame's front, round the
+# bow, up to the grip) and the hole smoothed by corner cutting
+FRAME_PROFILE = og.smooth_span(FRAME_PROFILE, 3, 12)
+GUARD_HOLE = [tuple(q) for q in og.chaikin(GUARD_HOLE, 3, closed=True)]
 HAMMER_SLOT = sh.rounded_rect(0.0255, -0.0060, 0.0440, 0.0105, 0.0015, 2)
 
 
@@ -341,24 +346,32 @@ def _interp(table, d, col=1):
     return float(np.interp(d, xs, [r[col] for r in table]))
 
 
+GROOVES = (0.0060, 0.0660, 3, 0.0017)
+PANEL_D = (0.0100, 0.0760)
+BUTT = 0.0070                   # the butt's rounded edge: the last 7 mm curve in to the base
+
+
 def grip_mesh():
-    """Walnut target grips: superellipse sections lofted down the grip axis, fuller at the bottom, a finger swell in
-    front; closed at the butt."""
-    ds = np.linspace(-0.0100, GRIP_LEN, 14)
-    t = np.linspace(0, 2 * np.pi, 28, endpoint=False) + np.pi / 28
-    c, s = np.cos(t), np.sin(t)
-    rings = []
-    for k, d in enumerate(ds):
+    """Walnut target grips (section 55): round sections lofted down the grip axis, fuller at the bottom, three finger
+    grooves in front, a checkering panel set into each side, the butt rounded over into a domed base."""
+    ds = og.refine(list(np.linspace(-0.0100, GRIP_LEN, 26)), PANEL_D + GROOVES[:2], 0.0030)
+    ds = sorted(set(ds) | set(np.round(GRIP_LEN - BUTT * (1 - np.cos(np.linspace(0, np.pi / 2, 6))), 6)))
+    sections = []
+    for d in ds:
         hw = _interp(GRIP_HALF_W, d)
         sf, sb = _interp(GRIP_DEPTH, d, 1), _interp(GRIP_DEPTH, d, 2)
-        n = np.where(s > 0, 2.4, 2.9)
-        x = hw * np.sign(c) * np.abs(c) ** (2 / n)
-        sv = np.where(s > 0, sf, sb) * np.sign(s) * np.abs(s) ** (2 / n)
-        if k == len(ds) - 1:
-            x, sv = x * 0.93, sv * 0.96                 # the butt's rounded edge
-        centre = grip_center(d)
-        rings.append(centre[None, :] + x[:, None] * np.array([1.0, 0, 0]) + sv[:, None] * FRONT[None, :])
-    return sh.loft(rings, "grip")
+        sf -= og.finger_grooves(d, *GROOVES)
+        # the butt: a quarter ellipse pulling the section in over its last BUTT metres
+        u = np.clip((d - (GRIP_LEN - BUTT)) / BUTT, 0, 1)
+        k = np.sqrt(max(0.0, 1 - u * u)) * 0.30 + 0.70 if u > 0 else 1.0
+        sections.append(og.ring(hw * k, sf * k, sb * k, 48, 2.1, 2.35, flat_sides=0.25))
+    mask = og.panel_mask(sections, ds, *PANEL_D, side=0.5)
+    sections = og.recess(sections, mask, 0.0004)
+    rings = [grip_center(d)[None, :] + sec[:, 0:1] * np.array([1.0, 0, 0]) + sec[:, 1:2] * FRONT[None, :]
+             for d, sec in zip(ds, sections)]
+    m = og.skin(rings, "grip", mask, panel_material="grip_checker", cap_start=True, cap_end=True)
+    sh.orient_outward(m)
+    return m
 
 
 def charm_ring_mesh():

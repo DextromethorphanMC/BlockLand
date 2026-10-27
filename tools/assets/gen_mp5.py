@@ -9,6 +9,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import armrig                                      # noqa: E402
+import drum_mags                                   # noqa: E402
 import meshkit as mk                               # noqa: E402
 import mp5_model as mm                             # noqa: E402
 import mp5_rig as rig                              # noqa: E402
@@ -57,8 +58,17 @@ def build_meshes():
         "muzzle_brake": d(mm.muzzle_cap_mesh(), "muzzle_brake"),
         "mag_standard": mm.mag_mesh(False),
         "mag_extended": mm.mag_mesh(True),
+        "mag_drum": drum()[0],
         "fx_shell": mm.shell_mesh(),
     }
+
+
+DRUM = (0.040, 0.052)        # each of the twin drums: radius and length (section 56: 100 rounds)
+
+
+def drum():
+    """The twin drum (mag space): the curved magazine down to just under the well's lip, the drums hung there."""
+    return drum_mags.twin_drum(drum_mags.trim(mm.mag_mesh(False), mm.WELL_Y1 - mm.MAG_ORIGIN[1] - 0.006), *DRUM)
 
 
 def add_materials(g):
@@ -93,6 +103,7 @@ def build(path, clips):
         if name == "mag":
             g.add_node("mag_standard", "mag", mesh=mesh_idx["mag_standard"])
             g.add_node("mag_extended", "mag", mesh=mesh_idx["mag_extended"])
+            g.add_node("mag_drum", "mag", mesh=mesh_idx["mag_drum"])
     for name, (parent, t, rot, scale) in rig.MOUNTS.items():       # section 19: attachment mounts
         g.add_node(name, parent, t, rot, scale=scale)
     for side, shoulder in (("R", rig.SHOULDER_R), ("L", rig.SHOULDER_L)):
@@ -118,6 +129,8 @@ def build(path, clips):
                                     "rotation": rest[f"arm_{side}"]["rotation"]}
         rest_vals[f"arm_{side}_fore"] = {"rotation": rest[f"arm_{side}_fore"]["rotation"]}
         rest_vals.update(armrig.rest_values(rest, side))
+    # the drum's own reloads (section 56): the support hand on the drums, not round a box magazine's body
+    clips = list(clips) + drum_mags.drum_clips(clips, rig.ANCHORS, drum_mags.mp5_holds(rig, drum()[1], DRUM[1]))
     info = {clip.name: bake_clip(g, clip, rest_vals) for clip in clips}
     g.save(path)
     return tri_counts, info

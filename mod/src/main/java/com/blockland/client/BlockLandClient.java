@@ -102,6 +102,7 @@ public final class BlockLandClient {
             ClientAnnouncements.clear();
             ClientActivities.clear();
             com.blockland.client.render.LightSources.clear();
+            com.blockland.client.render.ObjectMotion.clear();
             BLNetwork.forgetClientConnection();
         });
         BLNetwork.setClientListener(new Handler());
@@ -168,6 +169,9 @@ public final class BlockLandClient {
         com.blockland.client.placement.PlacementPreview.init(modBus);
         com.blockland.client.revive.ClientRevive.init(modBus);
         com.blockland.client.binoculars.ClientBinoculars.init(modBus);
+        com.blockland.client.vehicle.ClientVehicles.init(modBus);
+        com.blockland.client.backpack.ClientBackpack.init(modBus);
+        com.blockland.client.decor.ClientDecor.init(modBus);
         ViewmodelMotion.setBodyMotion(ClientActions.BODY);
         com.blockland.client.dev.DevAutomation.init();
     }

@@ -9,7 +9,6 @@ import com.blockland.network.packet.InfectionPackets;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
@@ -133,7 +132,8 @@ final class MonsterSelectScreen extends Screen {
         LivingEntity preview = previews.get(index);
         if (preview != null) {
             Draw.glow(g, x + CARD_W / 2f, y + 62, CARD_W * 0.45f, 50, ColorMath.fade(accent, hover ? 0.22f : 0.12f));
-            InventoryScreen.renderEntityInInventoryFollowsMouse(g, x + 14, y + 12, x + CARD_W - 14, y + 108, 34, 0.0625f, mouseX, mouseY, preview);
+            // each card into a texture of its own (vanilla's entity preview shares one: every card would show the last model)
+            MonsterPreviewRenderer.draw(g, index, x + 14, y + 12, x + CARD_W - 14, y + 108, 34, 0.0625f, mouseX, mouseY, preview);
         }
 
         int ty = y + 112;

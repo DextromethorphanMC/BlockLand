@@ -7,6 +7,7 @@ bevels and a rounded nose, a deep dust cover with a slotted accessory rail, a bi
 an exposed ring hammer and a control lever at the rear of the frame. Every builder returns a meshkit.Mesh."""
 import numpy as np
 
+import organic as og
 import shapes as sh
 from meshkit import Mesh
 from p9_model import chamfer_bevel, extrude_z, fit_well, orient_radial, pin, round_bevel
@@ -180,23 +181,29 @@ def mag_outline(clear=0.0, count_corner=4):
                            (0.0036 + clear, 0.0036 + clear, 0.0066 + clear, 0.0066 + clear), count_corner)
 
 
+# the checkered panel wrapping the sides and the front strap (distance down the grip, section 55)
+PANEL_D = (0.0130, 0.0745)
+
+
 def grip_mesh():
-    ds = [d for d, _ in GRIP_WIDTH]
-    widths = dict(GRIP_WIDTH)
-    rings, sections = [], []
+    ds = og.refine([d for d, _ in GRIP_WIDTH], PANEL_D, 0.0035)
+    gd, gw = zip(*GRIP_WIDTH)
+    frames, sections = [], []
     for d in ds:
         c, s_dir, s_f, s_b = _ring_frame(d)
-        x, sv = _shape(0.5 * widths[d], s_f, s_b)
-        rings.append(c[None, :] + x[:, None] * np.array([1.0, 0, 0]) + sv[:, None] * s_dir[None, :])
-        sections.append(np.stack([x, sv], 1))
-    outer = sh.loft(rings, "polymer", cap_start=True, cap_end=False, auto_orient=False)
+        frames.append((c, s_dir))
+        # the USP's squarer back strap than the P9's, still a hand's round rather than a box
+        sections.append(og.ring(0.5 * np.interp(d, gd, gw), s_f, s_b, 48, 2.3, 2.9, flat_sides=0.4))
+    mask = og.panel_mask(sections, ds, *PANEL_D, side=0.5, front=True)
+    sections = og.recess(sections, mask, 0.0004)
+    rings = [c[None, :] + sec[:, 0:1] * np.array([1.0, 0, 0]) + sec[:, 1:2] * s_dir[None, :]
+             for (c, s_dir), sec in zip(frames, sections)]
+    outer = og.skin(rings, "polymer", mask)
     orient_radial(outer, GRIP_C0, AXIS, +1)
     top = outer.f[-1]
     pv = np.array(outer.v)[list(top)]
     if np.cross(pv[1] - pv[0], pv[2] - pv[0])[1] < 0:
         outer.f[-1] = tuple(reversed(top))
-    # textured panels on the sides and the front strap (USP: fine checkering all round below the frame)
-    outer.set_material(lambda c, n: (abs(n[0]) > 0.35 or n[2] < -0.6) and -0.0975 < c[1] < -0.0400, "grip")
     # the magazine's corners nearly touch the rounded front strap: the well follows the grip there
     well = fit_well(mag_outline(0.0008), ds, sections, GRIP_LEN, MAG_S, 0.036)
     to3 = lambda pts, d: (grip_center(d) + MAG_S * FRONT)[None, :] + pts[:, 0:1] * np.array([1.0, 0, 0]) \

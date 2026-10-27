@@ -3,6 +3,7 @@ package com.blockland.client.creature;
 import com.blockland.BlockLand;
 import com.blockland.entity.BLEntities;
 import com.blockland.client.render.RenderClock;
+import com.blockland.entity.Blind;
 import com.blockland.entity.CreeperZombie;
 import com.blockland.entity.GhastLord;
 import com.blockland.entity.SlimeLicker;
@@ -24,7 +25,8 @@ import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.eventbus.api.bus.BusGroup;
 
 /**
- * Renderers for BlockLand's entity types: the Slime Licker (own model and texture), the Creeper Zombie (the zombie model,
+ * Renderers for BlockLand's entity types: the Slime Licker (own model and texture), the Blind (瞎子: the zombie model in
+ * its own posture, its own skin), the Creeper Zombie (the zombie model,
  * its own skin, a creeper's swelling and flashing while its fuse burns), the Ghast Lord (the vanilla ghast at a player's
  * size), the slime shot (its item) and the skill fireball (drawn exactly like vanilla's ghast fireball).
  */
@@ -32,6 +34,8 @@ public final class CreatureRenderers {
     public static final ModelLayerLocation SLIME_LICKER = new ModelLayerLocation(BlockLand.id("slime_licker"), "main");
     private static final ResourceLocation SLIME_LICKER_TEXTURE = BlockLand.id("textures/entity/slime_licker.png");
     private static final ResourceLocation CREEPER_ZOMBIE_TEXTURE = BlockLand.id("textures/entity/creeper_zombie.png");
+    public static final ModelLayerLocation BLIND = new ModelLayerLocation(BlockLand.id("blind"), "main");
+    private static final ResourceLocation BLIND_TEXTURE = BlockLand.id("textures/entity/blind.png");
     private static final ResourceLocation GHAST_TEXTURE = ResourceLocation.withDefaultNamespace("textures/entity/ghast/ghast.png");
     private static final ResourceLocation GHAST_SHOOTING_TEXTURE = ResourceLocation.withDefaultNamespace("textures/entity/ghast/ghast_shooting.png");
 
@@ -41,10 +45,13 @@ public final class CreatureRenderers {
     public static void init(BusGroup modBus) {
         EntityRenderersEvent.RegisterLayerDefinitions.getBus(modBus).addListener(event ->
                 event.registerLayerDefinition(SLIME_LICKER, SlimeLickerModel::createBodyLayer));
+        EntityRenderersEvent.RegisterLayerDefinitions.getBus(modBus).addListener(event ->
+                event.registerLayerDefinition(BLIND, BlindModel::createBodyLayer));
         EntityRenderersEvent.RegisterRenderers.getBus(modBus).addListener(event -> {
             event.registerEntityRenderer(BLEntities.SLIME_LICKER.get(), SlimeLickerRenderer::new);
             event.registerEntityRenderer(BLEntities.CREEPER_ZOMBIE.get(), CreeperZombieRenderer::new);
             event.registerEntityRenderer(BLEntities.GHAST_LORD.get(), GhastLordRenderer::new);
+            event.registerEntityRenderer(BLEntities.BLIND.get(), BlindRenderer::new);
             event.registerEntityRenderer(BLEntities.SLIME_SHOT.get(), ThrownItemRenderer::new);
             // as vanilla registers its ghast fireball
             event.registerEntityRenderer(BLEntities.SKILL_FIREBALL.get(), context -> new ThrownItemRenderer<>(context, 3.0F, true));
@@ -72,6 +79,30 @@ public final class CreatureRenderers {
         @Override
         public ResourceLocation getTextureLocation(ZombieRenderState state) {
             return SLIME_LICKER_TEXTURE;
+        }
+    }
+
+    /** Drawn like a zombie with the blind one's posture (the model's own) and skin. */
+    static final class BlindRenderer extends HumanoidMobRenderer<Blind, ZombieRenderState, BlindModel> {
+        BlindRenderer(EntityRendererProvider.Context context) {
+            super(context, new BlindModel(context.bakeLayer(BLIND)), 0.5F);
+        }
+
+        @Override
+        public ZombieRenderState createRenderState() {
+            return new ZombieRenderState();
+        }
+
+        @Override
+        public void extractRenderState(Blind entity, ZombieRenderState state, float partialTick) {
+            super.extractRenderState(entity, state, partialTick);
+            state.isAggressive = entity.isAggressive();
+            state.isConverting = false;
+        }
+
+        @Override
+        public ResourceLocation getTextureLocation(ZombieRenderState state) {
+            return BLIND_TEXTURE;
         }
     }
 

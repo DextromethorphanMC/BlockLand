@@ -35,8 +35,12 @@ def _sticks():
         # the sticks are not machined: a little shorter / taller each, so the bundle reads as hand-packed
         dz = (0.004, -0.002, 0.003)[i]
         dy = (0.0005, 0.0, -0.0006)[i]
-        s = sh.box(x - STICK_W / 2, -STICK_H / 2, -STICK_L / 2 + dz, x + STICK_W / 2, STICK_H / 2 + dy,
-                   STICK_L / 2 - dz * 0.5, 0.0045, "explosive")
+        z0, z1 = -STICK_L / 2 + dz, STICK_L / 2 - dz * 0.5
+        s = sh.box(x - STICK_W / 2, -STICK_H / 2, z0, x + STICK_W / 2, STICK_H / 2 + dy, z1, 0.0045, "explosive")
+        # the wrapper's crimped ends: a folded lip round each end of the stick
+        for za, zb in ((z0 + 0.0015, z0 + 0.0060), (z1 - 0.0060, z1 - 0.0015)):
+            s.merge(sh.box(x - STICK_W / 2 - 0.0005, -STICK_H / 2 - 0.0005, za, x + STICK_W / 2 + 0.0005,
+                           STICK_H / 2 + dy + 0.0005, zb, 0.0030, "explosive"))
         m = s if m is None else m.merge(s)
     return m
 
@@ -50,6 +54,11 @@ def _tape():
     # a loose end of the far band hanging down the side
     m.merge(sh.box(HALF_W + TAPE_T, -0.020, TAPE_Z[0] - 0.010, HALF_W + 2.2 * TAPE_T, 0.004, TAPE_Z[0] + 0.009, 0.0,
                    "tape"))
+    # wrapped by hand: the tape is crumpled a little, never a machined band
+    rng = np.random.default_rng(11)
+    v = np.array(m.v)
+    v += rng.normal(0, 0.00022, v.shape)
+    m.v = [tuple(x) for x in v]
     return m
 
 
@@ -65,6 +74,30 @@ def _unit():
                            0.0009, "keys"))
     # the strap screws at the near corners and a battery pack on the near end
     m.merge(sh.box(-0.024, UNIT_Y0 + 0.002, UNIT_Z1, 0.024, UNIT_Y1 - 0.003, UNIT_Z1 + 0.009, 0.002, "housing"))
+    m.merge(_unit_details())
+    return m
+
+
+def _unit_details():
+    """The timer's small parts: a screw in each corner of its face, the seam where its two shells meet, a rubber
+    grommet where each wire leaves it and a stub antenna on the far corner."""
+    import detail_parts as dp
+    from meshkit import Mesh
+    m = Mesh()
+    screw = dp.socket_screw(0.0018, "housing")
+    for x in (-UNIT_X + 0.0045, UNIT_X - 0.0045):
+        for z in (UNIT_Z0 + 0.0045, UNIT_Z1 - 0.0045):
+            m.merge(dp.on_surface(screw, (x, UNIT_Y1, z), (0, 1, 0), (0, 0, 1)))
+    ym = 0.5 * (UNIT_Y0 + UNIT_Y1)
+    m.merge(sh.box(-UNIT_X - 0.0004, ym - 0.0005, UNIT_Z0 + 0.0020, UNIT_X + 0.0004, ym + 0.0005, UNIT_Z1 - 0.0020,
+                   0.0002, "housing"))
+    grommet = sh.revolve([(0.0, 0.0030), (0.0020, 0.0030), (0.0027, 0.0018), (0.0027, -0.0005), (0.0, -0.0005)], 14,
+                         "housing")
+    for _, x, z, side in (("r", 0.034, -0.030, 1.0), ("y", 0.034, -0.004, 1.0), ("b", -0.034, 0.020, -1.0)):
+        m.merge(dp.on_surface(grommet, (side * UNIT_X, UNIT_Y0 + 0.008, z), (side, 0, 0)))
+    antenna = sh.revolve([(0.0, 0.0), (0.0032, 0.0), (0.0032, 0.0040), (0.0018, 0.0060), (0.0016, 0.0170),
+                          (0.0010, 0.0180), (0.0, 0.0182)], 14, "keys")
+    m.merge(dp.on_surface(antenna, (-UNIT_X + 0.0070, UNIT_Y1, UNIT_Z0 + 0.0075), (0, 1, 0), (0, 0, 1)))
     return m
 
 

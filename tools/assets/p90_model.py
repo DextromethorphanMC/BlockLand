@@ -17,6 +17,7 @@ design frame; gen_p90 moves meshes into node-local space."""
 import numpy as np
 
 import shapes as sh
+import smg_detail as sd
 from meshkit import Mesh
 from p90_shapes import (P, PX, bevel, cyl_x, cyl_z, extrude_var, fillet, picatinny, py, pz, screw, smooth)
 from p9_model import chamfer_bevel, extrude_z
@@ -128,6 +129,10 @@ def butt_mesh():
                     hw_butt, bevel(0.0068, 4), "polymer")
     plate = fillet([(39, 264), (58, 264), (58, 650), (42, 650)], [12, 0, 0, 12], min_convex=9)
     m.merge(extrude_var(plate, (), 0.0250, bevel(0.0026, 3), "polymer"))
+    for k in range(13):                                    # the rubber butt plate's grip ribs across its rear face
+        yp = 300 + 26 * k
+        z, y = P(39 + 3 * (yp - 264) / 386, yp)
+        m.merge(sd.rib((-0.0200, y, z - 0.0002), (0.0200, y, z - 0.0002), 0.0030, 0.0008, (0, 0, 1), "polymer"))
     for s in (-1, 1):
         slot = fillet([(112, 619), (200, 619), (200, 628), (112, 628)], 4)
         m.merge(extrude_var(slot, (), 0.0004, ((0.0, 0.0),), "steel_dark", x_center=s * 0.0255))

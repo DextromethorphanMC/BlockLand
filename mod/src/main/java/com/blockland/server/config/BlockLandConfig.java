@@ -19,6 +19,7 @@ public final class BlockLandConfig {
     public static final ForgeConfigSpec.BooleanValue LOBBY_VOID_WORLD;
     public static final ForgeConfigSpec.IntValue PARTY_MAX_SIZE;
     public static final ForgeConfigSpec.BooleanValue SLIDE_OUTSIDE_MATCHES;
+    public static final ForgeConfigSpec.BooleanValue VEHICLES_OUTSIDE_MATCHES;
 
     public static final ForgeConfigSpec.IntValue ARENA_SPACING;
     public static final ForgeConfigSpec.IntValue ARENA_BASE_Y;
@@ -62,6 +63,12 @@ public final class BlockLandConfig {
         // inside a match the mode's allowSlide / allowProne / allowDive settings (backend) decide
         SLIDE_OUTSIDE_MATCHES = BUILDER.comment("不在对局中的世界内玩家（进入世界的管理员）能否滑铲、匍匐和飞扑；对局中由模式的「允许滑铲 / 匍匐 / 飞扑」决定")
                 .define("slideOutsideMatches", true);
+        BUILDER.pop();
+
+        BUILDER.push("vehicles");
+        // inside a match the mode's allowVehicles setting (backend) decides
+        VEHICLES_OUTSIDE_MATCHES = BUILDER.comment("不在对局中的世界内玩家能否放置和乘坐载具；对局中由模式的「允许载具」决定")
+                .define("outsideMatches", true);
         BUILDER.pop();
 
         BUILDER.push("arena");

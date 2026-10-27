@@ -8,9 +8,10 @@ What is kept: the receiver (split into the receiver and its pistol grip; trigger
 hardware stay with the receiver), the pump forend, the trigger and the loading gate. Everything forward of the receiver
 (the perforated heat shield, the barrel, the magazine tube and its clamp, the sights) and the round in the source are
 left out: ks3_model builds its own barrel with a ventilated rib, sights, rail, tubes, stock and shotshells. The heavy
-hidden geometry goes with them (16.3k -> 4.8k source triangles), and the kept parts are decimated (qem.py) to
-DECIMATE (-> 3.2k). Their textures are not used (box-projected UVs and
-our texture sets, section 20).
+hidden geometry goes with them (16.3k -> 4.8k source triangles). The kept parts stay at the source's full resolution
+(section 55: the decimation to 3.2k that the old 9k long-gun budget needed faceted the grip and the pump); DECIMATE
+can still name a part to decimate (qem.py). Their textures are not used (box-projected UVs and our texture sets,
+section 20).
 
 Design frame (metres): +X right, +Y up, +Z rearward, bore axis on x = y = 0, z = 0 at the receiver's front face. The
 source points its muzzle along +Z with its left side on +X (centimetre-like units): x' = -S x, y' = S (y - BORE_Y),
@@ -30,8 +31,8 @@ S = 0.0054             # source unit -> metre: the source bore (r 1.758) becomes
 BORE_Y = 14.1665       # barrel axis height (source)
 FRONT_Z = 38.18        # receiver front face (source)
 KEEP_Z_MAX = 38.6      # base components reaching further forward than this are not kept (shield, barrel, tube)
-# triangle targets of the kept parts (qem): the whole KS-3 stays under the long-gun budget (9k)
-DECIMATE = {"receiver": 1000, "grip": 360, "hardware": 650, "pump": 1100}
+# triangle targets of parts to decimate (qem); none: the source's 4.8k kept triangles fit the long-gun budget whole
+DECIMATE = {}
 COMP, NCOMP = {5121: np.uint8, 5123: np.uint16, 5125: np.uint32, 5126: np.float32}, {"SCALAR": 1, "VEC3": 3}
 
 

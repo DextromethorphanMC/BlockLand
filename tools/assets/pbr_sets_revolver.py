@@ -37,7 +37,36 @@ def sets(pt):
         return pt.Layers(alb, 0.004 * grain - pt.groove(craze, 0.002), np.clip(rough, 0, 1),
                          np.zeros((size, size), bool), f0=0.04)
 
+    def checkered_walnut(size, rng, pmm):
+        """The grip panels (section 55): the same oiled walnut cut with fine diamond checkering — two sets of V
+        grooves 1.25 mm apart (20 lines an inch) crossing at 60 degrees, about 0.4 mm deep, so every diamond is a
+        little pyramid the light catches; oil and grime darker in the grooves, the points rubbed lighter."""
+        lay = pt.lacquered_wood(size, rng, pmm)
+        t = pt.norm01(lay.albedo.mean(-1))
+        streak = pt.fbm(size, rng, size / 6, 3, aniso=4.0)
+        tone = pt.palette(t, [(0.0, pt.srgb([0.105, 0.060, 0.035])), (0.45, pt.srgb([0.225, 0.130, 0.070])),
+                              (1.0, pt.srgb([0.36, 0.215, 0.115]))])
+        alb = pt.tint(tone, -0.10 * streak, 1.0)
+        y, x = (np.mgrid[0:size, 0:size] + 0.5) / pmm                     # mm
+        pitch = 1.25
+        # the line spacing fits the tile exactly so the checkering repeats without a seam
+        lines = max(1, int(round(size / pmm / pitch)))
+        pitch = size / pmm / lines
+        a, b = np.radians(30.0), np.radians(-30.0)
+        ua = (x * np.cos(a) + y * np.sin(a)) / pitch
+        ub = (x * np.cos(b) + y * np.sin(b)) / pitch
+        va = np.abs(ua - np.round(ua)) * 2                               # 0 in a groove .. 1 on a ridge
+        vb = np.abs(ub - np.round(ub)) * 2
+        diamond = np.minimum(va, vb)
+        height = 0.40 * (diamond - 1.0) + lay.height                      # mm, the points at the surface
+        groove = 1 - pt.smoothstep(0.0, 0.35, diamond)
+        alb = pt.lerp(alb, alb * 0.55, 0.7 * groove)
+        alb = pt.lerp(alb, alb * 1.25, 0.4 * pt.smoothstep(0.75, 1.0, diamond))
+        rough = np.clip(lay.rough + 0.12 + 0.12 * groove - 0.08 * pt.smoothstep(0.8, 1.0, diamond), 0, 1)
+        return pt.Layers(alb, height, rough, lay.metal, f0=0.04, porosity=0.25, relief=lay.relief)
+
     return {
+        "revolver/checkered_walnut": pt.SetDef(pt._r(checkered_walnut), 512, 0.04, 1204),
         "revolver/blued": pt.SetDef(pt._r(bluing), 1024, 0.10, 1201),
         "revolver/stainless": pt.SetDef(pt._r(stainless), 512, 0.10, 1202),
         "revolver/ivory": pt.SetDef(pt._r(ivory), 512, 0.10, 1203),

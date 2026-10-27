@@ -736,7 +736,7 @@ public final class ClientGuns {
         BlockHitResult block = level.clip(new ClipContext(from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
         boolean hitBlock = block.getType() != HitResult.Type.MISS;
         Ballistics.Path path = Ballistics.trace(level, from, dir, hitBlock ? from.distanceTo(block.getLocation()) : range,
-                stats == null ? Ballistics.Medium.NONE : stats.ammo().medium());
+                stats == null ? Ballistics.Medium.NONE : stats.medium());
         if (path.stoppedInFluid()) hitBlock = false;
         Vec3 end = hitBlock ? block.getLocation() : path.end();
         // the same hit boxes as the server (a sliding player is low, with the head behind the hips)
@@ -752,7 +752,7 @@ public final class ClientGuns {
                 nearest = from.distanceToSqr(point);
             }
         }
-        String ammo = stats == null ? null : stats.ammo().id;
+        String ammo = stats == null ? null : stats.impactProfile();
         Vec3 stop = point != null ? point : end;
         Impacts.path(level, path, from.distanceTo(stop), ammo);
         if (point != null) {
@@ -790,7 +790,7 @@ public final class ClientGuns {
             Vec3 at = new Vec3(hit.x(), hit.y(), hit.z());
             Vec3 eye = BodyActions.eyePosition(mc.player);
             if (at.distanceToSqr(eye) < 1e-6) return;
-            Impacts.entity(mc.level, at, target, at.subtract(eye).normalize(), stats == null ? null : stats.ammo().id);
+            Impacts.entity(mc.level, at, target, at.subtract(eye).normalize(), stats == null ? null : stats.impactProfile());
             if (stats != null) Decals.onEntity(stats.ammo().bodyDecal, target, eye, at, null);
         });
     }
@@ -827,7 +827,7 @@ public final class ClientGuns {
         } else {
             float seconds = stats.reloadTime(empty);
             reloadEnd = now + (long) (seconds * 1e9);
-            viewmodel.play(Viewmodel.Action.RELOAD, empty ? stats.gun().anims.reloadEmpty : stats.gun().anims.reload, seconds);
+            viewmodel.play(Viewmodel.Action.RELOAD, stats.reloadClip(empty, viewmodel::hasClip), seconds);
         }
         BLNetwork.sendToServer(new GunPackets.C2SReload(slot));
     }
@@ -948,9 +948,8 @@ public final class ClientGuns {
             Matrix4f at = viewmodel.nodeMatrix("muzzle", gun, base, tmp);
             muzzles[gun] = gun == 1 && at == null ? muzzles[0] : ViewmodelRenderer.viewToWorld(camera, at, BodyActions.eyePosition(player));
         }
-        CraftData.SkinFx skinFx = stats == null ? null : stats.skinFx();
         // (no muzzle smoke here: in first person the muzzle is ~0.3 blocks from the eye and smoke would fill the screen)
-        for (PendingTracer tracer : pendingTracers) mc.particleEngine.add(tracer(level, muzzles[tracer.gun], tracer.end, skinFx));
+        for (PendingTracer tracer : pendingTracers) mc.particleEngine.add(tracer(level, muzzles[tracer.gun], tracer.end, stats));
         pendingTracers.clear();
         GltfModel.Primitive shell = null;
         for (int gun = 0; gun < 2; gun++) {
@@ -979,11 +978,21 @@ public final class ClientGuns {
         LightSources.flash(at.x, at.y, at.z, rgb, (suppressed ? 0.35f : 2.2f) * strength, suppressed ? 3.5f : 7f, 0.07f);
     }
 
-    /** A tracer, in a special skin's colour and width when the gun wears one. */
-    private static GunParticles.Tracer tracer(ClientLevel level, Vec3 from, Vec3 to, @Nullable CraftData.SkinFx skinFx) {
-        if (skinFx == null) return new GunParticles.Tracer(level, from, to);
-        int rgb = skinFx.hasTracerColor() ? skinFx.tracerRgb() : GunParticles.DEFAULT_TRACER;
-        return new GunParticles.Tracer(level, from, to, rgb, Math.max(0.2f, skinFx.tracerWidth));
+    /**
+     * A shot's streak: a tracer round's long bright one in its own colour; else in a special skin's colour and width when
+     * the gun wears one, tinted by the round (an incendiary's orange) when the skin brings no colour of its own.
+     */
+    private static GunParticles.Tracer tracer(ClientLevel level, Vec3 from, Vec3 to, @Nullable GunStats used) {
+        CraftData.SkinFx skinFx = used == null ? null : used.skinFx();
+        CraftData.Round round = used == null ? null : used.round();
+        if (round != null && round.tracer) {
+            int rgb = round.hasTracerColor() ? round.tracerRgb() : GunParticles.DEFAULT_TRACER;
+            return new GunParticles.Tracer(level, from, to, rgb, Math.max(0.2f, round.tracerWidth), true);
+        }
+        int rgb = skinFx != null && skinFx.hasTracerColor() ? skinFx.tracerRgb()
+                : round != null && round.hasTracerColor() ? round.tracerRgb() : GunParticles.DEFAULT_TRACER;
+        float width = (skinFx == null ? 1 : skinFx.tracerWidth) * (round == null ? 1 : round.tracerWidth);
+        return new GunParticles.Tracer(level, from, to, rgb, Math.max(0.2f, width));
     }
 
     /** The spent case: the {@code fx_shell} of the model on screen (a special skin's own model brings its own). */
@@ -1012,14 +1021,15 @@ public final class ClientGuns {
         if (shooter instanceof Player player && !watched) {
             // the shot came from this gun of a dual pair; a special skin colours the flash and the tracer (spec §30)
             Vec3 muzzle = GunParticles.thirdPersonMuzzle(player, 1, shot.hand() == 1);
-            CraftData.SkinFx skinFx = GunContent.statsOf(player.getMainHandItem()).map(GunStats::skinFx).orElse(null);
+            GunStats shooterStats = GunContent.statsOf(player.getMainHandItem()).orElse(null);
+            CraftData.SkinFx skinFx = shooterStats == null ? null : shooterStats.skinFx();
             muzzleLight(muzzle, skinFx, shot.suppressed(), 1f);
             if (!shot.suppressed()) {
                 mc.particleEngine.add(skinFx == null ? new GunParticles.Flash(level, muzzle)
                         : new GunParticles.Flash(level, muzzle, skinFx.hasFlashColor() ? skinFx.flashRgb() : GunParticles.DEFAULT_FLASH,
                         Math.max(0.2f, skinFx.flashScale)));
             }
-            if (shot.face() != GunPackets.S2CShot.LAUNCHED) mc.particleEngine.add(tracer(level, muzzle, end, skinFx));
+            if (shot.face() != GunPackets.S2CShot.LAUNCHED) mc.particleEngine.add(tracer(level, muzzle, end, shooterStats));
         }
         // a launched grenade flies on as an entity: its flight and its blast are its own
         if (shot.face() == GunPackets.S2CShot.LAUNCHED) return;
@@ -1030,11 +1040,11 @@ public final class ClientGuns {
         Vec3 dir = eye != null && end.distanceToSqr(eye) > 1e-6 ? end.subtract(eye).normalize()
                 : knownFace ? faceInto(Direction.values()[shot.face()]) : new Vec3(0, -1, 0);
         GunStats used = shooter instanceof Player player ? GunContent.statsOf(player.getMainHandItem()).orElse(null) : null;
-        String ammo = used == null ? null : used.ammo().id;
+        String ammo = used == null ? null : used.impactProfile();
         // the server's word on how it ended: a round a fluid stopped hit no one; one it did not stop did not skip
         boolean skipped = shot.face() == GunPackets.S2CShot.SKIPPED, spent = shot.face() == GunPackets.S2CShot.SPENT;
         // its way through fluids, re-traced from the shooter's eyes for the splashes and the trail
-        Ballistics.Medium medium = used == null ? Ballistics.Medium.NONE : used.ammo().medium();
+        Ballistics.Medium medium = used == null ? Ballistics.Medium.NONE : used.medium();
         if (!skipped) medium = new Ballistics.Medium(medium.waterRange(), medium.lavaRange(), 0);
         Ballistics.Path path = eye == null ? null : Ballistics.trace(level, eye, dir, eye.distanceTo(end) + 1e-3, medium);
         if (path != null) Impacts.path(level, path, eye.distanceTo(end), ammo);

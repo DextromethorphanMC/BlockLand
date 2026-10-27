@@ -123,6 +123,11 @@ def fuze(y0):
     m.merge(sh.box(0.0040, y0 + 0.013, -0.0055, 0.0130, y0 + 0.0205, 0.0055, 0.0008, "fuze"))      # striker housing
     m.merge(sh.box(0.0020, y0 + 0.004, -0.0135, 0.0100, y0 + 0.0125, -0.0095, 0.0006, "fuze"))      # pin ears (front)
     m.merge(sh.box(0.0020, y0 + 0.004, 0.0095, 0.0100, y0 + 0.0125, 0.0135, 0.0006, "fuze"))        # (back)
+    for y in (y0 + 0.0062, y0 + 0.0112):                                                            # rolled beads
+        m.merge(revolve_y([(FUZE_R - 0.0003, y - 0.0006), (FUZE_R + 0.0004, y - 0.0003), (FUZE_R + 0.0004, y + 0.0003),
+                           (FUZE_R - 0.0003, y + 0.0006)], 36, "fuze"))
+    rivet = sh.revolve([(0.0, 0.0006), (0.0012, 0.0005), (0.0016, 0.0), (0.0016, -0.0004), (0.0, -0.0004)], 12, "fuze")
+    m.merge(sh.place(rivet, origin=(0.0130, y0 + 0.0168, 0.0), x_axis=(0, 0, -1), y_axis=(0, 1, 0), z_axis=(1, 0, 0)))
     hinge = V(0.0115, y0 + 0.0205, 0.0)
     pin_head = V(0.0060, y0 + 0.0085, -0.0136)
     return m, hinge, pin_head
@@ -177,6 +182,7 @@ def frag():
     prof += [(0.0112, 0.0296), (0.0, 0.0296)]
     body = revolve_y(prof, 28, "body")
     body.merge(torus(V(0.0, -0.0322, 0.0), 2, 0.0032, 0.0009, "fuze", seg=12, tseg=6))           # charm eye
+    body.merge(torus(V(0.0, 0.0, 0.0), 1, FRAG_R + 0.0001, 0.0006, "body", seg=48, tseg=6))      # the halves' weld seam
     y0 = 0.0292
     fz, hinge, pin_head = fuze(y0)
     body.merge(fz)
@@ -262,8 +268,11 @@ def smoke_grenade():
 
 # ================================================================================================= molotov
 BOTTLE_R = 0.0290
-BOTTLE = [(0.0, -0.098), (0.0240, -0.098), (0.0272, -0.0955), (0.0288, -0.0905), (BOTTLE_R, -0.084),
-          (BOTTLE_R, 0.040), (0.0278, 0.052), (0.0235, 0.064), (0.0175, 0.077), (0.0132, 0.090), (0.0124, 0.122),
+# a pushed-up punt in the base, a moulded ring round the body below the shoulder, a beaded neck under the lip
+BOTTLE = [(0.0, -0.0925), (0.0110, -0.0952), (0.0200, -0.0975), (0.0240, -0.098), (0.0272, -0.0955),
+          (0.0288, -0.0905), (BOTTLE_R, -0.084), (BOTTLE_R, 0.030), (BOTTLE_R + 0.0008, 0.0318),
+          (BOTTLE_R + 0.0008, 0.0352), (BOTTLE_R, 0.037), (BOTTLE_R, 0.040), (0.0278, 0.052), (0.0235, 0.064),
+          (0.0175, 0.077), (0.0132, 0.090), (0.0124, 0.110), (0.0131, 0.1115), (0.0124, 0.1130), (0.0124, 0.122),
           (0.0138, 0.1245), (0.0140, 0.1290), (0.0122, 0.1305), (0.0, 0.1305)]
 RAG_TOP = V(0.0012, 0.1505, 0.0030)
 
@@ -279,8 +288,8 @@ def molotov():
     the neck and hanging down its front; the `flame` on the rag (scale 0 until lit); a petrol lighter (zippo pattern,
     nodes on the viewmodel: it lives in the left hand) with its hinged lid and a little flame."""
     glass = revolve_y(BOTTLE, 28, "glass")
-    liquid = revolve_y([(0.0, -0.0955), (0.0262, -0.0955), (0.0272, -0.0925), (0.0273, -0.088), (0.0273, 0.038),
-                        (0.0262, 0.046), (0.0, 0.046)], 24, "liquid")
+    liquid = revolve_y([(0.0, -0.0905), (0.0110, -0.0932), (0.0200, -0.0952), (0.0262, -0.0955), (0.0272, -0.0925),
+                        (0.0273, -0.088), (0.0273, 0.038), (0.0262, 0.046), (0.0, 0.046)], 24, "liquid")
     rng = np.random.default_rng(5)
     path = [V(0.0, 0.112, 0.0), V(0.0, 0.128, 0.0), V(0.0008, 0.140, 0.0010), RAG_TOP, V(0.0, 0.1530, 0.0090),
             V(-0.0006, 0.1490, 0.0148), V(-0.0004, 0.1400, 0.0170), V(0.0004, 0.1280, 0.0172),
@@ -291,6 +300,7 @@ def molotov():
     v = np.array(rag.v)
     v += rng.normal(0, 0.00035, v.shape)                     # crumpled cloth
     rag.v = [tuple(x) for x in v]
+    rag.merge(binding(rng))
     flame = Mesh()
     flame.merge(teardrop((0, -0.002, 0), 0.052, 0.0115, "flame", lean=(0.003, 0.0)))
     flame.merge(teardrop((0.004, -0.004, 0.003), 0.034, 0.0075, "flame", lean=(0.006, 0.004)))
@@ -298,6 +308,29 @@ def molotov():
     parts = {"glass": (glass, V(0, 0, 0)), "liquid": (liquid, V(0, 0, 0)), "rag": (rag, V(0, 0, 0)),
              "flame": (flame.translated(RAG_TOP), RAG_TOP)}
     return parts, {"charm": V(0.0, 0.098, -0.0128), "top": RAG_TOP}
+
+
+def binding(rng):
+    """What holds the rag and the bottle together: a cord wound three times round the neck over the rag and tied off,
+    and a strip of cloth tape wrapped round the foot of the body (a grip that will not slip when it is thrown)."""
+    m = Mesh()
+    turns, y0, y1 = 3.0, 0.0985, 0.1075
+    ts = np.linspace(0, 1, 96)
+    path = [V((bottle_r(y0 + (y1 - y0) * t) + 0.0009) * np.cos(2 * np.pi * turns * t + 1.3),
+              y0 + (y1 - y0) * t,
+              (bottle_r(y0 + (y1 - y0) * t) + 0.0009) * np.sin(2 * np.pi * turns * t + 1.3)) for t in ts]
+    # the knot and its two loose ends on the back of the neck (+Z, under the rag's tail)
+    end = path[-1]
+    path += [end + V(0.0010, -0.0010, 0.0030), end + V(0.0006, -0.0060, 0.0052), end + V(-0.0004, -0.0110, 0.0060)]
+    m.merge(tube_along(path, 0.00085, "rag", seg=6))
+    tape = [(BOTTLE_R - 0.0002, -0.074), (BOTTLE_R + 0.0007, -0.0735), (BOTTLE_R + 0.0007, -0.0505),
+            (BOTTLE_R - 0.0002, -0.0500), (BOTTLE_R - 0.0002, -0.074)]
+    band = sh.revolve(tape, 36, "rag", outward=True)
+    v = np.array(band.v)
+    v += rng.normal(0, 0.00012, v.shape)                     # cloth, not a turned part
+    band.v = [tuple(x) for x in v]
+    m.merge(sh.place(band, **Y_UP))
+    return m
 
 
 LIGHTER = {"w": 0.0380, "h": 0.0390, "d": 0.0125, "lid": 0.0150}
@@ -345,14 +378,18 @@ def throwing_knife():
     hole = sh.circle(0.0605, 0.0, 0.0034, sh.arc_segments(0.0034, 12))
     tang = sh.extrude_x(np.array(tang_prof), holes=[hole[:, [0, 1]]], half_width=KNIFE_HW,
                         bevel=((0.0006, 0.0), (0.0, 0.0006)), material="blade")
-    # paracord wrap: a lofted sleeve with one ridge per turn of the cord (crossing wraps)
+    # paracord wrap: a lofted sleeve woven of two crossing helices (the cord's turns cross over each other on the
+    # flats, a diamond weave), one cord's width per 4.7 mm
     secs = []
-    zs = np.linspace(-0.0120, 0.0500, 88)
-    loop = sh.superellipse(0.0060, 0.0128, 2.6, sh.arc_segments(0.0128, 16))
+    zs = np.linspace(-0.0120, 0.0500, 132)
+    loop = sh.superellipse(0.0060, 0.0128, 2.6, 56)
+    phi = np.arctan2(loop[:, 1] / 0.0128, loop[:, 0] / 0.0060) / (2 * np.pi)
     for z in zs:
-        bump = 1.0 + 0.10 * np.cos(2 * np.pi * (z + 0.012) / 0.0047) ** 2
+        u = (z + 0.012) / 0.0047
+        weave = np.maximum(np.cos(np.pi * (u + phi)) ** 2, np.cos(np.pi * (u - phi)) ** 2) ** 2
+        bump = 1.0 + 0.11 * weave
         taper = 1.0 - 0.15 * np.clip((z - 0.044) / 0.006, 0, 1) - 0.12 * np.clip((-0.008 - z) / 0.004, 0, 1)
-        secs.append([(x * bump * taper, y * bump * taper, z) for x, y in loop])
+        secs.append([(x * b * taper, y * b * taper, z) for (x, y), b in zip(loop, bump)])
     grip = sh.loft(secs, "grip")
     blade.merge(tang)
     return ({"blade": (blade, V(0, 0, 0)), "grip": (grip, V(0, 0, 0))},
@@ -380,6 +417,17 @@ def adrenaline():
                         (0.0086, -0.0500), (0.0, -0.0500)], 20, "plunger")
     cap = revolve_z([(0.0, 0.0590), (0.0098, 0.0590), (0.0106, 0.0610), (0.0106, 0.0760), (0.0096, 0.0790),
                      (0.0060, 0.0800), (0.0, 0.0800)], 22, "cap")
+    # the cap's grip: sixteen ribs along it where the thumb pulls it off
+    for k in range(16):
+        a_ = 2 * np.pi * k / 16
+        rib = sh.box(-0.0006, -0.0005, 0.0625, 0.0006, 0.0006, 0.0745, 0.0003, "cap")
+        cap.merge(sh.place(rib, origin=(0.0106 * np.cos(a_), 0.0106 * np.sin(a_), 0.0),
+                           x_axis=(np.sin(a_), -np.cos(a_), 0.0), y_axis=(np.cos(a_), np.sin(a_), 0.0), z_axis=(0, 0, 1)))
+    # the viewing windows: two raised frames either side of the barrel's front, where the dose shows once fired
+    for side in (-1, 1):
+        frame = sh.box(-0.0034, -0.0004, 0.0390, 0.0034, 0.0006, 0.0490, 0.0004, "barrel")      # z flipped below
+        barrel.merge(sh.place(frame, origin=(side * PEN_R, 0.0, 0.0), x_axis=(0, side, 0), y_axis=(side, 0, 0),
+                              z_axis=(0, 0, -1)))
     plunger_origin = V(0.0, 0.0, -0.0560)
     cap_origin = V(0.0, 0.0, 0.0590)
     return ({"barrel": (barrel, V(0, 0, 0)), "plunger": (shroud, plunger_origin), "cap": (cap, cap_origin)},

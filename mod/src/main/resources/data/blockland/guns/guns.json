@@ -15,7 +15,11 @@
         "calico_50",
         "calico_100",
         "deagle_7",
-        "revolver_6"
+        "revolver_6",
+        "p9_drum",
+        "usp_drum",
+        "usp_dual_drum",
+        "deagle_drum"
       ]
     },
     "smg": {
@@ -33,7 +37,10 @@
         "mp5_40",
         "sten_32",
         "vector_25",
-        "vector_30"
+        "vector_30",
+        "bizon_64",
+        "uzi_drum",
+        "mp5_drum"
       ]
     },
     "shotgun": {
@@ -206,6 +213,84 @@
       "reloadTimeScale": 1.3,
       "adsTimeScale": 1.12
     },
+    "p9_drum": {
+      "name": "50 发弹鼓",
+      "description": "50 发 9 毫米弹鼓：几乎不用换弹，但换弹与开镜都慢得多。",
+      "ammo": "pistol",
+      "capacity": 50,
+      "guns": [
+        "p9",
+        "p9a"
+      ],
+      "node": "mag_drum",
+      "reloadTimeScale": 1.3,
+      "adsTimeScale": 1.15,
+      "clipSuffix": "_drum"
+    },
+    "usp_drum": {
+      "name": "50 发弹鼓",
+      "description": "50 发 .45 弹鼓：几乎不用换弹，但换弹与开镜都慢得多。",
+      "ammo": "pistol",
+      "capacity": 50,
+      "guns": [
+        "usp"
+      ],
+      "node": "mag_drum",
+      "reloadTimeScale": 1.3,
+      "adsTimeScale": 1.15,
+      "clipSuffix": "_drum"
+    },
+    "usp_dual_drum": {
+      "name": "50 发弹鼓 ×2",
+      "description": "两把枪各一个 50 发弹鼓，共 100 发；换弹更慢。",
+      "ammo": "pistol",
+      "capacity": 100,
+      "guns": [
+        "usp_dual"
+      ],
+      "node": "mag_drum",
+      "reloadTimeScale": 1.25,
+      "adsTimeScale": 1.0
+    },
+    "deagle_drum": {
+      "name": "20 发弹鼓",
+      "description": "20 发 .50 AE 弹鼓：火力持续更久，但沉重的弹鼓让换弹与开镜更慢。",
+      "ammo": "pistol",
+      "capacity": 20,
+      "guns": [
+        "deagle"
+      ],
+      "node": "mag_drum",
+      "reloadTimeScale": 1.35,
+      "adsTimeScale": 1.15,
+      "clipSuffix": "_drum"
+    },
+    "uzi_drum": {
+      "name": "100 发弹鼓",
+      "description": "100 发 9 毫米弹鼓：压制火力的极致，但换弹与开镜都明显更慢。",
+      "ammo": "smg",
+      "capacity": 100,
+      "guns": [
+        "uzi"
+      ],
+      "node": "mag_drum",
+      "reloadTimeScale": 1.4,
+      "adsTimeScale": 1.18,
+      "clipSuffix": "_drum"
+    },
+    "mp5_drum": {
+      "name": "100 发双弹鼓",
+      "description": "100 发双联弹鼓：长时间压制，但换弹与开镜都明显更慢。",
+      "ammo": "smg",
+      "capacity": 100,
+      "guns": [
+        "mp5"
+      ],
+      "node": "mag_drum",
+      "reloadTimeScale": 1.4,
+      "adsTimeScale": 1.2,
+      "clipSuffix": "_drum"
+    },
     "ks3_tube": {
       "name": "6 发管式弹仓",
       "description": "标准长度的管式弹仓，逐发装填。",
@@ -354,6 +439,14 @@
       "reloadTimeScale": 1.06,
       "adsTimeScale": 1.03
     },
+    "bizon_64": {
+      "name": "64 发螺旋弹匣",
+      "description": "64 发 9 毫米螺旋弹匣：装在枪管下方，兼作前握把。",
+      "ammo": "smg",
+      "capacity": 64,
+      "guns": ["bizon"],
+      "node": "mag_standard"
+    },
     "sten_32": {
       "name": "32 发弹匣",
       "description": "32 发 9 毫米侧插弹匣。",
@@ -442,7 +535,8 @@
       "ammo": "pistol",
       "magazines": [
         "p9_standard",
-        "p9_extended"
+        "p9_extended",
+        "p9_drum"
       ],
       "slots": {
         "optic": {
@@ -459,6 +553,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -636,7 +734,8 @@
       "ammo": "pistol",
       "magazines": [
         "p9_extended",
-        "p9_standard"
+        "p9_standard",
+        "p9_drum"
       ],
       "slots": {
         "optic": {
@@ -653,6 +752,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_extended",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -843,6 +946,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -1076,6 +1183,10 @@
           ]
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "underbarrel": {
           "node": "mount_underbarrel",
           "default": "none",
@@ -1258,6 +1369,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_stick",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -1434,6 +1549,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "tube_standard",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -1618,7 +1737,8 @@
       "ammo": "pistol",
       "magazines": [
         "usp_standard",
-        "usp_extended"
+        "usp_extended",
+        "usp_drum"
       ],
       "slots": {
         "optic": {
@@ -1635,6 +1755,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -1759,7 +1883,8 @@
       "ammo": "pistol",
       "magazines": [
         "usp_dual_standard",
-        "usp_dual_extended"
+        "usp_dual_extended",
+        "usp_dual_drum"
       ],
       "slots": {
         "barrel": {
@@ -1772,6 +1897,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "charm": {
           "node": "mount_charm",
           "default": "none"
@@ -1937,12 +2066,18 @@
       "model": "models/gun/deagle.glb",
       "ammo": "pistol",
       "magazines": [
-        "deagle_7"
+        "deagle_7",
+        "deagle_drum"
       ],
       "slots": {
         "optic": {
           "node": "mount_optic",
           "default": "iron"
+        },
+        "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
         }
       },
       "fireModes": [
@@ -2109,6 +2244,10 @@
         "charm": {
           "node": "mount_charm",
           "default": "none"
+        },
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
         }
       },
       "fireModes": [
@@ -2277,6 +2416,10 @@
           ]
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -2443,7 +2586,7 @@
       "category": "smg",
       "model": "models/gun/uzi.glb",
       "ammo": "smg",
-      "magazines": ["uzi_32", "uzi_50"],
+      "magazines": ["uzi_32", "uzi_50", "uzi_drum"],
       "slots": {
         "optic": {
           "node": "mount_optic",
@@ -2461,6 +2604,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -2672,6 +2819,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "underbarrel": {
           "node": "mount_underbarrel",
           "default": "none",
@@ -2840,7 +2991,7 @@
       "category": "smg",
       "model": "models/gun/mp5.glb",
       "ammo": "smg",
-      "magazines": ["mp5_30", "mp5_40"],
+      "magazines": ["mp5_30", "mp5_40", "mp5_drum"],
       "slots": {
         "optic": {
           "node": "mount_optic",
@@ -2858,6 +3009,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -3067,6 +3222,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -3252,6 +3411,10 @@
           "hides": ["muzzle_brake"]
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "underbarrel": {
           "node": "mount_underbarrel",
           "default": "none",
@@ -3440,6 +3603,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -3610,6 +3777,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -3818,6 +3989,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "stock": {
           "node": "mount_stock",
           "default": "none",
@@ -4026,6 +4201,10 @@
           "default": "none"
         },
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "underbarrel": {
           "node": "mount_underbarrel",
           "default": "none",
@@ -4201,6 +4380,10 @@
         "barrel": {"node": "mount_barrel", "default": "none", "noneName": "消焰器", "hides": ["muzzle_brake"]},
         "laser": {"node": "mount_laser", "default": "none"},
         "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
         "stock": {"node": "mount_stock", "default": "none", "noneName": "折叠枪托", "hides": ["stock"]},
         "underbarrel": {"node": "mount_underbarrel", "default": "none", "options": ["vertical_grip", "angled_grip"]},
         "charm": {"node": "mount_charm", "default": "none"}
@@ -4275,6 +4458,99 @@
         "cameraKick": 0.65,
         "cameraRoll": 0.8,
         "cameraFov": 0.7,
+        "cameraRumble": 0.3
+      }
+    },
+    "bizon": {
+      "name": "野牛冲锋枪",
+      "description": "PP-19 野牛：9 毫米冲锋枪，64 发螺旋弹匣装在枪管下方兼作前握把；载弹量极大、后坐柔和，单发伤害偏低，换弹较慢。",
+      "category": "smg",
+      "model": "models/gun/bizon.glb",
+      "ammo": "smg",
+      "magazines": ["bizon_64"],
+      "slots": {
+        "optic": {"node": "mount_optic", "default": "iron", "hides": ["sight_rear", "sight_iron"]},
+        "barrel": {"node": "mount_barrel", "default": "none", "noneName": "枪口螺帽", "hides": ["muzzle_brake"]},
+        "laser": {"node": "mount_laser", "default": "none"},
+        "magazine": {},
+        "ammo": {
+          "node": "mag_standard",
+          "default": "ammo_normal"
+        },
+        "stock": {"node": "mount_stock", "default": "none", "noneName": "侧折枪托", "hides": ["stock"]},
+        "charm": {"node": "mount_charm", "default": "none"}
+      },
+      "fireModes": ["auto", "semi"],
+      "rpm": 700,
+      "damageScale": 0.85,
+      "range": 75,
+      "falloff": {"start": 13, "end": 34, "min": 0.5},
+      "spread": {"hip": 3.5, "ads": 0.40, "move": 1.5, "air": 4.3, "perShot": 0.24, "max": 5.2, "recovery": 11.5},
+      "recoil": {"vertical": 0.62, "horizontal": 0.38, "kick": 0.72, "ads": 0.66},
+      "adsTime": 0.22,
+      "drawTime": 0.6,
+      "reload": {"tactical": 2.4, "empty": 2.9},
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "fire": "fire",
+        "fireLast": "fire_last",
+        "reload": "reload",
+        "reloadEmpty": "reload_empty",
+        "inspect": "inspect",
+        "walk": "walk",
+        "sprint": "sprint",
+        "tacSprint": "tac_sprint"
+      },
+      "sounds": {"fire": "gun.bizon.fire", "dry": "gun.dry_fire"},
+      "slideLock": {"node": "bolt", "offset": [0.0, 0.0, 0.0]},
+      "skins": {
+        "default": {"name": "标准"},
+        "woodland": {"name": "林地迷彩",
+        "regions": {
+          "body": {"pbr": "textures/pbr/skin/camo/woodland", "uvScale": 0.333333},
+          "stock": {"pbr": "textures/pbr/skin/camo/woodland", "uvScale": 0.333333},
+          "magazine": {"pbr": "textures/pbr/skin/camo/woodland", "uvScale": 0.333333}
+        }},
+        "desert": {"name": "沙漠迷彩",
+        "regions": {
+          "body": {"pbr": "textures/pbr/skin/camo/desert", "uvScale": 0.333333},
+          "stock": {"pbr": "textures/pbr/skin/camo/desert", "uvScale": 0.333333},
+          "magazine": {"pbr": "textures/pbr/skin/camo/desert", "uvScale": 0.333333}
+        }},
+        "arctic": {"name": "雪地迷彩",
+        "regions": {
+          "body": {"pbr": "textures/pbr/skin/camo/arctic", "uvScale": 0.333333},
+          "stock": {"pbr": "textures/pbr/skin/camo/arctic", "uvScale": 0.333333},
+          "magazine": {"pbr": "textures/pbr/skin/camo/arctic", "uvScale": 0.333333}
+        }},
+        "tiger": {"name": "虎纹",
+        "regions": {
+          "body": {"pbr": "textures/pbr/skin/camo/tiger", "uvScale": 0.333333},
+          "stock": {"pbr": "textures/pbr/skin/camo/tiger", "uvScale": 0.333333},
+          "magazine": {"pbr": "textures/pbr/skin/camo/tiger", "uvScale": 0.333333}
+        }},
+        "gold": {"name": "鎏金", "rarity": "legendary",
+          "tints": {"steel": [1.0, 0.77, 0.34], "steel_dark": [1.0, 0.77, 0.34], "barrel": [1.0, 0.77, 0.34],
+                    "steel_stock": [1.0, 0.77, 0.34]}}
+      },
+      "handling": {
+        "weight": 1.45,
+        "sway": 1.0,
+        "bob": 1.0,
+        "inertia": 1.12,
+        "sprintOut": 0.26,
+        "tacticalSprint": 2.7,
+        "adsTilt": 7,
+        "recoilBack": 0.9,
+        "recoilRise": 0.45,
+        "recoilTwist": 0.8,
+        "recoilSnap": 1.2,
+        "recoilShake": 0.85,
+        "recoilPivot": 0.08,
+        "cameraKick": 0.7,
+        "cameraRoll": 0.9,
+        "cameraFov": 0.72,
         "cameraRumble": 0.3
       }
     }

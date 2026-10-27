@@ -51,6 +51,7 @@ public final class ClientInfection {
     }
 
     public static void init(BusGroup modBus) {
+        MonsterPreviewRenderer.init();
         RegisterKeyMappingsEvent.getBus(modBus).addListener(event -> event.register(SKILL));
         AddGuiOverlayLayersEvent.getBus(modBus).addListener(event -> event.getLayeredDraw()
                 .addAbove(ForgeLayeredDraw.PRE_SLEEP_STACK, BlockLand.id("infection_hud"), ForgeLayeredDraw.CROSSHAIR, InfectionHud::render));

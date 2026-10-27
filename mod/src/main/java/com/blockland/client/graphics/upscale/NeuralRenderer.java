@@ -99,7 +99,8 @@ public final class NeuralRenderer implements StreamlineHost.Client {
             motionUbo.pass(frame.reprojection(), rw, rh, 1f / rw, 1f / rh);
             Fullscreen.pass("BlockLand DLSS 5: motion", motion.view, DlssUpscaler.MOTION)
                     .sampler("ColorSampler", frame.color()).sampler("WorldDepthSampler", frame.worldDepth())
-                    .sampler("HandVelocitySampler", ctx.handVelocity != null ? ctx.handVelocity : still()).uniform(motionUbo).draw();
+                    .sampler("HandVelocitySampler", ctx.handVelocity != null ? ctx.handVelocity : still()).uniform(motionUbo)
+                    .uniform(com.blockland.client.graphics.post.ObjectMotionBlock.BLOCK, com.blockland.client.graphics.post.ObjectMotionBlock.slice()).draw();
 
             // the jitter as DLSS wants it: the projection's shift of the picture in render pixels, rows running down
             float jitterX = ctx.jitterX * rw * 0.5f, jitterY = -ctx.jitterY * rh * 0.5f;

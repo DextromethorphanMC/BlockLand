@@ -1,6 +1,7 @@
 #version 150
 
 #moj_import <blockland:gfx_screen.glsl>
+#moj_import <blockland:bl_object_motion.glsl>
 
 // BlockLand temporal anti-aliasing and upscaling (client/graphics/upscale/TemporalUpscaler), drawn at the output
 // resolution. The current frame (internal resolution, jittered) is resampled at this output pixel with a Gaussian over
@@ -8,7 +9,8 @@
 // motion, sampled with Catmull-Rom and clipped to the current neighbourhood's colour box (YCoCg, mean +- gamma sigma) in
 // a tone-mapped space (bright pixels cannot dominate). Hand / viewmodel pixels move with the camera plus their own motion
 // (sway, recoil, reloads: client/render/HandMotion), and a pixel switching between hand and world drops most of its
-// history (no gun trails over the world).
+// history (no gun trails over the world). World pixels on a moving vehicle are reprojected by its own motion
+// (blockland:bl_object_motion.glsl).
 //   Matrix    = current unjittered NDC -> previous clip (camera-relative, translation of the camera included)
 //   Params[0] = (input size, 1 / input size)
 //   Params[1] = (output size, 1 / output size)
@@ -120,6 +122,8 @@ void main() {
     if (hand < 0.5) {
         vec4 clip = Matrix * vec4(texCoord * 2.0 - 1.0, closest * 2.0 - 1.0, 1.0);
         previous = clip.w > 1e-5 ? clip.xy / clip.w * 0.5 + 0.5 : vec2(-1.0);
+        vec2 carried;
+        if (bl_objectPrevious(texCoord, closest, carried)) previous = carried;
     } else {
         previous = texCoord - textureLod(HandVelocitySampler, texCoord + jitter, 0.0).rg;
     }
@@ -128,6 +132,8 @@ void main() {
     if (hand < 0.5) {
         vec4 clip = Matrix * vec4(texCoord * 2.0 - 1.0, closest * 2.0 - 1.0, 1.0);
         previous = clip.w > 1e-5 ? clip.xy / clip.w * 0.5 + 0.5 : vec2(-1.0);
+        vec2 carried;
+        if (bl_objectPrevious(texCoord, closest, carried)) previous = carried;
     }
 #endif
     bool valid = Params[2].z > 0.5 && previous.x >= 0.0 && previous.y >= 0.0 && previous.x <= 1.0 && previous.y <= 1.0;
