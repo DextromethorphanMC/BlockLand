@@ -21,6 +21,8 @@ vanilla and the server checks what reaches it. BlockLand only places the slots a
 * **Layout** (`InventoryLayout`, 20 px cells on a 22 px pitch, 14 px padding; the slot positions are the screens', set
   through `mixin/inventory/SlotAccess` — the server's menu never reads them):
   * header: the title (the creative screen: the tab's name, or the search field on the search tab) and the brightness bar;
+    held down on its free space and dragged, the panel moves (`PanelDrag`: an offset from the centred place, shared by
+    both screens for the session, kept inside the window; the creative rail and the recipe book beside it move along);
   * a left column of armour, the character in its own card, the backpack slot and the off hand beside it;
   * crafting in its own card on the right (2×2 grid → result); the creative inventory tab has the destroy-item slot
     there instead;
@@ -28,8 +30,9 @@ vanilla and the server checks what reaches it. BlockLand only places the slots a
   * the worn backpack's storage opening under the hotbar (its name, how full it is, its rows).
 * **Creative** (`BlockLandCreativeScreen`): a rail of tabs on the left — search pinned at the top, the inventory at the
   bottom, every other tab (all of Forge's pages, BlockLand's and vanilla's) scrolling between them with the wheel; item
-  tabs show the 9 × 5 grid with BlockLand's scrollbar (dragged, or the wheel anywhere else), how many items the tab has
-  and the hotbar. Vanilla's own tab and scroller areas are switched off in the subclass (`checkTabClicked`,
+  tabs show the 9 × 7 grid (`BlockLandCreativeScreen.GRID_ROWS`; vanilla's picker and its shared container are patched
+  to that many rows by `mixin/inventory/ItemPickerMenuMixin` / `CreativeGridMixin`) with BlockLand's scrollbar (dragged,
+  or the wheel anywhere else) and the hotbar, how many items the tab has beside the hotbar's label. Vanilla's own tab and scroller areas are switched off in the subclass (`checkTabClicked`,
   `insideScrollbar`); its private tab selection, search box, scroll position and destroy slot are reached through
   `mixin/inventory/CreativeScreenAccess`, the container screen's drag state through `ContainerScreenAccess`. The search
   box stays vanilla's (focus, typing, search) under the drawn field.

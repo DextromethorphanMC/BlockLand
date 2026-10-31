@@ -10,7 +10,9 @@
   ],
   "client": [
     "ContainerScreenAccess",
-    "CreativeScreenAccess"
+    "CreativeGridMixin",
+    "CreativeScreenAccess",
+    "ItemPickerMenuMixin"
   ],
   "injectors": {
     "defaultRequire": 1

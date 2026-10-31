@@ -45,6 +45,7 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
     private final Spring buttonHover = new Spring(0).config(420, 30), brightHover = new Spring(0).config(420, 30);
     private final Spring bookHover = new Spring(0).config(420, 30);
     private final RecipeBookPanel recipes;
+    private final PanelDrag drag = new PanelDrag();
     private boolean expanded;
     private boolean draggingBrightness;
     private float xMouse, yMouse;
@@ -132,9 +133,13 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
         imageHeight = Math.round(panelHeight.get());
         // the open book beside the inventory: the two centred together (the inventory moves right, as vanilla's)
         boolean beside = recipes.visible() && !recipes.narrow();
-        int group = (width - imageWidth - (beside ? RecipeBookPanel.W + RecipeBookPanel.GAP : 0)) / 2;
-        leftPos = group + (beside ? RecipeBookPanel.W + RecipeBookPanel.GAP : 0);
-        topPos = (height - imageHeight) / 2;
+        int book = beside ? RecipeBookPanel.W + RecipeBookPanel.GAP : 0;
+        int group = (width - imageWidth - book) / 2, top = (height - imageHeight) / 2;
+        // moved by its header: the book beside it goes along
+        int[] shift = PanelDrag.apply(group, top, imageWidth + book, beside ? Math.max(imageHeight, RecipeBookPanel.H) : imageHeight, width, height);
+        group += shift[0];
+        leftPos = group + book;
+        topPos = top + shift[1];
         recipes.place(beside ? group : (width - RecipeBookPanel.W) / 2, beside ? topPos : (height - RecipeBookPanel.H) / 2);
         for (int i = 0; i < menu.slots.size(); i++) InventoryLayout.place(menu.slots.get(i), InventoryLayout.cell(i, true), 0, 0);
     }
@@ -307,6 +312,11 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
         return inside(mouseX, mouseY, leftPos + imageWidth - PAD - 56, topPos + 6, 58, 12);
     }
 
+    /** The header's free space (its controls are tested first): held there, the panel is moved. */
+    private boolean overHeader(double mouseX, double mouseY) {
+        return !covered() && inside(mouseX, mouseY, leftPos, topPos, imageWidth, HEADER);
+    }
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0 && overBookButton(mouseX, mouseY)) {
@@ -327,6 +337,10 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
             setBrightness(mouseX);
             return true;
         }
+        if (button == 0 && overHeader(mouseX, mouseY)) {
+            drag.press(mouseX, mouseY);
+            return true;
+        }
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
@@ -334,6 +348,10 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dx, double dy) {
         if (draggingBrightness) {
             setBrightness(mouseX);
+            return true;
+        }
+        if (drag.dragging()) {
+            drag.drag(mouseX, mouseY);
             return true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dx, dy);
@@ -344,6 +362,10 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
         if (draggingBrightness) {
             draggingBrightness = false;
             ClientSettings.save();
+            return true;
+        }
+        if (drag.dragging()) {
+            drag.release();
             return true;
         }
         return super.mouseReleased(mouseX, mouseY, button);

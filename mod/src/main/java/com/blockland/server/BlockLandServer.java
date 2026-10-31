@@ -150,6 +150,7 @@ public final class BlockLandServer {
                 .register(new WorldGameType())
                 .register(new com.blockland.games.battleroyale.BattleRoyaleGameType())
                 .register(new com.blockland.games.pillars.LuckyPillarsGameType())
+                .register(new com.blockland.games.uhc.UhcGameType())
                 .register(new BridgePracticeGameType())
                 .register(new AimPracticeGameType());
         this.jobs = new WorldJobScheduler(BlockLandConfig.BLOCK_OPERATIONS_PER_TICK::get);
@@ -245,7 +246,8 @@ public final class BlockLandServer {
                 hitHistory::positionAgo);
         this.antiCheat.addAllowance(new com.blockland.server.movement.ActionAllowance(actions));
         // 远景地平线: terrain tiles for the clients' far terrain (rendering spec §22); a player in an arena match only sees
-        // their own arena, never the neighbouring matches; pasted and cleared arenas are captured again
+        // their own arena, never the neighbouring matches (nor a match in a shared generated world, e.g. UHC, beyond its
+        // bounds); pasted and cleared arenas are captured again
         this.farTerrain = new com.blockland.server.farterrain.FarTerrainService(server, () -> new com.blockland.server.farterrain.FarTerrainSettings(
                 BlockLandConfig.FAR_TERRAIN_ENABLED.get(), BlockLandConfig.FAR_TERRAIN_MAX_DISTANCE.get(), BlockLandConfig.FAR_TERRAIN_THREADS.get(),
                 BlockLandConfig.FAR_TERRAIN_BYTES_PER_SECOND.get(), BlockLandConfig.FAR_TERRAIN_ESTIMATE.get(),
@@ -253,12 +255,14 @@ public final class BlockLandServer {
                 BlockLandConfig.FAR_TERRAIN_GENERATE_CONCURRENCY.get(), BlockLandConfig.FAR_TERRAIN_COLUMN_DISTANCE.get(),
                 BlockLandConfig.FAR_TERRAIN_COLUMN_BYTES_PER_SECOND.get()));
         this.farTerrain.setViewLimit(player -> {
-            if (player.level().dimension() != ArenaService.ARENA_DIMENSION) return null;
+            boolean arena = player.level().dimension() == ArenaService.ARENA_DIMENSION;
             GameInstance game = games.gameOf(player);
             if (game == null) return null;
             net.minecraft.world.phys.AABB bounds = game.spectateBounds();
-            // a match whose arena is not there yet sees nothing (a box far away)
-            if (bounds == null) return new net.minecraft.world.level.levelgen.structure.BoundingBox(29_000_000, 0, 29_000_000, 29_000_000, 0, 29_000_000);
+            if (bounds == null) {
+                // a match whose arena is not there yet sees nothing (a box far away); other worlds are open
+                return arena ? new net.minecraft.world.level.levelgen.structure.BoundingBox(29_000_000, 0, 29_000_000, 29_000_000, 0, 29_000_000) : null;
+            }
             return new net.minecraft.world.level.levelgen.structure.BoundingBox((int) Math.floor(bounds.minX), (int) Math.floor(bounds.minY),
                     (int) Math.floor(bounds.minZ), (int) Math.ceil(bounds.maxX) - 1, (int) Math.ceil(bounds.maxY) - 1, (int) Math.ceil(bounds.maxZ) - 1);
         });

@@ -364,6 +364,79 @@ public final class CoverArt {
         return png(image);
     }
 
+    /**
+     * 极限生存: blocky hills and trees running to the horizon between two red border walls closing in from the sides, a
+     * golden apple glowing in front; {@code dusk} gives the evening palette.
+     */
+    public static byte[] uhc(boolean dusk, long seed) {
+        BufferedImage image = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = graphics(image);
+        g.setPaint(new GradientPaint(0, 0, dusk ? new Color(0x1F2148) : new Color(0x3C8BE0), 0, H * 0.6f,
+                dusk ? new Color(0xE3774A) : new Color(0xCDEBFF)));
+        g.fillRect(0, 0, W, H);
+        Random random = new Random(seed);
+        // hills: three bands of block columns, far (hazy) to near
+        Color[][] bands = dusk
+                ? new Color[][]{{new Color(0x5C5070), new Color(0x4A4060)}, {new Color(0x3E5A3A), new Color(0x2E4430)}, {new Color(0x35682C), new Color(0x5A3C28)}}
+                : new Color[][]{{new Color(0x86B7A0), new Color(0x7AA592)}, {new Color(0x4F9A3E), new Color(0x3F7F30)}, {new Color(0x5DB33A), new Color(0x7A5534)}};
+        float[] bandBase = {0.5f, 0.62f, 0.76f};
+        int[] cell = {8, 12, 18};
+        for (int b = 0; b < 3; b++) {
+            double phase = random.nextDouble() * Math.PI * 2;
+            for (int x = 0; x < W; x += cell[b]) {
+                float top = H * bandBase[b] - (float) ((Math.sin(x / (60.0 + b * 30) + phase) * 0.5 + 0.5) * (14 + b * 6));
+                top = Math.round(top / cell[b]) * cell[b];
+                g.setColor(bands[b][0]);
+                g.fill(new Rectangle2D.Float(x, top, cell[b], cell[b] * 0.5f));
+                g.setColor(bands[b][1]);
+                g.fill(new Rectangle2D.Float(x, top + cell[b] * 0.5f, cell[b], H - top));
+                // a tree now and then on the nearer bands
+                if (b > 0 && random.nextInt(9) == 0) {
+                    float tw = cell[b] * 0.4f;
+                    g.setColor(new Color(0x6B4A2B));
+                    g.fill(new Rectangle2D.Float(x + cell[b] * 0.3f, top - cell[b] * 1.6f, tw, cell[b] * 1.6f));
+                    g.setColor(dusk ? new Color(0x2C4A26) : new Color(0x2F7D2A));
+                    g.fill(new Rectangle2D.Float(x - cell[b] * 0.4f, top - cell[b] * 2.8f, cell[b] * 1.8f, cell[b] * 1.4f));
+                }
+            }
+        }
+        // the border: translucent red walls with vanilla's diagonal stripes, nearer at the bottom
+        for (int side = 0; side < 2; side++) {
+            float edge = side == 0 ? W * 0.12f : W * 0.88f, far = side == 0 ? W * 0.3f : W * 0.7f;
+            Path2D wall = new Path2D.Float();
+            wall.moveTo(side == 0 ? 0 : W, 0);
+            wall.lineTo(edge, 0);
+            wall.lineTo(far, H * 0.45f);
+            wall.lineTo(edge, H);
+            wall.lineTo(side == 0 ? 0 : W, H);
+            wall.closePath();
+            g.setColor(new Color(255, 60, 50, 70));
+            g.fill(wall);
+            Graphics2D stripes = (Graphics2D) g.create();
+            stripes.clip(wall);
+            stripes.setColor(new Color(255, 120, 100, 80));
+            stripes.setStroke(new BasicStroke(5));
+            for (int i = -H; i < W + H; i += 18) stripes.draw(new Line2D.Float(i, 0, i + H, H));
+            stripes.dispose();
+            g.setColor(new Color(255, 90, 80, 200));
+            g.setStroke(new BasicStroke(2));
+            g.draw(new Line2D.Float(edge, 0, far, H * 0.45f));
+            g.draw(new Line2D.Float(far, H * 0.45f, edge, H));
+        }
+        // a golden apple in front
+        float ax = W * 0.5f, ay = H * 0.78f, s = 40;
+        g.setPaint(new RadialGradientPaint(new Point2D.Float(ax, ay), s * 1.8f, new float[]{0f, 1f},
+                new Color[]{new Color(255, 220, 90, 190), new Color(255, 220, 90, 0)}));
+        g.fill(new Ellipse2D.Float(ax - s * 1.8f, ay - s * 1.8f, s * 3.6f, s * 3.6f));
+        block(g, ax - s / 2, ay - s / 2, s, s, new Color(0xF4C542), new Color(0xA8740B));
+        g.setColor(new Color(0x6B4A2B));
+        g.fill(new Rectangle2D.Float(ax - 2, ay - s / 2 - 10, 4, 10));
+        g.setColor(new Color(0x3F9A2E));
+        g.fill(new Ellipse2D.Float(ax + 1, ay - s / 2 - 12, 12, 6));
+        g.dispose();
+        return png(image);
+    }
+
     /** The practice group: a shot-up bullseye and a staircase of blocks on a calm blue gradient. */
     public static byte[] practice(long seed) {
         BufferedImage image = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);

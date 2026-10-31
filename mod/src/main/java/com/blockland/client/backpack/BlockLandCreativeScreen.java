@@ -50,7 +50,9 @@ public final class BlockLandCreativeScreen extends CreativeModeInventoryScreen i
     private static final int RAIL_WIDE = 118, RAIL_NARROW = 36, GAP = 6;
     /** A tab's row and a group heading's row in the sidebar's list. */
     private static final int ROW_H = 20, HEADING_H = 15;
-    private static final int GRID_Y = 34, GRID_ROWS = 5;
+    /** Rows of the item grid (vanilla's picker is patched to match: {@code mixin/inventory/ItemPickerMenuMixin}). */
+    public static final int GRID_ROWS = 7;
+    private static final int GRID_Y = 34;
     private static final int SCROLL_X = PAD + 9 * PITCH + 2, SCROLL_W = 6;
     private static final int CONTENT_W = SCROLL_X + SCROLL_W + PAD;
     private static final int SEARCH_W = 150;
@@ -61,6 +63,7 @@ public final class BlockLandCreativeScreen extends CreativeModeInventoryScreen i
     private final Spring buttonHover = new Spring(0).config(420, 30), brightHover = new Spring(0).config(420, 30);
     private final Spring scrollHover = new Spring(0).config(420, 30);
     private final Map<CreativeModeTab, Spring> tabHover = new HashMap<>();
+    private final PanelDrag drag = new PanelDrag();
     private float railScroll;
     /** The sidebar's width this frame (wide or narrow by the screen's width). */
     private int rail = RAIL_WIDE;
@@ -186,8 +189,11 @@ public final class BlockLandCreativeScreen extends CreativeModeInventoryScreen i
         int target = inventoryTab() ? InventoryLayout.height(storageShown() ? rows() : 0) : BASE_HEIGHT;
         panelHeight.setTarget(target);
         imageHeight = Math.round(panelHeight.get());
-        leftPos = (width - imageWidth) / 2;
-        topPos = (height - imageHeight) / 2;
+        int left = (width - imageWidth) / 2, top = (height - imageHeight) / 2;
+        // moved by its header, the sidebar along
+        int[] shift = PanelDrag.apply(left, top, imageWidth, imageHeight, width, height);
+        leftPos = left + shift[0];
+        topPos = top + shift[1];
         Slot destroy = access().blockland$destroyItemSlot();
         if (inventoryTab()) {
             for (int i = 0; i < menu.slots.size(); i++) {
@@ -196,8 +202,8 @@ public final class BlockLandCreativeScreen extends CreativeModeInventoryScreen i
             }
         } else {
             for (int i = 0; i < menu.slots.size(); i++) {
-                int[] cell = i < 45 ? new int[]{PAD + (i % 9) * PITCH, GRID_Y + (i / 9) * PITCH}
-                        : i < 54 ? new int[]{PAD + (i - 45) * PITCH, HOTBAR_Y} : null;
+                int[] cell = i < GRID_ROWS * 9 ? new int[]{PAD + (i % 9) * PITCH, GRID_Y + (i / 9) * PITCH}
+                        : i < GRID_ROWS * 9 + 9 ? new int[]{PAD + (i - GRID_ROWS * 9) * PITCH, HOTBAR_Y} : null;
                 InventoryLayout.place(menu.slots.get(i), cell, off(), 0);
             }
         }
@@ -402,16 +408,16 @@ public final class BlockLandCreativeScreen extends CreativeModeInventoryScreen i
         InventoryStyle.brightnessBar(g, bx, by, 54, 3, brightHover.get());
     }
 
-    /** An item tab: the grid with its scrollbar, how many items, the hotbar. */
+    /** An item tab: the grid with its scrollbar, the hotbar with how many items beside its label. */
     private void drawItems(GuiGraphics g, int x, int y, int mouseX, int mouseY) {
         int trackY = y + GRID_Y, trackH = GRID_ROWS * PITCH - 2;
         int rows = Math.max(1, (menu.items.size() + 8) / 9);
         scrollHover.setTarget(scrollDragging || overScrollbar(mouseX, mouseY) ? 1 : 0);
         InventoryStyle.scrollbar(g, x + SCROLL_X, trackY, SCROLL_W, trackH, access().blockland$scrollOffs(),
                 GRID_ROWS / (float) Math.max(GRID_ROWS, rows), canScrollGrid(), scrollHover.get());
-        String count = tr("blockland.inventory.items", menu.items.size());
-        Draw.text(g, count, x + PAD, y + GRID_Y + GRID_ROWS * PITCH + 4, 0.75f, InventoryStyle.dim(), false);
         Draw.text(g, tr("blockland.inventory.hotbar"), x + PAD, y + HOTBAR_Y - 13, 0.8f, InventoryStyle.dim(), false);
+        String count = tr("blockland.inventory.items", menu.items.size());
+        Draw.text(g, count, x + PAD + 9 * PITCH - 2 - UiFont.width(count) * 0.75f, y + HOTBAR_Y - 12, 0.75f, InventoryStyle.dim(), false);
         g.fill(x + PAD, y + HOTBAR_Y - 4, x + PAD + 9 * PITCH - 2, y + HOTBAR_Y - 3, InventoryStyle.fade(InventoryStyle.line(), 0.7f));
     }
 
@@ -532,6 +538,13 @@ public final class BlockLandCreativeScreen extends CreativeModeInventoryScreen i
         return ModernInventoryScreen.inside(mouseX, mouseY, leftPos + imageWidth - PAD - 56, topPos + 6, 58, 12);
     }
 
+    /** The content's header outside the search field (the brightness bar is tested first): held there, the panel is moved. */
+    private boolean overHeader(double mouseX, double mouseY) {
+        int x = leftPos + off();
+        if (!ModernInventoryScreen.inside(mouseX, mouseY, x, topPos, CONTENT_W, HEADER)) return false;
+        return !selected().hasSearchBar() || !ModernInventoryScreen.inside(mouseX, mouseY, x + PAD, topPos + 5, SEARCH_W, 16);
+    }
+
     private void scrollTo(double mouseY) {
         int trackY = topPos + GRID_Y, trackH = GRID_ROWS * PITCH - 2;
         int rows = Math.max(1, (menu.items.size() + 8) / 9);
@@ -567,6 +580,10 @@ public final class BlockLandCreativeScreen extends CreativeModeInventoryScreen i
                 setBrightness(mouseX);
                 return true;
             }
+            if (overHeader(mouseX, mouseY)) {
+                drag.press(mouseX, mouseY);
+                return true;
+            }
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
@@ -591,6 +608,10 @@ public final class BlockLandCreativeScreen extends CreativeModeInventoryScreen i
             ClientSettings.save();
             return true;
         }
+        if (drag.dragging()) {
+            drag.release();
+            return true;
+        }
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
@@ -602,6 +623,10 @@ public final class BlockLandCreativeScreen extends CreativeModeInventoryScreen i
         }
         if (draggingBrightness) {
             setBrightness(mouseX);
+            return true;
+        }
+        if (drag.dragging()) {
+            drag.drag(mouseX, mouseY);
             return true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dx, dy);

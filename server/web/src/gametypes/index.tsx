@@ -7,6 +7,7 @@ import { bombUi } from './bomb'
 import { luckyPillarsUi } from './pillars'
 import { aimPracticeUi, bridgePracticeUi } from './practice'
 import { skyWarsUi } from './skywars'
+import { uhcUi } from './uhc'
 import { worldUi } from './world'
 
 export interface SettingsFormProps {
@@ -79,6 +80,7 @@ const registry: Record<string, GameTypeUi> = {
   WORLD: worldUi,
   BATTLE_ROYALE: battleRoyaleUi,
   LUCKY_PILLARS: luckyPillarsUi,
+  UHC: uhcUi,
 }
 
 export function uiFor(type: string): GameTypeUi {
