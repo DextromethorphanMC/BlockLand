@@ -27,6 +27,10 @@ public enum Optimization {
     BIOME_TINTS(Group.VANILLA, true),
     /** Blocks whose every face is culled by full neighbours are not tesselated at all (same mesh, less work). */
     ENCLOSED_BLOCKS(Group.VANILLA, true),
+    /** Enclosed blocks whose model then draws nothing are left out before their model is read (variant, layers, data). */
+    ENCLOSED_MODELS(Group.VANILLA, true),
+    /** Fluid blocks none of whose faces would be drawn (inside lakes and seas) are not tesselated (same mesh, less work). */
+    HIDDEN_FLUIDS(Group.VANILLA, true),
     /** Solid and cutout quads grouped by facing; groups facing away from the camera are not drawn (the GPU culls them). */
     FACE_GROUPS(Group.VANILLA, true),
     /** The section compile queue drops cancelled tasks in one sweep. */

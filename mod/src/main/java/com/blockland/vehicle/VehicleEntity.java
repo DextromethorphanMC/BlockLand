@@ -63,8 +63,12 @@ import java.util.UUID;
  * {@link RoundTraits#armorDamage} pierces it); at no health it burns a moment and blows up.
  */
 public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Target {
-    /** Entity events (client effects): a hit, the horn, destroyed (burning), the wreck exploding, a weapon fired (+ index). */
-    public static final byte EVENT_HIT = 60, EVENT_HORN = 61, EVENT_DESTROYED = 62, EVENT_EXPLODED = 63, EVENT_FIRE = 70;
+    /**
+     * Entity events (client effects): a hit, the horn, destroyed (burning), the wreck exploding, a weapon fired (+ index).
+     * Never 21, 35 or 63: vanilla's {@code ClientPacketListener.handleEntityEvent} takes those for any entity (guardian,
+     * totem, sniffer) and casts it, which disconnects the client.
+     */
+    public static final byte EVENT_HIT = 60, EVENT_HORN = 61, EVENT_DESTROYED = 62, EVENT_EXPLODED = 64, EVENT_FIRE = 70;
     public static final ResourceKey<DamageType> CRASH = ResourceKey.create(Registries.DAMAGE_TYPE, BlockLand.id("vehicle_crash"));
     /** Height of a rider's hips over its feet (the player model's leg pivot), so a seat's hips place the rider. */
     public static final float HIP = 12 / 16f * 0.9375f;

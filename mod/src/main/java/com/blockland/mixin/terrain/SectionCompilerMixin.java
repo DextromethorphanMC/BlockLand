@@ -12,8 +12,12 @@ import net.minecraft.client.renderer.chunk.SectionCompiler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.BlockAndTintGetter;
+import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.FluidState;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -23,14 +27,41 @@ import java.util.List;
 
 /**
  * A section compile reads the terrain switches once and keeps them for the whole section (rendering spec §20);
- * {@code ENCLOSED_BLOCKS} leaves out blocks whose every face is culled, {@code FACE_GROUPS} groups the finished meshes.
+ * {@code ENCLOSED_BLOCKS} leaves out blocks whose every face is culled, {@code ENCLOSED_MODELS} does so before their
+ * model is read, {@code HIDDEN_FLUIDS} leaves out fluid blocks without a face to draw, {@code FACE_GROUPS} groups the
+ * finished meshes.
  */
 @Mixin(SectionCompiler.class)
 public abstract class SectionCompilerMixin {
+    @Shadow
+    @Final
+    private BlockRenderDispatcher blockRenderer;
+
     @Inject(method = "compile", at = @At("HEAD"))
     private void blockland$begin(SectionPos section, RenderSectionRegion region, VertexSorting sorting, SectionBufferBuilderPack buffers,
                                  CallbackInfoReturnable<SectionCompiler.Results> cir) {
         TerrainCompile.begin(section, region);
+    }
+
+    @Redirect(method = "compile", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/core/BlockPos;betweenClosed(Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/BlockPos;)Ljava/lang/Iterable;"))
+    private Iterable<BlockPos> blockland$blocks(BlockPos from, BlockPos to) {
+        return TerrainCompile.blocks(BlockPos.betweenClosed(from, to));
+    }
+
+    /** A fluid without a face to draw is passed over as no fluid: no render layer is begun for it, nothing tesselated. */
+    @Redirect(method = "compile", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/material/FluidState;isEmpty()Z"))
+    private boolean blockland$noFluid(FluidState fluid, SectionPos section, RenderSectionRegion region, VertexSorting sorting,
+                                      SectionBufferBuilderPack buffers) {
+        return fluid.isEmpty() || TerrainCompile.hiddenFluid(region, fluid);
+    }
+
+    /** An enclosed model block that would draw nothing is passed over as an invisible one. */
+    @Redirect(method = "compile", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/level/block/state/BlockState;getRenderShape()Lnet/minecraft/world/level/block/RenderShape;"))
+    private RenderShape blockland$renderShape(BlockState state) {
+        RenderShape shape = state.getRenderShape();
+        return shape == RenderShape.MODEL && TerrainCompile.enclosedModel(state, blockRenderer) ? RenderShape.INVISIBLE : shape;
     }
 
     @Redirect(method = "compile", at = @At(value = "INVOKE",

@@ -1,5 +1,6 @@
 package com.blockland.client.perf.terrain;
 
+import com.blockland.client.perf.Optimization;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexSorting;
@@ -33,6 +34,9 @@ import java.util.List;
  * It also times both runs (snapshot + compile), a direct measure of meshing speed. A run that throws counts as a
  * differing section (the exception is its difference).
  * <p>
+ * For one entry alone (the benchmark's {@code bench <id>} of an entry that changes the meshing) "off" is every terrain
+ * entry on but that one: the same byte for byte comparison and timing, of what that entry adds to all the others.
+ * <p>
  * Render thread, in a world. Everything is compiled into buffers of its own and thrown away: the live section meshes,
  * the compile queue and the worker threads are not touched (they keep the player's switches meanwhile).
  */
@@ -46,8 +50,12 @@ public final class MeshCheck {
     private MeshCheck() {
     }
 
-    /** Meshes up to {@code maxSections} non-empty loaded sections nearest the camera both ways and compares them. */
-    public static Result run(int maxSections) {
+    /**
+     * Meshes up to {@code maxSections} non-empty loaded sections nearest the camera both ways and compares them;
+     * {@code only}, if it changes the meshing ({@link Optimization#rebuildsSections}), is the one entry off for "off".
+     */
+    public static Result run(int maxSections, @Nullable Optimization only) {
+        Optimization alone = only != null && only.rebuildsSections ? only : null;
         Minecraft mc = Minecraft.getInstance();
         ClientLevel level = mc.level;
         if (level == null || !RenderSystem.isOnRenderThread()) return new Result(0, 0, "no world (or not the render thread)", 0, 0);
@@ -68,11 +76,11 @@ public final class MeshCheck {
                 try {
                     // alternate which goes first, so warming up favours neither
                     if ((n & 1) == 0) {
-                        off = compile(false, level, compiler, section, sorting, offBuffers);
-                        on = compile(true, level, compiler, section, sorting, onBuffers);
+                        off = compile(false, alone, level, compiler, section, sorting, offBuffers);
+                        on = compile(true, alone, level, compiler, section, sorting, onBuffers);
                     } else {
-                        on = compile(true, level, compiler, section, sorting, onBuffers);
-                        off = compile(false, level, compiler, section, sorting, offBuffers);
+                        on = compile(true, alone, level, compiler, section, sorting, onBuffers);
+                        off = compile(false, alone, level, compiler, section, sorting, offBuffers);
                     }
                     offNanos += off.nanos;
                     onNanos += on.nanos;
@@ -98,9 +106,10 @@ public final class MeshCheck {
     private record Run(SectionCompiler.Results results, long nanos) {
     }
 
-    private static Run compile(boolean on, ClientLevel level, SectionCompiler compiler, SectionPos section, VertexSorting sorting,
-                               SectionBufferBuilderPack buffers) {
-        TerrainSwitches.force(on);
+    private static Run compile(boolean on, @Nullable Optimization alone, ClientLevel level, SectionCompiler compiler, SectionPos section,
+                               VertexSorting sorting, SectionBufferBuilderPack buffers) {
+        // "off" with one entry alone: every entry on but that one
+        TerrainSwitches.force(on || alone != null, on ? null : alone);
         try {
             level.clearTintCaches();
             long start = System.nanoTime();
@@ -111,9 +120,10 @@ public final class MeshCheck {
             // what a finished compile would have reset on this thread
             TerrainCompile.end();
             ModelBlockRenderer.clearCache();
-            throw new IllegalStateException("the compile with the terrain entries " + (on ? "on" : "off") + " threw " + e, e);
+            throw new IllegalStateException("the compile with " + (on ? "the terrain entries on" : alone != null ? alone.id + " off"
+                    : "the terrain entries off") + " threw " + e, e);
         } finally {
-            TerrainSwitches.force(null);
+            TerrainSwitches.force(null, null);
         }
     }
 

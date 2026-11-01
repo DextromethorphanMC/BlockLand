@@ -1163,7 +1163,8 @@ sample, skips an update that could leave something a frame stale, or reorders dr
   the visible-section graph is complete, every visible section with loaded neighbours has a mesh, nothing is queued
   (cancelled tasks do not count), nothing waits for upload, and the view's section count held for five frames.
   `MeshCheck` compares vertex bytes the format uses (the block format's padding byte is never written and holds old
-  memory). A pass starts with a garbage collection (the switch's rebuild leaves garbage); the 1% low is taken over all
+  memory); in `bench <id>` of an entry that changes the meshing (`rebuildsSections`) its "off" is every terrain entry
+  on but that one, so its timing is what that entry adds to all the others. A pass starts with a garbage collection (the switch's rebuild leaves garbage); the 1% low is taken over all
   frames of a mode. The frame-time passes run twice: on the spot (the camera only turns), then with the camera circling
   3 blocks around it at the same height (everything that waits for a still camera is redone every frame); the summary
   gives both. `bench compare` (dev automation) runs the frame comparison alone, `bench <id>` compares one optimization
@@ -1173,7 +1174,16 @@ sample, skips an update that could leave something a frame stale, or reorders dr
   `ENCLOSED_BLOCKS` — a section compile reads its section and one-block border as full-face bits
   (`terrain/FullFaces`: `getFaceOcclusionShape(side) == Shapes.block()`, `Block.shouldRenderFace`'s first test, which culls
   whatever the block); a block whose six neighbours are full against it and whose parts have no `getQuads(null)` quads is
-  not handed to `renderBatched` (same mesh). `FACE_GROUPS` — at the end of a compile each quad of the solid and cutout
+  not handed to `renderBatched` (same mesh). `ENCLOSED_MODELS` — the same test before the model is read at all: the
+  compile's walk (`BlockPos.betweenClosed`) remembers the block it is at, and an enclosed model block whose every variant
+  has only cullable faces (`terrain/CullableModels`: single or weighted variants of `SimpleModelWrapper` parts without
+  `getQuads(null)` quads, remembered per state with the model it was read from; multipart, CTM and other wrappers keep
+  the full path) reads as `RenderShape.INVISIBLE`, so model data, render layers, the seeded variant pick and
+  `renderBatched` are left out. `HIDDEN_FLUIDS` — a fluid block for which `LiquidBlockRenderer.tesselate` would draw no
+  face (same fluid above; bottom and sides by vanilla's `shouldRenderFace`, the bottom also against a full top below —
+  a partly full one leaves the decision to vanilla) reads as no fluid, so its render layer, sprites and biome tint are
+  never looked up (`terrain/HiddenFluids`). Both may leave a layer unbegun that vanilla begins for nothing; an empty
+  builder builds no mesh, so the results are the same (`MeshCheck` compares them). `FACE_GROUPS` — at the end of a compile each quad of the solid and cutout
   meshes (back-face culled, unblended; translucent and tripwire keep vanilla's sort) gets one of seven groups
   (`terrain/FaceGroups`: quads in one axis plane whose two triangles wind towards one axis direction, and the rest —
   including every quad on a texture the wind moves, `client/render/PlantWind.moves`, since a bent quad can face a camera

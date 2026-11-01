@@ -3,6 +3,7 @@ package com.blockland.client.perf.terrain;
 import com.blockland.client.perf.FrameTimings;
 import com.blockland.client.perf.Optimization;
 import com.mojang.blaze3d.vertex.MeshData;
+import net.minecraft.client.renderer.block.BlockRenderDispatcher;
 import net.minecraft.client.renderer.block.model.BlockModelPart;
 import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
 import net.minecraft.client.renderer.chunk.SectionCompiler;
@@ -11,9 +12,11 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.FluidState;
 import org.joml.Vector3f;
 
 import javax.annotation.Nullable;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -23,8 +26,8 @@ import java.util.List;
  * flipping one meanwhile never mixes the old and the new path inside a section (the flip rebuilds every section anyway).
  * <p>
  * What lives here exists per thread and is valid for one compile: the section's light and shade cache
- * ({@link SectionLight}), the biome colour samples ({@link BiomeTints}), the face culling already decided for the block
- * being tesselated, and the vectors {@link QuadWriter} writes through.
+ * ({@link SectionLight}), the biome colour samples ({@link BiomeTints}), the block the compile's walk is at, the face
+ * culling already decided for the block being tesselated, and the vectors {@link QuadWriter} writes through.
  */
 public final class TerrainCompile {
     private static final ThreadLocal<TerrainCompile> THREAD = ThreadLocal.withInitial(TerrainCompile::new);
@@ -34,7 +37,15 @@ public final class TerrainCompile {
     private boolean tints;
     /** {@code ENCLOSED_BLOCKS}: the full faces of the section and its one-block border ({@link #enclosed}). */
     private boolean enclosed;
+    /** {@code ENCLOSED_MODELS}: enclosed blocks are left out before their model is read ({@link #enclosedModel}). */
+    private boolean models;
     private final byte[] fullFaces = new byte[18 * 18 * 18];
+    /** {@code HIDDEN_FLUIDS}: fluid blocks without a face to draw are left out ({@link #hiddenFluid}). */
+    private boolean fluids;
+    /** The block the compile's walk is at ({@link #blocks}), while {@link #models} or {@link #fluids} decides on it. */
+    @Nullable
+    private BlockPos current;
+    private final BlockPos.MutableBlockPos scratch = new BlockPos.MutableBlockPos();
     /** {@code FACE_GROUPS}: the solid and cutout quads are grouped by facing at the end ({@link #finish}). */
     private boolean groups;
     int originX, originY, originZ;
@@ -67,7 +78,10 @@ public final class TerrainCompile {
         c.meshing = TerrainSwitches.on(Optimization.SECTION_MESHING);
         c.tints = TerrainSwitches.on(Optimization.BIOME_TINTS);
         c.enclosed = TerrainSwitches.on(Optimization.ENCLOSED_BLOCKS);
+        c.models = TerrainSwitches.on(Optimization.ENCLOSED_MODELS);
+        c.fluids = TerrainSwitches.on(Optimization.HIDDEN_FLUIDS);
         c.groups = TerrainSwitches.on(Optimization.FACE_GROUPS);
+        c.current = null;
         c.originX = section.minBlockX();
         c.originY = section.minBlockY();
         c.originZ = section.minBlockZ();
@@ -81,7 +95,7 @@ public final class TerrainCompile {
             if (c.tintMemo == null) c.tintMemo = new BiomeTints.Memo();
             c.tintMemo.begin(c.originX, c.originY, c.originZ);
         }
-        if (c.enclosed) c.readFullFaces(region);
+        if (c.enclosed || c.models) c.readFullFaces(region);
         // render-thread compiles only (sections the player changed); worker compiles are timed by MeshCheck
         c.span = FrameTimings.span("bl/terrain/compile");
     }
@@ -107,18 +121,68 @@ public final class TerrainCompile {
      */
     public static boolean enclosed(BlockPos pos, List<BlockModelPart> parts) {
         TerrainCompile c = THREAD.get();
-        if (!c.compiling || !c.enclosed) return false;
-        int x = pos.getX() - c.originX + 1, y = pos.getY() - c.originY + 1, z = pos.getZ() - c.originZ + 1;
-        if (x < 1 || x > 16 || y < 1 || y > 16 || z < 1 || z > 16) return false;
-        int i = (y * 18 + z) * 18 + x;
-        byte[] f = c.fullFaces;
-        // the neighbour below must be full on its up face, the one above on its down face, and so on
-        if ((f[i - 324] & 1 << 1) == 0 || (f[i + 324] & 1) == 0 || (f[i - 18] & 1 << 3) == 0 || (f[i + 18] & 1 << 2) == 0
-                || (f[i - 1] & 1 << 5) == 0 || (f[i + 1] & 1 << 4) == 0) return false;
+        if (!c.compiling || !c.enclosed || !c.surrounded(pos)) return false;
         for (int p = 0, n = parts.size(); p < n; p++) {
             if (!parts.get(p).getQuads(null).isEmpty()) return false;
         }
         return true;
+    }
+
+    /** Whether every neighbour of a section block is full against it ({@link #readFullFaces} of this compile). */
+    private boolean surrounded(BlockPos pos) {
+        int x = pos.getX() - originX + 1, y = pos.getY() - originY + 1, z = pos.getZ() - originZ + 1;
+        if (x < 1 || x > 16 || y < 1 || y > 16 || z < 1 || z > 16) return false;
+        int i = (y * 18 + z) * 18 + x;
+        byte[] f = fullFaces;
+        // the neighbour below must be full on its up face, the one above on its down face, and so on
+        return (f[i - 324] & 1 << 1) != 0 && (f[i + 324] & 1) != 0 && (f[i - 18] & 1 << 3) != 0 && (f[i + 18] & 1 << 2) != 0
+                && (f[i - 1] & 1 << 5) != 0 && (f[i + 1] & 1 << 4) != 0;
+    }
+
+    /**
+     * The section's positions as {@code SectionCompiler.compile} walks them, each one remembered as the block being
+     * compiled for {@link #enclosedModel} and {@link #hiddenFluid}; vanilla's own iterable while neither is on.
+     */
+    public static Iterable<BlockPos> blocks(Iterable<BlockPos> positions) {
+        TerrainCompile c = THREAD.get();
+        if (!c.compiling || !(c.models || c.fluids)) return positions;
+        return () -> {
+            Iterator<BlockPos> walk = positions.iterator();
+            return new Iterator<>() {
+                @Override
+                public boolean hasNext() {
+                    return walk.hasNext();
+                }
+
+                @Override
+                public BlockPos next() {
+                    return c.current = walk.next();
+                }
+            };
+        };
+    }
+
+    /**
+     * {@code ENCLOSED_MODELS}: whether the block being compiled ({@code state}, a model block) draws nothing for certain
+     * before its model is even asked for parts — every neighbour is full against it (so all six faces are culled, as in
+     * {@link #enclosed}) and every variant of its model has only such faces ({@link CullableModels}). Then vanilla's
+     * model data, render layers, seeded variant pick and {@code renderBatched} are all left out: the same mesh (a layer
+     * begun for nothing but such blocks builds no mesh either way).
+     */
+    public static boolean enclosedModel(BlockState state, BlockRenderDispatcher blocks) {
+        TerrainCompile c = THREAD.get();
+        if (!c.compiling || !c.models || c.current == null || !c.surrounded(c.current)) return false;
+        return CullableModels.cullable(state, blocks.getBlockModel(state));
+    }
+
+    /**
+     * {@code HIDDEN_FLUIDS}: whether the fluid of the block being compiled would draw no face ({@link HiddenFluids}); then
+     * vanilla's render layer look-up and {@code renderLiquid} are left out (same mesh, as for {@link #enclosedModel}).
+     */
+    public static boolean hiddenFluid(BlockAndTintGetter region, FluidState fluid) {
+        TerrainCompile c = THREAD.get();
+        if (!c.compiling || !c.fluids || c.current == null) return false;
+        return HiddenFluids.hidden(region, c.current, fluid, c.scratch);
     }
 
     /** {@code FACE_GROUPS}: the groups of the compile's solid and cutout quads (RETURN of the compile, before {@link #end}). */
@@ -139,6 +203,7 @@ public final class TerrainCompile {
         if (c.span != null) c.span.close();
         c.span = null;
         c.compiling = false;
+        c.current = null;
         c.faceLevel = null;
         c.faceState = null;
         if (c.light != null) c.light.end();

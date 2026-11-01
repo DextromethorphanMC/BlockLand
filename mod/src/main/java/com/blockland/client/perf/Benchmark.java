@@ -231,7 +231,7 @@ final class Benchmark {
             // the sections around meshed off and on side by side, compared byte for byte (and timed)
             steps.add(r -> {
                 progress("mesh check");
-                r.report.mesh = MeshCheck.run(MESH_CHECK_SECTIONS);
+                r.report.mesh = MeshCheck.run(MESH_CHECK_SECTIONS, r.only);
                 return true;
             });
             steps.add(compare());

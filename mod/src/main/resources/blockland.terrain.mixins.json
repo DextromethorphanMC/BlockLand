@@ -14,7 +14,8 @@
     "ModelBlockRendererMixin",
     "SectionBuffersMixin",
     "SectionCompilerMixin",
-    "SectionCopyMixin"
+    "SectionCopyMixin",
+    "WeightedVariantsAccess"
   ],
   "injectors": {
     "defaultRequire": 1
