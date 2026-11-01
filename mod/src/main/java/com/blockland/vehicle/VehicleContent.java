@@ -49,7 +49,7 @@ public final class VehicleContent {
             RegistryObject<EntityType<VehicleEntity>> type = ENTITIES.register(id, () -> EntityType.Builder
                     .<VehicleEntity>of(VehicleEntity::new, MobCategory.MISC)
                     .sized(v.size[0], v.size[1])
-                    .clientTrackingRange(10)
+                    .clientTrackingRange(v.trackingRange)
                     .updateInterval(1)
                     .build(ResourceKey.create(Registries.ENTITY_TYPE, BlockLand.id(id))));
             TYPES.put(id, type);

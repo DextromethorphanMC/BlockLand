@@ -63,6 +63,7 @@ public final class ClientArmor {
                 }));
         AddGuiOverlayLayersEvent.getBus(modBus).addListener(event -> event.getLayeredDraw()
                 .addAbove(ForgeLayeredDraw.PRE_SLEEP_STACK, BlockLand.id("armor_hud"), ForgeLayeredDraw.CROSSHAIR, ArmorHud::render));
+        com.blockland.client.hud.layout.HudLayout.register(new ArmorHud.Plates());
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> clientTick());
         TickEvent.RenderTickEvent.Pre.BUS.addListener(event -> frame());
         RenderHandEvent.BUS.addListener(ClientArmor::renderHand);

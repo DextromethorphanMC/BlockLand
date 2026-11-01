@@ -1,6 +1,7 @@
 package com.blockland.client.graphics.shadow;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.GunPipelines;
 import com.mojang.blaze3d.buffers.Std140SizeCalculator;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.platform.DepthTestFunction;
@@ -29,6 +30,14 @@ final class ShadowPipelines {
             .build();
     static final RenderPipeline ENTITY = caster("shadow_entity", "core/shadow_entity", "core/shadow_cutout", true)
             .withVertexFormat(DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.QUADS)
+            .build();
+    /**
+     * SHADOW_GPU_CASTERS: a BlockLand model's triangles from its own buffers ({@code GunPipelines.FORMAT}, triangle
+     * lists), placed per draw by {@code DynamicTransforms} exactly as the CPU would place them (shadow_entity_gpu.vsh).
+     */
+    static final RenderPipeline ENTITY_GPU = caster("shadow_entity_gpu", "core/shadow_entity_gpu", "core/shadow_cutout", true)
+            .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
+            .withVertexFormat(GunPipelines.FORMAT, VertexFormat.Mode.TRIANGLES)
             .build();
     /** Resets one tile to the far plane (a cascade that is redrawn while the others keep last frame's depth). */
     static final RenderPipeline CLEAR = RenderPipeline.builder()

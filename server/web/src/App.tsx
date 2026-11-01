@@ -4,6 +4,7 @@ import { getToken, setToken } from './api'
 import { ToastProvider } from './components/ui'
 import { AntiCheat } from './pages/AntiCheat'
 import { Announcements } from './pages/Announcements'
+import { CheckIn } from './pages/CheckIn'
 import { Dashboard } from './pages/Dashboard'
 import { GameModes } from './pages/GameModes'
 import { Login } from './pages/Login'
@@ -43,6 +44,7 @@ export function App() {
                 <NavLink to="/anticheat">反作弊</NavLink>
                 <NavLink to="/ranked">排位</NavLink>
                 <NavLink to="/shop">商店</NavLink>
+                <NavLink to="/checkin">签到</NavLink>
                 {allTypePages().map((p) => (
                   <NavLink key={p.path} to={p.path}>
                     {p.label}
@@ -64,6 +66,7 @@ export function App() {
                 <Route path="/anticheat" element={<AntiCheat />} />
                 <Route path="/ranked" element={<Ranked />} />
                 <Route path="/shop" element={<Shop />} />
+                <Route path="/checkin" element={<CheckIn />} />
                 {allTypePages().map((p) => (
                   <Route key={p.path} path={p.path} element={p.element} />
                 ))}

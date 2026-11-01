@@ -5,7 +5,8 @@ antifouling on the boat). Lights, gauges, lenses and glass keep their glTF colou
 it occlude each other; parts that move (wheels, the fork, the turret, the outboard, the tracks) only shade themselves."""
 
 GLOW = {"headlight": (None, "none"), "taillight": (None, "none"), "indicator": (None, "none"),
-        "gauge": (None, "none"), "reflector": (None, "none"), "lens": (None, "none"), "glass": (None, "none")}
+        "gauge": (None, "none"), "reflector": (None, "none"), "lens": (None, "none"), "glass": (None, "none"),
+        "afterburner": (None, "none"), "nav_green": (None, "none")}
 COMMON = {"metal": ("common/steel_dark", "hardware"), "chrome": ("common/polished_steel", "hardware"),
           "rubber": ("common/rubber", "detail"), "tire": ("vehicle/tyre", "detail"),
           "plastic": ("vehicle/plastic", "detail"), "exhaust": ("vehicle/exhaust", "hardware"),
@@ -46,5 +47,17 @@ def models():
             "ao": {"mode": "together", "root": "body", "distance": AO_DISTANCE,
                    "separate": [["turret"], ["track_l"], ["track_r"]] + tank_wheels},
             "materials": _table(),
+        },
+        "vehicle/fighter_jet": {
+            "ao": {"mode": "together", "root": "body", "distance": AO_DISTANCE,
+                   "separate": [["gear_0"], ["gear_1"], ["gear_2"], ["afterburner"]]},
+            "materials": _table(paint=("vehicle/paint_jet_grey", "body"), paint_accent=("vehicle/paint_jet_dark", "body"),
+                                seat=("vehicle/vinyl_black", "detail")),
+        },
+        "vehicle/helicopter": {
+            "ao": {"mode": "together", "root": "body", "distance": AO_DISTANCE,
+                   "separate": [["rotor_main"], ["rotor_tail"], ["chin_turret"]]},
+            "materials": _table(paint=("vehicle/paint_heli", "body"), paint_accent=("vehicle/paint_black", "body"),
+                                seat=("vehicle/vinyl_black", "detail")),
         },
     }

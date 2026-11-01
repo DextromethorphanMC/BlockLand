@@ -86,6 +86,16 @@ public class MapService {
         return maps.save(map);
     }
 
+    /**
+     * Replaces a generated map's stored file with a newer generation of it, unless the stored file is already that one
+     * (seeds that fix a generator). True when it was replaced.
+     */
+    public boolean replaceGeneratedFile(String id, String fileName, byte[] data) {
+        if (sha256(data).equals(get(id).fileHash())) return false;
+        replaceFile(id, null, fileName, data);
+        return true;
+    }
+
     /** Replaces the map file; the game type decides which of its map settings survive (e.g. chests at the same coordinates). */
     public GameMap replaceFile(String id, String spawnMarkerBlock, String fileName, byte[] data) {
         GameMap current = get(id);
@@ -100,6 +110,8 @@ public class MapService {
         ObjectNode settings = types.find(current.gameType())
                 .map(type -> type.mapSettingsFromFile(result, current.settings()))
                 .orElse(current.settings());
+        // the ambience is the map's, not its file's: it stays
+        MapAmbient.attach(settings, MapAmbient.of(current.settings()));
         GameMap map = new GameMap(id, current.name(), current.gameType(), format, fileName, sha256(data), data.length,
                 result.size(), marker, spawns, current.voidY(), settings, current.coverVersion(), Instant.now());
         return maps.save(map);
@@ -123,6 +135,8 @@ public class MapService {
             spawns.add(new GameMap.TeamSpawn(spawnName, points));
         }
         ObjectNode settings = type == null ? current.settings() : type.normalizeMapSettings(request.settings(), errors);
+        // every game type's maps may carry an ambience; the type cleans only its own keys
+        if (type != null) MapAmbient.attach(settings, MapAmbient.normalize(request.settings(), errors));
         if (!errors.isEmpty()) throw ApiException.invalid(errors);
 
         GameMap map = new GameMap(id, request.name().trim(), type.id(), current.format(), current.fileName(),

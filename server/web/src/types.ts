@@ -193,6 +193,42 @@ export interface InventoryItem {
 
 export type RankTierId = 'coal' | 'iron' | 'gold' | 'diamond' | 'headhunter'
 
+/** One day of the check-in cycle; mirrors the backend's CheckInConfig.Reward. */
+export interface CheckInReward {
+  /** blank: the game shows the item's own name */
+  label: string
+  /** an inventory item (graffiti:skull) or a permission (PRIORITY_QUEUE); blank = nothing */
+  entitlement: string
+  /** 0 = permanent */
+  durationDays: number
+}
+
+/** Mirrors the backend's CheckInConfig (每日签到). */
+export interface CheckInConfig {
+  enabled: boolean
+  /** the time zone whose midnight starts a new day */
+  zone: string
+  days: CheckInReward[]
+}
+
+export interface CheckInPlayerLine {
+  uuid: string
+  name: string
+  lastDay: string | null
+  /** 0 once a day was missed */
+  streak: number
+  best: number
+  total: number
+  claimedToday: boolean
+}
+
+export interface CheckInStats {
+  today: string
+  players: number
+  claimedToday: number
+  recent: CheckInPlayerLine[]
+}
+
 /** Mirrors the backend's RankedConfig. */
 export interface RankedConfig {
   startScore: number

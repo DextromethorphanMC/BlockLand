@@ -179,6 +179,7 @@ public final class ClientGuns {
             draw.addConditionTo(ForgeLayeredDraw.PRE_SLEEP_STACK, ForgeLayeredDraw.CROSSHAIR, () -> !holdingGun());
             draw.addAbove(ForgeLayeredDraw.PRE_SLEEP_STACK, BlockLand.id("gun_hud"), ForgeLayeredDraw.CROSSHAIR, GunHud::render);
         });
+        com.blockland.client.hud.layout.HudLayout.register(new GunHud.Panel());
         DualHold.init();
         WatchedGun.init();
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> clientTick());

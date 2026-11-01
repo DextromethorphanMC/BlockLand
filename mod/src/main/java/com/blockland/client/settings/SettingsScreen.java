@@ -14,6 +14,10 @@ import com.blockland.client.graphics.GraphicsStatus;
 import com.blockland.client.graphics.display.Display;
 import com.blockland.client.hud.Crosshair;
 import com.blockland.client.hud.HitMarker;
+import com.blockland.client.hud.layout.HudEditorScreen;
+import com.blockland.client.hud.layout.HudElement;
+import com.blockland.client.hud.layout.HudLayout;
+import com.blockland.client.hud.minimap.MinimapSettings;
 import com.blockland.client.impact.ImpactSettings;
 import com.blockland.client.perf.Optimization;
 import com.blockland.client.perf.Perf;
@@ -49,8 +53,8 @@ import static com.blockland.client.ui.Tr.tr;
 /**
  * The lobby's settings page (设置): 通用 (language), 画质 (the render pipeline: presets, resolution and anti-aliasing,
  * lighting, screen-space effects, camera and colour, and what the pipeline is doing right now), 枪械 (look, aim-down-sights
- * and per-magnification scope sensitivity, crosshair and hit marker style, with a live preview) and 隐私 (party
- * invitations). Client preferences are saved on this computer as they change; the privacy choice is sent to the server,
+ * and per-magnification scope sensitivity, crosshair and hit marker style, with a live preview), HUD (the movable HUD's
+ * elements, the minimap, and the layout editor) and 隐私 (party invitations). Client preferences are saved on this computer as they change; the privacy choice is sent to the server,
  * which stores and enforces it. Graphics changes apply live; the world lighting switch (a resource reload) applies when
  * the page closes.
  */
@@ -65,7 +69,7 @@ public final class SettingsScreen extends Screen {
     private enum Tab {
         GENERAL("blockland.settings.tab.general"), GRAPHICS("blockland.settings.tab.graphics"),
         PERFORMANCE("blockland.settings.tab.performance"), WEAPONS("blockland.settings.tab.weapons"),
-        PRIVACY("blockland.settings.tab.privacy");
+        HUD("blockland.settings.tab.hud"), PRIVACY("blockland.settings.tab.privacy");
 
         final String key;
 
@@ -115,6 +119,8 @@ public final class SettingsScreen extends Screen {
 
     @Override
     protected void init() {
+        // back from the HUD editor (which removed this screen, committing it): changes from here on commit again
+        committed = false;
         Anim.to(intro, 1, 0.4).ease(Ease.QUART_OUT);
         rebuild();
     }
@@ -248,6 +254,7 @@ public final class SettingsScreen extends Screen {
                     rebuild();
                 }));
             }
+            case HUD -> hudRows(data);
             case PRIVACY -> {
                 rows.add(new Header("blockland.settings.section.party"));
                 rows.add(new Toggle("blockland.settings.allow_invites", ClientLobbyState::allowInvites,
@@ -255,6 +262,62 @@ public final class SettingsScreen extends Screen {
                 rows.add(new Note("blockland.settings.allow_invites_note"));
             }
         }
+    }
+
+    /**
+     * The HUD tab (UI spec §3.1): the layout editor (in a world only: it draws the live HUD), whether BlockLand draws the
+     * vanilla bars and chat, each movable element on or off, the minimap's options, and a reset of all of it.
+     */
+    private void hudRows(ClientSettings.Data data) {
+        String hud = "blockland.settings.hud.";
+        rows.add(new Header("blockland.settings.section.hud_layout"));
+        rows.add(new Action(hud + "edit", () -> {
+            if (Minecraft.getInstance().level == null || Minecraft.getInstance().player == null) return;
+            commit();
+            Minecraft.getInstance().setScreen(new HudEditorScreen(this));
+        }).primary().dim(() -> Minecraft.getInstance().level == null));
+        rows.add(new Note(() -> tr(Minecraft.getInstance().level == null ? hud + "edit_needs_world" : hud + "edit_note")));
+        rows.add(new Toggle(hud + "replace_vanilla", () -> data.hud.replaceVanilla, v -> data.hud.replaceVanilla = v));
+        rows.add(new Note(hud + "replace_vanilla_note"));
+
+        rows.add(new Header("blockland.settings.section.hud_elements"));
+        if (HudLayout.elements().isEmpty()) rows.add(new Note(hud + "no_elements"));
+        for (HudElement e : HudLayout.elements()) {
+            rows.add(new Toggle(e.nameKey(), () -> HudLayout.enabled(e), v -> HudLayout.setEnabled(e, v)));
+            // the element's own choices (the hotbar's 横 / 竖) under its switch
+            for (HudElement.Option o : e.options()) {
+                String[] names = o.values().stream().map(v -> tr(o.nameKey() + "." + v)).toArray(String[]::new);
+                rows.add(new Choice(o.nameKey(), () -> o.values().indexOf(HudLayout.option(e, o)),
+                        i -> HudLayout.setOption(e, o, o.values().get(i)), names));
+            }
+            // a resizable element's size (also its corner grip in the editor): one side when it keeps square
+            HudElement.Resize r = e.resize();
+            if (r != null && r.square()) {
+                rows.add(new Slider(hud + "size", new Object[]{e.id()}, r.minW(), r.maxW(), 1, () -> HudLayout.size(e)[0],
+                        v -> HudLayout.resize(e, (int) Math.round(v), (int) Math.round(v)), v -> Math.round(v) + " px"));
+            } else if (r != null) {
+                rows.add(new Slider(hud + "width", new Object[]{e.id()}, r.minW(), r.maxW(), 1, () -> HudLayout.size(e)[0],
+                        v -> HudLayout.resize(e, (int) Math.round(v), HudLayout.size(e)[1]), v -> Math.round(v) + " px"));
+                rows.add(new Slider(hud + "height", new Object[]{e.id()}, r.minH(), r.maxH(), 1, () -> HudLayout.size(e)[1],
+                        v -> HudLayout.resize(e, HudLayout.size(e)[0], (int) Math.round(v)), v -> Math.round(v) + " px"));
+            }
+        }
+
+        MinimapSettings m = data.minimap;
+        rows.add(new Header("blockland.settings.section.minimap"));
+        rows.add(new Slider("blockland.settings.minimap.size", 48, 192, 8, () -> m.size, v -> m.size = (int) Math.round(v),
+                v -> Math.round(v) + " px").then(m::sanitize));
+        rows.add(new Slider("blockland.settings.minimap.range", 32, 256, 16, () -> m.range, v -> m.range = (int) Math.round(v),
+                v -> tr("blockland.settings.minimap.blocks", Math.round(v))).then(m::sanitize));
+        rows.add(new Toggle("blockland.settings.minimap.rotate", () -> m.rotate, v -> m.rotate = v));
+
+        rows.add(new Action(hud + "reset_all", () -> {
+            HudLayout.resetAll();
+            data.hud.replaceVanilla = true;
+            data.minimap = new MinimapSettings();
+            ClientSettings.save();
+            rebuild();
+        }));
     }
 
     /**
@@ -569,6 +632,14 @@ public final class SettingsScreen extends Screen {
                 SettingsScreen::percentOrOff));
         rows.add(new Toggle("blockland.settings.impacts.fluid_physics", () -> fx.fluidPhysics, v -> fx.fluidPhysics = v));
         rows.add(new Note("blockland.settings.impacts.note"));
+
+        // ---- ambient props (rendering spec §29; their own settings, not part of the presets)
+        com.blockland.client.ambient.AmbientSettings ambient = ClientSettings.get().ambient;
+        rows.add(new Header("blockland.settings.section.ambient"));
+        rows.add(new Toggle("blockland.settings.ambient.tumbleweeds", () -> ambient.tumbleweeds, v -> ambient.tumbleweeds = v));
+        rows.add(new Slider("blockland.settings.ambient.tumbleweed_density", 0.25, 2, 0.05, () -> ambient.tumbleweedDensity,
+                v -> ambient.tumbleweedDensity = (float) v, SettingsScreen::percent));
+        rows.add(new Note("blockland.settings.ambient.note"));
 
         // ---- what the pipeline is doing
         rows.add(new Header(gfx + "section.status"));
@@ -1484,10 +1555,17 @@ public final class SettingsScreen extends Screen {
     private final class Action extends Row {
         private final String key;
         private final Runnable action;
+        /** Drawn as the page's main action (accent filled). */
+        private boolean primary;
 
         Action(String key, Runnable action) {
             this.key = key;
             this.action = action;
+        }
+
+        Action primary() {
+            primary = true;
+            return this;
         }
 
         @Override
@@ -1500,8 +1578,9 @@ public final class SettingsScreen extends Screen {
             String label = tr(key);
             int bw = UiFont.width(label) + 16, bx = x + 8, by = y + 8;
             float hv = spring("a" + key, inside(mouseX, mouseY, bx, by, bw, 16));
-            Draw.rect(g, bx, by, bw, 16, ColorMath.fade(ColorMath.mix(0xFF2A3446, 0xFF3A4660, hv), a));
-            Draw.text(g,label, bx + 8, by + 4, 1f, ColorMath.fade(TEXT, a), false);
+            int bg = primary ? ColorMath.mix(ACCENT, 0xFFFFFFFF, hv * 0.2f) : ColorMath.mix(0xFF2A3446, 0xFF3A4660, hv);
+            Draw.rect(g, bx, by, bw, 16, ColorMath.fade(bg, a));
+            Draw.text(g,label, bx + 8, by + 4, 1f, ColorMath.fade(primary ? 0xFF101418 : TEXT, a), false);
         }
 
         @Override

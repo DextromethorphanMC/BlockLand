@@ -4,6 +4,7 @@ import com.blockland.BlockLand;
 import com.blockland.client.perf.Optimization;
 import com.blockland.client.render.ShadowPass;
 import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTextureView;
@@ -16,6 +17,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.DynamicUniforms;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
@@ -29,6 +31,10 @@ import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.LightningBolt;
 import net.minecraft.world.entity.Marker;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
+import org.joml.Vector4f;
+import org.lwjgl.opengl.GL;
 import org.lwjgl.system.MemoryUtil;
 
 import javax.annotation.Nullable;
@@ -46,6 +52,11 @@ import java.util.Map;
  * one vertex buffer and are drawn depth-only, alpha-tested against their own textures, into the near cascades. The local
  * player casts a whole shadow in first person too, head included; the first-person weapon does not take that shadow
  * (it looks past what is right behind it towards the sun: gun.fsh), so the head around the eye does not darken it.
+ * <p>
+ * {@link Optimization#SHADOW_GPU_CASTERS}: a BlockLand model's draws whose triangles already sit in its own GPU
+ * buffers are not rebuilt as vertices — the capture keeps each one's buffers, index range and placement and draws them
+ * with {@link ShadowPipelines#ENTITY_GPU}, which places every vertex by the same float operations as the CPU would. The
+ * shadow map is depth-only (the nearest depth wins whatever the order), so the same triangles give the same map.
  */
 final class EntityCasters implements ShadowPass.Capture {
     static final float RANGE = 32f;
@@ -58,10 +69,24 @@ final class EntityCasters implements ShadowPass.Capture {
     private record Mesh(GpuTextureView texture, int baseVertex, int indexCount) {
     }
 
+    /** A model draw taken from its own buffers ({@link ShadowPass.Capture#gpuCaster}). */
+    private record GpuCaster(RenderType type, Matrix4f matrix, GpuBuffer vertices, GpuBuffer indices, VertexFormat.IndexType indexType,
+                             int firstIndex, int indexCount, float uvScale) {
+    }
+
+    private static final Vector4f WHITE = new Vector4f(1, 1, 1, 1);
+    private static final Matrix4f IDENTITY = new Matrix4f();
+    /** Whether the driver has {@code precise} (ARB_gpu_shader5, which shadow_entity_gpu.vsh requires) for the exact placing. */
+    @Nullable
+    private static Boolean gpuSupported;
+
     private final Map<RenderType, BufferBuilder> building = new IdentityHashMap<>();
     private final Map<RenderType, ByteBufferBuilder> memory = new IdentityHashMap<>();
     private final ArrayDeque<ByteBufferBuilder> free = new ArrayDeque<>();
     private final List<Mesh> meshes = new ArrayList<>();
+    private final List<GpuCaster> gpuCasters = new ArrayList<>();
+    private final List<GpuTextureView> gpuTextures = new ArrayList<>();
+    private GpuBufferSlice[] gpuTransforms = new GpuBufferSlice[0];
     private final List<Entity> nearby = new ArrayList<>();
     private final PoseStack pose = new PoseStack();
     @Nullable
@@ -85,12 +110,14 @@ final class EntityCasters implements ShadowPass.Capture {
     }
 
     boolean isEmpty() {
-        return meshes.isEmpty();
+        return meshes.isEmpty() && gpuCasters.isEmpty();
     }
 
     /** Draws the entities near the camera into the capture and packs the result into the vertex buffer. */
     void capture(ClientLevel level, double camX, double camY, double camZ, float partialTick) {
         meshes.clear();
+        gpuCasters.clear();
+        gpuTextures.clear();
         maxIndices = 0;
         vertexBytes = 0;
         entities = 0;
@@ -111,6 +138,7 @@ final class EntityCasters implements ShadowPass.Capture {
             ShadowPass.set(false);
         }
         pack();
+        packGpu();
     }
 
     /** The nearest few entities in range that have a surface. */
@@ -160,6 +188,29 @@ final class EntityCasters implements ShadowPass.Capture {
         building.put(type, builder);
         memory.put(type, bytes);
         return builder;
+    }
+
+    @Override
+    public boolean gpuCaster(RenderType type, Matrix4f matrix, GpuBuffer vertices, GpuBuffer indices, VertexFormat.IndexType indexType,
+                             int firstIndex, int indexCount, float uvScale) {
+        if (gpuSupported == null) gpuSupported = GL.getCapabilities().GL_ARB_gpu_shader5;
+        if (!gpuSupported || vertices.isClosed() || indices.isClosed()) return false;
+        gpuCasters.add(new GpuCaster(type, new Matrix4f(matrix), vertices, indices, indexType, firstIndex, indexCount, uvScale));
+        return true;
+    }
+
+    /** The GPU casters' textures and their placings as per-draw transforms (one write for all of them). */
+    private void packGpu() {
+        if (gpuCasters.isEmpty()) return;
+        Map<RenderType, GpuTextureView> textures = new IdentityHashMap<>();
+        DynamicUniforms.Transform[] transforms = new DynamicUniforms.Transform[gpuCasters.size()];
+        for (int i = 0; i < gpuCasters.size(); i++) {
+            GpuCaster c = gpuCasters.get(i);
+            gpuTextures.add(textures.computeIfAbsent(c.type, EntityCasters::textureOf));
+            // ModelViewMat places the vertices, ModelOffset.x scales the texture coordinates (shadow_entity_gpu.vsh)
+            transforms[i] = new DynamicUniforms.Transform(c.matrix, WHITE, new Vector3f(c.uvScale, 0, 0), IDENTITY, 1.0F);
+        }
+        gpuTransforms = RenderSystem.getDynamicUniforms().writeTransforms(transforms);
     }
 
     private static boolean casts(RenderType type) {
@@ -245,6 +296,38 @@ final class EntityCasters implements ShadowPass.Capture {
 
     /** Draws the captured meshes with the entity pipeline already set on the pass. */
     void draw(RenderPass pass, @Nullable GpuBuffer sequential, @Nullable VertexFormat.IndexType sequentialType) {
+        drawCaptured(pass, sequential, sequentialType);
+        drawGpu(pass);
+    }
+
+    /** The GPU casters (SHADOW_GPU_CASTERS) from their own buffers, with the shadow map's cascade uniform already set. */
+    private void drawGpu(RenderPass pass) {
+        if (gpuCasters.isEmpty()) return;
+        pass.setPipeline(ShadowPipelines.ENTITY_GPU);
+        GpuBuffer boundVertices = null, boundIndices = null;
+        GpuTextureView bound = null;
+        for (int i = 0; i < gpuCasters.size(); i++) {
+            GpuCaster c = gpuCasters.get(i);
+            GpuTextureView texture = gpuTextures.get(i);
+            if (texture == null || c.vertices.isClosed() || c.indices.isClosed()) continue;
+            if (c.vertices != boundVertices) {
+                pass.setVertexBuffer(0, c.vertices);
+                boundVertices = c.vertices;
+            }
+            if (c.indices != boundIndices) {
+                pass.setIndexBuffer(c.indices, c.indexType);
+                boundIndices = c.indices;
+            }
+            if (texture != bound) {
+                pass.bindSampler("Sampler0", texture);
+                bound = texture;
+            }
+            pass.setUniform("DynamicTransforms", gpuTransforms[i]);
+            pass.drawIndexed(0, c.firstIndex, c.indexCount, 1);
+        }
+    }
+
+    private void drawCaptured(RenderPass pass, @Nullable GpuBuffer sequential, @Nullable VertexFormat.IndexType sequentialType) {
         if (vertices == null || sequential == null || sequentialType == null) return;
         pass.setVertexBuffer(0, vertices);
         pass.setIndexBuffer(sequential, sequentialType);

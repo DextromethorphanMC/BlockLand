@@ -37,6 +37,7 @@
     "minecraft:experience_bottle": { "color": "#C8FF70", "intensity": 0.4, "radius": 5 },
     "minecraft:dragon_breath": { "color": "#FF70E8", "intensity": 0.4, "radius": 5 },
     "minecraft:sea_pickle": { "color": "#B8FFB0", "intensity": 0.4, "radius": 5 },
-    "minecraft:light": { "color": "#FFFFFF", "intensity": 0.8, "radius": 9 }
+    "minecraft:light": { "color": "#FFFFFF", "intensity": 0.8, "radius": 9 },
+    "blockland:flashlight": { "color": "#FFF1DC", "intensity": 3.0, "radius": 28, "cone": [11, 24], "switch": "blockland:lit" }
   }
 }

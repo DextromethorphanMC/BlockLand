@@ -154,7 +154,7 @@ MODEL_MODULES = ("pbr_models_tommy", "pbr_models_ks3", "pbr_models_usp", "pbr_mo
                  "pbr_models_crowbar", "pbr_models_knuckles",
                  "pbr_models_handcannon", "pbr_models_vector", "pbr_models_baton", "pbr_models_ammo_crate",
                  "pbr_models_deagle", "pbr_models_revolver", "pbr_models_armor", "pbr_models_revive", "pbr_models_bizon",
-                 "pbr_models_vehicles")
+                 "pbr_models_vehicles", "pbr_models_creatures")
 
 
 def _load_model_modules():

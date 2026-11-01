@@ -85,6 +85,7 @@ public final class WorldLighting {
                     settings.waterRefraction && Minecraft.useShaderTransparency(), underwater);
             uniforms.bind(SceneUniforms.Phase.WORLD);
             Graphics.status().dynamicLightCount = lit ? lights.count() : 0;
+            Graphics.status().dynamicSpotCount = lit ? lights.spots() : 0;
         }
 
         @Override

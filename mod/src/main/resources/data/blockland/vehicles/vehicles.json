@@ -526,6 +526,461 @@
         "fire_mg",
         "reload_mg"
       ]
+    },
+    "fighter_jet": {
+      "name": "战斗机",
+      "model": "blockland:models/vehicle/fighter_jet.glb",
+      "size": [
+        3.6,
+        2.8
+      ],
+      "mass": 9000,
+      "health": 320,
+      "armor": 0.3,
+      "trackingRange": 20,
+      "movement": {
+        "kind": "jet",
+        "maxSpeed": 62,
+        "reverseSpeed": 2,
+        "accel": 16,
+        "brake": 10,
+        "turnRate": 48,
+        "pitchRate": 55,
+        "grip": 0.9,
+        "stepHeight": 0.6,
+        "wheelRadius": 0.33,
+        "wadeDepth": 1.2,
+        "takeoffSpeed": 26,
+        "boostThrust": 1.35,
+        "maxBank": 70,
+        "taxiTurn": 35,
+        "gearFold": 95
+      },
+      "seats": [
+        {
+          "node": "seat_0",
+          "role": "driver",
+          "exposed": false,
+          "camera": "third",
+          "pos": [
+            0,
+            2.0,
+            -3.2
+          ],
+          "yawLimit": 180
+        }
+      ],
+      "hitBoxes": [
+        {
+          "center": [
+            0,
+            1.8,
+            -0.4
+          ],
+          "half": [
+            0.8,
+            0.65,
+            6.2
+          ]
+        },
+        {
+          "center": [
+            0,
+            1.55,
+            1.2
+          ],
+          "half": [
+            4.3,
+            0.15,
+            1.6
+          ]
+        },
+        {
+          "center": [
+            0,
+            3.1,
+            4.6
+          ],
+          "half": [
+            0.1,
+            1.0,
+            1.1
+          ]
+        }
+      ],
+      "weapons": [
+        {
+          "id": "cannon",
+          "seat": 0,
+          "freeView": true,
+          "pivotYaw": "",
+          "pivotPitch": "",
+          "muzzle": "muzzle_cannon",
+          "pivot": [
+            -0.55,
+            1.85,
+            -4.9
+          ],
+          "pitchPivot": [
+            0,
+            0,
+            0
+          ],
+          "muzzleOffset": [
+            0,
+            0,
+            -0.1
+          ],
+          "yawLimit": [
+            0,
+            0
+          ],
+          "pitchLimit": [
+            0,
+            0
+          ],
+          "turnRate": 0,
+          "kind": "hitscan",
+          "damage": 12,
+          "fireInterval": 0.07,
+          "range": 260,
+          "spread": 0.5,
+          "ammo": "rifle",
+          "magazine": 240,
+          "reload": 6.0,
+          "zoom": 1.0
+        },
+        {
+          "id": "rockets",
+          "seat": 0,
+          "freeView": true,
+          "trigger": "use",
+          "mirror": true,
+          "pivotYaw": "",
+          "pivotPitch": "",
+          "muzzle": "muzzle_rockets",
+          "pivot": [
+            -2.4,
+            1.12,
+            -0.3
+          ],
+          "pitchPivot": [
+            0,
+            0,
+            0
+          ],
+          "muzzleOffset": [
+            0,
+            0,
+            -0.5
+          ],
+          "yawLimit": [
+            0,
+            0
+          ],
+          "pitchLimit": [
+            0,
+            0
+          ],
+          "turnRate": 0,
+          "kind": "shell",
+          "damage": 70,
+          "fireInterval": 0.2,
+          "range": 400,
+          "ammo": "sniper",
+          "magazine": 14,
+          "reload": 8.0,
+          "shellSpeed": 150,
+          "shellGravity": 2,
+          "zoom": 1.0,
+          "explosion": {
+            "radius": 4.5,
+            "innerRadius": 1.4,
+            "damage": 55,
+            "minDamage": 8,
+            "knockback": 1.4,
+            "hullDamage": 170
+          }
+        }
+      ],
+      "effects": {
+        "exhaust": [
+          [
+            0,
+            1.75,
+            6.0
+          ]
+        ],
+        "headlights": [
+          [
+            0,
+            0.95,
+            -2.35
+          ]
+        ]
+      },
+      "sounds": [
+        "engine",
+        "start",
+        "hit",
+        "destroyed",
+        "fire_cannon",
+        "reload_cannon",
+        "fire_rockets",
+        "reload_rockets"
+      ]
+    },
+    "helicopter": {
+      "name": "直升机",
+      "model": "blockland:models/vehicle/helicopter.glb",
+      "size": [
+        3.2,
+        3.6
+      ],
+      "mass": 5000,
+      "health": 260,
+      "armor": 0.25,
+      "trackingRange": 16,
+      "movement": {
+        "kind": "heli",
+        "maxSpeed": 34,
+        "reverseSpeed": 10,
+        "accel": 9,
+        "brake": 12,
+        "turnRate": 80,
+        "grip": 0.9,
+        "stepHeight": 0.5,
+        "wheelRadius": 0.3,
+        "wadeDepth": 1.2,
+        "climbRate": 9,
+        "descendRate": 11,
+        "strafeSpeed": 14,
+        "rotorRadius": 5.5
+      },
+      "seats": [
+        {
+          "node": "seat_0",
+          "role": "driver",
+          "exposed": false,
+          "camera": "third",
+          "pos": [
+            0.45,
+            1.55,
+            -2.3
+          ],
+          "yawLimit": 180
+        },
+        {
+          "node": "seat_1",
+          "role": "gunner",
+          "exposed": false,
+          "camera": "third",
+          "pos": [
+            -0.45,
+            1.55,
+            -2.3
+          ],
+          "yawLimit": 180
+        },
+        {
+          "node": "seat_2",
+          "role": "passenger",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            -0.9,
+            1.45,
+            -0.6
+          ],
+          "yawLimit": 160
+        },
+        {
+          "node": "seat_3",
+          "role": "passenger",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            0.9,
+            1.45,
+            -0.6
+          ],
+          "yawLimit": 160
+        },
+        {
+          "node": "seat_4",
+          "role": "passenger",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            -0.9,
+            1.45,
+            0.5
+          ],
+          "yawLimit": 160
+        },
+        {
+          "node": "seat_5",
+          "role": "passenger",
+          "exposed": true,
+          "camera": "first",
+          "pos": [
+            0.9,
+            1.45,
+            0.5
+          ],
+          "yawLimit": 160
+        }
+      ],
+      "hitBoxes": [
+        {
+          "center": [
+            0,
+            1.6,
+            -1.0
+          ],
+          "half": [
+            1.15,
+            1.1,
+            2.9
+          ]
+        },
+        {
+          "center": [
+            0,
+            2.4,
+            4.2
+          ],
+          "half": [
+            0.35,
+            0.45,
+            2.6
+          ]
+        }
+      ],
+      "weapons": [
+        {
+          "id": "chingun",
+          "seat": 1,
+          "pivotYaw": "chin_turret",
+          "pivotPitch": "chin_gun",
+          "muzzle": "muzzle_chingun",
+          "pivot": [
+            0,
+            0.85,
+            -3.6
+          ],
+          "pitchPivot": [
+            0,
+            -0.15,
+            0
+          ],
+          "muzzleOffset": [
+            0,
+            0,
+            -1.0
+          ],
+          "yawLimit": [
+            -110,
+            110
+          ],
+          "pitchLimit": [
+            -60,
+            15
+          ],
+          "turnRate": 120,
+          "kind": "hitscan",
+          "damage": 9,
+          "fireInterval": 0.05,
+          "range": 200,
+          "spread": 1.0,
+          "ammo": "rifle",
+          "magazine": 400,
+          "reload": 7.0,
+          "zoom": 2.5
+        },
+        {
+          "id": "rockets",
+          "seat": 0,
+          "freeView": true,
+          "mirror": true,
+          "pivotYaw": "",
+          "pivotPitch": "",
+          "muzzle": "muzzle_rockets",
+          "pivot": [
+            -1.65,
+            1.35,
+            -0.4
+          ],
+          "pitchPivot": [
+            0,
+            0,
+            0
+          ],
+          "muzzleOffset": [
+            0,
+            0,
+            -0.8
+          ],
+          "yawLimit": [
+            0,
+            0
+          ],
+          "pitchLimit": [
+            -25,
+            4
+          ],
+          "turnRate": 60,
+          "kind": "shell",
+          "damage": 60,
+          "fireInterval": 0.3,
+          "range": 350,
+          "ammo": "sniper",
+          "magazine": 12,
+          "reload": 9.0,
+          "shellSpeed": 120,
+          "shellGravity": 3,
+          "zoom": 1.0,
+          "explosion": {
+            "radius": 4.5,
+            "innerRadius": 1.4,
+            "damage": 50,
+            "minDamage": 8,
+            "knockback": 1.4,
+            "hullDamage": 150
+          }
+        }
+      ],
+      "effects": {
+        "exhaust": [
+          [
+            -0.55,
+            3.0,
+            0.9
+          ],
+          [
+            0.55,
+            3.0,
+            0.9
+          ]
+        ],
+        "headlights": [
+          [
+            0,
+            0.94,
+            -3.9
+          ]
+        ]
+      },
+      "sounds": [
+        "engine",
+        "start",
+        "hit",
+        "destroyed",
+        "fire_chingun",
+        "reload_chingun",
+        "fire_rockets",
+        "reload_rockets"
+      ]
     }
   }
 }

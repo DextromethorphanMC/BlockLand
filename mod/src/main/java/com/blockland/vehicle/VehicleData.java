@@ -17,7 +17,14 @@ public final class VehicleData {
     private VehicleData() {
     }
 
-    public enum Kind { BIKE, WHEELED, TRACKED, BOAT }
+    public enum Kind {
+        BIKE, WHEELED, TRACKED, BOAT, JET, HELI;
+
+        /** Aircraft: they fly by the pilot's view (vehicle spec §4.1). */
+        public boolean flies() {
+            return this == JET || this == HELI;
+        }
+    }
 
     public static final class Vehicle {
         public transient String id;
@@ -27,6 +34,8 @@ public final class VehicleData {
         public float[] size = {2, 1.5f};
         public float mass = 1000;
         public float health = 100;
+        /** How far (chunks) clients are sent the vehicle: aircraft are seen from further away. */
+        public int trackingRange = 10;
         /** Share of incoming damage the hull ignores (before a round's {@code armorDamage}). */
         public float armor;
         public Movement movement = new Movement();
@@ -51,6 +60,12 @@ public final class VehicleData {
         /** The weapon's index in {@link #weapons}, -1 for none. */
         public int weaponIndexOf(int seat) {
             for (int i = 0; i < weapons.size(); i++) if (weapons.get(i).seat == seat) return i;
+            return -1;
+        }
+
+        /** The index of seat {@code seat}'s weapon fired with the use key ({@code trigger: use}), -1 for none. */
+        public int useWeaponOf(int seat) {
+            for (int i = 0; i < weapons.size(); i++) if (weapons.get(i).seat == seat && weapons.get(i).onUse()) return i;
             return -1;
         }
 
@@ -81,12 +96,32 @@ public final class VehicleData {
         public float lean = 20;
         /** Tracks: how far the track material's v runs per metre of track (its uvs before uv scale; VEH-MODELS' models). */
         public float trackUvPerMetre = 20;
+        /** Jets: degrees per second the nose pitches at most. */
+        public float pitchRate = 50;
+        /** Jets: below this speed the wings do not carry it (stall); on the runway it may lift off from here. */
+        public float takeoffSpeed = 25;
+        /** Jets: thrust with the afterburner (sprint), a share of the full thrust. */
+        public float boostThrust = 1.3f;
+        /** Jets: the most it banks into a turn (degrees). */
+        public float maxBank = 70;
+        /** Jets: degrees per second it turns on the ground at full steer. */
+        public float taxiTurn = 35;
+        /** Jets: degrees each {@code gear_<i>} node folds about its local X when the gear is up. */
+        public float gearFold = 90;
+        /** Helicopters: blocks/s up (jump) and down (sprint). */
+        public float climbRate = 8, descendRate = 10;
+        /** Helicopters: blocks/s sideways at full A/D. */
+        public float strafeSpeed = 12;
+        /** Helicopters: the main rotor's radius (its downwash; what moves with the hull on screen). */
+        public float rotorRadius = 0;
 
         public Kind kind() {
             return switch (kind) {
                 case "bike" -> Kind.BIKE;
                 case "tracked" -> Kind.TRACKED;
                 case "boat" -> Kind.BOAT;
+                case "jet" -> Kind.JET;
+                case "heli" -> Kind.HELI;
                 default -> Kind.WHEELED;
             };
         }
@@ -168,6 +203,19 @@ public final class VehicleData {
         public float zoom = 1.5f;
         @Nullable
         public Explosion explosion;
+        /**
+         * The gunner's view stays free (a pilot's weapons): the weapon turns towards it as far as its limits let it, the
+         * view is not held on the weapon and there is no sight.
+         */
+        public boolean freeView;
+        /** {@code attack} (default) or {@code use}: the key that fires it. */
+        public String trigger = "attack";
+        /** Fires from its muzzle and from the same point mirrored across the hull's middle by turns (a pair of pods). */
+        public boolean mirror;
+
+        public boolean onUse() {
+            return "use".equals(trigger);
+        }
 
         public boolean shell() {
             return "shell".equals(kind);

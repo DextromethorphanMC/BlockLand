@@ -437,6 +437,84 @@ public final class CoverArt {
         return png(image);
     }
 
+    /**
+     * A desert town at sunset (DustA): a hot sky over sandstone rooftops with domes and arches, a palm, a tumbleweed
+     * rolling over the sand in front, dust in the air.
+     */
+    public static byte[] desertTown(long seed) {
+        BufferedImage image = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = graphics(image);
+        g.setPaint(new GradientPaint(0, 0, new Color(0x3A2A4A), 0, H * 0.62f, new Color(0xF2A35A)));
+        g.fillRect(0, 0, W, H);
+        Random random = new Random(seed);
+        // the sun low over the roofs
+        Point2D sun = new Point2D.Float(W * 0.7f, H * 0.5f);
+        g.setPaint(new RadialGradientPaint(sun, 120, new float[]{0f, 0.25f, 1f},
+                new Color[]{new Color(255, 236, 180, 255), new Color(255, 190, 110, 160), new Color(255, 160, 80, 0)}));
+        g.fill(new Ellipse2D.Float(W * 0.7f - 120, H * 0.5f - 120, 240, 240));
+        // two rows of houses, far (hazy) then near, flat roofs, a dome or two, dark arched doorways
+        Color[][] rows = {{new Color(0xC98A5E), new Color(0xB27650)}, {new Color(0xE2B57A), new Color(0xC79560)}};
+        float[] base = {H * 0.6f, H * 0.74f};
+        for (int r = 0; r < 2; r++) {
+            float x = -10;
+            while (x < W) {
+                float w = 40 + random.nextInt(50) + r * 10, h = 30 + random.nextInt(40) + r * 12;
+                g.setColor(rows[r][random.nextInt(2)]);
+                g.fill(new Rectangle2D.Float(x, base[r] - h, w, H - base[r] + h));
+                if (random.nextInt(4) == 0) {
+                    g.fill(new Ellipse2D.Float(x + w * 0.2f, base[r] - h - w * 0.3f, w * 0.6f, w * 0.6f));
+                }
+                g.setColor(new Color(0x3B2418));
+                float door = Math.min(14, w * 0.25f);
+                g.fill(new RoundRectangle2D.Float(x + w * 0.4f, base[r] - door * 1.6f, door, door * 1.6f + 2, door, door));
+                if (r == 1 && random.nextInt(2) == 0) {
+                    g.fill(new Rectangle2D.Float(x + w * 0.15f, base[r] - h * 0.7f, 6, 9));
+                    g.fill(new Rectangle2D.Float(x + w * 0.75f, base[r] - h * 0.7f, 6, 9));
+                }
+                x += w + 2;
+            }
+        }
+        // the sand in front
+        g.setPaint(new GradientPaint(0, H * 0.78f, new Color(0xE8C48A), 0, H, new Color(0xC99A5C)));
+        g.fill(new Rectangle2D.Float(0, H * 0.78f, W, H * 0.22f));
+        // a palm on the left
+        g.setColor(new Color(0x4A3020));
+        g.setStroke(new BasicStroke(9, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        Path2D trunk = new Path2D.Float();
+        trunk.moveTo(W * 0.12f, H * 0.95f);
+        trunk.quadTo(W * 0.1f, H * 0.6f, W * 0.17f, H * 0.36f);
+        g.draw(trunk);
+        g.setColor(new Color(0x2F5A22));
+        g.setStroke(new BasicStroke(7, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        for (int i = 0; i < 7; i++) {
+            double a = Math.toRadians(-160 + i * 45 + random.nextInt(14));
+            Path2D frond = new Path2D.Float();
+            frond.moveTo(W * 0.17f, H * 0.36f);
+            frond.quadTo(W * 0.17f + Math.cos(a) * 40, H * 0.36f + Math.sin(a) * 40 - 14,
+                    W * 0.17f + Math.cos(a) * 70, H * 0.36f + Math.sin(a) * 70 + 22);
+            g.draw(frond);
+        }
+        // a tumbleweed rolling past, its shadow under it
+        float tx = W * 0.56f, ty = H * 0.86f, tr = 26;
+        g.setColor(new Color(60, 40, 20, 70));
+        g.fill(new Ellipse2D.Float(tx - tr, ty + tr - 6, tr * 2, 10));
+        g.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        for (int i = 0; i < 70; i++) {
+            double a1 = random.nextDouble() * Math.PI * 2, a2 = a1 + 0.6 + random.nextDouble() * 1.4;
+            float r1 = tr * (0.3f + random.nextFloat() * 0.7f), r2 = tr * (0.3f + random.nextFloat() * 0.7f);
+            g.setColor(random.nextBoolean() ? new Color(0x8A6234) : new Color(0xB48A52));
+            g.draw(new Line2D.Double(tx + Math.cos(a1) * r1, ty + Math.sin(a1) * r1, tx + Math.cos(a2) * r2, ty + Math.sin(a2) * r2));
+        }
+        // dust in the air
+        for (int i = 0; i < 60; i++) {
+            float size = 1 + random.nextFloat() * 3;
+            g.setColor(new Color(255, 220, 170, 30 + random.nextInt(70)));
+            g.fill(new Ellipse2D.Float(random.nextInt(W), H * 0.4f + random.nextInt((int) (H * 0.6f)), size, size));
+        }
+        g.dispose();
+        return png(image);
+    }
+
     /** The practice group: a shot-up bullseye and a staircase of blocks on a calm blue gradient. */
     public static byte[] practice(long seed) {
         BufferedImage image = new BufferedImage(W, H, BufferedImage.TYPE_INT_ARGB);

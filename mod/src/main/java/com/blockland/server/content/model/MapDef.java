@@ -22,7 +22,10 @@ public final class MapDef {
     public List<TeamSpawnDef> teamSpawns = new ArrayList<>();
     /** Relative Y below which players are considered fallen into the void. */
     public Integer voidY;
-    /** Owned by the map's game type (e.g. SkyWars chests). */
+    /**
+     * Owned by the map's game type (e.g. SkyWars chests); besides, any map may carry {@code "ambient": {"tumbleweeds":
+     * true}} — ambient props its match shows inside its bounds (rendering spec §29, {@code server/ambient/AmbientService}).
+     */
     public JsonObject settings = new JsonObject();
     /** Version of the cover image ({@code map/<id>}); null = no cover. */
     public String coverVersion;

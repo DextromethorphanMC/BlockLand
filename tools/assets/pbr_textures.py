@@ -1149,7 +1149,7 @@ SET_MODULES = ("pbr_sets_tommy", "pbr_sets_ks3", "pbr_sets_usp", "pbr_sets_dagge
                "pbr_sets_crowbar", "pbr_sets_knuckles",
                "pbr_sets_handcannon", "pbr_sets_vector", "pbr_sets_baton", "pbr_sets_ammo_crate", "pbr_sets_blood",
                "pbr_sets_deagle", "pbr_sets_revolver", "pbr_sets_armor", "pbr_sets_bizon",
-               "pbr_sets_vehicles")
+               "pbr_sets_vehicles", "pbr_sets_creatures")
 
 
 def _load_set_modules():

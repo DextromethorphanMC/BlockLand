@@ -46,6 +46,9 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
     private final Spring bookHover = new Spring(0).config(420, 30);
     private final RecipeBookPanel recipes;
     private final PanelDrag drag = new PanelDrag();
+    private final Spring gripHover = new Spring(0).config(420, 30);
+    /** The panel's (and the book's beside it) top-left corner. */
+    private int originX, originY;
     private boolean expanded;
     private boolean draggingBrightness;
     private float xMouse, yMouse;
@@ -129,18 +132,20 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
 
     /** The panel's size and place (eased), and every slot's place in it. */
     private void layout() {
+        InventoryLayout.setCell(PanelDrag.cell());
+        imageWidth = WIDTH;
         panelHeight.setTarget(InventoryLayout.height(storageShown() ? rows() : 0));
         imageHeight = Math.round(panelHeight.get());
         // the open book beside the inventory: the two centred together (the inventory moves right, as vanilla's)
         boolean beside = recipes.visible() && !recipes.narrow();
         int book = beside ? RecipeBookPanel.W + RecipeBookPanel.GAP : 0;
-        int group = (width - imageWidth - book) / 2, top = (height - imageHeight) / 2;
-        // moved by its header: the book beside it goes along
-        int[] shift = PanelDrag.apply(group, top, imageWidth + book, beside ? Math.max(imageHeight, RecipeBookPanel.H) : imageHeight, width, height);
-        group += shift[0];
-        leftPos = group + book;
-        topPos = top + shift[1];
-        recipes.place(beside ? group : (width - RecipeBookPanel.W) / 2, beside ? topPos : (height - RecipeBookPanel.H) / 2);
+        // moved by its header and sized by its grip: the book beside it goes along
+        int[] at = PanelDrag.place(imageWidth + book, beside ? Math.max(imageHeight, RecipeBookPanel.H) : imageHeight, width, height);
+        originX = at[0];
+        originY = at[1];
+        leftPos = originX + book;
+        topPos = originY;
+        recipes.place(beside ? originX : (width - RecipeBookPanel.W) / 2, beside ? topPos : (height - RecipeBookPanel.H) / 2);
         for (int i = 0; i < menu.slots.size(); i++) InventoryLayout.place(menu.slots.get(i), InventoryLayout.cell(i, true), 0, 0);
     }
 
@@ -149,9 +154,17 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
         return recipes.visible() && recipes.narrow();
     }
 
+    /** The panel's (and the book's) size for cells of {@code cell} pixels: what the grip resizes. */
+    private int[] sizeFor(int cell) {
+        InventoryLayout.setCell(cell);
+        boolean beside = recipes.visible() && !recipes.narrow();
+        int h = InventoryLayout.height(storageShown() ? rows() : 0);
+        return new int[]{WIDTH + (beside ? RecipeBookPanel.W + RecipeBookPanel.GAP : 0), beside ? Math.max(h, RecipeBookPanel.H) : h};
+    }
+
     /** Whether a slot is inside the panel as far as it has opened. */
     private boolean revealed(Slot slot) {
-        return slot.y + 18 <= imageHeight - 2;
+        return slot.y + InventoryLayout.itemSize() + 2 <= imageHeight - 2;
     }
 
     // ---- drawing ---------------------------------------------------------------------------------------
@@ -171,7 +184,18 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
         renderCarriedItem(g, mouseX, mouseY);
         renderSnapbackItem(g);
         if (!covered()) drawEffects(g);
-        if (!menu.getCarried().isEmpty()) return;
+        if (menu.getCarried().isEmpty()) tooltips(g, mouseX, mouseY);
+    }
+
+    /** The panel is laid out (and sized by the grip) before vanilla draws its background with {@link #renderBg}. */
+    @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        layout();
+        super.renderBackground(g, mouseX, mouseY, partialTick);
+    }
+
+    /** The tooltip under the pointer. */
+    private void tooltips(GuiGraphics g, int mouseX, int mouseY) {
         String filter = recipes.filterTooltip(mouseX, mouseY);
         if (filter != null) {
             InventoryStyle.tooltip(g, List.of(filter), mouseX, mouseY, width, height);
@@ -197,7 +221,7 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
         // the character between its equipment
         InventoryStyle.card(g, x + CHARACTER_X, y + EQUIP_Y, CHARACTER_W, CHARACTER_H);
         InventoryScreen.renderEntityInInventoryFollowsMouse(g, x + CHARACTER_X + 2, y + EQUIP_Y + 4, x + CHARACTER_X + CHARACTER_W - 2,
-                y + EQUIP_Y + CHARACTER_H - 4, 30, 0.0625f, xMouse, yMouse, player);
+                y + EQUIP_Y + CHARACTER_H - 4, Math.round(30 * CELL / (float) DEFAULT_CELL), 0.0625f, xMouse, yMouse, player);
         // crafting in its own card: the grid, an arrow, the result
         InventoryStyle.card(g, x + CARD_X, y + EQUIP_Y, CARD_W, CHARACTER_H);
         Draw.text(g, tr("blockland.inventory.crafting"), x + CARD_X + 5, y + EQUIP_Y + 5, 0.75f, InventoryStyle.dim(), false);
@@ -220,6 +244,8 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
             }
         }
         drawCells(g);
+        gripHover.setTarget(drag.resizing() || PanelDrag.overGrip(mouseX, mouseY, x + imageWidth, y + imageHeight) ? 1 : 0);
+        PanelDrag.drawGrip(g, x + imageWidth, y + imageHeight, gripHover.get());
     }
 
     /** The cell under every slot shown, eased hover, a glyph in empty equipment slots. */
@@ -235,7 +261,7 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
                 InventoryStyle.round(g, cx - 1, cy + CELL, CELL + 2, 1, 0, InventoryStyle.fade(InventoryStyle.strong(), 0.4f));
             }
             InventoryStyle.Glyph glyph = InventoryLayout.glyph(i);
-            if (glyph != null && !slot.hasItem()) InventoryStyle.glyph(g, glyph, cx + 2, cy + 2, InventoryStyle.glyph());
+            if (glyph != null && !slot.hasItem()) InventoryStyle.glyph(g, glyph, cx + (CELL - 16) / 2, cy + (CELL - 16) / 2, InventoryStyle.glyph());
         }
     }
 
@@ -319,6 +345,10 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0 && !covered() && PanelDrag.overGrip(mouseX, mouseY, leftPos + imageWidth, topPos + imageHeight)) {
+            drag.pressGrip(mouseX, mouseY, originX, originY, width, height, this::sizeFor);
+            return true;
+        }
         if (button == 0 && overBookButton(mouseX, mouseY)) {
             AbstractWidget.playButtonClickSound(minecraft.getSoundManager());
             recipes.toggle();
@@ -346,12 +376,12 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dx, double dy) {
-        if (draggingBrightness) {
-            setBrightness(mouseX);
+        if (drag.active()) {
+            drag.drag(mouseX, mouseY);
             return true;
         }
-        if (drag.dragging()) {
-            drag.drag(mouseX, mouseY);
+        if (draggingBrightness) {
+            setBrightness(mouseX);
             return true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dx, dy);
@@ -359,13 +389,13 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (drag.active()) {
+            drag.release();
+            return true;
+        }
         if (draggingBrightness) {
             draggingBrightness = false;
             ClientSettings.save();
-            return true;
-        }
-        if (drag.dragging()) {
-            drag.release();
             return true;
         }
         return super.mouseReleased(mouseX, mouseY, button);
@@ -394,6 +424,8 @@ public final class ModernInventoryScreen extends AbstractContainerScreen<Invento
 
     @Override
     protected boolean isHovering(int x, int y, int w, int h, double mouseX, double mouseY) {
+        // vanilla asks about a slot's 16 × 16 item; the items fill their (resizable) cells
+        if (w == 16 && h == 16) w = h = InventoryLayout.itemSize();
         return !covered() && super.isHovering(x, y, w, h, mouseX, mouseY);
     }
 

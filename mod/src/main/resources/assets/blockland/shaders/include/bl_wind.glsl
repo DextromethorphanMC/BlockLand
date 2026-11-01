@@ -7,13 +7,16 @@
 
 // one turn per 2048 blocks: spatial frequencies are whole multiples of it
 const float BL_WIND_K = 0.0030679616;
+// one turn per hour: bl_time() wraps at 3600 s, so every frequency of time is a whole multiple of it (nothing jumps there)
+const float BL_TIME_K = 0.0017453293;
 
 // The wind's strength at a camera-relative position (world: the same, world-anchored): the steady wind broken up by slow
 // turbulence carried along with it, plus every gust over it. `back` is how far a gust that just went by lets the plants
 // swing back against the wind.
 float bl_windAt(vec3 rel, vec3 world, float t, out float back) {
-    vec2 dir = BlWind.xy;
-    vec2 q = world.xz - dir * (t * 3.5);
+    // carried along with the wind: how far it has blown so far, integrated frame by frame on the CPU and wrapped at
+    // 2048 blocks (a heading that wanders must not swing a far-travelled pattern round)
+    vec2 q = world.xz - vec2(BlWindPush.w, BlWindSpring.w);
     float turbulence = 0.55 + 0.27 * sin(dot(q, vec2(32.0, 16.0) * BL_WIND_K))
             + 0.18 * sin(dot(q, vec2(-48.0, 64.0) * BL_WIND_K) + 1.7);
     float gust = 0.0;
@@ -137,18 +140,18 @@ vec2 bl_windBend(vec3 pos, float h, float lean, float flutterScale, float t, flo
     float back;
     float w = bl_windAt(lagged, lagged + BlCamera.xyz, t, back);
     float delay = h * 0.9;
-    float flutter = flutterScale * (0.6 + 1.4 * w) * (0.65 * sin(t * 8.6 - delay + seed * 6.2831853)
-            + 0.35 * sin(t * 13.1 - delay * 1.5 + seed * 9.0));
-    float sideways = flutterScale * (0.4 + 0.9 * w) * (0.6 * sin(t * 6.1 - delay + seed * 11.0)
-            + 0.4 * sin(t * 10.3 - delay * 1.5 + seed * 4.0));
+    float flutter = flutterScale * (0.6 + 1.4 * w) * (0.65 * sin(t * (4927.0 * BL_TIME_K) - delay + seed * 6.2831853)
+            + 0.35 * sin(t * (7506.0 * BL_TIME_K) - delay * 1.5 + seed * 9.0));
+    float sideways = flutterScale * (0.4 + 0.9 * w) * (0.6 * sin(t * (3495.0 * BL_TIME_K) - delay + seed * 11.0)
+            + 0.4 * sin(t * (5901.0 * BL_TIME_K) - delay * 1.5 + seed * 4.0));
     return dir * (lean * w - 0.5 * lean * back + flutter) + vec2(-dir.y, dir.x) * sideways;
 }
 
 // A slow swaying current under water (at one block of height).
 vec2 bl_windCurrent(vec3 world, float t, float seed) {
     vec2 dir = BlWind.xy;
-    float s = 0.6 * sin(t * 1.25 + seed * 6.2831853) + 0.4 * sin(t * 0.71 + world.x * 64.0 * BL_WIND_K);
-    return dir * (0.05 + 0.07 * s) * BlWindInfo.w + vec2(-dir.y, dir.x) * 0.03 * sin(t * 0.93 + seed * 4.0);
+    float s = 0.6 * sin(t * (716.0 * BL_TIME_K) + seed * 6.2831853) + 0.4 * sin(t * (407.0 * BL_TIME_K) + world.x * 64.0 * BL_WIND_K);
+    return dir * (0.05 + 0.07 * s) * BlWindInfo.w + vec2(-dir.y, dir.x) * 0.03 * sin(t * (533.0 * BL_TIME_K) + seed * 4.0);
 }
 
 // A stem of height h tipped by d sideways keeps its length: its top sinks (or, hanging, rises) by `sink`.
@@ -183,7 +186,7 @@ vec3 bl_wind(vec3 pos, vec3 local, int wind, int corner, vec3 normal) {
         float w = bl_windAt(pos, world, t, back);
         vec3 ph = world * (128.0 * BL_WIND_K);
         float shiver = 0.010 + 0.022 * w;
-        vec3 d = vec3(sin(t * 3.1 + ph.x + ph.y * 0.7), 0.6 * sin(t * 2.3 + ph.z + ph.x * 0.5), sin(t * 2.7 + ph.z + ph.y))
+        vec3 d = vec3(sin(t * (1776.0 * BL_TIME_K) + ph.x + ph.y * 0.7), 0.6 * sin(t * (1318.0 * BL_TIME_K) + ph.z + ph.x * 0.5), sin(t * (1547.0 * BL_TIME_K) + ph.z + ph.y))
                 * shiver + vec3(dir.x, 0.0, dir.y) * (0.018 * w - 0.01 * back);
         vec3 push = bl_windPush(pos - vec3(0.0, 0.5, 0.0), 1.0);
         d.xz += push.xy * 0.3 * BlWindKinds.z;
@@ -236,7 +239,7 @@ vec3 bl_wind(vec3 pos, vec3 local, int wind, int corner, vec3 normal) {
         float w = bl_windAt(pos, world, t, back);
         float ph = dot(world, vec3(96.0, 160.0, 64.0) * BL_WIND_K);
         vec2 bend = water ? bl_windCurrent(world, t, seed) : bl_windBend(pos, 0.0, BlWindBend.x, BlWindBend.y, t, seed);
-        vec2 d = bend * 0.28 * flex + dir * 0.02 * sin(t * 2.1 + ph) * (0.5 + w) * flex;
+        vec2 d = bend * 0.28 * flex + dir * 0.02 * sin(t * (1203.0 * BL_TIME_K) + ph) * (0.5 + w) * flex;
         d += push.xy * BlWindStack.z * pushKind;
         d *= mask;
         return pos + vec3(d.x, 0.0, d.y);

@@ -29,8 +29,9 @@ import java.util.Optional;
 
 /**
  * Registers what equipment needs in the game registries — one item per entry of the catalog, the
- * {@code blockland:equipment} item component (the item's 工匠 build: skin and charm), the equipment sound events and a
- * creative tab — and offers stack helpers. Independent of the gun and knife modules.
+ * {@code blockland:equipment} item component (the item's 工匠 build: skin and charm), the {@code blockland:lit} switch of
+ * the items that toggle (the flashlight; {@code graphics/item_lights.json} names it as the light's switch), the equipment
+ * sound events and a creative tab — and offers stack helpers. Independent of the gun and knife modules.
  */
 public final class EquipmentContent {
     private static final DeferredRegister<DataComponentType<?>> COMPONENTS = DeferredRegister.create(Registries.DATA_COMPONENT_TYPE, BlockLand.MODID);
@@ -42,6 +43,11 @@ public final class EquipmentContent {
     public static final RegistryObject<DataComponentType<Build>> EQUIPMENT_BUILD = COMPONENTS.register("equipment",
             () -> DataComponentType.<Build>builder().persistent(Build.CODEC).networkSynchronized(Build.STREAM_CODEC).build());
 
+    /** Switched on (the flashlight): synced to every client, so everyone's held light shines; changed only by the server. */
+    public static final RegistryObject<DataComponentType<Boolean>> LIT = COMPONENTS.register("lit",
+            () -> DataComponentType.<Boolean>builder().persistent(com.mojang.serialization.Codec.BOOL)
+                    .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.BOOL).build());
+
     /** Damage type of throwing knife hits (data/blockland/damage_type/throwing_knife.json). */
     public static final ResourceKey<DamageType> THROWING_KNIFE = ResourceKey.create(Registries.DAMAGE_TYPE, BlockLand.id("throwing_knife"));
 
@@ -51,7 +57,7 @@ public final class EquipmentContent {
             "equipment.frag_explode", "equipment.flash_bang", "equipment.flash_ring", "equipment.smoke_pop",
             "equipment.smoke_hiss", "equipment.molotov_light", "equipment.molotov_shatter", "equipment.fire_loop",
             "equipment.knife_throw", "equipment.knife_hit_flesh", "equipment.knife_hit_block", "equipment.adrenaline_cap",
-            "equipment.adrenaline_inject", "equipment.heartbeat");
+            "equipment.adrenaline_inject", "equipment.heartbeat", "equipment.flashlight_on", "equipment.flashlight_off");
 
     private static final Map<String, RegistryObject<Item>> ITEMS_BY_ID = new LinkedHashMap<>();
 
@@ -100,6 +106,19 @@ public final class EquipmentContent {
         Build build = stack.get(EQUIPMENT_BUILD.get());
         if (build != null) return build;
         return EquipmentCatalog.get().item(item.equipmentId()).map(EquipmentData.Equipment::defaultBuild).orElse(null);
+    }
+
+    /** Whether the stack is switched on (the flashlight). */
+    public static boolean isLit(ItemStack stack) {
+        return Boolean.TRUE.equals(stack.get(LIT.get()));
+    }
+
+    /** Server: switches the stack on or off; returns whether it is on now. */
+    public static boolean toggleLit(ItemStack stack) {
+        boolean on = !isLit(stack);
+        if (on) stack.set(LIT.get(), true);
+        else stack.remove(LIT.get());
+        return on;
     }
 
     /** Writes the build and mirrors the skin into custom_model_data so item models can pick the right look. */

@@ -40,7 +40,8 @@ import java.util.WeakHashMap;
  * Draws a vehicle as its GLB (vehicle spec §3, §5) with the weapon pipeline, lit by the world like the weapons and the
  * ammo crate: the hull turned and tilted, and the parts its state moves — wheels rolling with the ground covered, the
  * steering (knuckles, the bike's fork), tracks' road wheels at each track's own speed, the boat's propeller and
- * outboard, each weapon's yaw and pitch pivots (the barrel kicked back by its recoil). While the sun's shadow map
+ * outboard, each weapon's yaw and pitch pivots (the barrel kicked back by its recoil), an aircraft's rotors, its
+ * landing gear folding away and its afterburner's flame (shown only while boosting). While the sun's shadow map
  * captures entities its triangles go through vanilla render types, so it casts a shadow. Until its model exists (or if
  * it fails to load) its hull boxes are drawn as outlines, so nothing is invisible.
  */
@@ -72,7 +73,7 @@ final class VehicleRenderer extends EntityRenderer<VehicleEntity, VehicleRendere
         final Pose pose;
         final List<int[]> moves = new ArrayList<>();
         final float[][] rest;
-        final int trackLeft, trackRight;
+        final int trackLeft, trackRight, afterburner;
         /** The track material's v per metre (its extras, else the data's), 0 = no track. */
         final float trackPerMetre;
 
@@ -81,6 +82,7 @@ final class VehicleRenderer extends EntityRenderer<VehicleEntity, VehicleRendere
             pose = new Pose(source);
             trackLeft = source.node("track_l");
             trackRight = source.node("track_r");
+            afterburner = source.node("afterburner");
             float perMetre = data.movement.trackUvPerMetre;
             for (GltfModel.Material m : source.materials) if ("track".equals(m.name) && m.scrollPerMetre > 0) perMetre = m.scrollPerMetre;
             trackPerMetre = perMetre;
@@ -93,7 +95,10 @@ final class VehicleRenderer extends EntityRenderer<VehicleEntity, VehicleRendere
                         : name.startsWith("roadwheel_l") || name.equals("sprocket_l") || name.equals("idler_l") ? TRACK_LEFT
                         : name.startsWith("roadwheel_r") || name.equals("sprocket_r") || name.equals("idler_r") ? TRACK_RIGHT
                         : name.equals("propeller") ? PROPELLER
-                        : name.equals("outboard") ? OUTBOARD : -1;
+                        : name.equals("outboard") ? OUTBOARD
+                        : name.equals("rotor_main") ? ROTOR_MAIN
+                        : name.equals("rotor_tail") ? ROTOR_TAIL
+                        : name.startsWith("gear_") ? GEAR : -1;
                 if (kind >= 0) moves.add(new int[]{i, kind, 0});
             }
             for (int w = 0; w < data.weapons.size(); w++) {
@@ -110,7 +115,9 @@ final class VehicleRenderer extends EntityRenderer<VehicleEntity, VehicleRendere
     }
 
     private static final int WHEEL = 0, STEER = 1, TRACK_LEFT = 2, TRACK_RIGHT = 3, PROPELLER = 4, OUTBOARD = 5, AIM_YAW = 6,
-            AIM_PITCH = 7, AIM_BOTH = 8;
+            AIM_PITCH = 7, AIM_BOTH = 8, ROTOR_MAIN = 9, ROTOR_TAIL = 10, GEAR = 11;
+    /** How much faster the tail rotor turns than the main one. */
+    private static final float TAIL_ROTOR = 4.5f;
 
     private final Map<GpuModel, Rig> rigs = new WeakHashMap<>();
     private final TrackStyle leftTrack = new TrackStyle(), rightTrack = new TrackStyle();
@@ -143,6 +150,8 @@ final class VehicleRenderer extends EntityRenderer<VehicleEntity, VehicleRendere
     protected AABB getBoundingBoxForCulling(VehicleEntity vehicle) {
         AABB box = vehicle.getBoundingBox();
         for (HitShapes.Box b : vehicle.hitBoxes(0.5)) box = box.minmax(b.bounds());
+        float rotor = vehicle.data.movement.rotorRadius;
+        if (rotor > 0) box = box.minmax(vehicle.getBoundingBox().inflate(rotor, 0, rotor));
         return box.inflate(2.5);
     }
 
@@ -179,6 +188,7 @@ final class VehicleRenderer extends EntityRenderer<VehicleEntity, VehicleRendere
         GltfModel source = model.source;
         for (int index : source.order) {
             if (source.nodes.get(index).mesh < 0 || rig.pose.isCollapsed(index)) continue;
+            if (index == rig.afterburner && !vehicle.boosting()) continue;
             GpuModel.Style style = index == rig.trackLeft ? leftTrack : index == rig.trackRight ? rightTrack : GpuModel.Style.NONE;
             model.addNode(draws, index, scratch.set(base).mul(rig.pose.world[index]), style, "", block, sky, 1);
         }
@@ -204,6 +214,7 @@ final class VehicleRenderer extends EntityRenderer<VehicleEntity, VehicleRendere
         float wheel = Mth.lerp(pt, v.wheelTurnO, v.wheelTurn);
         float left = Mth.lerp(pt, v.trackLeftO, v.trackLeft), right = Mth.lerp(pt, v.trackRightO, v.trackRight);
         float steer = Mth.lerp(pt, v.steerO, v.steer);
+        float rotor = Mth.lerp(pt, v.rotorO, v.rotor), gear = Mth.lerp(pt, v.gearO, v.gear);
         for (int[] move : rig.moves) {
             int node = move[0], weapon = move[2];
             float[] r = rig.rest[node];
@@ -215,6 +226,9 @@ final class VehicleRenderer extends EntityRenderer<VehicleEntity, VehicleRendere
                 case TRACK_RIGHT -> q.rotateX(-right);
                 case PROPELLER -> q.rotateZ(wheel * 3);
                 case OUTBOARD -> q.rotateY((float) Math.toRadians(steer * 25));
+                case ROTOR_MAIN -> q.rotateY(rotor);
+                case ROTOR_TAIL -> q.rotateX(rotor * TAIL_ROTOR);
+                case GEAR -> q.rotateX((float) Math.toRadians(v.data.movement.gearFold * gear));
                 case AIM_YAW -> q.rotateY((float) Math.toRadians(-yaw(v, weapon, pt)));
                 case AIM_PITCH -> q.rotateX((float) Math.toRadians(pitch(v, weapon, pt)));
                 case AIM_BOTH -> q.rotateY((float) Math.toRadians(-yaw(v, weapon, pt))).rotateX((float) Math.toRadians(pitch(v, weapon, pt)));
@@ -258,6 +272,14 @@ final class VehicleRenderer extends EntityRenderer<VehicleEntity, VehicleRendere
                 max[1] = Math.max(max[1], p[1] + 1.2f);
                 min[2] = Math.min(min[2], p[2] - 0.6f);
                 max[2] = Math.max(max[2], p[2] + 0.6f);
+            }
+            // a helicopter's main rotor sweeps far past its hull
+            float rotor = d.movement.rotorRadius;
+            if (rotor > 0) {
+                min[0] = Math.min(min[0], -rotor);
+                max[0] = Math.max(max[0], rotor);
+                min[2] = Math.min(min[2], -rotor);
+                max[2] = Math.max(max[2], rotor);
             }
             if (min[0] > max[0]) return new float[]{0, 0.5f, 0, 1, 0.5f, 1};
             return new float[]{(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2,

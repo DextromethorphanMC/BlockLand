@@ -51,10 +51,13 @@ import java.util.Deque;
 
 /**
  * Vehicles on this client (vehicle spec §1, §4, §5): their renderers; the driver's input (W/S throttle, A/D steer, space
- * brake, sprint boost), predicted at once by the vehicle and matched to the server's state; gunners firing (attack held)
- * and looking through their sight (use held: the view from the gun, zoomed, following the barrel as it turns); seats
+ * brake, sprint boost, and the view an aircraft flies towards), predicted at once by the vehicle and matched to the
+ * server's state; gunners firing (attack held; a pilot's second weapon with use) and looking through their sight (use
+ * held: the view from the gun, zoomed, following the barrel as it turns — not for a pilot's free-view weapons); seats
  * (number keys for riders working the vehicle, J for the next free seat, sneak to get out), the horn (H); cameras —
- * seats inside a hull start in third person, pulled back to fit the vehicle; riders' bodies tilted with the hull, the
+ * seats inside a hull start in third person, pulled back to fit the vehicle, and the camera key switches to first
+ * person in any seat (the eyes ride with the seat in the hull's tilted frame, the view rolls with the hull); riders'
+ * bodies tilted with the hull, the
  * ones inside it hidden; the HUD; and the effects ({@link VehicleEffects}).
  */
 public final class ClientVehicles {
@@ -75,6 +78,8 @@ public final class ClientVehicles {
     private static Method setPosition;
     private static boolean cameraLooked;
     private static final Deque<PlayerRenderState> tilted = new ArrayDeque<>();
+    /** The field of view of the last frame (degrees, vertical): the HUD places marks in the world by it. */
+    private static float fov = 70;
 
     private ClientVehicles() {
     }
@@ -90,6 +95,7 @@ public final class ClientVehicles {
         });
         AddGuiOverlayLayersEvent.getBus(modBus).addListener(event -> event.getLayeredDraw()
                 .addAbove(ForgeLayeredDraw.PRE_SLEEP_STACK, BlockLand.id("vehicle_hud"), ForgeLayeredDraw.CROSSHAIR, VehicleHud::render));
+        com.blockland.client.hud.layout.HudLayout.register(VehicleHud.PANEL_ELEMENT);
         Vehicles.setClient(new Vehicles.Client() {
             @Override
             public Player localPlayer() {
@@ -104,7 +110,7 @@ public final class ClientVehicles {
             @Override
             public void send(VehicleEntity vehicle, VehicleControl control) {
                 BLNetwork.sendToServer(new VehiclePackets.C2SControl(vehicle.getId(), control.seq(), (byte) Math.round(control.throttle() * 100),
-                        (byte) Math.round(control.steer() * 100), control.brake(), control.boost()));
+                        (byte) Math.round(control.steer() * 100), control.brake(), control.boost(), control.lookYaw(), control.lookPitch()));
             }
 
             @Override
@@ -146,9 +152,10 @@ public final class ClientVehicles {
             return player != null && VehicleEntity.handsBusy(player);
         });
         ViewportEvent.ComputeCameraAngles.BUS.addListener(ClientVehicles::camera);
-        ViewportEvent.ComputeFov.BUS.addListener(event -> {
+        ViewportEvent.ComputeFov.BUS.addListener(Priority.LOWEST, event -> {
             VehicleData.Weapon w = sightWeapon();
             if (sighting && w != null && event.usedConfiguredFov()) event.setFOV(event.getFOV() / Math.max(1, w.zoom));
+            if (event.usedConfiguredFov()) fov = (float) event.getFOV();
         });
         RenderPlayerEvent.Pre.BUS.addListener(ClientVehicles::riderPre);
         RenderPlayerEvent.Post.BUS.addListener(event -> {
@@ -171,6 +178,17 @@ public final class ClientVehicles {
         return sighting;
     }
 
+    /** The last frame's vertical field of view, degrees. */
+    static float fov() {
+        return fov;
+    }
+
+    /** The weapon seat {@code seat} fires with the attack key, -1 for none. */
+    static int attackWeapon(VehicleData.Vehicle data, int seat) {
+        for (int i = 0; i < data.weapons.size(); i++) if (data.weapons.get(i).seat == seat && !data.weapons.get(i).onUse()) return i;
+        return -1;
+    }
+
     // ---- input ----------------------------------------------------------------------------------
 
     private static VehicleControl driverInput() {
@@ -179,7 +197,7 @@ public final class ClientVehicles {
         Input k = mc.player.input.keyPresses;
         float throttle = (k.forward() ? 1 : 0) - (k.backward() ? 1 : 0);
         float steer = (k.right() ? 1 : 0) - (k.left() ? 1 : 0);
-        return new VehicleControl(0, throttle, steer, k.jump(), k.sprint());
+        return new VehicleControl(0, throttle, steer, k.jump(), k.sprint(), mc.player.getYRot(), mc.player.getXRot());
     }
 
     /** Seat keys, before vanilla reads the hotbar keys (riders working the vehicle use them for seats). */
@@ -208,9 +226,12 @@ public final class ClientVehicles {
             if (seat == 0) BLNetwork.sendToServer(new VehiclePackets.C2SAction(v.getId(), VehiclePackets.Action.HORN, 0));
         }
         KeyMapping reload = reloadKey();
-        int weapon = v.data.weaponIndexOf(seat);
-        if (reload != null && weapon >= 0) {
-            while (reload.consumeClick()) BLNetwork.sendToServer(new VehiclePackets.C2SAction(v.getId(), VehiclePackets.Action.RELOAD, weapon));
+        if (reload != null && v.data.weaponIndexOf(seat) >= 0) {
+            while (reload.consumeClick()) {
+                for (int i = 0; i < v.data.weapons.size(); i++) {
+                    if (v.data.weapons.get(i).seat == seat) BLNetwork.sendToServer(new VehiclePackets.C2SAction(v.getId(), VehiclePackets.Action.RELOAD, i));
+                }
+            }
         }
     }
 
@@ -250,10 +271,9 @@ public final class ClientVehicles {
             }
             lastSeat = seat;
         }
-        // inside a hull the first-person camera would sit in the armour: only the sight looks out from in there
-        if (!s.exposed && !sighting && mc.options.getCameraType().isFirstPerson()) mc.options.setCameraType(CameraType.THIRD_PERSON_BACK);
-        int weapon = v.data.weaponIndexOf(seat);
-        boolean wantSight = weapon >= 0 && mc.screen == null && mc.options.keyUse.isDown() && v.wreck() == 0;
+        int weapon = attackWeapon(v.data, seat), second = v.data.useWeaponOf(seat);
+        // a pilot's free-view weapons have no sight: use fires the second one instead
+        boolean wantSight = weapon >= 0 && !v.data.weapons.get(weapon).freeView && mc.screen == null && mc.options.keyUse.isDown() && v.wreck() == 0;
         if (wantSight && !sighting) {
             sightCamera = mc.options.getCameraType();
             mc.options.setCameraType(CameraType.FIRST_PERSON);
@@ -261,11 +281,17 @@ public final class ClientVehicles {
         } else if (!wantSight && sighting) {
             endSight(mc);
         }
-        if (weapon >= 0 && mc.screen == null && mc.options.keyAttack.isDown() && v.wreck() == 0 && ticks >= nextFire[weapon]
-                && v.reloadLeft(weapon) == 0 && v.ammo(weapon) > 0) {
-            BLNetwork.sendToServer(new VehiclePackets.C2SAction(v.getId(), VehiclePackets.Action.FIRE, weapon));
-            nextFire[weapon] = ticks + v.data.weapons.get(weapon).fireTicks();
+        if (mc.screen == null && v.wreck() == 0) {
+            if (mc.options.keyAttack.isDown()) fire(v, weapon);
+            if (mc.options.keyUse.isDown()) fire(v, second);
         }
+    }
+
+    /** Asks the server to fire weapon {@code weapon} when its interval has passed and it is loaded. */
+    private static void fire(VehicleEntity v, int weapon) {
+        if (weapon < 0 || weapon >= nextFire.length || ticks < nextFire[weapon] || v.reloadLeft(weapon) > 0 || v.ammo(weapon) <= 0) return;
+        BLNetwork.sendToServer(new VehiclePackets.C2SAction(v.getId(), VehiclePackets.Action.FIRE, weapon));
+        nextFire[weapon] = ticks + v.data.weapons.get(weapon).fireTicks();
     }
 
     private static void leftVehicle(Minecraft mc) {
@@ -288,7 +314,7 @@ public final class ClientVehicles {
     private static VehicleData.Weapon sightWeapon() {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null || !(player.getVehicle() instanceof VehicleEntity v)) return null;
-        int weapon = v.data.weaponIndexOf(v.seatOf(player));
+        int weapon = attackWeapon(v.data, v.seatOf(player));
         return weapon < 0 ? null : v.data.weapons.get(weapon);
     }
 
@@ -310,7 +336,9 @@ public final class ClientVehicles {
     private static void holdGunnerView() {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
-        int index = player != null && player.getVehicle() instanceof VehicleEntity v ? v.data.weaponIndexOf(v.seatOf(player)) : -1;
+        int index = player != null && player.getVehicle() instanceof VehicleEntity v ? attackWeapon(v.data, v.seatOf(player)) : -1;
+        // a pilot's free-view weapons follow the view as they can; the view is never held on them
+        if (index >= 0 && ((VehicleEntity) player.getVehicle()).data.weapons.get(index).freeView) index = -1;
         if (index < 0) {
             predictedIndex = -1;
             predictedVehicle = null;
@@ -361,7 +389,7 @@ public final class ClientVehicles {
         if (player == null || mc.level == null || !(player.getVehicle() instanceof VehicleEntity v) || event.getCamera().getEntity() != player) return;
         float pt = (float) event.getPartialTick();
         Camera camera = event.getCamera();
-        int weapon = v.data.weaponIndexOf(v.seatOf(player));
+        int weapon = attackWeapon(v.data, v.seatOf(player));
         Vec3 origin = v.getPosition(pt);
         float yaw = Mth.rotLerp(pt, v.yRotO, v.getYRot());
         Quaterniond hull = VehicleFrame.hull(yaw, v.hullPitch(pt), v.hullRoll(pt));
@@ -384,7 +412,10 @@ public final class ClientVehicles {
             place(camera, muzzle[0].add(dir.scale(0.3)));
             return;
         }
-        if (mc.options.getCameraType().isFirstPerson()) return;
+        if (mc.options.getCameraType().isFirstPerson()) {
+            firstPerson(event, player, v, origin, hull);
+            return;
+        }
         double extent = 2;
         for (VehicleData.HitBox b : v.data.hitBoxes) extent = Math.max(extent, Math.max(b.half[0], b.half[2]));
         Vec3 pivot = origin.add(0, v.getBbHeight() * 0.75 + 0.8, 0);
@@ -393,6 +424,28 @@ public final class ClientVehicles {
         BlockHitResult hit = mc.level.clip(new ClipContext(pivot, want, ClipContext.Block.VISUAL, ClipContext.Fluid.NONE, player));
         if (hit.getType() != HitResult.Type.MISS) want = hit.getLocation().add(look.scale(0.3));
         place(camera, want);
+    }
+
+    /**
+     * First person in a seat: the eyes ride with the seat — over the hips in the hull's own (tilted) frame, turning with
+     * the turret on a turret seat — so the vehicle never swings into the view as it pitches and rolls, and the view rolls
+     * with the hull as seen along where the rider looks (the middle of the view stays where they aim).
+     */
+    private static void firstPerson(ViewportEvent.ComputeCameraAngles event, LocalPlayer player, VehicleEntity v, Vec3 origin, Quaterniond hull) {
+        int seat = v.seatOf(player);
+        if (seat < 0) return;
+        Vec3 hips = v.seatPoint(v.data.seats.get(seat));
+        double up = player.getEyeHeight() - VehicleEntity.HIP;
+        place(event.getCamera(), VehicleFrame.toWorld(origin, hull, hips.x, hips.y + up, hips.z));
+        Vec3 look = Vec3.directionFromRotation(event.getPitch(), event.getYaw());
+        if (Math.abs(look.y) > 0.98) return;
+        Vec3 level = new Vec3(0, 1, 0).subtract(look.scale(look.y)).normalize();
+        Vec3 right = look.cross(new Vec3(0, 1, 0)).normalize();
+        Vec3 tilted = VehicleFrame.direction(hull, 0, 1, 0);
+        tilted = tilted.subtract(look.scale(tilted.dot(look)));
+        if (tilted.lengthSqr() < 1e-6) return;
+        // + rolls the view's top towards its right (Camera.setRotation)
+        event.setRoll(event.getRoll() + (float) Math.toDegrees(Math.atan2(tilted.dot(right), tilted.dot(level))));
     }
 
     private static void place(Camera camera, Vec3 at) {

@@ -137,6 +137,12 @@ function MapEditorBody({ initial }: { initial: GameMap }) {
             <Field label="出生点标记方块">
               <input value={map.spawnMarkerBlock ?? '（无）'} disabled />
             </Field>
+            <Field label="环境效果" hint="任何游戏类型的地图都可开启，替换地图文件时保留">
+              <label className="check">
+                <input type="checkbox" checked={tumbleweeds(map.settings)} onChange={(e) => update({ settings: withTumbleweeds(map.settings, e.target.checked) })} />
+                风滚草（随风滚过沙地）
+              </label>
+            </Field>
           </div>
         </section>
       </div>
@@ -169,6 +175,17 @@ function MapEditorBody({ initial }: { initial: GameMap }) {
       )}
     </>
   )
+}
+
+/** The map's ambience (`settings.ambient`, the same for every game type; kept by the backend around the type's own keys). */
+function tumbleweeds(settings: Record<string, unknown> | undefined) {
+  const ambient = settings?.ambient as { tumbleweeds?: unknown } | undefined
+  return ambient?.tumbleweeds === true
+}
+
+function withTumbleweeds(settings: Record<string, unknown> | undefined, on: boolean): Record<string, unknown> {
+  const { ambient: _ambient, ...rest } = settings ?? {}
+  return on ? { ...rest, ambient: { tumbleweeds: true } } : rest
 }
 
 function SpawnCard({ team, color, onChange, onRemove }: { team: TeamSpawn; color: string; onChange: (t: TeamSpawn) => void; onRemove: () => void }) {

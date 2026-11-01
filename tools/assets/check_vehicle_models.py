@@ -18,7 +18,7 @@ from check_glb import check_container, check_meshes
 from glbread import GLTF
 from model_quality import BUDGETS
 
-SEATS = {"motorcycle": 1, "offroad": 4, "speedboat": 5, "tank": 3}
+SEATS = {"motorcycle": 1, "offroad": 4, "speedboat": 5, "tank": 3, "fighter_jet": 1, "helicopter": 6}
 PARENTS = {
     "motorcycle": {"body": None, "fork": "body", "handlebar": "fork", "wheel_f": "fork", "wheel_r": "body"},
     "offroad": {"body": None, "steer_fl": "body", "steer_fr": "body", "wheel_fl": "steer_fl", "wheel_fr": "steer_fr",
@@ -28,15 +28,25 @@ PARENTS = {
                   "muzzle_mg": "mg", "track_l": "body", "track_r": "body", "sprocket_l": "body", "sprocket_r": "body",
                   "idler_l": "body", "idler_r": "body", "seat_1": "turret", "seat_2": "turret"},
                  **{f"roadwheel_{s}{i}": "body" for s in "lr" for i in range(6)}),
+    "fighter_jet": {"body": None, "gear_0": "body", "gear_1": "body", "gear_2": "body", "wheel_n": "gear_0",
+                    "wheel_l": "gear_1", "wheel_r": "gear_2", "afterburner": "body", "muzzle_cannon": "body",
+                    "muzzle_rockets": "body", "exhaust_0": "body", "headlight_0": "gear_0", "seat_0": "body"},
+    "helicopter": dict({"body": None, "rotor_main": "body", "rotor_tail": "body", "chin_turret": "body",
+                        "chin_gun": "chin_turret", "muzzle_chingun": "chin_gun", "muzzle_rockets": "body",
+                        "exhaust_0": "body", "exhaust_1": "body", "headlight_0": "body"},
+                       **{f"seat_{i}": "body" for i in range(6)}),
 }
 SPIN_X = {"motorcycle": ["wheel_f", "wheel_r"], "offroad": ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"],
           "tank": [f"roadwheel_{s}{i}" for s in "lr" for i in range(6)] + ["sprocket_l", "sprocket_r", "idler_l",
-                                                                           "idler_r"]}
+                                                                           "idler_r"],
+          "fighter_jet": ["wheel_n", "wheel_l", "wheel_r"], "helicopter": ["rotor_tail"]}
+SPIN_Y = {"helicopter": ["rotor_main"]}
 SPIN_Z = {"speedboat": ["propeller"]}
-GROUNDED = {"motorcycle": ["wheel_f", "wheel_r"], "offroad": ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"]}
+GROUNDED = {"motorcycle": ["wheel_f", "wheel_r"], "offroad": ["wheel_fl", "wheel_fr", "wheel_rl", "wheel_rr"],
+            "fighter_jet": ["wheel_n", "wheel_l", "wheel_r"]}
 SEE_THROUGH = {"glass"}
-GLOWING = {"headlight", "taillight", "gauge"}
-NO_SET = {"headlight", "taillight", "indicator", "gauge", "reflector", "lens", "glass"}
+GLOWING = {"headlight", "taillight", "gauge", "afterburner", "nav_green"}
+NO_SET = {"headlight", "taillight", "indicator", "gauge", "reflector", "lens", "glass", "afterburner", "nav_green"}
 
 
 def claims(path, names):
@@ -93,7 +103,7 @@ def check(path, arms, r):
             radius = np.max(np.linalg.norm(_points(g, W, names[name])[:, 1:] - p[1:], axis=1))
             r.check(abs(p[1] - radius) < 0.02, f"{vid}: {name} (radius {radius:.3f}) floats {p[1] - radius:+.3f} m")
     # concentric spinning parts
-    for axis, table in ((0, SPIN_X), (2, SPIN_Z)):
+    for axis, table in ((0, SPIN_X), (1, SPIN_Y), (2, SPIN_Z)):
         for name in table.get(vid, []):
             if name not in names or "mesh" not in g.nodes[names[name]]:
                 r.check(False, f"{vid}: {name} has no mesh")

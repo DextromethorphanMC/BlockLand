@@ -72,6 +72,14 @@ SKINS = {
         "neon": {"name": "霓虹回路", "rarity": "legendary", "regions": {
             "*": layer("skin/neon/base", effect="circuit", effectColor="#38F0FF", params=[0.25, 40.0, 0.8, 0.05])}},
     },
+    "flashlight": {
+        "default": {"name": "标准"},
+        "desert": {"name": "沙漠迷彩", "regions": {"body": layer("skin/camo/desert")}},
+        "arctic": {"name": "雪地迷彩", "regions": {"body": layer("skin/camo/arctic")}},
+        "aurora": {"name": "极光", "rarity": "legendary", "regions": {
+            "body": layer("skin/aurora/body", effect="iridescent", params=[0.85, 1.0, 0.04, 6.0]),
+            "*": layer("skin/aurora/metal", tint=[0.92, 0.96, 1.0])}},
+    },
 }
 
 

@@ -167,4 +167,12 @@ def sets(pt):
         "vehicle/nonskid": pt.SetDef(pt._r(nonskid), 512, 0.15, 1114),
         "vehicle/exhaust": pt.SetDef(pt._r(exhaust), 512, 0.25, 1115),
         "vehicle/plastic": pt.SetDef(pt._r(plastic), 512, 0.12, 1116),
+        # the helicopter's flat aviation olive: dead matte, light handling wear, exhaust-stained dust
+        "vehicle/paint_heli": pt.SetDef(pt._r(paint, colour=[0.19, 0.22, 0.14], gloss=0.74, wear=0.35, dust=0.45,
+                                              peel_mm=2.2), 1024, 0.80, 1141, detail=0.4),
+        # the fighter jet's low-visibility greys: a matte polyurethane, lightly weathered, exhaust and fluid grime aft
+        "vehicle/paint_jet_grey": pt.SetDef(pt._r(paint, colour=[0.36, 0.38, 0.40], gloss=0.46, wear=0.18, dust=0.08,
+                                                  peel_mm=0.8), 1024, 0.90, 1131, detail=0.4),
+        "vehicle/paint_jet_dark": pt.SetDef(pt._r(paint, colour=[0.17, 0.18, 0.20], gloss=0.40, wear=0.15, dust=0.08,
+                                                  peel_mm=0.8), 512, 0.60, 1132, detail=0.4),
     }

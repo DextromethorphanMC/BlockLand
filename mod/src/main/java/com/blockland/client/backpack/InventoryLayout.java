@@ -9,7 +9,9 @@ import javax.annotation.Nullable;
 
 /**
  * Where the player's inventory goes on the inventory screens (UI spec §1), from the content area's corner; the survival
- * screen and the creative screen's inventory tab share it. Cells are 20 px on a 22 px pitch (the item sits 2 in).
+ * screen and the creative screen's inventory tab share it. Cells are 20 px on a 22 px pitch (the item sits 2 in) at the
+ * natural size; the grip in the panel's corner changes the cell size ({@link #setCell}, 18–40 px) and the panel's width
+ * and height with it — items fill their cells, labels and buttons keep their size.
  *
  * <pre>
  *  header  ─ title ──────────────────────────────── brightness ─
@@ -25,28 +27,68 @@ import javax.annotation.Nullable;
  * </pre>
  */
 final class InventoryLayout {
-    static final int PAD = 14, HEADER = 26, CELL = 20, PITCH = 22;
-    /** Width of the inventory's content (9 cells and the padding). */
-    static final int WIDTH = PAD * 2 + 9 * PITCH - 2;
+    static final int PAD = 14, HEADER = 26;
+    /** The cells' size range (the grip in the corner resizes the panel by it) and the natural one. */
+    static final int MIN_CELL = 18, MAX_CELL = 40, DEFAULT_CELL = 20;
+    /** Labels and buttons keep their size; everything holding items follows the cell size. */
     static final int EQUIP_Y = 34;
-    static final int CHARACTER_X = PAD + 26, CHARACTER_W = 52, CHARACTER_H = 4 * PITCH - 2;
-    static final int SIDE_X = CHARACTER_X + CHARACTER_W + 6;
-    static final int CARD_X = SIDE_X + 26, CARD_W = WIDTH - PAD - (SIDE_X + 26);
-    static final int CRAFT_X = CARD_X + 4, CRAFT_Y = EQUIP_Y + 18;
-    static final int RESULT_X = CARD_X + CARD_W - 4 - CELL, RESULT_Y = CRAFT_Y + 11;
-    static final int MAIN_LABEL_Y = EQUIP_Y + CHARACTER_H + 10;
-    static final int MAIN_Y = MAIN_LABEL_Y + 14;
-    static final int HOTBAR_Y = MAIN_Y + 3 * PITCH + 6;
-    static final int BASE_HEIGHT = HOTBAR_Y + CELL + PAD;
-    static final int STORAGE_LABEL_Y = BASE_HEIGHT + 4;
-    static final int STORAGE_Y = STORAGE_LABEL_Y + 14;
-    /** The 打开背包 / 收起背包 button. */
-    static final int BUTTON_W = 64, BUTTON_H = 14, BUTTON_X = WIDTH - PAD - BUTTON_W, BUTTON_Y = MAIN_LABEL_Y - 3;
-    /** The creative inventory's destroy-item cell, where crafting is in survival. */
-    static final int TRASH_X = CARD_X + (CARD_W - CELL) / 2, TRASH_Y = RESULT_Y;
+    static final int BUTTON_W = 64, BUTTON_H = 14;
     static final int HIDDEN = -10000;
 
+    // set from the cell size by setCell (the values below are the natural size's)
+    static int CELL, PITCH;
+    /** Width of the inventory's content (9 cells and the padding). */
+    static int WIDTH;
+    static int CHARACTER_X, CHARACTER_W, CHARACTER_H;
+    static int SIDE_X;
+    static int CARD_X, CARD_W;
+    static int CRAFT_X, CRAFT_Y;
+    static int RESULT_X, RESULT_Y;
+    static int MAIN_LABEL_Y, MAIN_Y, HOTBAR_Y, BASE_HEIGHT, STORAGE_LABEL_Y, STORAGE_Y;
+    /** The 打开背包 / 收起背包 button. */
+    static int BUTTON_X, BUTTON_Y;
+    /** The creative inventory's destroy-item cell, where crafting is in survival. */
+    static int TRASH_X, TRASH_Y;
+
+    static {
+        setCell(DEFAULT_CELL);
+    }
+
     private InventoryLayout() {
+    }
+
+    /** Lays everything out for cells of {@code cell} pixels (on a pitch two more); a no-op when it already is. */
+    static void setCell(int cell) {
+        cell = Math.max(MIN_CELL, Math.min(MAX_CELL, cell));
+        if (cell == CELL) return;
+        CELL = cell;
+        PITCH = cell + 2;
+        WIDTH = PAD * 2 + 9 * PITCH - 2;
+        CHARACTER_X = PAD + CELL + 6;
+        CHARACTER_W = Math.round(52 * CELL / 20f);
+        CHARACTER_H = 4 * PITCH - 2;
+        SIDE_X = CHARACTER_X + CHARACTER_W + 6;
+        CARD_X = SIDE_X + CELL + 6;
+        CARD_W = WIDTH - PAD - CARD_X;
+        CRAFT_X = CARD_X + 4;
+        CRAFT_Y = EQUIP_Y + 18;
+        RESULT_X = CARD_X + CARD_W - 4 - CELL;
+        RESULT_Y = CRAFT_Y + (2 * PITCH - 2 - CELL) / 2;
+        MAIN_LABEL_Y = EQUIP_Y + CHARACTER_H + 10;
+        MAIN_Y = MAIN_LABEL_Y + 14;
+        HOTBAR_Y = MAIN_Y + 3 * PITCH + 6;
+        BASE_HEIGHT = HOTBAR_Y + CELL + PAD;
+        STORAGE_LABEL_Y = BASE_HEIGHT + 4;
+        STORAGE_Y = STORAGE_LABEL_Y + 14;
+        BUTTON_X = WIDTH - PAD - BUTTON_W;
+        BUTTON_Y = MAIN_LABEL_Y - 3;
+        TRASH_X = CARD_X + (CARD_W - CELL) / 2;
+        TRASH_Y = RESULT_Y;
+    }
+
+    /** The size of an item drawn in a cell (two pixels in from each side). */
+    static int itemSize() {
+        return CELL - 4;
     }
 
     /** The panel's height with {@code rows} of backpack storage shown. */

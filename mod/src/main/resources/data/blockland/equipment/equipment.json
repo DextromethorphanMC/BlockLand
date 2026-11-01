@@ -780,6 +780,90 @@
           "default": "none"
         }
       }
+    },
+    "flashlight": {
+      "name": "手电筒",
+      "description": "战术手电筒：右键开关，锥形光束照亮前方约 28 格，对所有人可见。",
+      "kind": "flashlight",
+      "model": "models/equipment/flashlight.glb",
+      "stack": 1,
+      "drawTime": 0.4,
+      "cooldown": 0.1,
+      "useTime": 0.36,
+      "injectAt": 0.12,
+      "effect": {},
+      "anims": {
+        "idle": "idle",
+        "draw": "draw",
+        "inspect": "inspect",
+        "sprint": "sprint",
+        "walk": "walk",
+        "use": "use"
+      },
+      "handling": {
+        "weight": 0.35,
+        "sway": 1.0,
+        "bob": 1.0,
+        "inertia": 0.8,
+        "sprintOut": 0.12,
+        "tacticalSprint": 3.0,
+        "adsTilt": 0
+      },
+      "skins": {
+        "default": {
+          "name": "标准"
+        },
+        "desert": {
+          "name": "沙漠迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/desert",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "arctic": {
+          "name": "雪地迷彩",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/camo/arctic",
+              "uvScale": 0.333333
+            }
+          }
+        },
+        "aurora": {
+          "name": "极光",
+          "rarity": "legendary",
+          "regions": {
+            "body": {
+              "pbr": "textures/pbr/skin/aurora/body",
+              "uvScale": 0.333333,
+              "effect": "iridescent",
+              "params": [
+                0.85,
+                1.0,
+                0.04,
+                6.0
+              ]
+            },
+            "*": {
+              "pbr": "textures/pbr/skin/aurora/metal",
+              "uvScale": 0.416667,
+              "tint": [
+                0.92,
+                0.96,
+                1.0
+              ]
+            }
+          }
+        }
+      },
+      "slots": {
+        "charm": {
+          "node": "mount_charm",
+          "default": "none"
+        }
+      }
     }
   }
 }

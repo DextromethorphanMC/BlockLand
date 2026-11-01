@@ -7,21 +7,23 @@ public final class VehiclePackets {
     private VehiclePackets() {
     }
 
-    /** The driver's input for one tick (throttle and steer as -100..100). */
-    public record C2SControl(int vehicle, int seq, byte throttle, byte steer, boolean brake, boolean boost) {
+    /** The driver's input for one tick (throttle and steer as -100..100; the view an aircraft flies towards). */
+    public record C2SControl(int vehicle, int seq, byte throttle, byte steer, boolean brake, boolean boost, float lookYaw, float lookPitch) {
         public static void encode(C2SControl msg, FriendlyByteBuf buf) {
             buf.writeVarInt(msg.vehicle);
             buf.writeVarInt(msg.seq);
             buf.writeByte(msg.throttle);
             buf.writeByte(msg.steer);
             buf.writeByte((msg.brake ? 1 : 0) | (msg.boost ? 2 : 0));
+            buf.writeFloat(msg.lookYaw);
+            buf.writeFloat(msg.lookPitch);
         }
 
         public static C2SControl decode(FriendlyByteBuf buf) {
             int vehicle = buf.readVarInt(), seq = buf.readVarInt();
             byte throttle = buf.readByte(), steer = buf.readByte();
             int flags = buf.readByte();
-            return new C2SControl(vehicle, seq, throttle, steer, (flags & 1) != 0, (flags & 2) != 0);
+            return new C2SControl(vehicle, seq, throttle, steer, (flags & 1) != 0, (flags & 2) != 0, buf.readFloat(), buf.readFloat());
         }
     }
 

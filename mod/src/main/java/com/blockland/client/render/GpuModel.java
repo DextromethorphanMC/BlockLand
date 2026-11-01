@@ -358,6 +358,7 @@ public final class GpuModel implements AutoCloseable {
             list.add(pipeline, vertexOverride != null ? vertexOverride : vertices, indices, indexType, part.firstIndex, part.indexCount,
                     modelView, color, blockLight, skyLight, material(material, emissive, uvScale, layer, style.surge()), origin, albedo,
                     normal, specular, sources != null && index < sources.size() ? sources.get(index) : part.primitive, id, managed);
+            if (vertexOverride == null && sources == null) list.staticSource();
             if (scroll != 0) list.uvScroll(0);
         }
     }

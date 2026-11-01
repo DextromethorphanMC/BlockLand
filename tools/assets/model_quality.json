@@ -4,7 +4,9 @@
   "blade_subdivisions": 2,
   "budgets": {"long_gun": 64000, "pistol": 32000, "knife": 30000, "equipment": 30000,
               "vehicle_motorcycle": 80000, "vehicle_offroad": 140000, "vehicle_speedboat": 110000,
-              "vehicle_tank": 180000},
+              "vehicle_tank": 180000,
+              "vehicle_fighter_jet": 160000, "vehicle_helicopter": 170000,
+              "creature_shark": 60000},
   "edges": {
     "radius_fraction": 0.12,
     "min_radius_m": 0.00025,

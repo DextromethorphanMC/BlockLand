@@ -90,6 +90,8 @@ public final class GraphicsStatus {
     @Nullable
     public volatile String shadowReason;
     public volatile int dynamicLightCount;
+    /** How many of them are spots (flashlights). */
+    public volatile int dynamicSpotCount;
     /** CPU milliseconds of the pipeline's own work last frame (smoothed). */
     public volatile float cpuMillis;
 
@@ -120,8 +122,8 @@ public final class GraphicsStatus {
         List<String> lines = new ArrayList<>();
         lines.add(String.format("[BlockLand] render %s: %dx%d -> %dx%d, aa %s, %.2f ms CPU", running ? "on" : "off",
                 internalWidth, internalHeight, outputWidth, outputHeight, activeAa, cpuMillis));
-        lines.add(String.format("[BlockLand] world lighting %s, shadows %d cascades, %d lights",
-                worldLightingActive ? "on" : "off", shadowCascades, dynamicLightCount));
+        lines.add(String.format("[BlockLand] world lighting %s, shadows %d cascades, %d lights (%d spots)",
+                worldLightingActive ? "on" : "off", shadowCascades, dynamicLightCount, dynamicSpotCount));
         if (rayTracingActive) {
             lines.add(String.format("[BlockLand] ray tracing %s, voxels %s %.0f%%, %.2f ms CPU", rayReconstructionActive ? "DLSS-RR" : "on",
                     rayVolume, rayVoxelsReady * 100, rayMillis));

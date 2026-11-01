@@ -56,8 +56,13 @@ import java.util.List;
  * bench [compare|&lt;id&gt;]  run the benchmark (client/perf), only its frame comparison, or one optimization alone (off
  *                       and on, every other one on); the commands after it wait until it has finished, then its
  *                       summary is logged
+ * timings 600           record every frame-timing span over the next 600 frames and log their averages (client/perf
+ *                       TimingProbe; changes nothing); the commands after it wait for it
+ * tumbleweeds 30 [front]  replace the tumbleweeds with 30 still ones round the player (front: within 50° of the view),
+ *                       the same every time; 0 removes them (client/ambient, rendering spec §29)
  * reload / quit         reload resources / close the client
  * </pre>
+ * Chat messages (command results such as {@code /locate} among them) are logged too.
  * While it runs the desktop's mouse and keyboard are ignored (no button presses, no grabbed cursor, no keys, no wheel), so
  * a script is not disturbed by whatever happens on the desktop while its window has focus.
  */
@@ -78,6 +83,11 @@ public final class DevAutomation {
         BlockLand.LOGGER.warn("[BlockLand] Dev automation enabled, reading commands from {}", dir);
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> tick());
         TickEvent.RenderTickEvent.Post.BUS.addListener(event -> frameRendered());
+        // command results (/locate …) reach the log
+        net.minecraftforge.client.event.ClientChatReceivedEvent.BUS.addListener(event -> {
+            log("chat: " + event.getMessage().getString());
+            return false;
+        });
         // the scripted client must not react to whatever the desktop's mouse does while its window has focus: real
         // buttons are ignored and the cursor is never grabbed (so moving it does not turn the player)
         net.minecraftforge.client.event.InputEvent.MouseButton.Pre.BUS.addListener(event -> true);
@@ -119,12 +129,12 @@ public final class DevAutomation {
             log("bench: finished");
             for (String summaryLine : com.blockland.client.perf.Perf.lastResult()) log("bench: " + summaryLine);
         }
-        if (benchmarking) return;
+        if (benchmarking || timingFrames > 0) return;
         if (waitTicks > 0) {
             waitTicks--;
             return;
         }
-        while (!queue.isEmpty() && waitTicks == 0) {
+        while (!queue.isEmpty() && waitTicks == 0 && timingFrames == 0 && !benchmarkWatched) {
             String line = queue.peek().trim();
             // in the lobby (no world yet) only commands that need no player run; the rest waits for the world
             if (mc.player == null && !LOBBY_COMMANDS.contains(line.split("\\s+")[0]) && !line.isEmpty() && !line.startsWith("#")) return;
@@ -142,6 +152,9 @@ public final class DevAutomation {
     /** A benchmark started by {@code bench} is running. */
     private static boolean benchmarkWatched;
 
+    /** Frames still to record with {@code timings}. */
+    private static int timingFrames;
+
     /** Frames still to capture with {@code frames}, and their file name prefix. */
     private static int framesLeft;
     private static int frameIndex;
@@ -149,6 +162,9 @@ public final class DevAutomation {
 
     /** Saves the framebuffer after every rendered frame while a {@code frames} capture runs (catches one-frame flicker). */
     private static void frameRendered() {
+        if (timingFrames > 0 && --timingFrames == 0) {
+            for (String timingLine : com.blockland.client.perf.TimingProbe.report()) log("timings: " + timingLine);
+        }
         if (framesLeft <= 0) return;
         framesLeft--;
         String name = String.format("%s_%03d.png", framePrefix, frameIndex);
@@ -236,6 +252,13 @@ public final class DevAutomation {
                 benchmarkWatched = started;
                 log(started ? "bench: started" : "bench: could not start (no world or already running)");
             }
+            case "timings" -> {
+                com.blockland.client.perf.TimingProbe.start();
+                timingFrames = Math.max(1, Integer.parseInt(a[1]));
+                log("timings: recording " + timingFrames + " frames");
+            }
+            case "tumbleweeds" -> log("tumbleweeds: " + com.blockland.client.ambient.Tumbleweeds.devPlace(Integer.parseInt(a[1]),
+                    a.length > 2 && "front".equals(a[2])) + " placed");
             case "frames" -> {
                 framesLeft = Integer.parseInt(a[1]);
                 framePrefix = a.length > 2 ? a[2] : "frame";

@@ -106,6 +106,7 @@ public final class ClientKnives {
                 (ResourceManagerReloadListener) manager -> knifeId = ""));
         AddGuiOverlayLayersEvent.getBus(modBus).addListener(event -> event.getLayeredDraw()
                 .addAbove(ForgeLayeredDraw.PRE_SLEEP_STACK, BlockLand.id("knife_hud"), ForgeLayeredDraw.CROSSHAIR, KnifeHud::render));
+        com.blockland.client.hud.layout.HudLayout.register(new KnifeHud.Panel());
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> clientTick());
         TickEvent.RenderTickEvent.Pre.BUS.addListener(event -> frame());
         RenderHandEvent.BUS.addListener(ClientKnives::renderHand);

@@ -32,7 +32,7 @@ public final class Perf {
             com.blockland.client.render.Textures.beginFrame();
             // every benchmark pass must draw with the same textures: none may still be loading in the background
             com.blockland.client.render.Textures.setBlocking(Benchmark.running());
-            FrameTimings.setRecording(settings().showTimings || Benchmark.running() || Hitches.armed());
+            FrameTimings.setRecording(settings().showTimings || Benchmark.running() || Hitches.armed() || TimingProbe.active());
             Benchmark.beforeFrame();
         });
         Benchmark.init(modBus);

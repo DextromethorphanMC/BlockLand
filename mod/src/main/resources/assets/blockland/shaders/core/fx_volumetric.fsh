@@ -101,7 +101,7 @@ vec3 pointLights(vec3 p) {
         if (i >= count) {
             break;
         }
-        vec4 light = BlLights[i * 2];
+        vec4 light = BlLights[i * 3];
         vec3 d = light.xyz - p;
         float dist2 = dot(d, d);
         float r2 = light.w * light.w;
@@ -109,7 +109,10 @@ vec3 pointLights(vec3 p) {
             continue;
         }
         float window = 1.0 - dist2 / r2;
-        sum += BlLights[i * 2 + 1].rgb * (window * window / (1.0 + dist2));
+        float falloff = window * window / (1.0 + dist2);
+        // a spot lights the haze only inside its cone: a visible beam
+        float cone = bl_spot(i, d, dist2, window, falloff);
+        sum += BlLights[i * 3 + 1].rgb * (falloff * cone);
     }
     // isotropic scattering
     return sum * 0.0795775;

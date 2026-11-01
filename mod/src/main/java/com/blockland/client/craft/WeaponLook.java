@@ -41,6 +41,12 @@ public final class WeaponLook {
      * @param build    a completed build ({@link CraftCatalog#complete})
      * @param keepRoot only this root's subtree is drawn (e.g. {@code viewmodel}); -1 = all roots
      */
+    /**
+     * Nodes whose name starts with this glow only while their item is switched on (a flashlight's lens): hidden here;
+     * the first-person viewmodel shows them while the held stack is lit (asset spec §36).
+     */
+    public static final String LIT_PREFIX = "lit_";
+
     public static boolean[] hiddenNodes(GltfModel source, Craftable weapon, Build build, int keepRoot) {
         Set<String> hide = new HashSet<>();
         for (Craftable.Slot slot : weapon.slots()) {
@@ -59,7 +65,8 @@ public final class WeaponLook {
         for (int index : source.order) {
             GltfModel.Node node = source.nodes.get(index);
             boolean outside = keepRoot >= 0 && node.parent < 0 && index != keepRoot;
-            hidden[index] = hide.contains(node.name) || outside || (node.parent >= 0 && hidden[node.parent]);
+            hidden[index] = hide.contains(node.name) || outside || node.name.startsWith(LIT_PREFIX)
+                    || (node.parent >= 0 && hidden[node.parent]);
         }
         return hidden;
     }

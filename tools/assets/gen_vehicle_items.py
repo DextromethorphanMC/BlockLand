@@ -12,11 +12,12 @@ from gen_items import render_items_icon
 from glbread import GLTF
 from preview import load_materials
 
-VEHICLES = ("motorcycle", "offroad", "speedboat", "tank")
+VEHICLES = ("motorcycle", "offroad", "speedboat", "tank", "fighter_jet", "helicopter")
 HERE = os.path.dirname(os.path.abspath(__file__))
 VEHICLE_DIR = os.path.join(HERE, "..", "..", "mod", "src", "main", "resources", "assets", "blockland", "models", "vehicle")
 #: (yaw, pitch) of the view per vehicle: nearly side-on (front to the left) like the weapon icons, a little from above
-VIEWS = {"motorcycle": (-78.0, 10.0), "offroad": (-66.0, 16.0), "speedboat": (-68.0, 20.0), "tank": (-66.0, 12.0)}
+VIEWS = {"motorcycle": (-78.0, 10.0), "offroad": (-66.0, 16.0), "speedboat": (-68.0, 20.0), "tank": (-66.0, 12.0),
+         "fighter_jet": (-62.0, 24.0), "helicopter": (-64.0, 16.0)}
 #: nodes posed for the icon (degrees about the node's local X): the tank's gun raised, so the long barrel does not
 #: stretch the icon flat
 POSES = {"tank": {"cannon": 12.0}}

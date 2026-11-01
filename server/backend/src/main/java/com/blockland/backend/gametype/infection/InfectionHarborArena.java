@@ -17,7 +17,9 @@ import java.util.Random;
  */
 public final class InfectionHarborArena {
     public static final int SIZE_X = 49;
-    public static final int SIZE_Y = 18;
+    public static final int SIZE_Y = 19;
+    /** The harbour stands on a layer of stone: in the arena the lake's sand floor would fall into the void. */
+    private static final int LIFT = 1;
     public static final int SIZE_Z = 49;
     private static final int MAX = SIZE_X - 1;
     /** Top of the ground; players stand on {@code SURFACE + 1}. */
@@ -33,7 +35,9 @@ public final class InfectionHarborArena {
     public record Result(byte[] data, List<GameMap.TeamSpawn> spawns, List<InfectionMapSettings.Spawn> roleSpawns) {
     }
 
-    private final StructureBuilder b = new StructureBuilder(SIZE_X, SIZE_Y, SIZE_Z);
+    private final StructureBuilder base = new StructureBuilder(SIZE_X, SIZE_Y, SIZE_Z);
+    /** Where the harbour is drawn: every y below is one above the foundation's. */
+    private final StructureBuilder b = base.lifted(LIFT);
 
     private InfectionHarborArena() {
     }
@@ -43,6 +47,7 @@ public final class InfectionHarborArena {
     }
 
     private Result build() {
+        base.fill(0, 0, 0, MAX, LIFT - 1, MAX, "minecraft:stone");
         ground();
         lake();
         walls();
@@ -54,17 +59,17 @@ public final class InfectionHarborArena {
         trees();
 
         List<GameMap.SpawnPoint> humans = new ArrayList<>();
-        for (int z : new int[]{4, 6}) for (int x = 18; x <= 30; x += 3) humans.add(new GameMap.SpawnPoint(x, SURFACE + 1, z, 0f));
+        for (int z : new int[]{4, 6}) for (int x = 18; x <= 30; x += 3) humans.add(new GameMap.SpawnPoint(x, LIFT + SURFACE + 1, z, 0f));
         List<GameMap.SpawnPoint> monsters = new ArrayList<>();
-        for (int z : new int[]{42, 44}) for (int x = 18; x <= 30; x += 4) monsters.add(new GameMap.SpawnPoint(x, SURFACE + 1, z, 180f));
+        for (int z : new int[]{42, 44}) for (int x = 18; x <= 30; x += 4) monsters.add(new GameMap.SpawnPoint(x, LIFT + SURFACE + 1, z, 180f));
         List<GameMap.TeamSpawn> spawns = List.of(new GameMap.TeamSpawn("人类出生点", humans), new GameMap.TeamSpawn("怪物复活点", monsters));
 
         List<InfectionMapSettings.Spawn> roleSpawns = new ArrayList<>();
         for (GameMap.SpawnPoint p : humans) roleSpawns.add(new InfectionMapSettings.Spawn(p.x(), p.y(), p.z(), p.yaw(), InfectionMapSettings.Role.HUMAN));
         for (GameMap.SpawnPoint p : monsters) roleSpawns.add(new InfectionMapSettings.Spawn(p.x(), p.y(), p.z(), p.yaw(), InfectionMapSettings.Role.MONSTER));
         // the pier head looking back to the quay, and the east bank looking over the lake
-        roleSpawns.add(new InfectionMapSettings.Spawn(24, SURFACE + 1, 21, 180f, InfectionMapSettings.Role.BOTH));
-        roleSpawns.add(new InfectionMapSettings.Spawn(43, SURFACE + 1, 24, 90f, InfectionMapSettings.Role.BOTH));
+        roleSpawns.add(new InfectionMapSettings.Spawn(24, LIFT + SURFACE + 1, 21, 180f, InfectionMapSettings.Role.BOTH));
+        roleSpawns.add(new InfectionMapSettings.Spawn(43, LIFT + SURFACE + 1, 24, 90f, InfectionMapSettings.Role.BOTH));
         return new Result(b.build(), spawns, roleSpawns);
     }
 

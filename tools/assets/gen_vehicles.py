@@ -35,6 +35,9 @@ MATERIALS = {
     "indicator": ((0.80, 0.40, 0.02, 1), 0.0, 0.15, None, "none", "OPAQUE"),
     "gauge": ((0.02, 0.02, 0.02, 1), 0.0, 0.25, (0.10, 0.22, 0.30), "none", "OPAQUE"),
     "reflector": ((0.50, 0.02, 0.02, 1), 0.0, 0.20, None, "none", "OPAQUE"),
+    # the fighter jet: its afterburner's flame core (shown only while boosting) and the green starboard nav light
+    "afterburner": ((1.00, 0.62, 0.25, 1), 0.0, 0.90, (6.0, 3.4, 1.4), "none", "OPAQUE"),
+    "nav_green": ((0.03, 0.45, 0.10, 1), 0.0, 0.15, (0.05, 0.85, 0.20), "none", "OPAQUE"),
 }
 #: the track's v advances this many units per metre of track before uvScale (the runtime scrolls it with the speed)
 TRACK_V_PER_METRE = 20.0

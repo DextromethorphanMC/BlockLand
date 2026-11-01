@@ -6,6 +6,8 @@ import type {
   AntiCheatReview,
   AntiCheatSummary,
   Announcement,
+  CheckInConfig,
+  CheckInStats,
   GameMap,
   GameMode,
   GameType,
@@ -127,6 +129,12 @@ export const api = {
   deleteProduct: (id: string) => request<void>(`/api/admin/shop/products/${id}`, { method: 'DELETE' }),
   uploadProductImage: (id: string, file: File) => upload<Product>(`/api/admin/shop/products/${id}/image`, file),
   orders: () => request<Order[]>('/api/admin/shop/orders'),
+
+  checkInConfig: () => request<CheckInConfig>('/api/admin/checkin/config'),
+  saveCheckInConfig: (c: CheckInConfig) => request<CheckInConfig>('/api/admin/checkin/config', { method: 'PUT', body: json(c) }),
+  checkInStats: () => request<CheckInStats>('/api/admin/checkin/stats'),
+  /** Forgets a player's check-ins (the streak starts again; rewards already granted stay). */
+  resetCheckIn: (uuid: string) => request<void>(`/api/admin/checkin/players/${uuid}`, { method: 'DELETE' }),
 
   rankedConfig: () => request<RankedConfig>('/api/admin/ranked/config'),
   saveRankedConfig: (c: RankedConfig) => request<RankedConfig>('/api/admin/ranked/config', { method: 'PUT', body: json(c) }),

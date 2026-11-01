@@ -212,6 +212,17 @@ def adrenaline_inject(seed=99):
     return finish(reverb(clack + band(buzz, 100, 3000) + hiss, 0.2, 0.1, seed=seed), -3.0, fade=0.2)
 
 
+def flashlight_switch(seed, on=True):
+    """The tail switch: a crisp two-stage click (the boot squashing, the contact snapping), a hair higher going on."""
+    rng = np.random.default_rng(seed)
+    t = t_axis(0.18)
+    pitch = 1.12 if on else 0.92
+    x = click(t, 0.0, rng, 1200 * pitch, 9000, 0.003, 0.9) + click(t, 0.018, rng, 2200 * pitch, 11000, 0.002, 0.7)
+    x += ring(t, [3100 * pitch, 4700 * pitch], [0.012, 0.008], [0.22, 0.12], 0.018, rng)
+    x += band(rng.standard_normal(len(t)), 300, 1200) * env_exp(t, 0.02) * 0.08      # the thumb on the rubber
+    return finish(x, -9.0)
+
+
 def heartbeat(seed=100):
     """One heartbeat (lub-dub), deep and close: the runtime repeats it faster while the drug runs."""
     t = t_axis(0.75)
@@ -241,6 +252,7 @@ FILES = {
     "knife_hit_block_1": lambda: knife_hit_block(105), "knife_hit_block_2": lambda: knife_hit_block(106),
     "adrenaline_cap": lambda: adrenaline_cap(98), "adrenaline_inject": lambda: adrenaline_inject(99),
     "heartbeat": lambda: heartbeat(100),
+    "flashlight_on": lambda: flashlight_switch(107, True), "flashlight_off": lambda: flashlight_switch(108, False),
 }
 EVENTS = {   # sound event -> files
     "equipment.equip": ["equip_1", "equip_2"],
@@ -264,6 +276,8 @@ EVENTS = {   # sound event -> files
     "equipment.adrenaline_cap": ["adrenaline_cap"],
     "equipment.adrenaline_inject": ["adrenaline_inject"],
     "equipment.heartbeat": ["heartbeat"],
+    "equipment.flashlight_on": ["flashlight_on"],
+    "equipment.flashlight_off": ["flashlight_off"],
 }
 #: subtitles (lang keys subtitles.blockland.<event>): Chinese, English
 SUBTITLES = {
@@ -279,14 +293,23 @@ SUBTITLES = {
     "equipment.knife_hit_flesh": ("飞刀命中", "Knife hits"), "equipment.knife_hit_block": ("飞刀扎入", "Knife sticks"),
     "equipment.adrenaline_cap": ("拔下针帽", "Cap off"), "equipment.adrenaline_inject": ("注射", "Injection"),
     "equipment.heartbeat": ("心跳", "Heartbeat"),
+    "equipment.flashlight_on": ("手电筒打开", "Flashlight clicks on"),
+    "equipment.flashlight_off": ("手电筒关闭", "Flashlight clicks off"),
 }
 
+#: the files and events of each item (build(keys=...): only those are written)
+ITEM_FILES = {"flashlight": ("flashlight_on", "flashlight_off")}
 
-def build(path):
+
+def build(path, keys=None):
+    """Every equipment sound, or only those of the items `keys` (ITEM_FILES)."""
     tmp = tempfile.mkdtemp(prefix="blockland_equipment_snd_")
-    for name, fn in FILES.items():
+    names = None if keys is None else {f for k in keys for f in ITEM_FILES.get(k, ())}
+    files = {n: fn for n, fn in FILES.items() if names is None or n in names}
+    events = {ev: fs for ev, fs in EVENTS.items() if names is None or set(fs) <= names}
+    for name, fn in files.items():
         encode(fn(), path("sounds", "equipment", f"{name}.ogg"), tmp)
     merge_sounds_json(path("sounds.json"), {
-        ev: {"sounds": [f"blockland:equipment/{f}" for f in files], "subtitle": f"subtitles.blockland.{ev}"}
-        for ev, files in EVENTS.items()})
-    print(f"equipment sounds: {len(FILES)} files, events {', '.join(EVENTS)}")
+        ev: {"sounds": [f"blockland:equipment/{f}" for f in fs], "subtitle": f"subtitles.blockland.{ev}"}
+        for ev, fs in events.items()})
+    print(f"equipment sounds: {len(files)} files, events {', '.join(events)}")

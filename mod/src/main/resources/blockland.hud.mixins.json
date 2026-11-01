@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.blockland.mixin.hud",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [
+    "ExperienceBarMixin",
+    "GuiBarsMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

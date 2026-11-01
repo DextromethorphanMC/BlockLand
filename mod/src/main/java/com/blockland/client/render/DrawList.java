@@ -106,6 +106,8 @@ public final class DrawList {
         Blend blend;
         int blockLight, skyLight;
         float uvScale;
+        /** The vertex and index buffers hold exactly {@link #source}'s triangles (a model's own buffers, nothing skinned). */
+        boolean staticSource;
     }
 
     /**
@@ -313,6 +315,12 @@ public final class DrawList {
         e.blockLight = blockLight;
         e.skyLight = skyLight;
         e.uvScale = material.uvScale();
+        e.staticSource = false;
+    }
+
+    /** The draw just added reads a model's own buffers, which hold exactly its source triangles (see {@link Entry#staticSource}). */
+    void staticSource() {
+        if (size > 0) pool.get(size - 1).staticSource = true;
     }
 
     /** Entries in drawing order: opaque before blended, otherwise in submission order (callers add back to front). */

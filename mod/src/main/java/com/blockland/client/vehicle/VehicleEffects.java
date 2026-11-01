@@ -40,8 +40,9 @@ import java.util.WeakHashMap;
 import java.util.function.Supplier;
 
 /**
- * A vehicle's effects on this client (vehicle spec §5): exhaust smoke while its engine runs, the boat's wake and spray,
- * a wreck's fire and smoke, the engine's sound (pitch by speed), headlights ({@link LightSources}), muzzle flashes and
+ * A vehicle's effects on this client (vehicle spec §5): exhaust smoke while its engine runs (a jet's afterburner flame),
+ * the boat's wake and spray, a helicopter's downwash stirring the ground (or the water) under it, a wreck's fire and
+ * smoke, the engine's sound (pitch by speed), headlights ({@link LightSources}), muzzle flashes and
  * the barrel's recoil, the machine gun's tracers and impacts as the server traced them ({@link Impacts}: a body bleeds
  * only when the server says it was really hurt), the shell's and the wreck's explosions.
  */
@@ -68,9 +69,18 @@ final class VehicleEffects {
         float speed = Math.abs(v.speed());
         if (running) {
             float rate = 0.35f + Math.max(0, v.throttle()) * 0.65f;
+            Vec3 tail = VehicleFrame.direction(hull, 0, 0, 1);
             for (float[] p : fx.exhaust) {
-                if (random.nextFloat() > rate) continue;
                 Vec3 at = VehicleFrame.toWorld(v.position(), hull, p[0], p[1], p[2]);
+                if (v.boosting() && v.data.kind() == VehicleData.Kind.JET) {
+                    // the afterburner: flame streaming from the nozzle
+                    for (int i = 0; i < 2; i++) {
+                        level.addParticle(ParticleTypes.FLAME, at.x + random.nextGaussian() * 0.12, at.y + random.nextGaussian() * 0.12,
+                                at.z + random.nextGaussian() * 0.12, tail.x * 0.35, tail.y * 0.35, tail.z * 0.35);
+                    }
+                    LightSources.flash(at.x, at.y, at.z, 0xFF9A40, 1.2f, 6f, 0.06f);
+                }
+                if (random.nextFloat() > rate) continue;
                 level.addParticle(ParticleTypes.SMOKE, at.x, at.y, at.z, back.x * 0.03, 0.02, back.z * 0.03);
             }
             if (!engines.containsKey(v)) {
@@ -83,6 +93,7 @@ final class VehicleEffects {
             }
             attachHeadlights(v);
         }
+        if (v.data.kind() == VehicleData.Kind.HELI && v.rotorSpin > 0.4f) downwash(level, v);
         if (fx.wake != null && v.isInWater() && speed > 2) {
             Vec3 at = VehicleFrame.toWorld(v.position(), hull, fx.wake[0], fx.wake[1], fx.wake[2]);
             int count = 1 + (int) (speed / 6);
@@ -102,6 +113,23 @@ final class VehicleEffects {
                 level.addParticle(ParticleTypes.FLAME, c.x + (random.nextDouble() - 0.5) * spread, c.y, c.z + (random.nextDouble() - 0.5) * spread,
                         0, 0.03, 0);
             }
+        }
+    }
+
+    /** A helicopter's rotor wash: dust (or spray on water) blown out in a ring on the surface under it, stronger lower down. */
+    private static void downwash(ClientLevel level, VehicleEntity v) {
+        double reach = 14, height = v.heightAboveGround(reach);
+        if (height >= reach) return;
+        float strength = (float) (1 - height / reach) * v.rotorSpin;
+        Vec3 ground = v.position().subtract(0, height - 0.15, 0);
+        boolean water = level.getFluidState(BlockPos.containing(ground.x, ground.y - 0.2, ground.z)).isSource();
+        float radius = Math.max(2, v.data.movement.rotorRadius * 0.8f);
+        int count = Math.round(6 * strength);
+        for (int i = 0; i < count; i++) {
+            double a = random.nextDouble() * Math.PI * 2, r = radius * (0.4 + random.nextDouble() * 0.7);
+            double ox = Math.cos(a), oz = Math.sin(a), out = 0.25 + 0.35 * strength;
+            level.addParticle(water ? ParticleTypes.SPLASH : ParticleTypes.CLOUD, ground.x + ox * r, ground.y, ground.z + oz * r,
+                    ox * out, 0.02, oz * out);
         }
     }
 
@@ -225,8 +253,22 @@ final class VehicleEffects {
                 return;
             }
             float share = Mth.clamp(Math.abs(vehicle.speed()) / Math.max(1, vehicle.data.movement.maxSpeed), 0, 1);
-            pitch = 0.65f + share * 0.9f;
-            volume = 0.6f + Math.abs(vehicle.throttle()) * 0.4f;
+            switch (vehicle.data.kind()) {
+                // the rotor's beat rises as it spins up, then barely with speed
+                case HELI -> {
+                    pitch = 0.5f + vehicle.rotorSpin * 0.45f + share * 0.1f;
+                    volume = 0.3f + vehicle.rotorSpin * 0.7f;
+                }
+                // a turbine sings higher with the throttle, more again on the afterburner
+                case JET -> {
+                    pitch = 0.75f + Math.max(0, vehicle.throttle()) * 0.25f + share * 0.2f + (vehicle.boosting() ? 0.12f : 0);
+                    volume = 0.7f + (vehicle.boosting() ? 0.3f : Math.max(0, vehicle.throttle()) * 0.2f);
+                }
+                default -> {
+                    pitch = 0.65f + share * 0.9f;
+                    volume = 0.6f + Math.abs(vehicle.throttle()) * 0.4f;
+                }
+            }
             follow();
         }
 

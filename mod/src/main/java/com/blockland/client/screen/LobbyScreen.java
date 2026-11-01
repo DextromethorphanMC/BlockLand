@@ -13,6 +13,7 @@ import com.blockland.client.screen.lobby.ActivitiesPanel;
 import com.blockland.client.screen.lobby.AnnouncementReminder;
 import com.blockland.client.screen.lobby.AnnouncementsPanel;
 import com.blockland.client.screen.lobby.CharacterStage;
+import com.blockland.client.screen.lobby.CheckInPanel;
 import com.blockland.client.screen.lobby.InventoryPanel;
 import com.blockland.client.screen.lobby.LobbyTab;
 import com.blockland.client.screen.lobby.ProfilePanel;
@@ -47,7 +48,7 @@ import static com.blockland.client.ui.Tr.tr;
 
 /**
  * Main lobby screen, laid out like the CS2 main menu: tabs on top ("开始游戏" / "活动" / "工匠" / "公告" / "商店" / "库存" / "个人主页"),
- * the lobby's own buttons top right (settings, leave). The play tab has the mode browser on the left, the player's character in
+ * the lobby's own buttons top right (daily check-in, settings, leave). The play tab has the mode browser on the left, the player's character in
  * the middle, the party and unread announcements top right and the matchmaking panel bottom right.
  * <p>
  * The lobby is the configuration phase: there is no world behind this screen, so it cannot be closed — Escape only
@@ -88,6 +89,7 @@ public final class LobbyScreen extends Screen {
     private AnnouncementsPanel news;
     private ActivitiesPanel events;
     private AnnouncementReminder reminder;
+    private CheckInPanel checkIn;
     private boolean introPlayed;
     private boolean switching;
     private final AnimValue contentAlpha = new AnimValue(1);
@@ -144,6 +146,8 @@ public final class LobbyScreen extends Screen {
                 news.select(id);
                 if (tab != Tab.NEWS) switchTab(Tab.NEWS);
             });
+            // 每日签到: opened from the top bar, over everything
+            checkIn = new CheckInPanel();
         }
         if (tab == Tab.SHOP) shop.open();
         if (tab == Tab.INVENTORY) inventory.open();
@@ -234,7 +238,10 @@ public final class LobbyScreen extends Screen {
 
         int[] badges = new int[Tab.values().length];
         badges[Tab.NEWS.ordinal()] = ClientAnnouncements.unread().size();
-        topBar.render(g, mouseX, mouseY, width, tab.ordinal(), badges);
+        topBar.setCheckInPending(checkIn.pending());
+        boolean modal = checkIn.isOpen();
+        topBar.render(g, modal ? -1 : mouseX, modal ? -1 : mouseY, width, tab.ordinal(), badges);
+        checkIn.render(g, mouseX, mouseY, width, height);
     }
 
     private void renderPlay(GuiGraphics g, int mouseX, int mouseY, float alpha) {
@@ -280,6 +287,7 @@ public final class LobbyScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (checkIn.isOpen()) return button != 0 || checkIn.mouseClicked(mouseX, mouseY);
         if (button == 0) {
             int clickedTab = topBar.tabAt(mouseX, mouseY);
             if (clickedTab >= 0) {
@@ -300,6 +308,11 @@ public final class LobbyScreen extends Screen {
                 case QUIT -> {
                     click();
                     quit();
+                    return true;
+                }
+                case CHECK_IN -> {
+                    click();
+                    checkIn.open();
                     return true;
                 }
                 case NONE -> {
@@ -378,6 +391,7 @@ public final class LobbyScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (checkIn.isOpen()) return true;
         if (tab == Tab.SHOP) return shop.mouseScrolled(scrollY);
         if (tab == Tab.CRAFT) return craft != null && craft.mouseScrolled(mouseX, mouseY, scrollY);
         if (tab == Tab.INVENTORY) return inventory.mouseScrolled(mouseX, mouseY, scrollY);
@@ -444,6 +458,10 @@ public final class LobbyScreen extends Screen {
 
     @Override
     public boolean keyPressed(int key, int scanCode, int modifiers) {
+        if (checkIn.isOpen()) {
+            if (key == 256) checkIn.close();
+            return true;
+        }
         if (tab == Tab.PLAY && party.keyPressed(key, scanCode, modifiers)) return true;
         if (key == 256) {
             if (tab == Tab.SHOP && shop.isModalOpen()) {
@@ -466,6 +484,7 @@ public final class LobbyScreen extends Screen {
 
     @Override
     public boolean charTyped(char c, int modifiers) {
+        if (checkIn.isOpen()) return true;
         if (tab == Tab.PLAY && party.charTyped(c, modifiers)) return true;
         return super.charTyped(c, modifiers);
     }

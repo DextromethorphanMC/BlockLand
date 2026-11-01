@@ -6,7 +6,15 @@ motorcycle's air-cooled single (a 25 Hz four-stroke thump with exhaust pops and 
 the outboard's buzzing two-stroke with its gearcase whine and the water slapping the hull, the tank's diesel rumble
 under a turbocharger whine with the tracks' clatter. Each also has a starter (`start`), a horn (not the tank), a hit on
 the hull (`hit`: a metal clang or the boat's fibreglass knock) and its destruction (`destroyed`); the tank its cannon
-(`fire_cannon`, `reload_cannon`) and roof machine gun (`fire_mg`, `reload_mg`)."""
+(`fire_cannon`, `reload_cannon`) and roof machine gun (`fire_mg`, `reload_mg`).
+
+The aircraft's engines are exactly periodic instead of cross-faded: every tone a whole number of cycles in the loop and
+the noise filtered circularly, so the loop has no seam at all — the fighter's turbofan (broadband roar, fan and
+compressor whine, the shaft's buzz-saw orders, a low rumble) and the helicopter's four-blade rotor (a slap on every
+blade pass at 20 Hz, uneven blade to blade, over the turboshaft's whine and the tail rotor's buzz). Their starters spool
+up (the jet's ignition thump, the rotor's chop speeding up); their guns are single grains the runtime repeats at the
+fire interval (the jet's rotary cannon, the helicopter's chin minigun); rockets leave with an ignition crack and a
+falling motor roar."""
 import tempfile
 
 import numpy as np
@@ -162,6 +170,147 @@ def reload(seed, events, dur):
     return finish(reverb(x, rt=0.4, mix=0.25, seed=seed), -3.0, drive=1.3, fade=0.05)
 
 
+def _cband(x, lo=None, hi=None, order=2.0):
+    """Band filter applied circularly (no padding): a periodic input stays periodic, so a loop built of it has no seam."""
+    f = np.fft.rfftfreq(len(x), 1 / SR)
+    g = np.ones_like(f)
+    if lo:
+        g *= 1 / np.sqrt(1 + (lo / np.maximum(f, 1e-3)) ** (2 * order))
+    if hi:
+        g *= 1 / np.sqrt(1 + (f / hi) ** (2 * order))
+    return np.fft.irfft(np.fft.rfft(x) * g, len(x))
+
+
+def _tone(t, f, dur):
+    """A sine at the nearest frequency with a whole number of cycles in `dur` seconds (so it loops)."""
+    f = max(1, round(f * dur)) / dur
+    return np.sin(2 * np.pi * f * t)
+
+
+def _norm(x):
+    return x / (np.max(np.abs(x)) + 1e-9)
+
+
+def turbofan(seed, dur=2.0, fan=1850.0, shaft=95.0, core=6200.0):
+    """A jet engine at speed, exactly periodic over `dur`: broadband roar (40 Hz - 7 kHz), the fan's blade-pass whine and
+    its second harmonic, the shaft's buzz-saw orders (many weak harmonics of the shaft rate), a thin high compressor
+    whine and a low rumble, all breathing slowly (whole cycles per loop)."""
+    rng = np.random.default_rng(seed)
+    t = t_axis(dur)
+    roar = _norm(_cband(rng.standard_normal(len(t)), 40, 1200, 1.0) + 0.35 * _cband(rng.standard_normal(len(t)), 1800, 7000))
+    rumble = _norm(_cband(rng.standard_normal(len(t)), 25, 160))
+    breathe = 1 + 0.06 * _tone(t, 1 / dur, dur) + 0.03 * _tone(t, 3 / dur, dur)
+    whine = 0.13 * _tone(t, fan, dur) + 0.05 * _tone(t, 2 * fan, dur) + 0.035 * _tone(t, core, dur)
+    saw = _norm(_cband(sum(rng.uniform(0.2, 1.0) / k * _tone(t, shaft * k, dur) for k in range(1, 18)), 150, 3000))
+    x = breathe * (0.9 * roar + 0.12 * saw) + 0.45 * rumble + whine * (1 + 0.04 * _tone(t, 2 / dur, dur))
+    return finish(x, -4.0, drive=1.25, fade=0.0)
+
+
+def rotor(seed, dur=2.0, blade_pass=20.0, blades=4, whine=2900.0, tail=100.0):
+    """A helicopter's rotor at flight speed, exactly periodic over `dur` (blade passes a whole number of times): a slap on
+    every blade pass (a band of noise over a thump at the pass rate, one blade of the four a little louder — the
+    rotor's lopsided beat), broadband rotor wash pulsing with it, the turboshaft's whine and the tail rotor's buzz."""
+    rng = np.random.default_rng(seed)
+    t = t_axis(dur)
+    rate = round(blade_pass * dur) / dur
+    phase = (t * rate) % 1.0
+    weight = np.array([1.0, 0.82, 0.9, 0.76])[:blades][np.floor(t * rate).astype(int) % blades]
+    pulse = weight * np.exp(-phase / 0.11) * np.clip(phase / 0.004, 0, 1)
+    slap = _norm(_cband(rng.standard_normal(len(t)), 120, 1800))
+    thump = sum(a * _tone(t, rate * h, dur) for h, a in ((1, 0.4), (2, 0.6), (3, 0.55), (4, 0.4), (5, 0.25), (6, 0.15)))
+    chop = pulse * (1.1 * slap + 0.2) + 0.12 * thump * (0.5 + 0.5 * pulse)
+    wash = _norm(_cband(rng.standard_normal(len(t)), 60, 1400, 1.0)) * (0.55 + 0.45 * np.exp(-phase / 0.3))
+    tail_phase = (t * round(tail * dur) / dur) % 1.0
+    buzz = _norm(_cband(np.exp(-tail_phase / 0.08) * _cband(rng.standard_normal(len(t)), 300, 3000), 250, 2600))
+    turbine = 0.05 * _tone(t, whine, dur) + 0.02 * _tone(t, 2 * whine, dur)
+    x = 1.0 * chop + 0.3 * wash + 0.22 * buzz + turbine
+    return finish(x, -4.0, drive=1.8, fade=0.0)
+
+
+def turbine_start(seed, idle, dur=3.4, ignite=1.0, f0=180.0, f1=1850.0):
+    """A jet engine starting: the starter's whine rising from `f0` towards the fan's `f1`, the ignition thump (a low
+    whump and a puff of noise) at `ignite`, the roar fading in after it and the running engine `idle` at the end."""
+    rng = np.random.default_rng(seed)
+    t = t_axis(dur)
+    k = np.clip(t / (dur * 0.9), 0, 1)
+    f = f0 + (f1 - f0) * (1 - (1 - k) ** 2.2)
+    x = (0.25 + 0.2 * k) * np.sin(2 * np.pi * np.cumsum(f) / SR) + 0.08 * np.sin(2 * np.pi * np.cumsum(2.02 * f) / SR)
+    fw = 30 * np.exp(-np.maximum(t - ignite, 0) / 0.25) + 28
+    whump = np.sin(2 * np.pi * np.cumsum(fw) / SR) * env_exp(t, 0.35, 0.01, ignite)
+    puff = band(rng.standard_normal(len(t)), 60, 2500) * env_exp(t, 0.25, 0.02, ignite)
+    roar = band(rng.standard_normal(len(t)), 50, 4000) * np.clip((t - ignite) / (dur - ignite), 0, 1) ** 1.5
+    run = np.zeros_like(t)
+    m = min(len(idle), len(t))
+    run[:m] = idle[:m]
+    run *= np.clip((t - (dur - 1.2)) / 1.0, 0, 1)
+    x = x + 1.0 * whump + 0.5 * puff + 0.35 * roar + 0.9 * run
+    x *= np.clip((dur - t) / 0.3, 0, 1)
+    return finish(x, -3.0, drive=1.3, fade=0.05)
+
+
+def rotor_start(seed, flying, dur=4.5, whine=(400.0, 2900.0), rate=(1.5, 20.0), blades=4):
+    """A helicopter starting: the turboshaft spooling up (its whine rising) and the rotor speeding up — its blade slaps
+    coming faster and harder, from `rate[0]` to `rate[1]` passes a second — into the running rotor `flying`."""
+    rng = np.random.default_rng(seed)
+    t = t_axis(dur)
+    k = np.clip(t / (dur * 0.85), 0, 1)
+    fw = whine[0] + (whine[1] - whine[0]) * (1 - (1 - np.clip(t / (dur * 0.5), 0, 1)) ** 2)
+    x = 0.18 * np.sin(2 * np.pi * np.cumsum(fw) / SR) * np.clip(t / 0.4, 0, 1)
+    ph = np.cumsum(rate[0] + (rate[1] - rate[0]) * k ** 1.6) / SR
+    frac = ph % 1.0
+    weight = np.array([1.0, 0.82, 0.9, 0.76])[:blades][np.floor(ph).astype(int) % blades]
+    pulse = weight * np.exp(-frac / 0.12) * np.clip(frac / 0.01, 0, 1)
+    x += (0.15 + 0.85 * k) * pulse * (0.8 * _norm(band(rng.standard_normal(len(t)), 90, 2600)) + 0.3)
+    run = np.zeros_like(t)
+    m = min(len(flying), len(t))
+    run[:m] = flying[:m]
+    x += 0.9 * run * np.clip((t - (dur - 1.0)) / 0.8, 0, 1)
+    x *= np.clip((dur - t) / 0.3, 0, 1)
+    return finish(x, -3.0, drive=1.25, fade=0.05)
+
+
+def hit_light(seed):
+    """A round on a light airframe: a thin aluminium bang (higher, shorter partials than a hull) over a small thud."""
+    rng = np.random.default_rng(seed)
+    t = t_axis(0.9)
+    thud = band(rng.standard_normal(len(t)), 120, 1500) * env_exp(t, 0.03, 0.0004)
+    x = 0.9 * thud + ring(t, [610, 1480, 2900, 4300, 6100], [0.25, 0.16, 0.1, 0.06, 0.04], [0.4, 0.3, 0.18, 0.12, 0.06],
+                         0.0, rng)
+    x += click(t, 0.0, rng, 2500, 11000, 0.003, 0.9)
+    return finish(reverb(x, rt=0.5, mix=0.25, seed=seed), -2.0, drive=1.5)
+
+
+def rotary_grain(seed, crack_lo=1200.0, thump=90.0, length=0.12, body=0.012):
+    """One round of a rotary gun, short enough to repeat at its fire rate (the grains overlap into the gun's growl): a
+    sharp crack, a brief bark and a small low thump, cut off quickly."""
+    rng = np.random.default_rng(seed)
+    t = t_axis(length)
+    crack = band(rng.standard_normal(len(t)), crack_lo, 12000) * env_exp(t, 0.0012, 0.00004)
+    bark = band(rng.standard_normal(len(t)), 220, 4500) * env_exp(t, body, 0.0002)
+    f = thump * np.exp(-t / 0.03) + thump * 0.5
+    boom = np.sin(2 * np.pi * np.cumsum(f) / SR) * env_exp(t, 0.03, 0.0008)
+    x = reverb(1.0 * crack + 1.1 * bark + 0.8 * boom, rt=0.25, mix=0.2, hi=4000, seed=seed + 5, predelay=0.004)
+    x *= np.clip((length - t) / (length * 0.4), 0, 1)
+    return finish(x, -1.0, drive=2.2, fade=0.01)
+
+
+def rocket(seed, dur=0.9):
+    """A rocket leaving its pod: the ignition crack and pop, then the motor's roar — a hiss whose brightness falls as it
+    leaves (two bands crossing over) with a little flutter."""
+    rng = np.random.default_rng(seed)
+    t = t_axis(dur)
+    crack = band(rng.standard_normal(len(t)), 900, 11000) * env_exp(t, 0.004, 0.0001)
+    f = 80 * np.exp(-t / 0.06) + 45
+    pop = np.sin(2 * np.pi * np.cumsum(f) / SR) * env_exp(t, 0.06, 0.0008)
+    hi = band(rng.standard_normal(len(t)), 2500, 10000)
+    mid = band(rng.standard_normal(len(t)), 250, 3000)
+    k = np.clip(t / dur, 0, 1)
+    flutter = 1 + 0.18 * np.sin(2 * np.pi * 31 * t + rng.random() * 6.28)
+    motor = (hi * (1 - k) ** 2 + 0.9 * mid * (0.4 + 0.6 * k)) * env_exp(t, 0.35, 0.015) * flutter
+    x = 1.0 * crack + 0.9 * pop + 1.3 * motor
+    return finish(reverb(x, rt=1.2, mix=0.35, hi=3500, seed=seed + 2, predelay=0.015), -1.0, drive=1.8, fade=0.15)
+
+
 def files():
     moto = engine(1201, 25.0, 2.0, 60, 3200, 0.010, jitter=0.05, pops=0.06, hiss=0.08)
     car = engine(1211, 42.0, 2.0, 40, 2400, 0.016, jitter=0.02, harmonics=(1.0, 0.6, 0.25, 0.2, 0.1), hiss=0.04)
@@ -169,7 +318,7 @@ def files():
                   hiss=0.06, slap=0.35)
     tank = engine(1231, 30.0, 2.0, 30, 1800, 0.022, jitter=0.03, harmonics=(1.0, 0.7, 0.4, 0.2), whine=(1250, 0.10),
                   clatter=(7.0, 0.45), hiss=0.05)
-    return {
+    made = {
         "motorcycle_engine": moto, "motorcycle_start": starter(1202, moto, 11.0, 0.7, (900, 1700)),
         "motorcycle_horn": horn([420, 505], 0.6), "motorcycle_hit": hit(1203), "motorcycle_destroyed": explosion(1204, 0.8),
         "offroad_engine": car, "offroad_start": starter(1212, car, 8.0, 1.0), "offroad_horn": horn([350, 440], 0.7, 0.4),
@@ -184,6 +333,31 @@ def files():
         "tank_fire_mg": heavy_mg(1237), "tank_reload_mg": reload(1238, [(0.05, "latch"), (0.30, "clank"),
                                                                         (0.65, "rattle"), (1.20, "clank"), (1.45, "latch")], 1.8),
     }
+    made.update(aircraft_files())
+    return made
+
+
+def aircraft_files():
+    """The fighter's and the helicopter's sounds (their engine loops are exactly periodic, see the module doc)."""
+    jet = turbofan(1301)
+    heli = rotor(1311)
+    return {
+        "fighter_jet_engine": jet, "fighter_jet_start": turbine_start(1302, jet), "fighter_jet_hit": hit_light(1303),
+        "fighter_jet_destroyed": explosion(1304, 1.4), "fighter_jet_fire_cannon": rotary_grain(1305),
+        "fighter_jet_reload_cannon": reload(1306, [(0.05, "latch"), (0.25, "clank"), (0.55, "rattle"), (1.05, "clunk"),
+                                                   (1.30, "latch")], 1.5),
+        "fighter_jet_fire_rockets": rocket(1307),
+        "fighter_jet_reload_rockets": reload(1308, [(0.05, "clank"), (0.45, "clunk"), (0.85, "clunk"), (1.25, "clank"),
+                                                    (1.70, "latch")], 2.0),
+        "helicopter_engine": heli, "helicopter_start": rotor_start(1312, heli), "helicopter_hit": hit_light(1313),
+        "helicopter_destroyed": explosion(1314, 1.3),
+        "helicopter_fire_chingun": rotary_grain(1315, crack_lo=1600.0, thump=120.0, length=0.08, body=0.008),
+        "helicopter_reload_chingun": reload(1316, [(0.05, "latch"), (0.20, "rattle"), (0.60, "rattle"), (1.10, "clank"),
+                                                   (1.50, "latch")], 1.8),
+        "helicopter_fire_rockets": rocket(1317),
+        "helicopter_reload_rockets": reload(1318, [(0.05, "clank"), (0.50, "clunk"), (0.90, "clunk"), (1.30, "clank"),
+                                                   (1.75, "latch")], 2.0),
+    }
 
 
 EVENTS = {
@@ -191,6 +365,8 @@ EVENTS = {
     "offroad": ("engine", "start", "horn", "hit", "destroyed"),
     "speedboat": ("engine", "start", "horn", "hit", "destroyed"),
     "tank": ("engine", "start", "hit", "destroyed", "fire_cannon", "reload_cannon", "fire_mg", "reload_mg"),
+    "fighter_jet": ("engine", "start", "hit", "destroyed", "fire_cannon", "reload_cannon", "fire_rockets", "reload_rockets"),
+    "helicopter": ("engine", "start", "hit", "destroyed", "fire_chingun", "reload_chingun", "fire_rockets", "reload_rockets"),
 }
 
 
@@ -203,9 +379,10 @@ def entries():
     return out
 
 
-def build(path, merge=True):
+def build(path, merge=True, aircraft_only=False):
+    """Every vehicle's sounds (or, with `aircraft_only`, just the fighter's and the helicopter's) and their events."""
     tmp = tempfile.mkdtemp(prefix="blockland_vehicle_snd_")
-    made = files()
+    made = aircraft_files() if aircraft_only else files()
     for name, x in made.items():
         encode(x, path("sounds", "vehicle", f"{name}.ogg"), tmp)
     if merge:

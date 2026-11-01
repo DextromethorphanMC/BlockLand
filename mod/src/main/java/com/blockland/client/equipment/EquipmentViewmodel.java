@@ -36,6 +36,10 @@ final class EquipmentViewmodel {
     private Build build;
     @Nullable
     private boolean[] hidden;
+    /** {@link #hidden} with the {@code lit_} nodes shown (a switched-on flashlight's lens), and the base mask's. */
+    @Nullable
+    private boolean[] litHidden, unlitDefault;
+    private boolean lit;
     private GpuModel.Style style = GpuModel.Style.NONE;
     private final Matrix4f root = new Matrix4f();
 
@@ -44,6 +48,8 @@ final class EquipmentViewmodel {
         this.item = item;
         build = null;
         hidden = null;
+        litHidden = null;
+        lit = false;
         style = GpuModel.Style.NONE;
         if (item.model.isEmpty() || !load(BlockLand.id(item.model))) return false;
         play(Action.DRAW, item.anims.draw, item.drawTime);
@@ -54,6 +60,13 @@ final class EquipmentViewmodel {
         loaded = location;
         ready = rig.load(location, item.anims.idle, item.anims.walk, item.anims.sprint, item.anims.tacSprint);
         if (ready) rig.motion().setHandling(item.handling);
+        unlitDefault = null;
+        if (ready) {
+            // until the build is known: everything but the lit parts
+            var source = rig.model().source;
+            unlitDefault = new boolean[source.nodes.size()];
+            for (int i = 0; i < unlitDefault.length; i++) unlitDefault[i] = source.nodes.get(i).name.startsWith(WeaponLook.LIT_PREFIX);
+        }
         return ready;
     }
 
@@ -71,10 +84,21 @@ final class EquipmentViewmodel {
         if (!isReady()) return;
         build = complete;
         hidden = WeaponLook.hiddenNodes(rig.model().source, item, complete, rig.node("viewmodel"));
+        litHidden = hidden.clone();
+        var source = rig.model().source;
+        for (int i = 0; i < litHidden.length; i++) {
+            var node = source.nodes.get(i);
+            if (node.name.startsWith(WeaponLook.LIT_PREFIX) && (node.parent < 0 || !litHidden[node.parent])) litHidden[i] = false;
+        }
         rig.setAttachments(WeaponLook.attachments(item, complete));
         EquipmentData.Equipment sprayed = item;
         rig.setSprays(() -> SprayDecals.of(sprayed, complete), null);
         style = WeaponLook.style(WeaponLook.skinOf(item, complete));
+    }
+
+    /** The held item is switched on (a flashlight): its {@code lit_} parts show. */
+    void setLit(boolean on) {
+        lit = on;
     }
 
     void setEventSink(Consumer<String> sink) {
@@ -163,8 +187,9 @@ final class EquipmentViewmodel {
         rig.motion().applyOffsets(root, 0);
         rig.motion().applyRotations(root, 0, !rig.hasSprintClips());
         rig.pose(root);
-        rig.drawMeshes(base, hidden, style, blockLight, skyLight);
-        rig.drawArms(base, player, hidden, blockLight, skyLight);
+        boolean[] mask = hidden == null ? unlitDefault : lit && litHidden != null ? litHidden : hidden;
+        rig.drawMeshes(base, mask, style, blockLight, skyLight);
+        rig.drawArms(base, player, mask, blockLight, skyLight);
     }
 
     void submit() {

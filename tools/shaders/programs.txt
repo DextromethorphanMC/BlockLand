@@ -43,6 +43,7 @@ clouds               | minecraft:core/rendertype_clouds | minecraft:core/rendert
 shadow_terrain_solid | blockland:core/shadow_terrain | blockland:core/shadow_solid  | Position,Color,UV0,UV2,Normal |
 shadow_terrain_cut   | blockland:core/shadow_terrain | blockland:core/shadow_cutout | Position,Color,UV0,UV2,Normal |
 shadow_entity        | blockland:core/shadow_entity  | blockland:core/shadow_cutout | Position,Color,UV0,UV1,UV2,Normal |
+shadow_entity_gpu    | blockland:core/shadow_entity_gpu | blockland:core/shadow_cutout | Position,UV0,Normal |
 shadow_clear         | blockland:core/shadow_clear   | blockland:core/shadow_clear  | Position |
 fx_ssao              | blockland:core/fx_screen | blockland:core/fx_ssao       | Position |
 fx_blur              | blockland:core/fx_screen | blockland:core/fx_blur       | Position |

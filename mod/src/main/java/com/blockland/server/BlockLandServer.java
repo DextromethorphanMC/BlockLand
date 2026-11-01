@@ -129,13 +129,19 @@ public final class BlockLandServer {
     public final com.blockland.server.graffiti.GraffitiService graffiti;
     public final KillTracker kills;
     public final com.blockland.server.combat.ProjectileHits projectileHits;
+    /** Where each hurt a player takes came from, for their HUD's damage arrows (UI spec §3.5). */
+    public final com.blockland.server.combat.DamageDirections damageDirections = new com.blockland.server.combat.DamageDirections();
     public final com.blockland.server.spectate.SpectateService spectate;
     public final CosmeticsService cosmetics;
     public final InventoryService inventory;
     public final ProfileService profilePages;
+    /** 每日签到: the lobby's daily check-in, kept by the backend. */
+    public final com.blockland.server.checkin.CheckInService checkIn;
     public final RankedService ranked;
     public final AntiCheatService antiCheat;
     public final com.blockland.server.farterrain.FarTerrainService farTerrain;
+    /** The ambient props a match's map asks for (rendering spec §27: tumbleweeds). */
+    public final com.blockland.server.ambient.AmbientService ambient;
     private int tickCounter;
 
     private BlockLandServer(MinecraftServer server) {
@@ -226,6 +232,7 @@ public final class BlockLandServer {
         this.inventory = new InventoryService(backend, profiles, cosmetics);
         this.profilePages = new ProfileService(server, sessions, profiles, cosmetics, inventory);
         this.cosmetics.setChangeListener(profilePages::refresh);
+        this.checkIn = new com.blockland.server.checkin.CheckInService(server, backend, profiles, sessions);
         // 排位: one ladder for every ranked mode; matchmaking by score, results (and leavers) reported to the backend
         this.ranked = new RankedService(server, backend, content, types, games::gameOf);
         this.matchmaking.setScoreSource(ranked::matchScore);
@@ -267,6 +274,7 @@ public final class BlockLandServer {
                     (int) Math.floor(bounds.minZ), (int) Math.ceil(bounds.maxX) - 1, (int) Math.ceil(bounds.maxY) - 1, (int) Math.ceil(bounds.maxZ) - 1);
         });
         this.jobs.addCompletionListener(farTerrain::areaChanged);
+        this.ambient = new com.blockland.server.ambient.AmbientService(server, games::gameOf);
         this.antiCheat.addAllowance(new com.blockland.server.parachute.ParachuteAllowance());
         // the login status brings the player's read announcements and builds: show the real ones
         this.profiles.setPreferencesListener(id -> {
@@ -343,6 +351,7 @@ public final class BlockLandServer {
                 instance.spectate.forget(player);
                 instance.antiCheat.leftWorld(player);
                 instance.farTerrain.forget(player);
+                instance.ambient.forget(player);
                 instance.sessions.leftWorld(player);
             }
         });
@@ -398,7 +407,24 @@ public final class BlockLandServer {
         // body armour soaks what it covers, once per hurt, before vanilla's own armour
         net.minecraftforge.event.entity.living.LivingHurtEvent.BUS.addListener(event -> {
             if (instance != null && !event.getEntity().level().isClientSide()) {
-                event.setAmount(instance.armor.onHurt(event.getEntity(), event.getSource(), event.getAmount()));
+                float before = event.getAmount();
+                event.setAmount(instance.armor.onHurt(event.getEntity(), event.getSource(), before));
+                // what the plates took shows on the victim's damage arrows in the plates' colour
+                instance.damageDirections.soaked(event.getEntity(), before - event.getAmount());
+            }
+            return false;
+        });
+        // the damage arrows (UI spec §3.5): after every other listener, what got through the hurt, then off the health.
+        // EventBus 7.0.1 runs a bus's monitors only while it has an ordinary listener too: the hurt event has ours above,
+        // the damage event has none, so there the last ordinary listener (lowest priority, never cancelling) does it
+        LivingHurtEvent.BUS.addListener((event, cancelled) -> {
+            if (instance != null && !event.getEntity().level().isClientSide()) {
+                instance.damageDirections.afterHurt(event.getEntity(), event.getSource(), cancelled ? 0 : event.getAmount());
+            }
+        });
+        net.minecraftforge.event.entity.living.LivingDamageEvent.BUS.addListener(net.minecraftforge.eventbus.api.listener.Priority.LOWEST, event -> {
+            if (instance != null && !event.getEntity().level().isClientSide()) {
+                instance.damageDirections.afterDamage(event.getEntity(), event.getSource(), event.getAmount());
             }
             return false;
         });
@@ -492,6 +518,13 @@ public final class BlockLandServer {
             InventoryCatalog.Display display = type == null ? null : type.display(key);
             return display == null ? "" : display.icon();
         });
+        // a check-in reward that is an inventory item shows that item (its name, icon and rarity)
+        created.checkIn.setItems(key -> {
+            InventoryCatalog.ItemType type = InventoryCatalog.typeOf(key);
+            InventoryCatalog.Display display = type == null ? null : type.display(key);
+            return display == null ? null : new com.blockland.server.checkin.CheckInService.Item(display.name(), display.icon(), display.rarity());
+        });
+        BLNetwork.setCheckInServerListener(created.checkIn);
         BLNetwork.setGraffitiServerListener(created.graffiti);
         BLNetwork.setSpectateServerListener(created.spectate);
         BLNetwork.setProfileServerListener(created.profilePages);
@@ -554,6 +587,7 @@ public final class BlockLandServer {
         BLNetwork.setCombatServerListener(null);
         current.kills.clear();
         BLNetwork.setProfileServerListener(null);
+        BLNetwork.setCheckInServerListener(null);
         Cosmetics.setStore(null);
         current.cosmetics.clear();
         BodyActions.setServerView(null);
@@ -604,6 +638,7 @@ public final class BlockLandServer {
         armor.tick();
         graffiti.tick();
         farTerrain.tick();
+        ambient.tick();
         kills.tick();
         spectate.tick();
         // after the worlds ticked: the velocities of this tick are sent, the pings that acknowledge them follow

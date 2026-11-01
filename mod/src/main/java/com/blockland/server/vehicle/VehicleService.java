@@ -62,11 +62,14 @@ public final class VehicleService implements VehiclePacketListeners.Server, Vehi
             if (vehicle.seatOf(player) < 0) report(player, "非驾驶员发送载具操控");
             return;
         }
-        if (Math.abs(control.throttle()) > 100 || Math.abs(control.steer()) > 100) {
-            report(player, String.format(Locale.ROOT, "载具操控越界 %d/%d", control.throttle(), control.steer()));
+        if (Math.abs(control.throttle()) > 100 || Math.abs(control.steer()) > 100 || !Float.isFinite(control.lookYaw())
+                || !Float.isFinite(control.lookPitch()) || Math.abs(control.lookPitch()) > 90.5f) {
+            report(player, String.format(Locale.ROOT, "载具操控越界 %d/%d %.1f/%.1f", control.throttle(), control.steer(),
+                    control.lookYaw(), control.lookPitch()));
             return;
         }
-        vehicle.queueControl(new VehicleControl(control.seq(), control.throttle() / 100f, control.steer() / 100f, control.brake(), control.boost()));
+        vehicle.queueControl(new VehicleControl(control.seq(), control.throttle() / 100f, control.steer() / 100f, control.brake(), control.boost(),
+                control.lookYaw(), control.lookPitch()));
     }
 
     @Override

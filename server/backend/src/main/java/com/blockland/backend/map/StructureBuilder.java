@@ -5,7 +5,9 @@ import com.blockland.backend.map.nbt.Nbt;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Builds a vanilla structure file ({@code .nbt}) in code, e.g. for generated demo maps. */
@@ -14,14 +16,42 @@ public final class StructureBuilder {
     private static final int DATA_VERSION = 4440;
 
     private final int sizeX, sizeY, sizeZ;
-    private final Map<String, Integer> paletteIndex = new LinkedHashMap<>();
-    private final Nbt.NbtList palette = new Nbt.NbtList((byte) 10);
-    private final Map<Long, Object[]> blocks = new LinkedHashMap<>();
+    private final Map<String, Integer> paletteIndex;
+    private final List<String> states;
+    private final Nbt.NbtList palette;
+    private final Map<Long, Object[]> blocks;
+    /** Added to every y this builder is given (a {@link #lifted} view of another one). */
+    private final int yOffset;
 
     public StructureBuilder(int sizeX, int sizeY, int sizeZ) {
         this.sizeX = sizeX;
         this.sizeY = sizeY;
         this.sizeZ = sizeZ;
+        this.paletteIndex = new LinkedHashMap<>();
+        this.states = new ArrayList<>();
+        this.palette = new Nbt.NbtList((byte) 10);
+        this.blocks = new LinkedHashMap<>();
+        this.yOffset = 0;
+    }
+
+    private StructureBuilder(StructureBuilder base, int dy) {
+        this.sizeX = base.sizeX;
+        this.sizeY = base.sizeY;
+        this.sizeZ = base.sizeZ;
+        this.paletteIndex = base.paletteIndex;
+        this.states = base.states;
+        this.palette = base.palette;
+        this.blocks = base.blocks;
+        this.yOffset = base.yOffset + dy;
+    }
+
+    /**
+     * The same structure seen {@code dy} blocks higher: what is set through the view lands {@code dy} above the given y.
+     * A generator draws on it as before and keeps the layers underneath for a foundation (a map is pasted over the void,
+     * where sand and water with nothing under them fall and pour away).
+     */
+    public StructureBuilder lifted(int dy) {
+        return new StructureBuilder(this, dy);
     }
 
     /** @param state block state in command syntax, e.g. {@code minecraft:chest[facing=north]} */
@@ -30,10 +60,19 @@ public final class StructureBuilder {
     }
 
     public StructureBuilder set(int x, int y, int z, String state, Map<String, Object> blockEntity) {
+        y += yOffset;
         if (x < 0 || y < 0 || z < 0 || x >= sizeX || y >= sizeY || z >= sizeZ) return this;
         int index = paletteIndex.computeIfAbsent(state, this::addPaletteEntry);
         blocks.put(((long) x << 32) | ((long) y << 16) | z, new Object[]{x, y, z, index, blockEntity});
         return this;
+    }
+
+    /** The state set at a position, null where nothing was set (lets tests walk a generated map). */
+    public String get(int x, int y, int z) {
+        y += yOffset;
+        if (y < 0) return null;
+        Object[] b = blocks.get(((long) x << 32) | ((long) y << 16) | z);
+        return b == null ? null : states.get((int) b[3]);
     }
 
     public StructureBuilder fill(int x1, int y1, int z1, int x2, int y2, int z2, String state) {
@@ -80,6 +119,7 @@ public final class StructureBuilder {
             entry.put("Properties", properties);
         }
         palette.add(entry);
+        states.add(state);
         return palette.size() - 1;
     }
 

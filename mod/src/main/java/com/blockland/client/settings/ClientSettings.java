@@ -56,6 +56,14 @@ public final class ClientSettings {
         public PerfSettings performance = new PerfSettings();
         /** The inventory screen's brightness (UI spec §1), 0..1: black … light grey panels; the only thing it lets one change. */
         public float inventoryBrightness = 0.25f;
+        /** The inventory screens' cell size (UI spec §1, the grip in the corner): the panels grow with it, labels do not. */
+        public int inventoryCell = 20;
+        /** Where each HUD element is (UI spec §3, the HUD tab). */
+        public com.blockland.client.hud.layout.HudSettings hud = new com.blockland.client.hud.layout.HudSettings();
+        /** The minimap's options (UI spec §3.4). */
+        public com.blockland.client.hud.minimap.MinimapSettings minimap = new com.blockland.client.hud.minimap.MinimapSettings();
+        /** Ambient props (rendering spec §29): tumbleweeds. */
+        public com.blockland.client.ambient.AmbientSettings ambient = new com.blockland.client.ambient.AmbientSettings();
     }
 
     private static Data data;
@@ -85,6 +93,13 @@ public final class ClientSettings {
         if (data.graphics == null) data.graphics = new GraphicsSettings();
         if (data.impacts == null) data.impacts = new ImpactSettings();
         if (data.performance == null) data.performance = new PerfSettings();
+        if (data.hud == null) data.hud = new com.blockland.client.hud.layout.HudSettings();
+        if (data.minimap == null) data.minimap = new com.blockland.client.hud.minimap.MinimapSettings();
+        data.hud.sanitize();
+        data.minimap.sanitize();
+        if (data.ambient == null) data.ambient = new com.blockland.client.ambient.AmbientSettings();
+        data.ambient.sanitize();
+        data.inventoryCell = Math.max(18, Math.min(40, data.inventoryCell));
         data.performance.sanitize();
         data.impacts.sanitize();
         data.graphics.sanitize();

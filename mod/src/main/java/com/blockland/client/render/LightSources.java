@@ -9,7 +9,8 @@ import java.util.function.Supplier;
 
 /**
  * Dynamic lights that features add to the world (rendering spec §5): short flashes (a muzzle flash, a blast) and
- * attached lights that live as long as their source (a burning patch of fire). The graphics module collects them every
+ * attached lights that live as long as their source (a burning patch of fire) — point lights, or spots that shine
+ * into a cone ({@link Light#spot}). The graphics module collects them every
  * frame, adds the lights it finds itself (held torches, glowing items) and lights the world and the weapons with the
  * strongest ones near the camera. Without world lighting nothing reads them, so adding lights is always cheap and safe.
  * Client thread only.
@@ -20,16 +21,42 @@ public final class LightSources {
     private static final int MAX_FLASHES = 64;
 
     /**
-     * One light.
+     * One light: a point light shining all round, or a spot (a flashlight) shining into a cone.
      *
-     * @param x,y,z     world position
-     * @param r,g,b     display colour 0..1
-     * @param intensity brightness multiplier (1 ≈ a torch at its own block)
-     * @param radius    reach in blocks (the light fades to nothing there)
+     * @param x,y,z      world position
+     * @param r,g,b      display colour 0..1
+     * @param intensity  brightness multiplier (1 ≈ a torch at its own block)
+     * @param radius     reach in blocks (the light fades to nothing there)
+     * @param dx,dy,dz   a spot's direction (unit); all 0 for a point light
+     * @param cosInner   a spot: the cosine of the half-angle inside which it is at full strength
+     * @param cosOuter   a spot: the cosine of the half-angle at its edge (nothing outside); {@link #POINT} for a point
+     *                   light
      */
-    public record Light(double x, double y, double z, float r, float g, float b, float intensity, float radius) {
+    public record Light(double x, double y, double z, float r, float g, float b, float intensity, float radius,
+                        float dx, float dy, float dz, float cosInner, float cosOuter) {
+        /** {@link #cosOuter} of a point light (no cone). */
+        public static final float POINT = -2;
+
+        /** A point light. */
+        public Light(double x, double y, double z, float r, float g, float b, float intensity, float radius) {
+            this(x, y, z, r, g, b, intensity, radius, 0, 0, 0, 0, POINT);
+        }
+
+        /** This light as a spot shining along ({@code dx}, {@code dy}, {@code dz}) with half-angles in degrees. */
+        public Light spot(double dx, double dy, double dz, float innerDegrees, float outerDegrees) {
+            double length = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (length < 1e-6) return this;
+            float outer = Math.max(0.5f, Math.min(89f, outerDegrees)), inner = Math.max(0, Math.min(outer - 0.25f, innerDegrees));
+            return new Light(x, y, z, r, g, b, intensity, radius, (float) (dx / length), (float) (dy / length), (float) (dz / length),
+                    (float) Math.cos(Math.toRadians(inner)), (float) Math.cos(Math.toRadians(outer)));
+        }
+
+        public boolean isSpot() {
+            return cosOuter > -1.5f;
+        }
+
         public Light scaled(float k) {
-            return new Light(x, y, z, r, g, b, intensity * k, radius);
+            return new Light(x, y, z, r, g, b, intensity * k, radius, dx, dy, dz, cosInner, cosOuter);
         }
     }
 

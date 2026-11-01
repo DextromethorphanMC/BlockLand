@@ -37,8 +37,9 @@ final class SlotPainter {
     @Nullable
     static Slot under(AbstractContainerMenu menu, double mouseX, double mouseY, int left, int top) {
         double x = mouseX - left, y = mouseY - top;
+        int size = InventoryLayout.itemSize();
         for (Slot slot : menu.slots) {
-            if (slot.isActive() && x >= slot.x - 1 && x < slot.x + 17 && y >= slot.y - 1 && y < slot.y + 17) return slot;
+            if (slot.isActive() && x >= slot.x - 1 && x < slot.x + size + 1 && y >= slot.y - 1 && y < slot.y + size + 1) return slot;
         }
         return null;
     }
@@ -70,11 +71,21 @@ final class SlotPainter {
             }
         }
         if (takenAway || stack.isEmpty()) return;
-        if (preview) InventoryStyle.round(g, slot.x - 1, slot.y - 1, 18, 18, 3, InventoryStyle.grey(1, 0.35f));
+        int size = InventoryLayout.itemSize();
+        if (preview) InventoryStyle.round(g, slot.x - 1, slot.y - 1, size + 2, size + 2, 3, InventoryStyle.grey(1, 0.35f));
         int seed = slot.x + slot.y * seedWidth;
+        // the item fills its cell (bigger cells, bigger items); its count and bars keep their size, in its corner
+        boolean scaled = size != 16;
+        if (scaled) {
+            g.pose().pushMatrix();
+            g.pose().translate(slot.x, slot.y);
+            g.pose().scale(size / 16f, size / 16f);
+            g.pose().translate(-slot.x, -slot.y);
+        }
         if (slot.isFake()) g.renderFakeItem(stack, slot.x, slot.y, seed);
         else g.renderItem(stack, slot.x, slot.y, seed);
-        InventoryStyle.decorations(g, stack, slot.x, slot.y, count);
+        if (scaled) g.pose().popMatrix();
+        InventoryStyle.decorations(g, stack, slot.x + size - 16, slot.y + size - 16, count);
     }
 
     /** The stack on the mouse, as vanilla's {@code renderCarriedItem} shows it. */

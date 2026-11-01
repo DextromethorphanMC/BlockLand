@@ -73,6 +73,7 @@ final class WatchedEquipment {
             });
         }
         viewmodel.setBuild(EquipmentContent.buildOf(watched.getMainHandItem()));
+        viewmodel.setLit(EquipmentContent.isLit(watched.getMainHandItem()));
     }
 
     /** {@code a}: 0 pressed, 1 released, 2 put away (see the packet). */
@@ -92,7 +93,8 @@ final class WatchedEquipment {
                     injecting = false;
                 } else {
                     viewmodel.play(EquipmentViewmodel.Action.USE, it.anims.use, it.useTime);
-                    releaseAt = now + (long) (it.injectAt * 1e9);
+                    // a flashlight's click has no flinch (nor a release)
+                    releaseAt = it.toggles() ? 0 : now + (long) (it.injectAt * 1e9);
                     injecting = true;
                 }
             }

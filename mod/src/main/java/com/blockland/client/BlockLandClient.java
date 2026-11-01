@@ -145,6 +145,13 @@ public final class BlockLandClient {
         com.blockland.client.loading.MatchLoading.init();
         com.blockland.client.combat.KillFeedback.init(modBus);
         com.blockland.client.hud.KillIcon.init(modBus);
+        // the movable HUD (UI spec §3): the layout, then the elements that join it
+        com.blockland.client.hud.layout.HudLayout.init(modBus);
+        com.blockland.client.hud.vanilla.VanillaHud.init(modBus);
+        com.blockland.client.hud.chat.ChatHud.init(modBus);
+        com.blockland.client.hud.minimap.Minimap.init(modBus);
+        com.blockland.client.hud.damage.DamageIndicator.init(modBus);
+        com.blockland.client.hud.compass.Compass.init(modBus);
         ClientMorphs.init();
         ClientInfection.init(modBus);
         com.blockland.client.rank.ClientRank.init();
@@ -152,6 +159,7 @@ public final class BlockLandClient {
         com.blockland.client.graffiti.ClientGraffiti.init(modBus);
         com.blockland.client.spectate.ClientSpectate.init(modBus);
         com.blockland.client.profile.ClientProfile.init(modBus);
+        com.blockland.client.checkin.ClientCheckIn.init(modBus);
         com.blockland.client.battleroyale.ClientBattleRoyale.init(modBus);
         CreatureRenderers.init(modBus);
         PracticeTargetRenderer.init(modBus);
@@ -171,7 +179,10 @@ public final class BlockLandClient {
         com.blockland.client.binoculars.ClientBinoculars.init(modBus);
         com.blockland.client.vehicle.ClientVehicles.init(modBus);
         com.blockland.client.backpack.ClientBackpack.init(modBus);
+        com.blockland.client.shark.ClientShark.init(modBus);
         com.blockland.client.decor.ClientDecor.init(modBus);
+        // ambient props: tumbleweeds rolling over deserts and the maps that ask for them
+        com.blockland.client.ambient.Tumbleweeds.init(modBus);
         ViewmodelMotion.setBodyMotion(ClientActions.BODY);
         com.blockland.client.dev.DevAutomation.init();
     }

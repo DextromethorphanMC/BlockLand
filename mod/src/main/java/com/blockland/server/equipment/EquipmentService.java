@@ -35,8 +35,9 @@ import java.util.function.Predicate;
 /**
  * Server authority for equipment: validates every request (selected slot, item held, cooldown), times the hand — the
  * pin coming out ({@code pullTime}), cooking, the release point of the throw clip ({@code releaseAt}), an injection's
- * {@code injectAt} — launches the {@link ThrownEquipment} from the eye ({@link BodyActions#eyePosition}), uses the item up
- * (unless the player's game hands out infinite equipment) and tells the thrower about knife hits. A grenade cooked past
+ * {@code injectAt} (a flashlight's switch) — launches the {@link ThrownEquipment} from the eye
+ * ({@link BodyActions#eyePosition}), uses the item up (unless the player's game hands out infinite equipment; a
+ * flashlight is switched instead) and tells the thrower about knife hits. A grenade cooked past
  * its fuse goes off in the hand; one whose pin is out when the player switches away or dies drops live at their feet.
  */
 public final class EquipmentService implements EquipmentPacketListeners.Server {
@@ -172,6 +173,13 @@ public final class EquipmentService implements EquipmentPacketListeners.Server {
         if (item.thrown()) {
             throwItem(player, prep, now);
             hand.readyTick = now + ticks(item.throwing.recover + item.cooldown);
+        } else if (item.toggles()) {
+            ItemStack stack = player.getInventory().getItem(prep.slot);
+            if (EquipmentContent.equipmentOf(stack).map(i -> i.id.equals(item.id)).orElse(false)) {
+                boolean on = EquipmentContent.toggleLit(stack);
+                play(level, player, on ? "equipment.flashlight_on" : "equipment.flashlight_off", 0.6f);
+            }
+            hand.readyTick = prep.startTick + ticks(item.useTime + item.cooldown);
         } else {
             EquipmentEffects.use(player, item.kind, item.effect);
             play(level, player, "equipment.adrenaline_inject", 0.8f);

@@ -1294,5 +1294,143 @@
       "blockland:vehicle/tank_reload_mg"
     ],
     "subtitle": "subtitles.blockland.vehicle.tank.reload_mg"
+  },
+  "vehicle.fighter_jet.engine": {
+    "sounds": [
+      "blockland:vehicle/fighter_jet_engine"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.fighter_jet.engine"
+  },
+  "vehicle.fighter_jet.start": {
+    "sounds": [
+      "blockland:vehicle/fighter_jet_start"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.fighter_jet.start"
+  },
+  "vehicle.fighter_jet.hit": {
+    "sounds": [
+      "blockland:vehicle/fighter_jet_hit"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.fighter_jet.hit"
+  },
+  "vehicle.fighter_jet.destroyed": {
+    "sounds": [
+      "blockland:vehicle/fighter_jet_destroyed"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.fighter_jet.destroyed"
+  },
+  "vehicle.fighter_jet.fire_cannon": {
+    "sounds": [
+      "blockland:vehicle/fighter_jet_fire_cannon"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.fighter_jet.fire_cannon"
+  },
+  "vehicle.fighter_jet.reload_cannon": {
+    "sounds": [
+      "blockland:vehicle/fighter_jet_reload_cannon"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.fighter_jet.reload_cannon"
+  },
+  "vehicle.fighter_jet.fire_rockets": {
+    "sounds": [
+      "blockland:vehicle/fighter_jet_fire_rockets"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.fighter_jet.fire_rockets"
+  },
+  "vehicle.fighter_jet.reload_rockets": {
+    "sounds": [
+      "blockland:vehicle/fighter_jet_reload_rockets"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.fighter_jet.reload_rockets"
+  },
+  "vehicle.helicopter.engine": {
+    "sounds": [
+      "blockland:vehicle/helicopter_engine"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.helicopter.engine"
+  },
+  "vehicle.helicopter.start": {
+    "sounds": [
+      "blockland:vehicle/helicopter_start"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.helicopter.start"
+  },
+  "vehicle.helicopter.hit": {
+    "sounds": [
+      "blockland:vehicle/helicopter_hit"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.helicopter.hit"
+  },
+  "vehicle.helicopter.destroyed": {
+    "sounds": [
+      "blockland:vehicle/helicopter_destroyed"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.helicopter.destroyed"
+  },
+  "vehicle.helicopter.fire_chingun": {
+    "sounds": [
+      "blockland:vehicle/helicopter_fire_chingun"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.helicopter.fire_chingun"
+  },
+  "vehicle.helicopter.reload_chingun": {
+    "sounds": [
+      "blockland:vehicle/helicopter_reload_chingun"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.helicopter.reload_chingun"
+  },
+  "vehicle.helicopter.fire_rockets": {
+    "sounds": [
+      "blockland:vehicle/helicopter_fire_rockets"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.helicopter.fire_rockets"
+  },
+  "vehicle.helicopter.reload_rockets": {
+    "sounds": [
+      "blockland:vehicle/helicopter_reload_rockets"
+    ],
+    "subtitle": "subtitles.blockland.vehicle.helicopter.reload_rockets"
+  },
+  "equipment.flashlight_on": {
+    "sounds": [
+      "blockland:equipment/flashlight_on"
+    ],
+    "subtitle": "subtitles.blockland.equipment.flashlight_on"
+  },
+  "equipment.flashlight_off": {
+    "sounds": [
+      "blockland:equipment/flashlight_off"
+    ],
+    "subtitle": "subtitles.blockland.equipment.flashlight_off"
+  },
+  "shark.bite": {
+    "sounds": [
+      "blockland:creature/shark_bite"
+    ],
+    "subtitle": "subtitles.blockland.shark.bite"
+  },
+  "shark.hurt": {
+    "sounds": [
+      "blockland:creature/shark_hurt"
+    ],
+    "subtitle": "subtitles.blockland.shark.hurt"
+  },
+  "shark.death": {
+    "sounds": [
+      "blockland:creature/shark_death"
+    ],
+    "subtitle": "subtitles.blockland.shark.death"
+  },
+  "shark.swim": {
+    "sounds": [
+      "blockland:creature/shark_swim"
+    ],
+    "subtitle": "subtitles.blockland.shark.swim"
+  },
+  "shark.flop": {
+    "sounds": [
+      "blockland:creature/shark_flop"
+    ],
+    "subtitle": "subtitles.blockland.shark.flop"
   }
 }

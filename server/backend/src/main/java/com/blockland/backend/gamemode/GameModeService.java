@@ -69,6 +69,12 @@ public class GameModeService {
         return modes.save(validate(id, request, current.coverVersion(), false));
     }
 
+    /** Like {@link #update} but, as {@link #createAllowingUnknownItems}, keeps kit items the server has not reported yet. */
+    public GameMode updateAllowingUnknownItems(String id, Request request) {
+        GameMode current = get(id);
+        return modes.save(validate(id, request, current.coverVersion(), true));
+    }
+
     public void delete(String id) {
         if (!modes.deleteById(id)) throw ApiException.notFound("游戏模式", id);
         media.delete(MediaService.MODE, id);

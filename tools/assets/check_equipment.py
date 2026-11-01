@@ -28,16 +28,18 @@ CLIPS = {
                     lob=(0.4, 0.8)),
     "knife": dict(LOCO, draw=(0.2, 0.6), inspect=(2.0, 4.0), throw=(0.3, 0.7)),
     "adrenaline": dict(LOCO, draw=(0.3, 0.7), inspect=(2.0, 4.0), use=(1.0, 2.0)),
+    "flashlight": dict(LOCO, draw=(0.3, 0.7), inspect=(2.0, 4.0), use=(0.2, 0.6)),
 }
 LOOPING = {"idle", "walk", "sprint", "hold"}
 NO_CAMERA = {"idle", "walk", "sprint", "hold"}
-EVENTS = {"equip", "pin", "spoon", "light", "release", "cap", "stab", "inject", "discard", "flip", "catch"}
+EVENTS = {"equip", "pin", "spoon", "light", "release", "cap", "stab", "inject", "discard", "flip", "catch", "click"}
 PARTS = {
     "frag_grenade": {"body": "equipment", "lever": "equipment", "pin": "equipment"},
     "molotov": {"glass": "equipment", "liquid": "equipment", "rag": "equipment", "flame": "equipment",
                 "lighter": "viewmodel", "lighter_lid": "lighter", "lighter_flame": "lighter"},
     "throwing_knife": {"blade": "equipment", "grip": "equipment", "tip": "equipment"},
     "adrenaline": {"barrel": "equipment", "plunger": "equipment", "cap": "equipment", "tip": "equipment"},
+    "flashlight": {"body": "equipment", "button": "equipment", "lit_glow": "equipment", "tip": "equipment"},
 }
 PARTS["flashbang"] = PARTS["smoke_grenade"] = PARTS["frag_grenade"]
 _G = {"body": "body", "fuze": "body", "lever": "lever", "pin": "pin"}
@@ -48,8 +50,10 @@ MATERIALS = {
     "molotov": {"glass": "glass", "liquid": "liquid", "rag": "rag", "flame": "none", "lighter": "none"},
     "throwing_knife": {"blade": "blade", "blade_edge": "blade", "grip": "grip"},
     "adrenaline": {"barrel": "barrel", "label": "label", "plunger": "plunger", "cap": "cap"},
+    "flashlight": {"body": "body", "bezel": "bezel", "clip": "body", "reflector": "none", "lens": "none",
+                   "button": "button", "lit_glow": "none"},
 }
-NO_SET = {"vent", "glass", "liquid", "flame"}            # keep their glTF look (dark recesses, see-through, self-lit)
+NO_SET = {"vent", "glass", "liquid", "flame", "reflector", "lens", "lit_glow"}   # keep their glTF look
 from model_quality import BUDGETS
 
 MAX_TRIS = BUDGETS["equipment"]
@@ -62,7 +66,7 @@ def claims(path, names):
 
 def family(key):
     return "grenade" if key in GRENADES else "molotov" if key == "molotov" else \
-        "knife" if key == "throwing_knife" else "adrenaline"
+        "knife" if key == "throwing_knife" else "flashlight" if key == "flashlight" else "adrenaline"
 
 
 def data(key):
@@ -86,6 +90,8 @@ def required_events(key):
         need.update(throw={"release"}, inspect={"flip", "catch"})
     if fam == "adrenaline":
         need["use"] = {"cap", "stab", "inject", "discard"}
+    if fam == "flashlight":
+        need["use"] = {"click"}
     return need
 
 
@@ -191,10 +197,10 @@ def check_timing(g, r, label, key, anims):
     if fam in ("grenade", "molotov"):
         r.check(abs(d.get("pullTime", 0) - dur.get("pull", 0)) < 0.011,
                 f"{label}: pullTime {d.get('pullTime')} != pull clip {dur.get('pull', 0):.3f}")
-    if fam == "adrenaline":
+    if fam in ("adrenaline", "flashlight"):
         r.check(abs(d.get("useTime", 0) - dur.get("use", 0)) < 0.011,
                 f"{label}: useTime {d.get('useTime')} != use clip {dur.get('use', 0):.3f}")
-        t = _event(anims, "use", "inject")
+        t = _event(anims, "use", "inject" if fam == "adrenaline" else "click")
         r.check(t is not None and abs(t - d.get("injectAt", -1)) < 0.006,
                 f"{label}: inject at {t}, equipment.json injectAt {d.get('injectAt')}")
 
@@ -209,6 +215,14 @@ def check_hands(g, r, label, key, anims):
         if clip not in anims:
             continue
         a = anims[clip]
+        if family(key) == "flashlight":
+            # the switch: the light never leaves the hand
+            worst = 0.0
+            for t in np.arange(0.0, g.duration(a), 1 / 120):
+                W = g.world_matrices(g.sample(a, t))
+                worst = max(worst, float(np.linalg.norm(W[eq][:3, 3] - W[hand_r][:3, 3])))
+            r.check(worst < 0.11 and _visible(W, eq), f"{label}: {clip}: the light leaves the hand ({worst:.3f} m)")
+            continue
         t_rel = _event(anims, clip, "release" if clip != "use" else "discard")
         worst = 0.0
         for t in np.arange(0.0, t_rel - 1e-3, 1 / 120):

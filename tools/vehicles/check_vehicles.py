@@ -23,6 +23,7 @@ RES = os.path.join(REPO, "mod", "src", "main", "resources")
 DATA = os.path.join(RES, "data", "blockland", "vehicles", "vehicles.json")
 TOLERANCE = 0.03                    # metres
 MAX_SEATS, MAX_WEAPONS = 6, 2
+KINDS = ("bike", "wheeled", "tracked", "boat", "jet", "heli")
 
 
 def model_path(model):
@@ -47,6 +48,20 @@ def check_data(vid, v, problems):
                 problems.append(f"{vid}: sound key {key} missing")
     if any(s.get("mount") == "turret" for s in seats) and not weapons:
         problems.append(f"{vid}: a turret seat needs weapon 0 (the turret)")
+    # a seat fires at most one weapon with each key (attack, use)
+    for seat in range(len(seats)):
+        for trigger in ("attack", "use"):
+            count = sum(1 for w in weapons if w.get("seat") == seat and w.get("trigger", "attack") == trigger)
+            if count > 1:
+                problems.append(f"{vid}: seat {seat} has {count} weapons on {trigger}")
+    for w in weapons:
+        if w.get("trigger", "attack") not in ("attack", "use"):
+            problems.append(f"{vid}: weapon {w.get('id')} trigger {w.get('trigger')!r}")
+    kind = v.get("movement", {}).get("kind")
+    if kind not in KINDS:
+        problems.append(f"{vid}: movement kind {kind!r} (one of {', '.join(KINDS)})")
+    if kind in ("jet", "heli") and not seats[0].get("yawLimit", 0) >= 180:
+        problems.append(f"{vid}: an aircraft's pilot looks all round (yawLimit 180)")
     if "engine" not in sounds:
         problems.append(f"{vid}: no engine sound key")
 

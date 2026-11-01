@@ -1,4 +1,4 @@
-"""Builds models/equipment/<id>.glb for the six equipment items (VIEWMODEL_SPEC sections 15-17, 19-21, 31 and 36)."""
+"""Builds models/equipment/<id>.glb for the equipment items (VIEWMODEL_SPEC sections 15-17, 19-21, 31 and 36)."""
 import numpy as np
 
 import armrig
@@ -10,7 +10,7 @@ from glb import GLB
 from ik import UPPER_LEN
 from vmath import quat_conj
 
-ITEM_IDS = ("frag_grenade", "flashbang", "smoke_grenade", "molotov", "throwing_knife", "adrenaline")
+ITEM_IDS = ("frag_grenade", "flashbang", "smoke_grenade", "molotov", "throwing_knife", "adrenaline", "flashlight")
 
 # name: (base rgba (linear), metallic, roughness, region, options) -- names are stable: texture sets (section 20) key
 # on them, skins on the regions
@@ -44,8 +44,17 @@ MATERIALS = {
         "plunger": ((0.95, 0.40, 0.06, 1), 0.0, 0.40, "plunger", {}),
         "cap": ((0.12, 0.30, 0.82, 1), 0.0, 0.40, "cap", {}),
     },
+    "flashlight": {
+        "body": ((0.022, 0.022, 0.024, 1), 0.7, 0.36, "body", {}),
+        "bezel": ((0.28, 0.28, 0.29, 1), 1.0, 0.32, "bezel", {}),
+        "clip": ((0.06, 0.06, 0.065, 1), 0.9, 0.40, "body", {}),
+        "reflector": ((0.86, 0.86, 0.87, 1), 1.0, 0.05, "none", {}),
+        "lens": ((0.62, 0.68, 0.72, 0.28), 0.0, 0.03, "none", {"alpha_mode": "BLEND"}),
+        "button": ((0.025, 0.025, 0.025, 1), 0.0, 0.85, "button", {}),
+        "lit_glow": ((1.0, 0.95, 0.86, 1), 0.0, 1.0, "none", {"emissive": (1.0, 0.93, 0.80)}),
+    },
 }
-EMPTY_POINTS = {"throwing_knife": ("tip",), "adrenaline": ("tip",)}
+EMPTY_POINTS = {"throwing_knife": ("tip",), "adrenaline": ("tip",), "flashlight": ("tip",)}
 
 
 def build_meshes(it):

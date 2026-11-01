@@ -25,7 +25,8 @@ import java.util.Set;
  * frame's triangles go through vanilla entity render types into the given buffers instead of BlockLand's pipeline —
  * transformed on the CPU, baked AO in the vertex colour, textures bound by id (cutout edges cast the right shadow).
  * Into the shadow map's own capture ({@link ShadowPass.Capture}) only what its depth pass reads is built: nothing for
- * what it discards, positions and texture coordinates for the rest.
+ * what it discards, positions and texture coordinates for the rest — or, a model's own buffers holding the triangles,
+ * nothing at all: the capture draws them from there ({@code SHADOW_GPU_CASTERS}).
  */
 final class VanillaDraws {
     private static final ResourceLocation WHITE = BlockLand.id("dynamic/white");
@@ -59,6 +60,10 @@ final class VanillaDraws {
             int light = e.blend == DrawList.Blend.OPAQUE || e.blend == DrawList.Blend.TRANSLUCENT
                     ? LightTexture.pack(e.blockLight, e.skyLight) : LightTexture.FULL_BRIGHT;
             if (lean) {
+                // a model's own buffers already hold these triangles: the capture may draw them from there
+                // (SHADOW_GPU_CASTERS), placed by the same matrix as the vertices below would be
+                if (e.staticSource && Optimization.SHADOW_GPU_CASTERS.on() && ((ShadowPass.Capture) buffers).gpuCaster(type, pose.pose(),
+                        e.vertices, e.indices, e.indexType, e.firstIndex, e.indexCount, e.uvScale)) continue;
                 casters(consumer, pose.pose(), source, light, e.uvScale);
                 continue;
             }

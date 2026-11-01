@@ -5,6 +5,7 @@ import com.blockland.anim.AnimValue;
 import com.blockland.anim.ColorMath;
 import com.blockland.anim.Ease;
 import com.blockland.anim.Spring;
+import com.blockland.anim.Ticker;
 import com.blockland.client.ClientLobbyState;
 import com.blockland.client.font.UiFont;
 import com.blockland.client.ui.Draw;
@@ -18,14 +19,14 @@ import static com.blockland.client.ui.Tr.tr;
 
 /**
  * Logo, tabs with a spring-driven underline (and unread badges), the player's playtime and the online count, and the
- * lobby's own buttons on the right: settings, enter the world (operators only) and leave the server — the lobby has
- * no pause menu.
+ * lobby's own buttons on the right: the daily check-in (with a dot while today's waits), settings, enter the world
+ * (operators only) and leave the server — the lobby has no pause menu.
  */
 public final class TopBar {
     public static final int HEIGHT = 32;
     private static final int PAD = 16;
 
-    public enum Button { NONE, SETTINGS, WORLD, QUIT }
+    public enum Button { NONE, SETTINGS, WORLD, QUIT, CHECK_IN }
 
     private final List<String> tabKeys;
     private final int[] tabX;
@@ -35,8 +36,11 @@ public final class TopBar {
     private final Spring indicatorW = new Spring(0).config(260, 24);
     private final AnimValue slide = new AnimValue(0);
     private final List<ButtonHit> buttons = new ArrayList<>();
-    private final Spring[] buttonHover = {new Spring(0).config(320, 26), new Spring(0).config(320, 26), new Spring(0).config(320, 26)};
+    private final Spring[] buttonHover = {new Spring(0).config(320, 26), new Spring(0).config(320, 26), new Spring(0).config(320, 26),
+            new Spring(0).config(320, 26)};
     private boolean placed;
+    /** Today's check-in is still waiting: the 签到 button carries a dot. */
+    private boolean checkInPending;
 
     private record ButtonHit(Button button, int x, int y, int w, int h) {
     }
@@ -52,6 +56,11 @@ public final class TopBar {
 
     public void playIntro() {
         Anim.fromTo(slide, -HEIGHT, 0, 0.6).ease(Ease.EXPO_OUT);
+    }
+
+    /** Whether today's check-in is still waiting (the 签到 button's dot). */
+    public void setCheckInPending(boolean pending) {
+        checkInPending = pending;
     }
 
     /** @param badges per tab, a number shown next to the label (0 = none) */
@@ -104,6 +113,14 @@ public final class TopBar {
         rx = button(g, mouseX, mouseY, rx, Button.QUIT, tr("blockland.lobby.quit"), 0, CANCEL);
         if (ClientLobbyState.canEnterWorld()) rx = button(g, mouseX, mouseY, rx, Button.WORLD, tr("blockland.lobby.enter_world"), 1, INFO);
         rx = button(g, mouseX, mouseY, rx, Button.SETTINGS, "⚙ " + tr("blockland.lobby.settings"), 2, ACCENT);
+        int checkInRight = rx;
+        rx = button(g, mouseX, mouseY, rx, Button.CHECK_IN, tr("blockland.checkin.button"), 3, GOLD);
+        if (checkInPending) {
+            // a dot on its corner, breathing, while today's check-in waits
+            float pulse = 0.5f + 0.5f * (float) Math.sin(Ticker.global().time() * 4);
+            Draw.glow(g, checkInRight - 7, 9, 5, 5, ColorMath.fade(ERROR, 0.4f + 0.4f * pulse));
+            Draw.rect(g, checkInRight - 9, 7, 5, 5, ERROR);
+        }
         rx -= 10;
         g.fill(rx, 11, rx + 1, 21, LINE);
         rx -= 10;

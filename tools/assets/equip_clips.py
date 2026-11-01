@@ -10,7 +10,8 @@ from here), the smoke grenade keeps it pressed until it leaves the hand. `hold` 
 left arm pointing the throw. `throw` — a last wind-back, the whip over the shoulder (speed peak at the release, the
 body turning into it), the follow-through down across the body. `lob` — the arm drops and swings through underhand.
 Molotov: `pull` lights the rag with a petrol lighter in the left hand. Throwing knife: a short cocked flick. Injector:
-`use` — cap off, raised, stabbed into the thigh, pressed and held, pulled out and tossed away.
+`use` — cap off, raised, stabbed into the thigh, pressed and held, pulled out and tossed away. Flashlight: `use` — the
+thumb presses the tail switch (`click`: it switches) with a small tick of the wrist.
 
 One clip set per item (clips(key)); event times are the gameplay timing of equipment.json (`releaseAt`, `injectAt`,
 `pullTime`, `useTime`, `drawTime`: TIMES below, copied into the data by gen_equipment's caller)."""
@@ -35,7 +36,8 @@ T_PIN, T_SPOON, DUR_PULL = 0.24, 0.40, 0.50
 T_LIGHT, T_CATCH_FIRE, DUR_LIGHT = 0.30, 0.40, 0.70
 T_KNIFE_RELEASE, DUR_KNIFE_THROW = 0.16, 0.48
 T_CAP, T_STAB, T_INJECT, T_DISCARD, DUR_USE = 0.28, 0.62, 0.82, 1.20, 1.45
-DUR_DRAW = {"throwing_knife": 0.36, "adrenaline": 0.45, "molotov": 0.52}
+T_CLICK, DUR_CLICK = 0.12, 0.36
+DUR_DRAW = {"throwing_knife": 0.36, "adrenaline": 0.45, "molotov": 0.52, "flashlight": 0.40}
 DUR_DRAW_DEFAULT = 0.48
 FLY_TIME = 0.07              # the thrown copy stays drawn this long after the release (the entity takes over)
 
@@ -50,6 +52,9 @@ def timing(key):
     elif key == "throwing_knife":
         out["throw.releaseAt"] = T_KNIFE_RELEASE
         out["throw.recover"] = round(DUR_KNIFE_THROW - T_KNIFE_RELEASE, 3)
+    elif key == "flashlight":
+        out["useTime"] = DUR_CLICK
+        out["injectAt"] = T_CLICK
     else:
         out["useTime"] = DUR_USE
         out["injectAt"] = T_INJECT
@@ -752,6 +757,36 @@ def use_clip(it):
     return Clip("use", DUR_USE, pose, events=ev, fps=120, extra_times=(T_CAP, T_STAB, T_INJECT, T_DISCARD))
 
 
+# ===================================================================================== flashlight
+def click_clip(it):
+    """The thumb pushes the tail switch home (T_CLICK: it clicks, the boot squashes 1 mm) and lets go; the wrist ticks
+    up a hair against the press and settles."""
+    press_t = T_CLICK - 0.05
+    m = motion(it,
+               (0.00, it.rest_t, it.rest_q, "stop"),
+               (press_t, it.rest_t + V(0.0, 0.002, 0.003), turned(it.rest_q, V(1.5, 0.0, -1.0)), "flow"),
+               (T_CLICK, it.rest_t + V(0.0, 0.003, 0.005), turned(it.rest_q, V(2.5, 0.0, -1.5)), ("hit", 1.4)),
+               (T_CLICK + 0.10, it.rest_t + V(0.0, 0.001, 0.001), turned(it.rest_q, V(0.6, 0.0, -0.3)), "flow"),
+               (DUR_CLICK, it.rest_t, it.rest_q, "stop"))
+    cam = CamCurve(DUR_CLICK, (0.0, V(0, 0, 0)), (T_CLICK, V(-0.15, 0.0, 0.1), "hit"), (DUR_CLICK, V(0, 0, 0)))
+
+    def pose(t):
+        p = rig.EquipPose(it)
+        apply(m, p, t)
+        press = ease("out2", t, press_t, T_CLICK) * (1 - ease("inout", t, T_CLICK + 0.04, T_CLICK + 0.14))
+        p.fingers_r = hands.adjust(it.curls, thumb=(-12.0 * press, -9.0 * press))
+        p.parts["button"] = {"translation": it.part_rest["button"]["translation"] + V(0.0, 0.0, -0.0010 * press)}
+        cam(p, t)
+        return p
+    return Clip("use", DUR_CLICK, pose, events=[(T_CLICK, "click")], fps=120, extra_times=(T_CLICK,))
+
+
+def light_inspect(it):
+    showq = (turned(it.rest_q, V(35.0, -10.0, 0.0)), turned(it.rest_q, V(10.0, 30.0, -70.0)),
+             turned(it.rest_q, V(-20.0, -40.0, 10.0)))
+    return inspect_clip(it, 2.6, showq)
+
+
 def pen_inspect(it):
     showq = (turned(it.rest_q, V(40.0, 0.0, 0.0)), turned(it.rest_q, V(25.0, 15.0, -60.0)),
              turned(it.rest_q, V(30.0, -15.0, 0.0)))
@@ -783,5 +818,8 @@ def clips(key):
     if key == "throwing_knife":
         return [idle_clip(it), draw_clip(it, DUR_DRAW["throwing_knife"], spin=-360.0), knife_inspect(it),
                 walk_clip(it), sprint_clip(it), knife_throw_clip(it)]
+    if key == "flashlight":
+        return [idle_clip(it), draw_clip(it, DUR_DRAW["flashlight"]), light_inspect(it), walk_clip(it), sprint_clip(it),
+                click_clip(it)]
     return [idle_clip(it), draw_clip(it, DUR_DRAW["adrenaline"]), pen_inspect(it), walk_clip(it), sprint_clip(it),
             use_clip(it)]

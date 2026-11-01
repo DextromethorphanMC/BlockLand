@@ -539,7 +539,7 @@ CHECK_MODULES = ("check_tommy", "check_shotgun", "check_dual", "check_usp", "che
                  "check_crowbar", "check_knuckles",
                  "check_handcannon", "check_vector", "check_baton", "check_ammo_crate",
                  "check_deagle", "check_revolver", "check_armor", "check_revive_antenna", "check_bizon",
-                 "check_vehicle_models")
+                 "check_vehicle_models", "check_ambient_models", "check_creature_models")
 
 
 def _claimed_by(path, names):

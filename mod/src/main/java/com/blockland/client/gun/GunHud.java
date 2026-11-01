@@ -7,6 +7,8 @@ import com.blockland.anim.Spring;
 import com.blockland.client.font.UiFont;
 import com.blockland.client.hud.Crosshair;
 import com.blockland.client.hud.HitMarker;
+import com.blockland.client.hud.layout.HudAnchor;
+import com.blockland.client.hud.layout.HudElement;
 import com.blockland.client.ui.Draw;
 import com.blockland.gun.GunStats;
 import com.blockland.network.packet.GunPackets;
@@ -14,12 +16,14 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 
+import javax.annotation.Nullable;
+
 import static com.blockland.client.ui.Tr.tr;
 
 /**
- * Gun HUD in the style of modern shooters: ammo counter with magazine pips (bottom right; a dual pair shows each gun's
- * rounds), a dynamic crosshair that opens with the real spread, the shared {@link HitMarker} and short hints.
- * Every motion uses the {@code anim} library.
+ * Gun HUD in the style of modern shooters: ammo counter with magazine pips (a {@link Panel} of the movable HUD, bottom
+ * right by default; a dual pair shows each gun's rounds), a dynamic crosshair that opens with the real spread, the
+ * shared {@link HitMarker} and short hints. Every motion uses the {@code anim} library.
  */
 final class GunHud {
     private static final int TEXT = 0xFFF2F4F7;
@@ -47,20 +51,81 @@ final class GunHud {
         hintAlpha.to(0, 0.6, Ease.QUAD_IN).delay(1.2);
     }
 
+    /** The crosshair, the hit marker and the hints, round the screen's middle (the ammo is the {@link Panel}'s). */
     static void render(GuiGraphics g, DeltaTracker delta) {
         Minecraft mc = Minecraft.getInstance();
-        GunStats watched = WatchedGun.stats();
-        if (watched != null && !mc.options.hideGui) {
-            watchedAmmo(g, watched, g.guiWidth(), g.guiHeight());
-            return;
-        }
+        // spectating through someone's eyes: only their rounds, on the panel
+        if (WatchedGun.stats() != null) return;
         GunStats stats = ClientGuns.stats();
         if (mc.player == null || stats == null || !ClientGuns.holdingGun() || mc.options.hideGui) return;
         int w = g.guiWidth(), h = g.guiHeight();
         crosshair(g, stats, w, h, mc);
         HitMarker.render(g, w, h);
-        ammo(g, stats, w, h);
         hints(g, stats, w, h);
+    }
+
+    /**
+     * The ammo counter as an element of the movable HUD (UI spec §3): its box's right edge is the counter's, the round
+     * count and pips sit at its bottom; the gun's name and configuration above. In the editor without a gun: a sample.
+     */
+    static final class Panel implements HudElement {
+        private static final int W = 200, H = 56;
+
+        @Override
+        public String id() {
+            return "gun_ammo";
+        }
+
+        @Override
+        public String nameKey() {
+            return "blockland.hud.element.gun_ammo";
+        }
+
+        @Override
+        public int width() {
+            return W;
+        }
+
+        @Override
+        public int height() {
+            return H;
+        }
+
+        @Override
+        public HudAnchor defaultAnchor() {
+            return HudAnchor.BOTTOM_RIGHT;
+        }
+
+        @Override
+        public int defaultX() {
+            return -14;
+        }
+
+        @Override
+        public int defaultY() {
+            return -10;
+        }
+
+        @Override
+        public boolean visible() {
+            return Minecraft.getInstance().player != null
+                    && (WatchedGun.stats() != null || ClientGuns.stats() != null && ClientGuns.holdingGun());
+        }
+
+        @Override
+        public void render(GuiGraphics g, DeltaTracker delta, int x, int y, boolean editing) {
+            // the pips' bottom edge; the reload line runs just under it
+            int right = x + W, bottom = y + H - 4;
+            GunStats watched = WatchedGun.stats();
+            GunStats stats = ClientGuns.stats();
+            if (watched != null) {
+                watchedAmmo(g, watched, right, bottom);
+            } else if (stats != null && ClientGuns.holdingGun()) {
+                ammo(g, stats, right, bottom);
+            } else if (editing) {
+                counter(g, right, bottom, 24, 30, 90, null, tr("blockland.hud.sample.gun"), tr("blockland.gun.fire_mode.auto"), -1);
+            }
+        }
     }
 
     private static void crosshair(GuiGraphics g, GunStats stats, int w, int h, Minecraft mc) {
@@ -80,10 +145,9 @@ final class GunHud {
      * Spectating through someone's eyes: their gun and the rounds in it (its synced state); what they carry in reserve
      * is theirs alone and not shown.
      */
-    private static void watchedAmmo(GuiGraphics g, GunStats stats, int w, int h) {
+    private static void watchedAmmo(GuiGraphics g, GunStats stats, int right, int bottom) {
         int ammo = WatchedGun.ammo(), capacity = stats.capacity();
         int ammoColor = ammo == 0 ? EMPTY : ammo <= Math.max(1, capacity / 4) ? LOW : TEXT;
-        int right = w - 14, bottom = h - 14;
         Draw.glow(g, right - 30, bottom - 22, 70, 36, 0x66000000);
         String count = String.valueOf(ammo);
         float scale = 2.2f;
@@ -92,20 +156,35 @@ final class GunHud {
         Draw.text(g, name, right - UiFont.width(name), bottom - 50, 1f, TEXT, true);
     }
 
-    private static void ammo(GuiGraphics g, GunStats stats, int w, int h) {
+    private static void ammo(GuiGraphics g, GunStats stats, int right, int bottom) {
         int ammo = ClientGuns.ammo();
         int capacity = stats.capacity();
         if (ammo < lastAmmo) ammoPulse.impulse(9);
         lastAmmo = ammo;
-        int reserve = ClientGuns.reserve();
+        boolean dual = ClientGuns.isDual();
+        String name = stats.gun().displayName().getString();
+        // a dual pair has no sight: its use key fires a volley
+        String sightText = dual ? tr("blockland.gun.hud.dual") : stats.gun().describe("optic", stats.sight().id).name().getString();
+        String detail = tr("blockland.gun.fire_mode." + ClientGuns.fireMode().name().toLowerCase(java.util.Locale.ROOT))
+                + " · " + sightText
+                + (stats.laser().hasBeam() ? " · " + stats.gun().describe("laser", stats.laser().id).name().getString() : "");
+        counter(g, right, bottom, ammo, capacity, ClientGuns.reserve(), dual ? ClientGuns.dualRounds() : null, name, detail,
+                ClientGuns.isReloading() ? ClientGuns.reloadProgress() : -1);
+    }
+
+    /**
+     * The counter drawn from the panel's right edge and the pips' bottom: pips, the round count and reserve, the name and
+     * the detail line, and a reload line when {@code reload} is 0 … 1.
+     *
+     * @param split a dual pair's rounds per gun, or null
+     */
+    private static void counter(GuiGraphics g, int right, int bottom, int ammo, int capacity, int reserve, @Nullable int[] split,
+                                String name, String detail, float reload) {
         boolean low = ammo <= Math.max(1, capacity / 4);
         int ammoColor = ammo == 0 ? EMPTY : low ? LOW : TEXT;
-
-        int right = w - 14, bottom = h - 14;
         Draw.glow(g, right - 30, bottom - 22, 70, 36, 0x66000000);
         // magazine pips, one per round (compressed for big magazines); a dual pair: the left gun's, a gap, the right's
-        boolean dual = ClientGuns.isDual();
-        int[] split = dual ? ClientGuns.dualRounds() : null;
+        boolean dual = split != null;
         int pipW = capacity > 30 ? 1 : 2, gapW = 1, pairGap = dual ? 4 : 0;
         int pipsWidth = capacity * (pipW + gapW) - gapW + pairGap;
         int pipX = right - pipsWidth, pipY = bottom - 4;
@@ -124,18 +203,11 @@ final class GunHud {
         Draw.text(g,reserveText, reserveX, bottom - 16, 1f, reserve == 0 ? EMPTY : MUTED, true);
         Draw.text(g,count, reserveX - 5 - countW, bottom - 9 - UiFont.LINE_HEIGHT * scale, scale, ammoColor, true);
         // name and configuration
-        String name = stats.gun().displayName().getString();
         Draw.text(g,name, right - UiFont.width(name), bottom - 50, 1f, TEXT, true);
-        // a dual pair has no sight: its use key fires a volley
-        String sightText = dual ? tr("blockland.gun.hud.dual") : stats.gun().describe("optic", stats.sight().id).name().getString();
-        String detail = tr("blockland.gun.fire_mode." + ClientGuns.fireMode().name().toLowerCase(java.util.Locale.ROOT))
-                + " · " + sightText
-                + (stats.laser().hasBeam() ? " · " + stats.gun().describe("laser", stats.laser().id).name().getString() : "");
         Draw.text(g,detail, right - UiFont.width(detail), bottom - 38, 1f, MUTED, true);
-        if (ClientGuns.isReloading()) {
-            float p = ClientGuns.reloadProgress();
+        if (reload >= 0) {
             g.fill(pipX, pipY + 6, right, pipY + 7, 0x30FFFFFF);
-            g.fill(pipX, pipY + 6, pipX + Math.round((right - pipX) * p), pipY + 7, 0xFFFFFFFF);
+            g.fill(pipX, pipY + 6, pipX + Math.round((right - pipX) * reload), pipY + 7, 0xFFFFFFFF);
         }
     }
 

@@ -63,7 +63,9 @@ One std140 uniform block `BlockLandScene` per frame (layout and helpers in
 * Camera: `BlViewRotation` (camera-relative world → view), `BlProjection` (level projection without jitter;
   `bl_viewPosition(uv, depth)` / `bl_worldFromView(v)` rebuild positions from a depth buffer), `BlCamera`.
 * Shadows: `BlShadowMatrix[4]`, `BlShadowSplits`, `BlShadowParams` (see §6).
-* Lights: `BlLights[2i]` (camera-relative position, radius), `BlLights[2i+1]` (linear colour × intensity).
+* Lights: `BlLights[3i]` (camera-relative position, radius), `BlLights[3i+1]` (linear colour × intensity, a spot's inner
+  cosine), `BlLights[3i+2]` (a spot's direction, outer cosine; w −2 = a point light). Read through `bl_pointLights`
+  (scene.glsl) and `bl_spot`; nothing else indexes the array.
 * Materials: `BlMaterials` (sprite rects of the block atlas with emission / kind / reflectivity, §7).
 * Light colours and sky (§14): `BlBlockLight` (rgb block light tint × strength, 1 = vanilla's; `a` 1 = the volumetric
   clouds replace vanilla's this frame), `BlFog` (haze extinction at the camera's height, height falloff, sun in-scatter,
@@ -243,6 +245,21 @@ keeps encoding on, so held items never fake glow from their texture alpha.
 Features add `LightSources.flash(...)` (muzzle flashes, blasts) and `LightSources.attach(supplier)` (fires). The light
 module adds held light items (`assets/blockland/graphics/item_lights.json`: item id → colour, intensity, radius) of
 every player and mob in range, picks the `MAX_LIGHTS` (32) strongest near the camera, and writes them camera-relative.
+
+A light is a point light or a **spot** (`LightSources.Light`: optional direction and inner / outer cone cosines; build one
+with `light.spot(dx, dy, dz, innerDegrees, outerDegrees)`; the 8-value constructor is a point light, exactly as
+before). The shaders (`bl_spot` in scene.glsl, the volumetric haze) give a spot a soft edge from the inner to the outer
+cone and a long throw — falloff `window² / (1 + 0.05·d²)` instead of a point light's `window² / (1 + d²)`, a focused beam
+does not spread — and nothing outside its cone; in the volumetric haze a spot is a visible beam. An item light may be a
+spot (`"cone": [inner, outer]` half-angles in degrees): held, it shines along its holder's view from the hand (this
+client's own first-person view: from just below and beside the camera along its look); lying on the ground it is a
+faint glow round the item. An item light may need a switch (`"switch": "<data component id>"`: a boolean component of
+the stack that must be true — the flashlight's `blockland:lit`, asset spec §36), so the light module knows nothing of
+the item. A switched item light is gameplay, not decoration: players' switched-on lights are collected (and shine in the
+volumetric haze) even with 动态光源 or 手持光源 off — those settings govern the features' lights and the other light
+items; only world lighting (光照) must be on. Unlit worlds and unpatched shaders read none of this (pixel-identical to
+vanilla). Dynamic light adds to vanilla's light and the sum is capped at full brightness, so in full daylight a lamp
+cannot brighten what the sun already lights. F3: `N lights (M spots)` this frame.
 `LightSources.isAttached(supplier)` tells a feature whether its attached light is still there (it goes when the supplier
 returns null and when leaving a world), so a light that comes and goes (a special skin's glow, asset spec §38) is
 attached again only when it is gone.
@@ -1023,7 +1040,11 @@ far, each vertex on its own (the canopy stays whole).
 0.45 × thunder (0.08 without sky light), broken up by turbulence carried along with it; gusts are born 45–70 blocks
 upwind of the camera (0.12 + 0.35 rain + 0.5 thunder a second, at most 6), 5–12 blocks deep and 14–36 wide, travel at
 5–9 blocks/s (+3 in thunder) with a ragged front and fade in and out over 2 s. All of it is world-anchored with periods
-dividing 2048 blocks (`BlCamera` wraps there) and real time (`BlFlags.w`). The fragment shader keeps the undisplaced
+dividing 2048 blocks (`BlCamera` wraps there) and real time (`BlFlags.w`, wrapped every 3600 s: every frequency of
+time is a whole number of turns per hour, `BL_TIME_K`, so nothing jumps at the wrap). How far the turbulence has been
+carried is integrated on the CPU every frame (3.5 blocks/s along the heading at that moment, wrapped at 2048:
+`BlWindPush.w`, `BlWindSpring.w`) — never heading × time, which swung the whole pattern by up to thousands of blocks
+whenever the heading wandered a little (the plants jerked 20 times a second). The fragment shader keeps the undisplaced
 position (`worldPos`) for the sun's shadow and the lights: the shadow map's terrain casters (`shadow_terrain`) hold the
 plants still, so a moved plant takes its own still shadow and casts a still one. Moving plants carry no motion vectors
 (TAA, DLSS and motion blur treat them as still geometry).
@@ -1169,6 +1190,22 @@ sample, skips an update that could leave something a frame stale, or reorders dr
   neither reachable nor next to a reachable one (and not on the border) are not meshed (`far/HiddenCells`): the camera is
   never inside a far unit, so no line of sight reaches them. Switching the far entries meshes the real far chunks again.
   Offline check: `python -I tools/perf/check_mesh_opt.py` (FaceInfo windings, grouping, flood).
+* **Entity shadows from GPU buffers** (`SHADOW_GPU_CASTERS`): the shadow map's entity capture (§6) used to rebuild
+  every BlockLand model draw (vehicles, third-person weapons, tumbleweeds) as entity vertices on the CPU — a quad per
+  triangle, each corner transformed by its matrix — and upload them every frame. A draw whose buffers hold exactly its
+  source triangles (`DrawList.Entry.staticSource`: a model's own vertex and index buffers, nothing skinned or substituted)
+  is instead handed to the capture (`ShadowPass.Capture.gpuCaster`: render type, the very matrix `VanillaDraws` would have
+  used, buffers, index range, uv scale) and drawn by `ShadowPipelines.ENTITY_GPU` (`shadow_entity_gpu.vsh`). The shader
+  places each vertex with JOML's `Matrix4f.transformPosition` operations as Minecraft runs them (`joml.useMathFma` unset:
+  `m00·x + (m10·y + (m20·z + m30))`, every product and sum rounded on its own) under `precise` (ARB_gpu_shader5; without
+  it the switch falls back), so the positions are the CPU's bit for bit; the shadow map is depth-only with `LEQUAL`
+  (each texel ends at the least depth covering it, whatever the order or batching), and the old quads were the same
+  triangles plus a degenerate twin — the same map. The render type's buffer is still asked for first, so the capture's
+  mesh slots fill as before. Measured (§29, 1080p, 30 tumbleweeds in view): `bl/shadow/entities` 14.6 → 0.08 ms CPU,
+  the frame 18.3 → 3.2 ms; `bench shadow_gpu_casters` with 40 still tumbleweeds round the camera: 16.10 → 2.72 ms
+  (−83%), moving 16.99 → 3.41 ms, every compared view identical.
+* **Quick measurements** (`perf/TimingProbe`, dev automation `timings <frames>`): every span averaged over the next frames
+  as the scene is — no camera path, no switches — for comparing a scene with and without something in it.
 * **Freezes** (`perf/Hitches`): a frame over 100 ms in a world is logged with its garbage collections, heap, window state
   and the time vanilla's frame flip spent in the buffer swap and in the window's event polls (`RenderSystemMixin` →
   `PerfHooks.displayStep`); the timings then record for a minute, so the next one is also logged span by span.
@@ -1600,3 +1637,53 @@ textures, loot tables, lang, tags and that the model boxes are the collision sha
   `staghorn`, `sea_whip` (cross plants), `table`, `pillar`, `brain_dome`, `tube_cluster` (element shapes). **Reef coral**
   (`reef_coral`, 礁珊瑚, and its dead twin): a knobbly core with an arm to every neighbouring reef coral and down to a
   solid face (multipart, chorus-plant style), so a heap grows into one branching reef; alive while water touches it.
+
+## 29. Tumbleweeds (风滚草: `client/ambient`, `ambient/TumbleweedEntity`, `server/ambient/AmbientService`)
+
+Dried tumbleweeds rolling with the wind, a purely visual ambient prop.
+
+* **What they are.** Client-only entities (`ambient/TumbleweedEntity`, type `blockland:tumbleweed`, registered on both
+  sides but never saved, summoned or made by a server — one on a server removes itself): never pickable, hit, pushed or
+  collided with by anything, so they never block players, shots or blades; they collide with blocks only, through
+  vanilla's collision move. The client's ambient module (`client/ambient/Tumbleweeds`) adds them to the client level with
+  negative ids the server never hands out, and its physics drives them (`TumbleweedEntity.ticker`).
+* **Wind.** `client/render/WindField` is the wind for things that move with it besides the plants: direction and
+  strength at a point, the same steady wind, slow turbulence and travelling gusts §18 bends the plants by (published by
+  `client/graphics/wind/Wind`, not scaled by the plants' 风 setting). A tumbleweed's speed follows the local strength
+  (at least the data's `minWind`: a desert's wind never quite drops), so gusts send them bounding across one after the
+  other.
+* **Movement** (`TumbleweedPhysics`): the wind brings it up to speed — quickly on the ground, slowly in the air; it rolls
+  without slipping (spin = up × velocity / radius), hops now and then (the faster, the more) and bounces when it lands
+  hard; a wall turns it back a little and it tries to hop over (pressed into a corner by the wind it stays until the wind
+  turns); rolling into a catcher plant (cactus, dead bush, dry grass …) may hold it a while until a strong gust tears it
+  free; water or lava sends it away. It grows in when it comes and shrinks away when it goes.
+* **Where.** (1) The player in one of the data's desert-like biomes (desert, badlands variants) under daylight sky, on
+  open ground of the data's `ground` blocks (sand, red sand, terracotta, coarse dirt, sandstone …) with nothing
+  motion-blocking above. (2) A match whose map's settings carry **`"ambient": {"tumbleweeds": true}`**: arena maps live in
+  the arena dimension, where the biome tells nothing, so the server's `AmbientService` tells each player once a second
+  (only on a change) what their match asks for, inside the match's bounds (`GameInstance.spectateBounds`), with
+  `AmbientPackets.S2CAmbient` (effects bit `TUMBLEWEEDS` + the box; none outside a match); there any open, sturdy
+  ground with nothing above inside the box will do. Leaving the match (or the world) forgets it.
+* **How many, and when.** At most the data's `maxCount` (biomes) or `matchCount` (a match), times the 画质 tab's 风滚草数量
+  (环境 section; 风滚草 turns them off — the ones there shrink away). Every half second: one comes upwind of the player,
+  22–56 blocks off and out of sight (or beyond 40 blocks); they leave when farther than `despawnDistance`, or — only where
+  the player is not looking — out of their area, past their lifetime or over the count.
+* **Drawing** (`TumbleweedRenderer`): one of the `models/ambient/tumbleweed_<i>.glb` variants (`tools/assets/
+  gen_tumbleweed.py`: tangled tapered stems curling round a slightly flattened shell, side twigs, three straw / grey-brown
+  tones, 9–12k triangles) through the weapon pipeline, lit by `SceneLighting`; its pose and a box round it go to
+  `ObjectMotion` (keys apart from the vehicles'), so TAA, DLSS and the motion blur move its pixels with it; while the sun's
+  shadow map captures entities it goes through `VanillaDraws`, so it casts a shadow.
+* **Data** (`assets/blockland/ambient/tumbleweeds.json`): counts, spawn radius, despawn distance, lifetime, size range,
+  speed per unit of wind, least wind, top speed, gravity, bounce, hops, ground / air grip, rolling friction, snagging
+  (chance, ticks, the wind that frees), the biome list and the ground and catcher block lists (ids and `#tags`).
+* **Cost** (measured with `TimingProbe` at 1920×1080, shadows ultra, a fixed desert view; dev automation
+  `tumbleweeds <n> [front]` places still ones the same way every time). Nothing in view: 2.63 ms a frame. Before the
+  optimizations, 10 in view cost +12.2 ms and 30 +15.7 ms — almost all of it the shadow capture rebuilding ~80k vertices
+  per tumbleweed on the CPU every frame (`bl/shadow/entities` 11.4 / 26.2 ms). Two steps: the models went from 15–20k to
+  9–12k triangles (stems four-sided, twigs three-sided in two lengths, no hidden base caps; every point of a stem's path
+  kept — halving them showed corners in the arcs; renders before and after at gameplay distance compare as the same:
+  mean difference 1.4 / 255, coverage −1.8 %), then `SHADOW_GPU_CASTERS` (§20). Now: 10 in view +0.38 ms, 30 in view
+  +0.52 ms (`bl/ambient/tumbleweed_draw` 0.12 ms CPU / 0.21 ms GPU for 30, their shadow draws 0.15 ms GPU,
+  `bl/shadow/entities` 0.08 ms); the physics of about 20 rolling ones 0.009 ms a frame (`bl/ambient/tumbleweed_physics`),
+  the spawner under 0.001 ms (`bl/ambient/tumbleweeds`). Each tumbleweed's tick is one wind sample, a block lookup ahead
+  and vanilla's collision move for a box under a block wide; drawing is one model per tumbleweed.

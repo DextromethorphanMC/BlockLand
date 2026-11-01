@@ -2,7 +2,7 @@
 vehicle's model script) and applies its texture sets and baked AO; `vehicle_sounds` the vehicles' sound files and
 sounds.json entries (gen_vehicle_sounds); `vehicle_items` the spawn items' icons (gen_vehicle_items)."""
 
-VEHICLES = ("motorcycle", "offroad", "speedboat", "tank")
+VEHICLES = ("motorcycle", "offroad", "speedboat", "tank", "fighter_jet", "helicopter")
 
 
 def steps(path, apply_pbr):

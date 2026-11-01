@@ -148,7 +148,7 @@ public final class SceneLighting {
         size.putVec4(); // BlShadowSplits
         size.putVec4(); // BlShadowParams
         size.putVec4(); // BlWater
-        for (int i = 0; i < MAX_LIGHTS * 2; i++) size.putVec4(); // BlLights[]
+        for (int i = 0; i < MAX_LIGHTS * 3; i++) size.putVec4(); // BlLights[]
         size.putVec4(); // BlMaterialInfo
         for (int i = 0; i < MAX_MATERIALS * 2; i++) size.putVec4(); // BlMaterials[]
         size.putVec4(); // BlBlockLight

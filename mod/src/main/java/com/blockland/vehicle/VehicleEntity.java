@@ -78,6 +78,7 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
     private static final EntityDataAccessor<Float> DATA_THROTTLE = SynchedEntityData.defineId(VehicleEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> DATA_PITCH = SynchedEntityData.defineId(VehicleEntity.class, EntityDataSerializers.FLOAT);
     private static final EntityDataAccessor<Float> DATA_ROLL = SynchedEntityData.defineId(VehicleEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Boolean> DATA_BOOST = SynchedEntityData.defineId(VehicleEntity.class, EntityDataSerializers.BOOLEAN);
     @SuppressWarnings("unchecked")
     private static final EntityDataAccessor<Integer>[] DATA_SEATS = new EntityDataAccessor[VehicleCatalog.MAX_SEATS];
     @SuppressWarnings("unchecked")
@@ -128,6 +129,8 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
     public final float[] shownYaw = new float[VehicleCatalog.MAX_WEAPONS], shownPitch = new float[VehicleCatalog.MAX_WEAPONS];
     /** Each weapon's recoil, 1 right after it fired, easing back to 0 (the renderer kicks the barrel back by it). */
     public final float[] recoil = new float[VehicleCatalog.MAX_WEAPONS];
+    /** Aircraft: the rotors' turn (radians) and how fast they spin (0 stopped … 1 flying); the gear, 0 down … 1 up. */
+    public float rotor, rotorO, rotorSpin, gear, gearO;
 
     public VehicleEntity(EntityType<? extends VehicleEntity> type, Level level) {
         super(type, level);
@@ -158,6 +161,7 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
         builder.define(DATA_THROTTLE, 0f);
         builder.define(DATA_PITCH, 0f);
         builder.define(DATA_ROLL, 0f);
+        builder.define(DATA_BOOST, false);
         for (EntityDataAccessor<Integer> seat : DATA_SEATS) builder.define(seat, -1);
         for (int i = 0; i < VehicleCatalog.MAX_WEAPONS; i++) {
             builder.define(DATA_AIM_YAW[i], 0f);
@@ -185,6 +189,17 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
 
     public float throttle() {
         return entityData.get(DATA_THROTTLE);
+    }
+
+    /** Whether the driver holds the boost (a jet's afterburner). */
+    public boolean boosting() {
+        return entityData.get(DATA_BOOST);
+    }
+
+    /** Speed through the air, blocks/s (the local driver's own, else the server's). */
+    public float airspeed() {
+        Player local = level().isClientSide ? Vehicles.client().localPlayer() : null;
+        return local != null && driver() == local ? (float) getDeltaMovement().length() * 20 : Math.abs(speed());
     }
 
     public float hullPitch(float partialTick) {
@@ -325,7 +340,9 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
         // the rider turns with the hull (and with the turret on a seat on it — not the one aiming the turret: their view
         // is where the turret is going, turning it on as well would send the turret after it for ever)
         boolean aimsTurret = !data.weapons.isEmpty() && data.weaponIndexOf(s) == 0;
-        float turned = getYRot() - yRotO + (seat.onTurret() && !aimsTurret ? turretTurned : 0);
+        // an aircraft's pilot looks where it should fly: the view stays theirs
+        boolean flies = s == 0 && data.kind().flies();
+        float turned = flies ? 0 : getYRot() - yRotO + (seat.onTurret() && !aimsTurret ? turretTurned : 0);
         rider.setYRot(rider.getYRot() + turned);
         rider.setYHeadRot(rider.getYHeadRot() + turned);
         clampRider(rider, seat);
@@ -400,6 +417,8 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
         wheelTurnO = wheelTurn;
         trackLeftO = trackLeft;
         trackRightO = trackRight;
+        rotorO = rotor;
+        gearO = gear;
         System.arraycopy(shownYaw, 0, aimYawO, 0, aimYawO.length);
         System.arraycopy(shownPitch, 0, aimPitchO, 0, aimPitchO.length);
         turretTurned = 0;
@@ -419,7 +438,7 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
         }
         VehicleControl control = nextControl();
         Entity driver = driver();
-        if (driver == null || wreck > 0) control = new VehicleControl(control.seq(), 0, 0, driver == null, false);
+        if (driver == null || wreck > 0) control = new VehicleControl(control.seq(), 0, 0, driver == null, false, getYRot(), 0);
         simulate(control);
         for (int i = 0; i < data.weapons.size(); i++) {
             Entity gunner = occupant(data.weapons.get(i).seat);
@@ -433,7 +452,8 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
             entityData.set(DATA_AIM_PITCH[i], aimPitch[i]);
         }
         crash(level);
-        entityData.set(DATA_SPEED, (float) forwardSpeed() * 20);
+        entityData.set(DATA_SPEED, data.kind().flies() ? (float) getDeltaMovement().length() * 20 : (float) forwardSpeed() * 20);
+        entityData.set(DATA_BOOST, control.boost() && control.throttle() >= 0);
         entityData.set(DATA_STEER, control.steer());
         entityData.set(DATA_THROTTLE, control.throttle());
         entityData.set(DATA_PITCH, pitch);
@@ -447,7 +467,7 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
             // the local driver: predicted at once from its own input (the server's state corrects it, see reconcile)
             interpolation.cancel();
             VehicleControl in = Vehicles.client().input(this);
-            VehicleControl control = new VehicleControl(++nextSeq, in.throttle(), in.steer(), in.brake(), in.boost()).clamped();
+            VehicleControl control = in.withSeq(++nextSeq).clamped();
             history.addLast(control);
             while (history.size() > HISTORY) history.pollFirst();
             Vehicles.client().send(this, control);
@@ -483,6 +503,13 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
         float turned = (float) Math.toRadians(getYRot() - yRotO), halfTrack = (float) halfExtent(0);
         trackLeft += (speed / 20f + turned * halfTrack) / radius;
         trackRight += (speed / 20f - turned * halfTrack) / radius;
+        if (data.kind().flies()) {
+            // rotors spin up while someone flies it (and down after); a jet's gear comes up once it is well off the ground
+            rotorSpin = Mth.approach(rotorSpin, driver() != null && wreck() == 0 ? 1 : 0, 0.01f);
+            rotor += rotorSpin * 1.4f;
+            boolean up = data.kind() == VehicleData.Kind.JET && !onGround() && heightAboveGround(4) >= 4;
+            gear = Mth.approach(gear, up ? 1 : 0, 1 / 30f);
+        }
     }
 
     @Override
@@ -504,7 +531,7 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
 
     private VehicleControl nextControl() {
         VehicleControl next = pending.pollFirst();
-        if (next == null) return new VehicleControl(processedSeq, last.throttle(), last.steer(), last.brake(), last.boost());
+        if (next == null) return last.withSeq(processedSeq);
         last = next;
         processedSeq = next.seq();
         return next;
@@ -545,6 +572,10 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
     void simulate(VehicleControl control) {
         VehicleData.Movement m = data.movement;
         VehicleData.Kind kind = m.kind();
+        if (kind.flies()) {
+            fly(control);
+            return;
+        }
         float yaw = getYRot();
         Vec3 v = getDeltaMovement();
         Vec3 f = VehicleFrame.forward(yaw), r = VehicleFrame.right(yaw);
@@ -602,6 +633,47 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
         tilt(control, vf);
     }
 
+    /**
+     * An aircraft's tick ({@link VehicleFlight}): its engine runs while someone flies it and it is not under water; then
+     * the vanilla collision move. What it strikes on the way — the ground too fast, a wall, a ceiling — wears its hull
+     * (aircraft take no fall damage: they land).
+     */
+    private void fly(VehicleControl control) {
+        VehicleData.Movement m = data.movement;
+        double water = getFluidHeight(FluidTags.WATER);
+        boolean engine = driver() != null && wreck() == 0 && water < m.wadeDepth;
+        boolean ground = onGround();
+        VehicleFlight.Step step = data.kind() == VehicleData.Kind.JET
+                ? VehicleFlight.jet(m, control, getDeltaMovement(), getYRot(), pitch, roll, ground, engine)
+                : VehicleFlight.heli(m, control, getDeltaMovement(), getYRot(), pitch, roll, ground, engine);
+        Vec3 v = step.velocity();
+        if (water > 0.4) v = v.scale(0.8).add(0, -0.01, 0);
+        setYRot(step.yaw());
+        pitch = step.pitch();
+        roll = step.roll();
+        setDeltaMovement(v);
+        move(MoverType.SELF, v);
+        // a helicopter sitting on its skids settles on the ground under them
+        if (data.kind() == VehicleData.Kind.HELI && onGround() && !control.brake()) tilt(control, 0);
+        if (level() instanceof ServerLevel level) impact(level, v, !ground);
+    }
+
+    /** Server: an aircraft striking something at speed (velocity before the move, blocks/tick) wears its hull. */
+    private void impact(ServerLevel level, Vec3 before, boolean airborne) {
+        Vec3 after = getDeltaMovement();
+        double hit = 0;
+        if (horizontalCollision) hit = (before.horizontalDistance() - after.horizontalDistance()) * 20 - 10;
+        if (verticalCollisionBelow && airborne) {
+            double sink = -before.y * 20 - (data.kind() == VehicleData.Kind.JET ? 6 : 7);
+            // a jet put down on a wing or its nose
+            if (data.kind() == VehicleData.Kind.JET && (Math.abs(roll) > 25 || pitch < -12)) sink = Math.max(sink, before.horizontalDistance() * 10);
+            hit = Math.max(hit, sink);
+        } else if (verticalCollision && !verticalCollisionBelow) {
+            hit = Math.max(hit, before.y * 20 - 8);
+        }
+        if (hit > 0) wear(level, (float) (hit * 8 * Mth.clamp(data.mass / 5000f, 0.6f, 2f)));
+    }
+
     /** The hull's tilt: the ground under its corners (land), a bike leaning into its turn, a boat's bow lifting at speed. */
     private void tilt(VehicleControl control, double vf) {
         VehicleData.Movement m = data.movement;
@@ -638,6 +710,13 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
         return hit.getType() == HitResult.Type.MISS ? getY() : hit.getLocation().y;
     }
 
+    /** How high the hull is over the ground under it (blocks), up to {@code max}. */
+    public double heightAboveGround(double max) {
+        Vec3 from = position();
+        BlockHitResult hit = level().clip(new ClipContext(from, from.subtract(0, max, 0), ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, this));
+        return hit.getType() == HitResult.Type.MISS ? max : from.y - hit.getLocation().y;
+    }
+
     @Override
     public float maxUpStep() {
         return data.movement.stepHeight;
@@ -665,7 +744,9 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
 
     /** The muzzle of weapon {@code index} now and its direction: {muzzle, direction}. */
     public Vec3[] muzzle(int index) {
-        return VehicleFrame.muzzle(data, index, position(), hull(), aimYaw, aimPitch);
+        // a pair of pods fires from each side by turns (the rounds left decide which, the same everywhere)
+        boolean mirrored = data.weapons.get(index).mirror && (ammo(index) & 1) == 1;
+        return VehicleFrame.muzzle(data, index, position(), hull(), aimYaw, aimPitch, mirrored);
     }
 
     /**
@@ -826,6 +907,7 @@ public class VehicleEntity extends Entity implements HitShapes.Shaped, Blasts.Ta
 
     @Override
     public boolean causeFallDamage(double fallDistance, float multiplier, DamageSource source) {
+        if (data.kind().flies()) return false;
         if (fallDistance > 4 && level() instanceof ServerLevel level) {
             wear(level, (float) ((fallDistance - 4) * Mth.clamp(data.mass / 2000f, 0.5f, 6f) * 3));
             if (fallDistance > 10) propagateFallToPassengers(fallDistance - 6, multiplier, source);

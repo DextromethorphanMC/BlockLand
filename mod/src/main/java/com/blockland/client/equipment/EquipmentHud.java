@@ -5,6 +5,8 @@ import com.blockland.anim.ColorMath;
 import com.blockland.anim.Ease;
 import com.blockland.client.font.UiFont;
 import com.blockland.client.hud.HitMarker;
+import com.blockland.client.hud.layout.HudAnchor;
+import com.blockland.client.hud.layout.HudElement;
 import com.blockland.client.ui.Draw;
 import com.blockland.equipment.EquipmentData;
 import net.minecraft.client.DeltaTracker;
@@ -14,9 +16,9 @@ import net.minecraft.client.gui.GuiGraphics;
 import static com.blockland.client.ui.Tr.tr;
 
 /**
- * Equipment HUD, matching the gun and knife HUDs: name, how many are carried and the controls (bottom right) with a
- * thin readiness bar, the shared {@link HitMarker} (thrown knives), and while a grenade cooks a fuse bar under the
- * crosshair that turns red in its last second.
+ * Equipment HUD, matching the gun and knife HUDs: name, how many are carried and the controls with a thin readiness bar
+ * (a {@link Panel} of the movable HUD, bottom right by default), the shared {@link HitMarker} (thrown knives), and
+ * while a grenade cooks a fuse bar under the crosshair that turns red in its last second.
  */
 final class EquipmentHud {
     private static final int TEXT = 0xFFF2F4F7;
@@ -46,25 +48,6 @@ final class EquipmentHud {
         int w = g.guiWidth(), h = g.guiHeight();
         HitMarker.render(g, w, h);
 
-        int right = w - 14, bottom = h - 14;
-        Draw.glow(g, right - 60, bottom - 22, 100, 36, 0x66000000);
-        String name = item.displayName().getString();
-        String count = " ×" + ClientEquipment.carried();
-        float countW = UiFont.width(count);
-        Draw.text(g, name, right - countW - UiFont.width(name), bottom - 26, 1f, TEXT, true);
-        Draw.text(g, count, right - countW, bottom - 26, 1f, MUTED, true);
-        String controls = tr(item.held() ? (item.throwing.lob != null ? "blockland.equipment.hud.grenade" : "blockland.equipment.hud.grenade_no_lob")
-                : item.thrown() ? "blockland.equipment.hud.knife" : "blockland.equipment.hud.use");
-        Draw.text(g, controls, right - UiFont.width(controls), bottom - 14, 1f, MUTED, true);
-        float ready = ClientEquipment.readiness();
-        barAlpha.toIfChanged(ready < 1 ? 1 : 0, 0.15, Ease.QUAD_OUT);
-        float a = barAlpha.get();
-        if (a > 0.02f) {
-            int barW = Math.round(UiFont.width(controls)), x0 = right - barW, y = bottom - 3;
-            g.fill(x0, y, right, y + 1, ColorMath.fade(0x30FFFFFF, a));
-            g.fill(x0, y, x0 + Math.round(barW * ready), y + 1, ColorMath.fade(0xFFFFFFFF, a));
-        }
-
         // the cooking fuse: a short bar under the crosshair emptying towards the bang
         float left = ClientEquipment.cookLeft();
         fuseAlpha.toIfChanged(left >= 0 ? 1 : 0, 0.12, Ease.QUAD_OUT);
@@ -83,6 +66,81 @@ final class EquipmentHud {
         if (c > 0.02f && !callout.isEmpty()) {
             float scale = 1.4f;
             Draw.text(g, callout, w / 2f - UiFont.width(callout) * scale / 2f, h / 2f + 28, scale, ColorMath.fade(CALLOUT, c), true);
+        }
+    }
+
+    /** Name, count, controls and readiness drawn from the panel's right edge and bottom. */
+    private static void panel(GuiGraphics g, int right, int bottom, String name, int carried, String controls, float ready) {
+        Draw.glow(g, right - 60, bottom - 22, 100, 36, 0x66000000);
+        String count = " ×" + carried;
+        float countW = UiFont.width(count);
+        Draw.text(g, name, right - countW - UiFont.width(name), bottom - 26, 1f, TEXT, true);
+        Draw.text(g, count, right - countW, bottom - 26, 1f, MUTED, true);
+        Draw.text(g, controls, right - UiFont.width(controls), bottom - 14, 1f, MUTED, true);
+        barAlpha.toIfChanged(ready < 1 ? 1 : 0, 0.15, Ease.QUAD_OUT);
+        float a = barAlpha.get();
+        if (a > 0.02f) {
+            int barW = Math.round(UiFont.width(controls)), x0 = right - barW, y = bottom - 3;
+            g.fill(x0, y, right, y + 1, ColorMath.fade(0x30FFFFFF, a));
+            g.fill(x0, y, x0 + Math.round(barW * ready), y + 1, ColorMath.fade(0xFFFFFFFF, a));
+        }
+    }
+
+    /** The held equipment's panel as an element of the movable HUD (UI spec §3); a sample in the editor. */
+    static final class Panel implements HudElement {
+        private static final int W = 200, H = 28;
+
+        @Override
+        public String id() {
+            return "equipment";
+        }
+
+        @Override
+        public String nameKey() {
+            return "blockland.hud.element.equipment";
+        }
+
+        @Override
+        public int width() {
+            return W;
+        }
+
+        @Override
+        public int height() {
+            return H;
+        }
+
+        @Override
+        public HudAnchor defaultAnchor() {
+            return HudAnchor.BOTTOM_RIGHT;
+        }
+
+        @Override
+        public int defaultX() {
+            return -14;
+        }
+
+        @Override
+        public int defaultY() {
+            return -14;
+        }
+
+        @Override
+        public boolean visible() {
+            return Minecraft.getInstance().player != null && ClientEquipment.item() != null && ClientEquipment.holdingEquipment();
+        }
+
+        @Override
+        public void render(GuiGraphics g, DeltaTracker delta, int x, int y, boolean editing) {
+            int right = x + W, bottom = y + H;
+            EquipmentData.Equipment item = ClientEquipment.item();
+            if (item != null && ClientEquipment.holdingEquipment()) {
+                String controls = tr(item.held() ? (item.throwing.lob != null ? "blockland.equipment.hud.grenade" : "blockland.equipment.hud.grenade_no_lob")
+                        : item.thrown() ? "blockland.equipment.hud.knife" : "blockland.equipment.hud.use");
+                panel(g, right, bottom, item.displayName().getString(), ClientEquipment.carried(), controls, ClientEquipment.readiness());
+            } else if (editing) {
+                panel(g, right, bottom, tr("blockland.hud.sample.equipment"), 2, tr("blockland.equipment.hud.grenade"), 1);
+            }
         }
     }
 }

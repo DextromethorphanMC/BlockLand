@@ -66,10 +66,20 @@ public final class VehicleFrame {
 
     /** The muzzle of weapon {@code index} in the world, and its unit direction: {muzzle, direction}. */
     public static Vec3[] muzzle(VehicleData.Vehicle v, int index, Vec3 origin, Quaterniond hull, float[] yaws, float[] pitches) {
+        return muzzle(v, index, origin, hull, yaws, pitches, false);
+    }
+
+    /** {@link #muzzle}, or its twin mirrored across the hull's middle ({@code mirrored}: the other pod of a pair). */
+    public static Vec3[] muzzle(VehicleData.Vehicle v, int index, Vec3 origin, Quaterniond hull, float[] yaws, float[] pitches,
+                                boolean mirrored) {
         VehicleData.Weapon w = v.weapons.get(index);
         Matrix4d m = weapon(v, index, yaws, pitches);
         Vector4d p = m.transform(new Vector4d(w.muzzleOffset[0], w.muzzleOffset[1], w.muzzleOffset[2], 1));
         Vector4d d = m.transform(new Vector4d(0, 0, -1, 0));
+        if (mirrored) {
+            p.x = -p.x;
+            d.x = -d.x;
+        }
         Vec3 at = toWorld(origin, hull, p.x, p.y, p.z);
         Vec3 dir = direction(hull, d.x, d.y, d.z).normalize();
         return new Vec3[]{at, dir};

@@ -277,6 +277,10 @@ def _pen_sdf(p):
     return em.sdf_cyl_z(p, em.PEN_R, -0.056, 0.060)
 
 
+def _light_sdf(p):
+    return em.sdf_cyl_z(p, em.LIGHT_R, -0.030, 0.047)
+
+
 def _molotov_items():
     parts, points = em.molotov()
     parts.update(em.lighter())
@@ -304,6 +308,12 @@ def _items():
                                 _pen_sdf, V(0.120, -0.110, -0.300),
                                 along_quat((-0.30, -0.55, -0.78), (0.2, 0.75, -0.6)), moving=("plunger", "cap"),
                                 thumb=V(0.0, 0.0, 0.0815))
+    # the flashlight: the fist round the barrel's grip, the thumb on the tail switch, the lens to the front
+    lparts, lpoints = em.flashlight()
+    out["flashlight"] = ItemDef("flashlight", lparts, lpoints, V(em.LIGHT_R, 0.0, 0.012), (-1, 0, 0), (0, 1, 0),
+                                _light_sdf, V(0.112, -0.094, -0.300),
+                                along_quat((-0.26, 0.06, -1.0), (0.10, 1.0, 0.0)), moving=("button",),
+                                thumb=em.SWITCH)
     return out
 
 

@@ -69,6 +69,9 @@ public final class ClientBattleRoyale {
                 .addAbove(ForgeLayeredDraw.PRE_SLEEP_STACK, BlockLand.id("battle_royale_hud"), ForgeLayeredDraw.CROSSHAIR, BrHud::render));
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> clientTick());
         ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(event -> reset());
+        // the HUD's own map of the island stands in for the minimap while it shows
+        com.blockland.client.hud.minimap.Minimap.hideWhile(() -> state.phase() == BattleRoyalePackets.Phase.FLIGHT
+                || state.phase() == BattleRoyalePackets.Phase.FIGHT);
         ViewportEvent.ComputeCameraAngles.BUS.addListener(ClientBattleRoyale::camera);
         // passengers of the plane are out of sight: nobody sees players stacked in the cabin
         RenderPlayerEvent.Pre.BUS.addListener(event -> {

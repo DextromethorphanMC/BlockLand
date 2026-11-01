@@ -10,10 +10,12 @@ import com.blockland.network.packet.GraffitiPackets;
 import com.blockland.network.packet.SpectatePackets;
 import com.blockland.network.packet.ViewmodelPackets;
 import com.blockland.network.packet.ProfilePackets;
+import com.blockland.network.packet.CheckInPackets;
 import com.blockland.network.packet.C2SJoinQueue;
 import com.blockland.network.packet.RankedPackets;
 import com.blockland.network.packet.ParachutePackets;
 import com.blockland.network.packet.VehiclePackets;
+import com.blockland.network.packet.AmbientPackets;
 import com.blockland.network.packet.SupplyPackets;
 import com.blockland.network.packet.ArmorPackets;
 import com.blockland.network.packet.C2SLeaveQueue;
@@ -22,6 +24,7 @@ import com.blockland.network.packet.C2SPostMatch;
 import com.blockland.network.packet.C2SRequestKit;
 import com.blockland.network.packet.C2SSubmitKit;
 import com.blockland.network.packet.CombatPackets;
+import com.blockland.network.packet.DamagePackets;
 import com.blockland.network.packet.CraftPackets;
 import com.blockland.network.packet.EffectPackets;
 import com.blockland.network.packet.EquipmentPackets;
@@ -59,7 +62,7 @@ import java.util.function.Function;
  * never references server or client logic directly.
  */
 public final class BLNetwork {
-    private static final int PROTOCOL_VERSION = 22;
+    private static final int PROTOCOL_VERSION = 25;
 
     public static final SimpleChannel CHANNEL = ChannelBuilder.named(BlockLand.id("main"))
             .networkProtocolVersion(PROTOCOL_VERSION)
@@ -102,12 +105,16 @@ public final class BLNetwork {
     private static volatile ViewmodelPacketListeners.Client viewmodelClientListener = ViewmodelPacketListeners.Client.NOOP;
     private static volatile ProfilePacketListeners.Server profileServerListener = ProfilePacketListeners.Server.NOOP;
     private static volatile ProfilePacketListeners.Client profileClientListener = ProfilePacketListeners.Client.NOOP;
+    private static volatile CheckInPacketListeners.Server checkInServerListener = CheckInPacketListeners.Server.NOOP;
+    private static volatile CheckInPacketListeners.Client checkInClientListener = CheckInPacketListeners.Client.NOOP;
     private static volatile BattleRoyalePacketListeners.Server battleRoyaleServerListener = BattleRoyalePacketListeners.Server.NOOP;
     private static volatile BattleRoyalePacketListeners.Client battleRoyaleClientListener = BattleRoyalePacketListeners.Client.NOOP;
     private static volatile ParachutePacketListeners.Server parachuteServerListener = ParachutePacketListeners.Server.NOOP;
     private static volatile ParachutePacketListeners.Client parachuteClientListener = ParachutePacketListeners.Client.NOOP;
     private static volatile VehiclePacketListeners.Server vehicleServerListener = VehiclePacketListeners.Server.NOOP;
     private static volatile VehiclePacketListeners.Client vehicleClientListener = VehiclePacketListeners.Client.NOOP;
+    private static volatile AmbientPacketListeners.Client ambientClientListener = AmbientPacketListeners.Client.NOOP;
+    private static volatile DamagePacketListeners.Client damageClientListener = DamagePacketListeners.Client.NOOP;
     private static volatile SupplyPacketListeners.Server supplyServerListener = SupplyPacketListeners.Server.NOOP;
     private static volatile SupplyPacketListeners.Client supplyClientListener = SupplyPacketListeners.Client.NOOP;
     private static volatile ArmorPacketListeners.Server armorServerListener = ArmorPacketListeners.Server.NOOP;
@@ -252,6 +259,14 @@ public final class BLNetwork {
         anyToClient(ProfilePackets.S2CLeaderboard.class, ProfilePackets.S2CLeaderboard::encode, ProfilePackets.S2CLeaderboard::decode,
                 msg -> profileClientListener.onLeaderboard(msg));
 
+        // 每日签到 (daily check-in): in the lobby
+        anyToServer(CheckInPackets.C2SRequest.class, CheckInPackets.C2SRequest::encode, CheckInPackets.C2SRequest::decode,
+                (msg, player) -> checkInServerListener.onRequest(player));
+        anyToServer(CheckInPackets.C2SClaim.class, CheckInPackets.C2SClaim::encode, CheckInPackets.C2SClaim::decode,
+                (msg, player) -> checkInServerListener.onClaim(player));
+        anyToClient(CheckInPackets.S2CState.class, CheckInPackets.S2CState::encode, CheckInPackets.S2CState::decode,
+                msg -> checkInClientListener.onState(msg));
+
         // 枪战爆破 (bomb defusal): only in the world
         toServer(BombPackets.C2SPlant.class, BombPackets.C2SPlant::encode, BombPackets.C2SPlant::decode,
                 (msg, player) -> bombServerListener.onPlant(player, msg.holding()));
@@ -303,6 +318,14 @@ public final class BLNetwork {
                 msg -> vehicleClientListener.onState(msg));
         toClient(VehiclePackets.S2CShot.class, VehiclePackets.S2CShot::encode, VehiclePackets.S2CShot::decode,
                 msg -> vehicleClientListener.onShot(msg));
+
+        // ambient props a match's map asks for (rendering spec §29, the tumbleweeds): only in the world
+        toClient(AmbientPackets.S2CAmbient.class, AmbientPackets.S2CAmbient::encode, AmbientPackets.S2CAmbient::decode,
+                msg -> ambientClientListener.onAmbient(msg));
+
+        // where a hurt came from (UI spec §3.5, the HUD's damage direction arrows): only in the world
+        toClient(DamagePackets.S2CDamage.class, DamagePackets.S2CDamage::encode, DamagePackets.S2CDamage::decode,
+                msg -> damageClientListener.onDamage(msg));
 
         // ammo crate resupply (弹药箱): only in the world
         toServer(SupplyPackets.C2SUse.class, SupplyPackets.C2SUse::encode, SupplyPackets.C2SUse::decode,
@@ -518,6 +541,14 @@ public final class BLNetwork {
         profileClientListener = listener == null ? ProfilePacketListeners.Client.NOOP : listener;
     }
 
+    public static void setCheckInServerListener(CheckInPacketListeners.Server listener) {
+        checkInServerListener = listener == null ? CheckInPacketListeners.Server.NOOP : listener;
+    }
+
+    public static void setCheckInClientListener(CheckInPacketListeners.Client listener) {
+        checkInClientListener = listener == null ? CheckInPacketListeners.Client.NOOP : listener;
+    }
+
     public static void setBattleRoyaleServerListener(BattleRoyalePacketListeners.Server listener) {
         battleRoyaleServerListener = listener == null ? BattleRoyalePacketListeners.Server.NOOP : listener;
     }
@@ -536,6 +567,14 @@ public final class BLNetwork {
 
     public static void setVehicleServerListener(VehiclePacketListeners.Server listener) {
         vehicleServerListener = listener == null ? VehiclePacketListeners.Server.NOOP : listener;
+    }
+
+    public static void setAmbientClientListener(AmbientPacketListeners.Client listener) {
+        ambientClientListener = listener == null ? AmbientPacketListeners.Client.NOOP : listener;
+    }
+
+    public static void setDamageClientListener(DamagePacketListeners.Client listener) {
+        damageClientListener = listener == null ? DamagePacketListeners.Client.NOOP : listener;
     }
 
     public static void setVehicleClientListener(VehiclePacketListeners.Client listener) {

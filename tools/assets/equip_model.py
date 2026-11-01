@@ -1,11 +1,12 @@
 """Equipment geometry (VIEWMODEL_SPEC section 36): frag grenade (M67 pattern), flashbang (M84 pattern), smoke grenade
-(M18 pattern), molotov, throwing knife and adrenaline auto-injector. Original designs at real scale.
+(M18 pattern), molotov, throwing knife, adrenaline auto-injector and the flashlight. Original designs at real scale.
 
 Design frame of every item (metres): the origin is the middle of the right hand's grip (equip_rig places the palm
 round it); grenades and the bottle stand along +Y (fuze / mouth up), their lever runs down the +X side (the palm's
 side: the palm squeezes it) and the pin's ring sticks out towards -Z next to the fuze (the left hand hooks it from the
-front). The throwing knife and the injector lie along Z: the knife's point towards -Z, flats facing +-X; the
-injector's needle end towards -Z, the cap (thumb end) towards +Z.
+front). The throwing knife, the injector and the flashlight lie along Z: the knife's point towards -Z, flats facing
++-X; the injector's needle end towards -Z, the cap (thumb end) towards +Z; the flashlight's lens towards -Z, its tail
+switch (thumb end) towards +Z.
 
 Each function returns {node: (Mesh in design coordinates, node origin in design coordinates)}; gen_equipment moves
 the meshes into their nodes' spaces."""
@@ -432,6 +433,82 @@ def adrenaline():
     cap_origin = V(0.0, 0.0, 0.0590)
     return ({"barrel": (barrel, V(0, 0, 0)), "plunger": (shroud, plunger_origin), "cap": (cap, cap_origin)},
             {"charm": V(0.0, -PEN_R - 0.0010, 0.0540), "tip": V(0.0, 0.0, -0.0960)})
+
+
+# ========================================================================================= flashlight
+LIGHT_R = 0.0125              # the barrel (25 mm)
+HEAD_R = 0.0182               # the head (36 mm)
+LENS_Z = -0.0785              # the lens's outer face
+TAIL_Z = 0.0690               # the tail cap's end, where the switch sits
+SWITCH = V(0.0, 0.0, TAIL_Z + 0.0042)
+
+
+def _ribs(r0, r1, z0, z1, count, depth, material, seg=40):
+    """Rings cut round a cylinder of radius r0 between z0 and z1 (the cooling fins, the cap's grip)."""
+    out = Mesh()
+    for z in np.linspace(z0, z1, count):
+        out.merge(revolve_z([(r0 - depth, z - 0.0009), (r1, z - 0.0005), (r1, z + 0.0005), (r0 - depth, z + 0.0009)],
+                            seg, material))
+    return out
+
+
+def flashlight():
+    """A tactical flashlight (0.155 long): an anodised barrel with a knurled grip band and a pocket clip down its +X
+    side, the wider head with cooling fins, a polished reflector behind the lens and a crenellated steel strike bezel;
+    the tail cap with grip rings, a lanyard ring and the rubber tail switch (`button`: the thumb presses it). The lens's
+    glow is its own node (`lit_glow`, shown only while it is switched on)."""
+    body = revolve_z([(0.0, TAIL_Z - 0.0010), (0.0088, TAIL_Z), (0.0128, TAIL_Z - 0.0018), (0.0132, TAIL_Z - 0.0040),
+                      (0.0132, 0.0505), (0.0127, 0.0490), (LIGHT_R, 0.0470), (LIGHT_R, -0.0300), (0.0130, -0.0330),
+                      (0.0158, -0.0390), (HEAD_R, -0.0450), (HEAD_R, -0.0740), (0.0186, -0.0752), (0.0186, LENS_Z + 0.0004),
+                      (0.0166, LENS_Z), (0.0161, LENS_Z + 0.0012), (0.0161, -0.0640), (0.0, -0.0640)], 48, "body")
+    # the grip: a knurl band (fine rings both ways read as diamond knurling at this size), its edges stepped
+    body.merge(_ribs(LIGHT_R, LIGHT_R + 0.00035, -0.0230, 0.0400, 16, 0.0003, "body", seg=36))
+    for k in range(18):
+        a_ = 2 * np.pi * k / 18
+        rib = sh.box(-0.00035, -0.0002, -0.0235, 0.00035, 0.00045, 0.0405, 0.0, "body", rounding=False)
+        body.merge(sh.place(rib, origin=(LIGHT_R * np.cos(a_), LIGHT_R * np.sin(a_), 0.0),
+                            x_axis=(-np.sin(a_), np.cos(a_), 0.0), y_axis=(np.cos(a_), np.sin(a_), 0.0), z_axis=(0, 0, 1)))
+    # the head's cooling fins and the cap's grip rings
+    body.merge(_ribs(HEAD_R, HEAD_R + 0.0008, -0.0700, -0.0480, 7, 0.0004, "body", seg=40))
+    body.merge(_ribs(0.0132, 0.0137, 0.0535, 0.0640, 4, 0.0002, "body", seg=32))
+    # the strike bezel: a steel crown of six teeth in front of the lens
+    bezel = revolve_z([(0.0168, LENS_Z + 0.0002), (0.0189, LENS_Z + 0.0002), (0.0189, LENS_Z - 0.0022),
+                       (0.0168, LENS_Z - 0.0022), (0.0168, LENS_Z + 0.0002)], 48, "bezel")
+    for k in range(6):
+        a_ = 2 * np.pi * (k + 0.5) / 6
+        tooth = sh.box(-0.0036, -0.0010, LENS_Z - 0.0052, 0.0036, 0.0010, LENS_Z - 0.0018, 0.0004, "bezel")
+        bezel.merge(sh.place(tooth, origin=(0.0178 * np.cos(a_), 0.0178 * np.sin(a_), 0.0),
+                             x_axis=(-np.sin(a_), np.cos(a_), 0.0), y_axis=(np.cos(a_), np.sin(a_), 0.0), z_axis=(0, 0, 1)))
+    body.merge(bezel)
+    # the reflector: a polished bowl from the lens back to the emitter, and the emitter itself
+    reflector = revolve_z([(0.0160, -0.0762), (0.0130, -0.0730), (0.0080, -0.0680), (0.0032, -0.0640), (0.0, -0.0638)],
+                          40, "reflector")
+    reflector.merge(sh.box(-0.0016, -0.0016, -0.0644, 0.0016, 0.0016, -0.0636, 0.0003, "bezel"))
+    body.merge(reflector)
+    lens = revolve_z([(0.0, LENS_Z + 0.0010), (0.0161, LENS_Z + 0.0010), (0.0161, LENS_Z + 0.0002), (0.0, LENS_Z + 0.0002)],
+                     40, "lens")
+    body.merge(lens)
+    # the pocket clip down the +X side, sprung off the barrel at its far end
+    clip_path = [V(LIGHT_R + 0.0004, 0.0, 0.0560), V(LIGHT_R + 0.0012, 0.0, 0.0480), V(LIGHT_R + 0.0012, 0.0, 0.0020),
+                 V(LIGHT_R + 0.0004, 0.0, -0.0040)]
+    for a0, b0 in zip(clip_path[:-1], clip_path[1:]):
+        mid, d = (a0 + b0) / 2, b0 - a0
+        length = float(np.linalg.norm(d))
+        piece = sh.box(-0.0004, -0.0024, -length / 2, 0.0004, 0.0024, length / 2, 0.0002, "clip")
+        z = d / length
+        x = np.cross((0.0, 1.0, 0.0), z)
+        body.merge(sh.place(piece, origin=mid, x_axis=x / np.linalg.norm(x), y_axis=(0.0, 1.0, 0.0), z_axis=z))
+    # the lanyard ring through the cap
+    body.merge(torus(V(0.0, -0.0128, 0.0605), 0, 0.0040, 0.0006, "bezel", seg=16, tseg=6))
+    # the switch: a rubber boot in the tail
+    button = revolve_z([(0.0, TAIL_Z + 0.0046), (0.0050, TAIL_Z + 0.0044), (0.0072, TAIL_Z + 0.0026),
+                        (0.0078, TAIL_Z - 0.0010), (0.0, TAIL_Z - 0.0010)], 32, "button")
+    glow = revolve_z([(0.0, LENS_Z - 0.0002), (0.0156, LENS_Z - 0.0002), (0.0156, LENS_Z - 0.0006), (0.0, LENS_Z - 0.0006)],
+                     40, "lit_glow")
+    button_origin = V(0.0, 0.0, TAIL_Z)
+    glow_origin = V(0.0, 0.0, LENS_Z)
+    return ({"body": (body, V(0, 0, 0)), "button": (button, button_origin), "lit_glow": (glow, glow_origin)},
+            {"charm": V(0.0, -0.0134, 0.0600), "tip": V(0.0, 0.0, LENS_Z - 0.0052)})
 
 
 # signed distance functions (item design space) for wrapping the fingers and the contact checks

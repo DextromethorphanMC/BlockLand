@@ -19,7 +19,8 @@ EQUIPMENT_DIR = os.path.join(HERE, "..", "..", "mod", "src", "main", "resources"
                              "equipment")
 # icon view per item: (yaw, pitch, roll) degrees applied to the item's design frame
 VIEWS = {"frag_grenade": (-35.0, 12.0, -12.0), "flashbang": (-35.0, 10.0, -18.0), "smoke_grenade": (-35.0, 10.0, -18.0),
-         "molotov": (-30.0, 8.0, -30.0), "throwing_knife": (90.0, 0.0, 45.0), "adrenaline": (90.0, 0.0, 45.0)}
+         "molotov": (-30.0, 8.0, -30.0), "throwing_knife": (90.0, 0.0, 45.0), "adrenaline": (90.0, 0.0, 45.0),
+         "flashlight": (90.0, 0.0, 45.0)}
 
 
 def _rot(yaw, pitch, roll):
@@ -110,6 +111,9 @@ def held_elements(key, names):
         return [_box((8, 7.0, 11), (1.45, 3.2, 1.45), k["liquid"]), _box((8, 10.9, 11), (0.95, 0.7, 0.95), k["glass"]),
                 _box((8, 12.9, 11), (0.6, 1.3, 0.6), k["glass"]), _box((8, 14.6, 11), (0.4, 0.6, 0.4), k["rag"]),
                 _box((8.0, 13.6, 11.6), (0.25, 0.9, 0.25), k["rag"])]
+    if key == "flashlight":
+        return [_box((8, 8, 11.6), (0.8, 0.8, 2.6), k["body"]), _box((8, 8, 7.6), (1.15, 1.15, 1.4), k["body"]),
+                _box((8, 8, 6.1), (1.05, 1.05, 0.15), k["bezel"]), _box((8, 8, 14.5), (0.5, 0.5, 0.3), k["button"])]
     if key == "throwing_knife":
         return [_box((8, 8, 12.4), (0.6, 0.65, 1.6), k["grip"]), _box((8, 8, 14.3), (0.1, 0.5, 0.4), k["blade"]),
                 _box((8, 8, 8.8), (0.1, 0.6, 2.0), k["blade"]), _box((8, 8, 6.3), (0.1, 0.35, 0.6), k["blade_edge"])]
@@ -117,15 +121,15 @@ def held_elements(key, names):
             _box((8, 8, 7.6), (0.4, 0.4, 0.7), k["plunger"]), _box((8, 8, 14.3), (0.55, 0.55, 0.5), k["cap"])]
 
 
-def build(path):
-    for key in ITEM_IDS:
+def build(path, keys=ITEM_IDS):
+    for key in keys:
         g = GLTF(os.path.join(EQUIPMENT_DIR, f"{key}.glb"))
         mats = load_materials(g)
         items, ext = icon_items(g, mats, key)
         tx.save_png(render_items_icon(items, ext, 32, 8, 1), path("textures", "item", f"{key}.png"))
         write_json(path("models", "item", f"{key}.json"),
                    {"parent": "minecraft:item/generated", "textures": {"layer0": f"blockland:item/{key}"}})
-        names = [m["name"] for m in g.json["materials"] if m["name"] not in ("flame", "lighter", "vent")]
+        names = [m["name"] for m in g.json["materials"] if m["name"] not in ("flame", "lighter", "vent", "lit_glow")]
         tx.save_png(palette(mats, names), path("textures", "item", f"{key}_held.png"))
         tex = f"blockland:item/{key}_held"
         write_json(path("models", "item", f"{key}_held.json"),

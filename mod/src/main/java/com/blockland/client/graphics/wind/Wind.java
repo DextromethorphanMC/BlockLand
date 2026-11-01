@@ -4,6 +4,7 @@ import com.blockland.client.graphics.Graphics;
 import com.blockland.client.graphics.GraphicsSettings;
 import com.blockland.client.render.RenderClock;
 import com.blockland.client.render.SceneLighting;
+import com.blockland.client.render.WindField;
 import com.mojang.blaze3d.buffers.Std140Builder;
 import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
@@ -70,6 +71,11 @@ public final class Wind {
     private static float heading = (float) (Math.random() * Math.PI * 2), turn, strength = 0.25f;
     private static boolean sky = true;
     private static long tick;
+    /** How far the turbulence has been carried along with the wind (blocks, wrapped at 2048), and when it last moved. */
+    private static double driftX, driftZ;
+    private static long driftAt;
+    /** Blocks/s the turbulence travels with the wind. */
+    private static final double DRIFT_SPEED = 3.5;
     private static ClientLevel level;
 
     /** A gust front: its centre (world xz) at {@code born}, travelling along its heading. */
@@ -109,6 +115,30 @@ public final class Wind {
                 }));
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> tick());
         ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(event -> clear());
+        WindField.publish(Wind::sample);
+    }
+
+    /**
+     * The wind at world (x, z) for what moves with it ({@link WindField}, the tumbleweeds): the steady wind broken up by
+     * the same slow turbulence the plants feel ({@code bl_windAt}), plus every gust over the point. Not scaled by the
+     * plants' 风 setting, which only says how far plants bend.
+     */
+    private static void sample(double x, double z, float[] out) {
+        float dirX = Mth.cos(heading), dirZ = Mth.sin(heading);
+        long now = RenderClock.nanos();
+        double t = (now % 3_600_000_000_000L) / 1e9;
+        double qx = x - dirX * t * 3.5, qz = z - dirZ * t * 3.5, k = 0.0030679616;
+        double turbulence = 0.55 + 0.27 * Math.sin((qx * 32 + qz * 16) * k) + 0.18 * Math.sin((qx * -48 + qz * 64) * k + 1.7);
+        double gust = 0;
+        for (Gust g : gusts) {
+            double dx = x - g.x(now), dz = z - g.z(now);
+            double across = -dx * g.dirZ + dz * g.dirX, along = dx * g.dirX + dz * g.dirZ;
+            gust += g.strength * g.fade(now) * Math.exp(-(along * along) / (g.length * g.length))
+                    * Math.exp(-(across * across) / (g.width * g.width));
+        }
+        out[0] = dirX;
+        out[1] = dirZ;
+        out[2] = (float) (strength * turbulence + gust);
     }
 
     private static boolean on() {
@@ -247,6 +277,12 @@ public final class Wind {
         float amount = on ? Graphics.settings().windStrength : 0;
         out.putVec4(Mth.cos(heading), Mth.sin(heading), on ? strength : 0, amount); // BlWind
         long now = RenderClock.nanos();
+        // the turbulence carried along with the wind, by the time since the last write (a second write in the same
+        // frame — the hand phase, a scope's view — adds nothing), wrapped where the shader's patterns repeat
+        double dt = driftAt == 0 ? 0 : Mth.clamp((now - driftAt) / 1e9, 0, 0.25);
+        driftAt = now;
+        driftX = (driftX + Mth.cos(heading) * DRIFT_SPEED * dt) % 2048;
+        driftZ = (driftZ + Mth.sin(heading) * DRIFT_SPEED * dt) % 2048;
         int gustCount = on ? Math.min(gusts.size(), SceneLighting.MAX_GUSTS) : 0;
         int pusherCount = on ? Math.min(pushers.size(), SceneLighting.MAX_PUSHERS) : 0;
         int swayCount = 0;
@@ -260,9 +296,9 @@ public final class Wind {
         WindData.Stack stack = data.stack;
         out.putVec4(stack.lean, stack.flutter, stack.pushCap, on && columnTexture != null ? 1 : 0); // BlWindStack
         WindData.Push push = data.push;
-        out.putVec4((float) Math.toRadians(push.lean), push.flatten, push.core, 0); // BlWindPush
+        out.putVec4((float) Math.toRadians(push.lean), push.flatten, push.core, (float) driftX); // BlWindPush (w: drift x)
         float omega = (float) (2 * Math.PI / Math.max(0.05f, push.springPeriod));
-        out.putVec4(omega, push.springDamping * omega, push.trail, 0); // BlWindSpring
+        out.putVec4(omega, push.springDamping * omega, push.trail, (float) driftZ); // BlWindSpring (w: drift z)
         out.putVec4(push.kinds.bend, push.kinds.sway, push.kinds.leaves, push.kinds.water); // BlWindKinds
         for (int i = 0; i < SceneLighting.MAX_GUSTS; i++) {
             if (i < gustCount) {

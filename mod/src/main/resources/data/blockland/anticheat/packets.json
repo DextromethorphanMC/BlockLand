@@ -31,6 +31,8 @@
     "PartyPackets.C2SAction": { "perSecond": 3, "burst": 8 },
     "ProfilePackets.C2SRequest": { "perSecond": 6, "burst": 20 },
     "ProfilePackets.C2SEquip": { "perSecond": 4, "burst": 10 },
+    "CheckInPackets.C2SRequest": { "perSecond": 2, "burst": 6 },
+    "CheckInPackets.C2SClaim": { "perSecond": 1, "burst": 3 },
     "C2SLobbyRequest": { "perSecond": 4, "burst": 10 },
     "C2SJoinQueue": { "perSecond": 2, "burst": 5 },
     "C2SLeaveQueue": { "perSecond": 2, "burst": 5 },

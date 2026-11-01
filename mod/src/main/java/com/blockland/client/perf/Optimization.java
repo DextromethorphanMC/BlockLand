@@ -41,6 +41,11 @@ public enum Optimization {
     SHADOW_TILE_CLEAR(Group.PIPELINE, false),
     /** Entity shadow capture: geometry the shadow map throws away is never transformed, the rest only where read. */
     SHADOW_ENTITY_CAPTURE(Group.PIPELINE, false),
+    /**
+     * Entity shadow capture: a BlockLand model's triangles drawn from the GPU buffers they already sit in (placed by the
+     * same float operations as on the CPU) instead of being rebuilt as vertices and uploaded every frame.
+     */
+    SHADOW_GPU_CASTERS(Group.PIPELINE, false),
     /** Shadow casters culled by their box in the sun's view instead of a bounding sphere (still conservative). */
     SHADOW_CULLING(Group.PIPELINE, false),
     /** Shadow casters drawn nearest the sun first, so the GPU's early depth test rejects what lies beneath. */

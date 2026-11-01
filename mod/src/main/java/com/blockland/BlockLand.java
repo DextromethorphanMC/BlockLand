@@ -44,7 +44,9 @@ public final class BlockLand {
         com.blockland.binoculars.BinocularsContent.register(context.getModBusGroup());
         com.blockland.vehicle.VehicleContent.register(context.getModBusGroup());
         com.blockland.decor.DecorContent.register(context.getModBusGroup());
+        com.blockland.ambient.AmbientContent.register(context.getModBusGroup());
         com.blockland.backpack.BackpackContent.register(context.getModBusGroup());
+        com.blockland.shark.SharkContent.register(context.getModBusGroup());
         BLEffects.register(context.getModBusGroup());
         BLEntities.register(context.getModBusGroup());
         BLNetwork.init();

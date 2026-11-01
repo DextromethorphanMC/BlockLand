@@ -217,7 +217,8 @@ final class WorldFx implements WorldEffects {
         viewToWorld.set(frame.viewRotation).transpose();
         float underwater = frame.submerged ? 1 : 0;
         float seaLevel = level.getSeaLevel();
-        boolean lights = settings.dynamicLights && settings.worldLighting;
+        // the scene's lights in the haze; with dynamic lights off only switched-on item lights (a flashlight's beam) are there
+        boolean lights = settings.worldLighting && (settings.dynamicLights || com.blockland.client.graphics.Graphics.status().dynamicLightCount > 0);
         volumetricInfo.write(b -> {
             b.putMat4f(viewToWorld);
             for (int c = 0; c < 4; c++) b.putMat4f(shadowed ? shadows.cascades()[c] : IDENTITY);

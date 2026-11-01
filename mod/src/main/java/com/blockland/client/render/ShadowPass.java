@@ -1,7 +1,11 @@
 package com.blockland.client.render;
 
+import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
+import org.joml.Matrix4f;
 
 /**
  * True while the graphics module renders entities into its sun shadow map (rendering spec §6). Entity, layer and
@@ -23,6 +27,18 @@ public final class ShadowPass {
      * texture coordinates (alpha-tested against the bound texture) and nothing else of them.
      */
     public interface Capture extends MultiBufferSource {
+        /**
+         * {@code Optimization.SHADOW_GPU_CASTERS}: a draw's triangles taken from the GPU buffers they already sit in
+         * (vertices of {@code GunPipelines.FORMAT}, a triangle-list index range) instead of as vertices built on the CPU.
+         * The capture draws them with each vertex placed by {@code matrix} exactly as {@code Matrix4f.transformPosition}
+         * places it on the CPU, and its texture coordinates scaled by {@code uvScale}, alpha-tested against {@code type}'s
+         * texture — the same triangles as the vertex path would give it. False when it cannot: then the caller builds the
+         * vertices as before. The caller has asked for {@code type}'s buffer first (as the vertex path does).
+         */
+        default boolean gpuCaster(RenderType type, Matrix4f matrix, GpuBuffer vertices, GpuBuffer indices, VertexFormat.IndexType indexType,
+                                  int firstIndex, int indexCount, float uvScale) {
+            return false;
+        }
     }
 
     private ShadowPass() {

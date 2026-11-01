@@ -3,13 +3,15 @@
 Vehicles (载具) are entities players ride: one shared system configured by data, drawn by BlockLand's own render
 pipeline from GLB models (COD-class models and PBR as `tools/assets/VIEWMODEL_SPEC.md` §53 asks of weapons). The first
 four: `motorcycle` (摩托车, 1 seat), `speedboat` (发动机小游艇, 5 seats), `tank` (坦克, 3 seats: driver, cannon gunner,
-machine gunner), `offroad` (越野车, 4 seats).
+machine gunner), `offroad` (越野车, 4 seats); the aircraft (§4.1): `fighter_jet` (战斗机, 1 seat: the pilot with a nose
+cannon and wing rocket pods) and `helicopter` (直升机, 6 seats: the pilot with rocket pods, the gunner on the chin gun,
+four passengers at the open doors).
 
 ## 1. Modules and boundaries
 
 | Module | What it owns |
 |---|---|
-| `com.blockland.vehicle` (shared) | `VehicleData` / `VehicleCatalog` (the data below), `VehicleEntity` (one class for every vehicle, configured by its data), `VehicleControl` (one tick of the driver's input), `VehicleFrame` (model space ↔ world, the weapon chain), `VehicleShell` (the cannon's round), `VehicleItem` (spawn items), `Vehicles` (the hooks each side sets), `VehicleContent` (entity types, items, sounds, creative tab 载具) |
+| `com.blockland.vehicle` (shared) | `VehicleData` / `VehicleCatalog` (the data below), `VehicleEntity` (one class for every vehicle, configured by its data), `VehicleControl` (one tick of the driver's input), `VehicleFlight` (an aircraft's tick, §4.1), `VehicleFrame` (model space ↔ world, the weapon chain), `VehicleShell` (the cannon's round), `VehicleItem` (spawn items), `Vehicles` (the hooks each side sets), `VehicleContent` (entity types, items, sounds, creative tab 载具) |
 | `server/vehicle` | `VehicleService` (wired by `BlockLandServer`): whether a player may use vehicles, the driver's inputs, riders' actions, the shelter of a hull, anti-cheat signals; `VehicleWeapons`: what a fired weapon does |
 | `client/vehicle` | `ClientVehicles` (input, keys, cameras, sight zoom, rider poses, packets), `VehicleRenderer`, `VehicleHud`, `VehicleEffects` (exhaust, wake, wreck fire, engine sound, headlights, muzzle flashes, tracers, impacts, explosions) |
 | `network/packet/VehiclePackets` + `network/VehiclePacketListeners` | messages only, dispatched to listener interfaces |
@@ -26,13 +28,19 @@ their hull reads `RoundTraits.current().armorDamage()`.
 Model space everywhere: metres, +Y up, front **−Z**, origin on the ground (a boat: the keel) under the middle of the
 wheelbase. Speeds blocks/s, accelerations blocks/s², angles degrees, times seconds. Per vehicle id:
 
-* `name`, `model` (`blockland:models/vehicle/<id>.glb`), `size` [width, height] of the (square) entity box, `mass`,
-  `health`, `armor` (0..1: share of incoming damage the hull ignores; a round's `RoundTraits.armorDamage` divides it;
-  blasts and fire meet half of it).
-* `movement`: `kind` — `bike` | `wheeled` | `tracked` | `boat`; `maxSpeed`, `reverseSpeed`, `accel`, `brake`,
+* `name`, `model` (`blockland:models/vehicle/<id>.glb`), `size` [width, height] of the (square) entity box (for
+  aircraft only the fuselage: wings and rotors pass over blocks), `mass`, `health`, `armor` (0..1: share of incoming
+  damage the hull ignores; a round's `RoundTraits.armorDamage` divides it; blasts and fire meet half of it),
+  `trackingRange` (chunks clients are sent it from; default 10, aircraft more).
+* `movement`: `kind` — `bike` | `wheeled` | `tracked` | `boat` | `jet` | `heli`; `maxSpeed`, `reverseSpeed`, `accel`, `brake`,
   `turnRate` (°/s at full steer; wheels and the boat need speed to turn, tracks turn on the spot), `grip` (share of the
   sideways slide removed per tick), `stepHeight`, `wheelRadius` (spins the wheels), `wadeDepth` (deeper water stalls a land
   vehicle), boats `draft` and `planing` (above it the hull rides higher, the bow lifts), bikes `lean` (into turns).
+  Jets: `maxSpeed` is level flight at full thrust, `accel` the full thrust, `turnRate` / `pitchRate` the most the nose
+  turns (°/s), `takeoffSpeed` (the wings carry it from here; slower stalls), `boostThrust` (the afterburner's share of
+  full thrust), `maxBank`, `taxiTurn` (°/s on the ground), `gearFold` (° each `gear_<i>` node folds when up).
+  Helicopters: `maxSpeed` / `reverseSpeed` forward and back, `strafeSpeed` sideways, `climbRate` / `descendRate`,
+  `turnRate` (yaw), `accel` / `brake` horizontally, `rotorRadius` (the downwash; the screen-motion box).
 * `seats`: in order, each `{ "node": "seat_<i>", "role": "driver" | "gunner" | "mg" | "passenger", "exposed": bool,
   "camera": "first" | "third", "pos": [x, y, z] (the rider's hips), "mount": "hull" | "turret", "yawLimit": ° }`. Seat 0
   is the driver. A `turret` seat's `pos` is relative to weapon 0's yaw pivot and turns with it. `exposed` riders can be
@@ -44,7 +52,12 @@ wheelbase. Speeds blocks/s, accelerations blocks/s², angles degrees, times seco
   [relative to the pitch pivot], "yawLimit" ([min, max] or absent = all round), "pitchLimit" [min, max] (+ = up),
   "turnRate", "kind": "shell" | "hitscan", "damage", "fireInterval", "range", "spread" (hitscan cone), "ammo"
   (impacts.json profile), "magazine", "reload", "shellSpeed", "shellGravity", "zoom" (the sight's magnification),
-  "explosion" { radius, innerRadius, damage, minDamage, knockback, hullDamage } }`.
+  "explosion" { radius, innerRadius, damage, minDamage, knockback, hullDamage }, "freeView", "trigger", "mirror" }`.
+  `freeView` (a pilot's weapons): the gunner's view stays free — the weapon turns towards it within its limits (fixed
+  forward with both limits [0, 0]), the view is never held on it and there is no sight. `trigger`: `attack` (default)
+  or `use` — a seat may have one of each (the jet's pilot: cannon on attack, rockets on use). `mirror`: a pair of pods,
+  firing by turns from the muzzle and from the same point mirrored across the hull's middle (odd rounds left: the
+  mirrored one), so only the left pod has a muzzle node.
 * `effects`: `exhaust` [[x, y, z] …], `headlights` [[x, y, z] …], `wake` [x, y, z].
 * `sounds`: keys; each is the sound event **`blockland:vehicle.<id>.<key>`** (registered from the data; the files and
   `sounds.json` entries are the models' side): `engine` (looped, pitch by speed, volume by throttle), `start`, `horn`,
@@ -75,6 +88,11 @@ points (within a couple of centimetres) — `python -I tools/vehicles/check_vehi
 | `roadwheel_l<i>`, `roadwheel_r<i>`, `sprocket_l/r`, `idler_l/r` | tank | spin about X at their track's speed (the tracks differ while turning) |
 | `propeller` | speedboat | spins about Z; child of `outboard` |
 | `outboard` | speedboat | the motor: yaw about Y with the steer |
+| `rotor_main` | helicopter | the main rotor (hub and blades), spins about its local Y while someone flies it (spinning up and down over ~5 s) |
+| `rotor_tail` | helicopter | the tail rotor, spins about its local X, 4.5× the main rotor |
+| `gear_<i>` | jet | a landing-gear leg, pivot at its top hinge: folds by `movement.gearFold` about its local X once the jet is 4 blocks off the ground (back down below that); its wheel is a `wheel_<n/l/r>` child |
+| `afterburner` | jet | the afterburner flame at the nozzle (emissive material `afterburner`), drawn only while the pilot boosts |
+| `chin_turret` → `chin_gun` | helicopter | the chin gun's yaw and pitch pivots (weapon `chingun`), `muzzle_chingun` on the gun |
 | `seat_<i>` | all | the rider's hips, one per seat in data order (a turret seat a child of `turret`) |
 | `exhaust_<i>`, `headlight_<i>`, `taillight_<i>`, `wake` | optional | effect anchors (the data's `effects`) |
 
@@ -87,11 +105,12 @@ its recoil. Until a vehicle's GLB exists its hull boxes are drawn as outlines.
   (right click; not while sneaking); the rider is placed with its hips at its seat (tilted with the hull), turns with
   the hull (and the turret on a turret seat) and may look `yawLimit` away from its front. Sneak to get out (beside the
   seat, else behind or in front).
-* Keys: W/S throttle, A/D steer, space brake, sprint boost; H horn; riders working the vehicle (driver, gunners, anyone
+* Keys: W/S throttle, A/D steer, space brake, sprint boost (aircraft: §4.1); H horn; riders working the vehicle (driver, gunners, anyone
   inside the hull) change seats with the number keys, everyone with J (the next free seat). Gunners: attack (held) fires,
   use (held) looks through the sight (the view from just ahead of the muzzle along the barrel, `zoom`×; the barrel
   follows the mouse at its turn rate), the guns' reload key reloads; empty magazines reload by themselves.
-* **Movement is the server's.** The driver's client sends `C2SControl` (seq, throttle, steer, brake, boost) every tick;
+* **Movement is the server's.** The driver's client sends `C2SControl` (seq, throttle, steer, brake, boost, and the
+  driver's view yaw / pitch, which aircraft fly towards) every tick;
   the server queues them on the vehicle (a backlog is cut short) and steps one per tick with `VehicleEntity.simulate`,
   then sends the driver `S2CState` (the seq it applied, position, yaw, velocity, tilt). The driver's own client runs the
   same `simulate` at once on its input (prediction) and, for each state, replays its newer inputs from the server's
@@ -103,8 +122,32 @@ its recoil. Until a vehicle's GLB exists its hull boxes are drawn as outlines.
   into its turn, a boat lifts its bow at speed).
 * Moving hulls hurt what they run into (speed over 4 blocks/s, by mass; damage type `blockland:vehicle_crash`, credited to
   the driver) and throw it aside. A vehicle falling more than 4 blocks wears its hull; riders feel only big falls.
+### 4.1 Aircraft (`VehicleFlight`)
+
+* **The pilot flies where they look.** The pilot's view is their own (the hull does not turn it, the yaw is not
+  limited); its yaw and pitch go with every input, so the server and the prediction steer the same way. In third person
+  (the pilot's seat starts there) the camera orbits by the view, the aircraft turns after it.
+* **Jet.** W full thrust, nothing cruise (about three quarters of top speed), S idle, sprint the afterburner (flame,
+  louder, faster), space the airbrake; A/D the rudder. Thrust along the nose against drag that grows with the square of
+  the speed; climbing costs speed, diving gives it. The nose turns towards the view (yaw at `turnRate`, pitch at
+  `pitchRate`, both weaker when slow) and banks into the turn. Below `takeoffSpeed` the wings carry less and less: the
+  nose drops and it sinks (HUD: 失速). On the ground it rolls on its wheels: W/sprint thrust, A/D steer the nose wheel,
+  space brakes, S slows and then backs up slowly; once at `takeoffSpeed` and the pilot looks up, it rotates and lifts off.
+  The gear folds away 4 blocks up and comes down again below that.
+* **Helicopter.** The nose turns to the view's yaw; W/S fly forward and back, A/D sideways, space climbs, sprint
+  descends, nothing held hovers where it is; the hull tips into its acceleration. On its skids it stays put until it
+  climbs. The rotors spin up while someone flies it; the downwash blows dust (or spray) out under it near the ground.
+* **No pilot, no engine**: a jet glides and stalls, a helicopter's rotor freewheels and it falls. Under water
+  (`wadeDepth`) the engine stops too.
+* **Landing and crashing.** Aircraft take no fall damage; what they strike wears the hull by mass: the ground faster
+  than 6 (jet) / 7 (helicopter) blocks/s down, a jet put down on a wing (roll over 25°) or its nose (pitch under −12°),
+  anything ahead after losing more than 10 blocks/s, a ceiling. The HUD warns 拉起 when the ground is less than three
+  seconds below at the current sink rate.
+* Hit boxes turn with the hull's yaw only (not its pitch or bank).
+* Getting out (sneak) works in the air too: the rider falls from there.
+
 * Anti-cheat: riders are passengers, which the movement checks leave alone (the vehicle's movement is the server's own
-  step). Refused control packets (not the driver, values out of range) are `Suspicion.report`ed as `vehicle.control`,
+  step). Refused control packets (not the driver, values out of range or not finite) are `Suspicion.report`ed as `vehicle.control`,
   weapons fired well before their interval as `vehicle.fire_rate` (both in `data/blockland/anticheat/checks.json`);
   `packets.json` rate-limits `VehiclePackets.C2SControl` and `C2SAction`.
 
@@ -115,8 +158,15 @@ pipeline, PBR, lit by `SceneLighting`, shadows through `ShadowPass` / `VanillaDr
 Never through vanilla's entity model system except as the shadow pass needs. Each vehicle reports its pose and a box over
 its hull and riders to `client/render/ObjectMotion`, so TAA, DLSS (Frame Generation, DLSS 5) and the motion blur move its
 pixels by its own motion, turning included (rendering spec §11).
-Seats with `camera: third` (inside a hull) switch to third person, pulled back to fit the vehicle; leaving the seat
-restores the player's camera. Riders' bodies tip with the hull; riders inside a hull are not drawn.
+Seats with `camera: third` (inside a hull) switch to third person, pulled back to fit the vehicle; the camera key (F5)
+switches to first person in any seat — inside a hull that is the view from the rider's eyes (a jet's cockpit). In first
+person the eyes ride with the seat in the hull's own tilted frame (over the hips, turning with the turret on a turret
+seat), so the vehicle never swings into the view as it pitches and rolls, and the view rolls with the hull as seen along
+where the rider looks (never pitched: the middle of the view stays where they aim); leaving the seat restores the
+player's camera. The rider's panel is a movable HUD element (`vehicle`, UI spec §3); its key hints
+wrap onto as many lines as they need. Riders' bodies tip with the hull; riders inside a hull are not drawn. A helicopter's
+motion box reaches out to its `rotorRadius`. The pilot's HUD shows airspeed and altitude, both weapons' rounds, a ring
+in the middle of the view (where they ask it to fly) and a mark where the nose's weapon points.
 
 ## 6. Weapons and damage
 

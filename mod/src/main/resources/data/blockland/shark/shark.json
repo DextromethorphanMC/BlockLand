@@ -1,0 +1,39 @@
+{
+  "_comment": "The shark (tools/creatures/SHARK_SPEC.md). Health and armour in vanilla points, speeds as vanilla attribute values, ranges in blocks, times in seconds. Spawn weights live in data/blockland/forge/biome_modifier/shark_spawns.json.",
+  "health": 30,
+  "armor": 2,
+  "speed": 1.3,
+  "damage": {
+    "easy": 4,
+    "normal": 6,
+    "hard": 9
+  },
+  "knockback": 0.9,
+  "xp": 8,
+  "aggroRange": 12,
+  "bloodRange": 28,
+  "bloodBelowHealth": 0.5,
+  "circleSeconds": [3.0, 6.0],
+  "circleRadius": 5.5,
+  "chargeSpeed": 1.9,
+  "biteCooldown": 1.6,
+  "retreatSeconds": 2.0,
+  "ignoreRiders": true,
+  "huntFish": true,
+  "spawn": {
+    "minDepth": 6,
+    "belowSeaLevel": [2, 30],
+    "maxNearby": 2,
+    "nearbyRadius": 64
+  },
+  "animation": {
+    "_comment": "Client only: the body's swimming wave (model space metres, front -Z).",
+    "waveLength": 3.2,
+    "amplitude": 0.16,
+    "speedAmplitude": 0.10,
+    "beatsPerBlock": 0.55,
+    "idleBeatsPerSecond": 0.9,
+    "turnBend": 0.35,
+    "jawOpen": 32
+  }
+}

@@ -80,6 +80,9 @@ public final class ClientEquipment {
     private static long pinAt;
     /** The item leaves the hand (or the injection takes hold) at this time; 0 = not yet scheduled. */
     private static long releaseAt;
+    /** The flashlight's switch as this client clicked it, shown until the server's state agrees (or a second passed). */
+    private static boolean predictedLit;
+    private static long predictedUntil;
     private static boolean releaseQueued;
     private static boolean releasedFx;
     @Nullable
@@ -94,10 +97,12 @@ public final class ClientEquipment {
     public static void init(BusGroup modBus) {
         RegisterClientReloadListenersEvent.getBus(modBus).addListener(event -> event.registerReloadListener(
                 (ResourceManagerReloadListener) manager -> itemId = ""));
+        net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(event -> FlashlightGlow.clear());
         EntityRenderersEvent.RegisterRenderers.getBus(modBus).addListener(event ->
                 event.registerEntityRenderer(BLEntities.THROWN_EQUIPMENT.get(), ThrownEquipmentRenderer::new));
         AddGuiOverlayLayersEvent.getBus(modBus).addListener(event -> event.getLayeredDraw()
                 .addAbove(ForgeLayeredDraw.PRE_SLEEP_STACK, BlockLand.id("equipment_hud"), ForgeLayeredDraw.CROSSHAIR, EquipmentHud::render));
+        com.blockland.client.hud.layout.HudLayout.register(new EquipmentHud.Panel());
         TickEvent.ClientTickEvent.Post.BUS.addListener(event -> clientTick());
         TickEvent.RenderTickEvent.Pre.BUS.addListener(event -> frame());
         RenderHandEvent.BUS.addListener(ClientEquipment::renderHand);
@@ -209,8 +214,12 @@ public final class ClientEquipment {
         LocalPlayer player = mc.player;
         if (player == null) return;
         WatchedEquipment.tick();
+        if (player.level() instanceof ClientLevel level) FlashlightGlow.tick(level, player);
         syncEquipped(player);
-        if (item != null) viewmodel.setBuild(EquipmentContent.buildOf(player.getMainHandItem()));
+        if (item != null) {
+            viewmodel.setBuild(EquipmentContent.buildOf(player.getMainHandItem()));
+            viewmodel.setLit(lit(player));
+        }
         if (WeaponInput.inspectPressed() && item != null && mc.screen == null) inspect(player);
     }
 
@@ -325,8 +334,12 @@ public final class ClientEquipment {
             case USING -> {
                 if (!releasedFx && now >= releaseAt) {
                     releasedFx = true;
-                    if (!modelReady) cue("inject");
-                    viewmodel.injected();
+                    if (it.toggles()) {
+                        if (!modelReady) cue("click");
+                    } else {
+                        if (!modelReady) cue("inject");
+                        viewmodel.injected();
+                    }
                 }
                 if (now >= stateStart + (long) (it.useTime * 1e9)) state = State.IDLE;
             }
@@ -382,7 +395,7 @@ public final class ClientEquipment {
             releaseAt = now + (long) (it.injectAt * 1e9);
             readyAt = now + (long) ((it.useTime + it.cooldown) * 1e9);
             viewmodel.play(EquipmentViewmodel.Action.USE, it.anims.use, it.useTime);
-            if (!modelReady) cue("cap");
+            if (!modelReady && !it.toggles()) cue("cap");
         }
         BLNetwork.sendToServer(new EquipmentPackets.C2SAction(slot, EquipmentPackets.Action.PRESS, lob));
     }
@@ -429,9 +442,28 @@ public final class ClientEquipment {
                     : lob ? "equipment.lob" : "equipment.throw";
             case "cap" -> "equipment.adrenaline_cap";
             case "inject" -> "equipment.adrenaline_inject";
+            case "click" -> clicked();
             default -> "";
         };
         if (!sound.isEmpty()) playUi(BlockLand.MODID + ":" + sound, 0.97f + random.nextFloat() * 0.06f, 0.7f);
+    }
+
+    /** The flashlight's switch clicked: it shows the new state at once (the server's follows); its sound. */
+    private static String clicked() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        boolean on = player == null || !lit(player);
+        predictedLit = on;
+        predictedUntil = RenderClock.nanos() + 1_000_000_000L;
+        if (player != null) viewmodel.setLit(on);
+        return on ? "equipment.flashlight_on" : "equipment.flashlight_off";
+    }
+
+    /** Whether the held flashlight shows lit: the switch just clicked, else the stack's state as the server keeps it. */
+    private static boolean lit(LocalPlayer player) {
+        boolean server = EquipmentContent.isLit(player.getMainHandItem());
+        if (RenderClock.nanos() < predictedUntil && server != predictedLit) return predictedLit;
+        predictedUntil = 0;
+        return server;
     }
 
     /** Without a model (no clip events) the moments of the hand still sound. */

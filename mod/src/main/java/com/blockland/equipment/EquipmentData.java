@@ -13,7 +13,7 @@ import java.util.Map;
 
 /**
  * Equipment (装备) definitions as written in {@code data/blockland/equipment/equipment.json} (read by Gson; field names
- * = JSON keys, except {@code throw}): grenades, the molotov, throwing knives and injectors. How an item is held, thrown
+ * = JSON keys, except {@code throw}): grenades, the molotov, throwing knives, injectors and the flashlight. How an item is held, thrown
  * or used and how it flies lives here; what it does when it goes off is the {@code effect} object, read only by the
  * effects module.
  */
@@ -23,7 +23,7 @@ public final class EquipmentData {
 
     /** Kinds the equipment module knows how to handle (the {@code kind} key). */
     public static final String FRAG = "frag", FLASH = "flash", SMOKE = "smoke", MOLOTOV = "molotov", KNIFE = "knife",
-            ADRENALINE = "adrenaline";
+            ADRENALINE = "adrenaline", FLASHLIGHT = "flashlight";
 
     /** One way to throw: launch speed (blocks per tick) and how far above the view direction it leaves (degrees). */
     public static final class Launch {
@@ -65,7 +65,7 @@ public final class EquipmentData {
         /** JSON key {@code throw}. */
         public String throwClip = "throw";
         public String lob = "lob";
-        /** Injectors. */
+        /** Injectors; the flashlight's switch (its {@code click} event toggles it). */
         public String use = "use";
     }
 
@@ -88,7 +88,7 @@ public final class EquipmentData {
         public float pullTime = 0.35f;
         /** JSON key {@code throw}. */
         public Throw throwing = new Throw();
-        /** Injectors: seconds of the {@code use} clip, and when in it the effect takes hold. */
+        /** Injectors: seconds of the {@code use} clip, and when in it the effect takes hold (the flashlight: it switches). */
         public float useTime = 1.4f;
         public float injectAt = 0.8f;
         /** Parameters of what the item does when it goes off (the effects module reads them). */
@@ -101,9 +101,14 @@ public final class EquipmentData {
 
         private transient List<Slot> resolvedSlots;
 
-        /** Thrown (grenades, molotov, knives) rather than used on oneself (injectors). */
+        /** Thrown (grenades, molotov, knives) rather than used on oneself (injectors) or switched (the flashlight). */
         public boolean thrown() {
-            return !ADRENALINE.equals(kind);
+            return !ADRENALINE.equals(kind) && !FLASHLIGHT.equals(kind);
+        }
+
+        /** Switched on and off by its use instead of used up (the flashlight: {@code EquipmentContent.LIT}). */
+        public boolean toggles() {
+            return FLASHLIGHT.equals(kind);
         }
 
         /** Readied by holding the button (pin, rag), released to throw. */

@@ -28,6 +28,8 @@ public final class BattleRoyaleDemoIsland {
 
     private final StructureBuilder b = new StructureBuilder(SIZE_X, SIZE_Y, SIZE_Z);
     private final int[][] height = new int[SIZE_X][SIZE_Z];
+    /** Columns of the island and its sea (the rest of the square is void). */
+    private final boolean[][] sea = new boolean[SIZE_X][SIZE_Z];
     /** Columns something was built on (no trees or open-air loot there). */
     private final Set<Long> taken = new HashSet<>();
     private final List<BattleRoyaleMapSettings.Spot> spots = new ArrayList<>();
@@ -62,15 +64,30 @@ public final class BattleRoyaleDemoIsland {
                 int h = d < coast ? (int) Math.round(SEA - 1 + Math.pow(t, 0.6) * Math.max(2, hills)) : SEA - 2;
                 h = Math.max(0, Math.min(SIZE_Y - 14, h));
                 height[x][z] = h;
-                if (d > SEA_RADIUS + 3 * fbm(x * 0.05, z * 0.05, 0)) continue;
+                // the sea ends two blocks inside the map's side, leaving room for the barrier that holds it in
+                if (d > Math.min(SEA_RADIUS + 3 * fbm(x * 0.05, z * 0.05, 0), SIZE_X / 2.0 - 2)) continue;
+                sea[x][z] = true;
                 for (int y = 0; y <= h; y++) b.set(x, y, z, block(y, h, x, z));
                 for (int y = h + 1; y <= SEA; y++) b.set(x, y, z, "minecraft:water");
+            }
+        }
+        // an invisible wall round the sea: in the arena its edge would otherwise pour away into the void
+        for (int x = 0; x < SIZE_X; x++) {
+            for (int z = 0; z < SIZE_Z; z++) {
+                if (sea[x][z]) continue;
+                boolean shore = false;
+                for (int[] d : new int[][]{{1, 0}, {-1, 0}, {0, 1}, {0, -1}}) {
+                    int nx = x + d[0], nz = z + d[1];
+                    if (nx >= 0 && nz >= 0 && nx < SIZE_X && nz < SIZE_Z && sea[nx][nz]) shore = true;
+                }
+                if (shore) b.fill(x, 0, z, x, SEA, z, "minecraft:barrier");
             }
         }
     }
 
     private String block(int y, int top, int x, int z) {
-        if (top <= SEA + 1) return y >= top - 2 ? "minecraft:sand" : "minecraft:sandstone";
+        // the bottom layer is sandstone: sand on it stays put, over the void it would fall
+        if (top <= SEA + 1) return y >= top - 2 && y > 0 ? "minecraft:sand" : "minecraft:sandstone";
         if (y == top) {
             // rocky tops on the highest hills
             if (top >= SEA + 12 && fbm(x * 0.2, z * 0.2, 2) > 0.2) return "minecraft:stone";

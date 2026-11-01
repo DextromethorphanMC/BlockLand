@@ -1467,11 +1467,12 @@ pistols (p9, p9a, usp) list their stock options explicitly so it never shows the
 
 # Round I: equipment
 
-## 36. Equipment (`models/equipment/<id>.glb`: grenades, molotov, throwing knife, adrenaline)
+## 36. Equipment (`models/equipment/<id>.glb`: grenades, molotov, throwing knife, adrenaline, flashlight)
 
-Six items, gameplay in `data/blockland/equipment/equipment.json` (ids `frag_grenade` 破片手雷 (M67 pattern),
+Seven items, gameplay in `data/blockland/equipment/equipment.json` (ids `frag_grenade` 破片手雷 (M67 pattern),
 `flashbang` 闪光弹 (M84), `smoke_grenade` 烟雾弹 (M18), `molotov` 燃烧瓶, `throwing_knife` 飞刀, `adrenaline`
-肾上腺素注射剂 (auto-injector)). One file per item, like the knives: arm rig, the item, its clips. §2–§4, §6, §7, §15–§17
+肾上腺素注射剂 (auto-injector), `flashlight` 手电筒 (§36.1)). One file per item, like the knives: arm rig, the item, its
+clips. §2–§4, §6, §7, §15–§17
 and §31 apply.
 
 ```
@@ -1557,6 +1558,32 @@ Camera within the §4 limits in every clip (throw ±2.4° pitch / 3.4° roll at 
 `check_equipment.py` (claims files with an `equipment` node: nodes, materials / regions, clips, STEP scales, events,
 the data timing, the item in the hand until its release and gone after it, the pin on the left index finger once
 pulled, pin and cooked spoon gone in the hold, the lighter flame at the rag, crosshair, eye distance, equipment budget in `model_quality.json`).
+
+### 36.1 Flashlight (`flashlight`, 手电筒)
+
+A tactical light (155 mm, original design): an anodised barrel with a knurled grip band and a pocket clip, the wider
+finned head, a polished reflector behind the lens, a crenellated steel strike bezel, the tail cap with grip rings, a
+lanyard ring and a rubber tail switch. Design frame: along Z, the lens towards −Z, the tail switch (thumb end) towards
++Z; held in the fist round the barrel, the thumb on the tail switch, the lens to the front.
+
+* **Kind** `flashlight` (`EquipmentData.toggles()`): not thrown, never used up. The use clip (`use`, `useTime` 0.36 s)
+  presses the switch; at its `click` event (`injectAt` 0.12 s) the server switches the held stack's `blockland:lit`
+  component (`EquipmentContent.LIT`: persistent, synced to every client) and plays `equipment.flashlight_on` / `_off` to
+  the others; this client hears its own click from the clip event and shows the new state at once (the server's state
+  follows within a round trip). Either mouse button clicks it, as with the injector.
+* **Nodes**: `body` (barrel, head, bezel, reflector, lens, clip, lanyard ring), `button` (the tail switch: it squashes
+  1 mm in the click), `lit_glow` (an emissive disc on the lens), `tip` (empty, the lens's front). **Nodes named
+  `lit_*` glow only while their item is switched on**: `WeaponLook.hiddenNodes` hides them everywhere (third person,
+  previews), the first-person viewmodel shows them while the held stack is lit.
+* **The light** is data: `graphics/item_lights.json` → `blockland:flashlight`: warm white `#FFF1DC`, intensity 3, reach
+  28 blocks, a spot cone of 11° / 24° half-angles, switch `blockland:lit` (rendering spec §5). Held in either hand by
+  anyone it lights the world along their view, whatever the 动态光源 / 手持光源 settings say (world lighting must be on);
+  in volumetric haze the beam shows. Like every dynamic light it shows in the dark, not against full daylight.
+* **Seen from outside** (`client/equipment/FlashlightGlow`): a soft glow on the lens (stronger when it points at the
+  viewer) and a faint beam fading out over 4.5 blocks, following the holder's hand and view; not for this client's
+  own first-person view.
+* Skins: default, desert and arctic camo on the anodised body, `aurora` (legendary). Sounds: `equipment.flashlight_on`,
+  `equipment.flashlight_off` (two-stage switch clicks). Kit key `blockland:flashlight`; listed in the equipment tab.
 
 ## 37. Third person, dropped and framed weapons (the `blockland:weapon` item model)
 

@@ -33,7 +33,9 @@ layout(std140) uniform BlockLandScene {
     vec4 BlShadowSplits;   // per cascade: distance from the camera (blocks) it covers; 0 = unused
     vec4 BlShadowParams;   // x 1 / atlas size, y PCF radius (texels, cascade 0), z normal offset (blocks, cascade 0), w cascades
     vec4 BlWater;          // x wave steepness (1 = default), y wave speed, z reflection strength, w refraction strength
-    vec4 BlLights[BL_MAX_LIGHTS * 2];       // light i: [2i] (position xyz, radius), [2i+1] (colour rgb linear × intensity, 0)
+    vec4 BlLights[BL_MAX_LIGHTS * 3];       // light i: [3i] (position xyz, radius), [3i+1] (colour rgb linear × intensity,
+                                            // a spot's inner cos), [3i+2] (a spot's direction xyz, outer cos; w -2 = a point
+                                            // light)
     vec4 BlMaterialInfo;   // x material count, yz block atlas size in texels
     vec4 BlMaterials[BL_MAX_MATERIALS * 2]; // material i: [2i] sprite uv rect (u0, v0, u1, v1),
                                             //             [2i+1] (emission 0..1, brightest-channel threshold, kind, reflectivity)
@@ -60,8 +62,8 @@ layout(std140) uniform BlockLandScene {
     vec4 BlWindInfo;       // x gust count, y pusher count, z sway count, w strength of the water's sway
     vec4 BlWindBend;       // graphics/wind.json bend: lean, flutter (blocks per unit of wind), height exponent, lag
     vec4 BlWindStack;      // stack: lean, flutter, most a body pushes a column (blocks); w 1 = BlPlantColumns is valid
-    vec4 BlWindPush;       // push: lean (radians), flatten (share of 90°), core (share of the radius at full push), -
-    vec4 BlWindSpring;     // the spring back: angular frequency (rad/s), decay (1/s), trail wobble, -
+    vec4 BlWindPush;       // push: lean (radians), flatten (share of 90°), core (share of the radius at full push), w how far the turbulence has blown (x, blocks, wrapped at 2048)
+    vec4 BlWindSpring;     // the spring back: angular frequency (rad/s), decay (1/s), trail wobble, w the turbulence's drift (z)
     vec4 BlWindKinds;      // push per mode: bend, sway, leaves, water plants
     vec4 BlGusts[BL_MAX_GUSTS * 2];     // gust i: [2i] (centre x, z camera-relative, half length along its heading,
                                         //           strength), [2i+1] (heading x, z, half width across it, seed)
@@ -313,8 +315,22 @@ float bl_shadow(vec3 pos, vec3 normal, vec2 pixel) {
     return bl_shadowMap(pos, normal, pixel) * bl_cloudShadow(pos);
 }
 
-// Sum of the dynamic point lights at a camera-relative position (linear light). Half-Lambert wrap: blocky surfaces next
-// to a light read better lit around their edges.
+// Light i's cone at offset d (from the point to the light), squared distance dist2: for a spot, soft from the inner to
+// the outer cone, and it gives the spot a long throw (falloff: a focused beam does not spread like a bulb); a point
+// light gets 1 and keeps its falloff.
+#define BL_SPOT_THROW 0.05
+float bl_spot(int i, vec3 d, float dist2, float window, inout float falloff) {
+    vec4 cone = BlLights[i * 3 + 2];
+    if (cone.w < -1.5) {
+        return 1.0;
+    }
+    float c = dot(-d * inversesqrt(max(dist2, 1e-4)), cone.xyz);
+    falloff = window * window / (1.0 + BL_SPOT_THROW * dist2);
+    return smoothstep(cone.w, BlLights[i * 3 + 1].w, c);
+}
+
+// Sum of the dynamic lights (point lights and spots) at a camera-relative position (linear light). Half-Lambert wrap:
+// blocky surfaces next to a light read better lit around their edges.
 vec3 bl_pointLights(vec3 pos, vec3 normal) {
     vec3 sum = vec3(0.0);
     int count = int(BlFlags.z + 0.5);
@@ -322,7 +338,7 @@ vec3 bl_pointLights(vec3 pos, vec3 normal) {
         if (i >= count) {
             break;
         }
-        vec4 light = BlLights[i * 2];
+        vec4 light = BlLights[i * 3];
         vec3 d = light.xyz - pos;
         float dist2 = dot(d, d);
         float r2 = light.w * light.w;
@@ -331,8 +347,12 @@ vec3 bl_pointLights(vec3 pos, vec3 normal) {
         }
         float window = 1.0 - dist2 / r2;
         float falloff = window * window / (1.0 + dist2);
+        float cone = bl_spot(i, d, dist2, window, falloff);
+        if (cone <= 0.0) {
+            continue;
+        }
         float wrap = clamp(dot(normal, d * inversesqrt(max(dist2, 1e-4))) * 0.5 + 0.5, 0.0, 1.0);
-        sum += BlLights[i * 2 + 1].rgb * (falloff * wrap);
+        sum += BlLights[i * 3 + 1].rgb * (falloff * wrap * cone);
     }
     return sum;
 }
