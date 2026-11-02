@@ -63,7 +63,7 @@ final class VanillaDraws {
                 // a model's own buffers already hold these triangles: the capture may draw them from there
                 // (SHADOW_GPU_CASTERS), placed by the same matrix as the vertices below would be
                 if (e.staticSource && Optimization.SHADOW_GPU_CASTERS.on() && ((ShadowPass.Capture) buffers).gpuCaster(type, pose.pose(),
-                        e.vertices, e.indices, e.indexType, e.firstIndex, e.indexCount, e.uvScale)) continue;
+                        e.vertices, e.indices, e.indexType, e.firstIndex, e.indexCount, e.uvScale, source.bounds())) continue;
                 casters(consumer, pose.pose(), source, light, e.uvScale);
                 continue;
             }

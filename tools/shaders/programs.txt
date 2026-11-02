@@ -35,6 +35,9 @@ gfx_copy             | blockland:core/gfx_screen | blockland:core/gfx_copy | Pos
 # Lighting pack variants (client/graphics/light): every define set of a static pipeline using the overridden shaders
 terrain_translucent  | minecraft:core/terrain | minecraft:core/terrain | Position,Color,UV0,UV2,Normal |
 terrain_tripwire     | minecraft:core/terrain | minecraft:core/terrain | Position,Color,UV0,UV2,Normal | ALPHA_CUTOUT=0.1
+terrain_pages_solid  | blockland:core/terrain_pages | minecraft:core/terrain | Position,Color,UV0,UV2,Normal |
+terrain_pages_cutout | blockland:core/terrain_pages | minecraft:core/terrain | Position,Color,UV0,UV2,Normal | ALPHA_CUTOUT=0.1
+terrain_pages_cutout_mip | blockland:core/terrain_pages | minecraft:core/terrain | Position,Color,UV0,UV2,Normal | ALPHA_CUTOUT=0.5
 entity_outline_less  | minecraft:core/entity  | minecraft:core/entity  | Position,Color,UV0,UV1,UV2,Normal | NO_OVERLAY
 entity_eyes          | minecraft:core/entity  | minecraft:core/entity  | Position,Color,UV0,UV1,UV2,Normal | EMISSIVE NO_CARDINAL_LIGHTING NO_OVERLAY
 entity_breeze_wind   | minecraft:core/entity  | minecraft:core/entity  | Position,Color,UV0,UV1,UV2,Normal | ALPHA_CUTOUT=0.1 APPLY_TEXTURE_MATRIX NO_CARDINAL_LIGHTING NO_OVERLAY
@@ -42,6 +45,8 @@ clouds               | minecraft:core/rendertype_clouds | minecraft:core/rendert
 # Sun shadow map and world effects (client/graphics/shadow)
 shadow_terrain_solid | blockland:core/shadow_terrain | blockland:core/shadow_solid  | Position,Color,UV0,UV2,Normal |
 shadow_terrain_cut   | blockland:core/shadow_terrain | blockland:core/shadow_cutout | Position,Color,UV0,UV2,Normal |
+shadow_terrain_solid_pages | blockland:core/shadow_terrain | blockland:core/shadow_solid  | Position,Color,UV0,UV2,Normal | BL_PAGES
+shadow_terrain_cut_pages   | blockland:core/shadow_terrain | blockland:core/shadow_cutout | Position,Color,UV0,UV2,Normal | BL_PAGES
 shadow_entity        | blockland:core/shadow_entity  | blockland:core/shadow_cutout | Position,Color,UV0,UV1,UV2,Normal |
 shadow_entity_gpu    | blockland:core/shadow_entity_gpu | blockland:core/shadow_cutout | Position,UV0,Normal |
 shadow_clear         | blockland:core/shadow_clear   | blockland:core/shadow_clear  | Position |
@@ -96,4 +101,10 @@ graffiti_glow        | blockland:core/graffiti_glow | blockland:core/graffiti_gl
 far_terrain          | blockland:core/far_terrain | blockland:core/far_terrain | Packed |
 far_terrain_masked   | blockland:core/far_terrain | blockland:core/far_terrain | Packed | MASKED
 far_depth            | blockland:core/gfx_screen | blockland:core/far_depth | Position |
+far_depth_occluded   | blockland:core/gfx_screen | blockland:core/far_depth | Position | OCCLUDED
+far_depth_init       | blockland:core/gfx_screen | blockland:core/far_depth_init | Position |
+# FAR_GPU_CULLING compute programs (client/graphics/far/GpuCull): "compute" in the vertex column, the shader in the fragment column
+far_hzb_copy         | compute | blockland:core/far_hzb | | COPY
+far_hzb              | compute | blockland:core/far_hzb | |
+far_cull             | compute | blockland:core/far_cull | |
 gfx_far_atmosphere   | blockland:core/gfx_screen | blockland:core/gfx_far_atmosphere | Position |

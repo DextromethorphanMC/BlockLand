@@ -101,6 +101,22 @@ public final class SceneLighting {
         if (provider != null) provider.extraWorldView(begin);
     }
 
+    private static boolean extraWorldViewExpected;
+
+    /**
+     * A module that draws an extra view of the world (a scope's picture through its eyepiece) says so on every frame it
+     * may: what that view shows is not what the camera's frustum does, so work that leaves out what the camera cannot
+     * see (the sun shadow casters) is held back in such frames.
+     */
+    public static void expectExtraWorldView(boolean expected) {
+        extraWorldViewExpected = expected;
+    }
+
+    /** Whether an extra view of the world may be drawn this frame ({@link #expectExtraWorldView}). */
+    public static boolean extraWorldViewExpected() {
+        return extraWorldViewExpected;
+    }
+
     /** An all-zero scene block: world lighting and emission encoding off. */
     public static GpuBufferSlice off() {
         if (offBuffer == null || offBuffer.isClosed()) {
@@ -165,6 +181,7 @@ public final class SceneLighting {
         size.putVec4(); // BlWindInfo
         for (int i = 0; i < 5; i++) size.putVec4(); // BlWindBend, BlWindStack, BlWindPush, BlWindSpring, BlWindKinds
         for (int i = 0; i < (MAX_GUSTS + MAX_PUSHERS + MAX_SWAYS) * 2; i++) size.putVec4(); // BlGusts[], BlPushers[], BlSways[]
+        size.putVec4(); // BlShadowSoft
         return size.get();
     }
 }

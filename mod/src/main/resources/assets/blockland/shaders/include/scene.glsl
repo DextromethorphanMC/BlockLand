@@ -71,6 +71,7 @@ layout(std140) uniform BlockLandScene {
                                         //           blocks/s, height, presence 0..1)
     vec4 BlSways[BL_MAX_SWAYS * 2];     // sway i: [2i] (x, y, z camera-relative, radius), [2i+1] (heading x, z, age s,
                                         //           strength) — plants an entity went through, swinging back
+    vec4 BlShadowSoft;     // x 1 = the soft shadows at low quality (fewer taps, spec §6), yzw unused
 };
 
 // Shadow atlas, comparison sampling: 2x2 tiles, cascade c in tile ((c & 1) / 2, (c >> 1) / 2).
@@ -139,6 +140,11 @@ const vec2 BL_SOFT[16] = vec2[16](
     vec2(0.4947, -0.3147), vec2(-0.1655, 0.6155), vec2(-0.3156, -0.6076), vec2(0.6846, 0.2500), vec2(-0.7123, 0.2940),
     vec2(0.3434, -0.7337), vec2(0.2537, 0.8089), vec2(-0.7647, -0.4432), vec2(0.8971, -0.1972), vec2(-0.5475, 0.7788),
     vec2(-0.1265, -0.9761));
+// Low quality (BlShadowSoft.x, the 软阴影质量 setting): the centre and four taps up the spiral, an 8-tap Vogel disc.
+const vec3 BL_SEARCH_LOW[4] = vec3[4](vec3(0.7648, 0.6442, 0.0000), vec3(-0.9991, 0.0416, 0.3333), vec3(0.7086, -0.7056, 0.6667), vec3(-0.0459, 0.9989, 1.0000));
+const vec2 BL_SOFT_LOW[8] = vec2[8](
+    vec2(0.2500, 0.0000), vec2(-0.3193, 0.2925), vec2(0.0489, -0.5569), vec2(0.4024, 0.5249),
+    vec2(-0.7385, -0.1306), vec2(0.6996, -0.4450), vec2(-0.2340, 0.8705), vec2(-0.4463, -0.8593));
 // Widest penumbra radius (blocks), and the caster distance (blocks) the blocker search is sized for.
 #define BL_PENUMBRA_MAX 1.5
 #define BL_PENUMBRA_REACH 48.0
@@ -177,6 +183,31 @@ float bl_shadowSoft(int c, vec3 local, vec3 normal, vec2 tile, float texel, floa
     if (d < depth) {
         blockers = 1.0;
         gap = depth - d;
+    }
+    if (BlShadowSoft.x > 0.5) {
+        // low quality: the same estimate from five taps, the same penumbra from eight
+        for (int i = 0; i < 4; i++) {
+            vec2 o = rotation * BL_SEARCH_LOW[i].xy * mix(radius, widest, BL_SEARCH_LOW[i].z);
+            float ref = min(depth + dot(slope, o), 1.0);
+            d = textureLod(BlShadowDepth, tile + clamp(centre + o, lo, hi), 0.0).r;
+            if (d < ref) {
+                blockers += 1.0;
+                gap += ref - d;
+            }
+        }
+        if (blockers < 0.5) {
+            return 1.0;
+        }
+        if (blockers > 4.5) {
+            return 0.0;
+        }
+        float widthLow = clamp(gap / blockers / depthPerBlock * tanSize * uvPerBlock, radius, widest);
+        float litLow = 0.0;
+        for (int i = 0; i < 8; i++) {
+            vec2 o = rotation * BL_SOFT_LOW[i] * widthLow;
+            litLow += texture(BlShadowMap, vec3(tile + clamp(centre + o, lo, hi), min(depth + dot(slope, o), 1.0)));
+        }
+        return litLow * 0.125;
     }
     for (int i = 0; i < 11; i++) {
         vec2 o = rotation * BL_SEARCH[i].xy * mix(radius, widest, BL_SEARCH[i].z);

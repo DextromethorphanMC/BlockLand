@@ -160,7 +160,9 @@ void main() {
         if (sigma <= 1e-6) {
             continue;
         }
-        float sun = shadowAt(p) * bl_cloudShadowFog(p);
+        // the clouds' shadow (a noise lookup) only where the shadow map lets any sun through: 0 times it is 0 anyway
+        float sun = shadowAt(p);
+        if (sun > 0.0) sun *= bl_cloudShadowFog(p);
         vec3 inscatter = sunColor * tint * (sun * sunPhase);
         // the sky and the lamps light the fog, not the thin shaft medium (which only shows the sun's shafts)
         inscatter += skyLight * (fog / sigma);

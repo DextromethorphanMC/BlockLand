@@ -52,6 +52,8 @@ import java.util.List;
  * optics                log the raised optic's state (power, eyepiece, sway, breath, sight line)
  * setting scopeQuality high   set a field of the client settings (not saved); dotted paths reach nested settings
  *                       (setting graphics.shadows ultra)
+ * commit                the settings as the settings screen commits them (the lighting pack selected or dropped to
+ *                       match graphics.worldLighting, which reloads the resources)
  * opt all|&lt;id&gt; on|off    switch optimizations (client/perf; all: every one), like the 性能 tab (not saved)
  * bench [compare|&lt;id&gt;]  run the benchmark (client/perf), only its frame comparison, or one optimization alone (off
  *                       and on, every other one on); the commands after it wait until it has finished, then its
@@ -148,7 +150,7 @@ public final class DevAutomation {
         }
     }
 
-    private static final java.util.Set<String> LOBBY_COMMANDS = java.util.Set.of("wait", "world", "setting", "opt", "reload", "quit");
+    private static final java.util.Set<String> LOBBY_COMMANDS = java.util.Set.of("wait", "world", "setting", "commit", "opt", "reload", "quit");
     /** A benchmark started by {@code bench} is running. */
     private static boolean benchmarkWatched;
 
@@ -208,6 +210,11 @@ public final class DevAutomation {
                     com.blockland.network.BLNetwork.sendToServer(com.blockland.network.packet.LobbyPackets.C2SEnterWorld.INSTANCE);
                     log("world: entering");
                 }
+            }
+            case "commit" -> {
+                // the settings as committed by the settings screen (selects or drops the lighting pack, reloading resources)
+                com.blockland.client.graphics.Graphics.settingsCommitted();
+                log("settings committed");
             }
             case "reload" -> mc.reloadResourcePacks();
             case "quit" -> mc.stop();

@@ -473,6 +473,13 @@ public final class SettingsScreen extends Screen {
         rows.add(custom(new Slider(gfx + "shadow_penumbra", 0, 1, 0.05, () -> g.shadowPenumbra, v -> g.shadowPenumbra = (float) v,
                 SettingsScreen::percentOrOff)));
         rows.add(new Note(() -> tr(gfx + "shadow_penumbra.note")));
+        rows.add(custom(new Choice(gfx + "shadow_soft_quality", () -> g.shadowSoftQualityMode().ordinal(),
+                i -> g.shadowSoftQuality = GraphicsSettings.id(GraphicsSettings.SoftShadowQuality.values()[i]),
+                tr(gfx + "quality.low"), tr(gfx + "quality.high"))));
+        rows.add(new Note(() -> tr(gfx + "shadow_soft_quality.note")));
+        rows.add(custom(new Slider(gfx + "shadow_lag", 0, 4, 0.1, () -> g.shadowLag, v -> g.shadowLag = (float) v,
+                v -> v <= 0 ? tr(gfx + "shadow_lag.every_frame") : tr(gfx + "texels", String.format(Locale.ROOT, "%.1f", v)))));
+        rows.add(new Note(() -> tr(gfx + "shadow_lag.note")));
         rows.add(custom(new Slider(gfx + "sun_strength", 0, 2, 0.05, () -> g.sunStrength, v -> g.sunStrength = (float) v, SettingsScreen::percent)));
         // ---- light colours (with world lighting; the ray tracer and the clouds take them too)
         rows.add(custom(new Slider(gfx + "sun_temperature", -1, 1, 0.05, () -> g.sunTemperature, v -> g.sunTemperature = (float) v,

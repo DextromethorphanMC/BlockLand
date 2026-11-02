@@ -2,7 +2,11 @@ package com.blockland.client.perf.terrain;
 
 import com.blockland.client.perf.FrameTimings;
 import com.blockland.client.perf.Optimization;
+import com.blockland.client.render.MeshBounds;
+import com.blockland.client.render.TerrainAnimation;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.block.BlockRenderDispatcher;
 import net.minecraft.client.renderer.block.model.BlockModelPart;
 import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
@@ -48,6 +52,10 @@ public final class TerrainCompile {
     private final BlockPos.MutableBlockPos scratch = new BlockPos.MutableBlockPos();
     /** {@code FACE_GROUPS}: the solid and cutout quads are grouped by facing at the end ({@link #finish}). */
     private boolean groups;
+    /** Each layer's builder of this compile ({@link #layer}): which layer a block is being drawn into. */
+    private final BufferBuilder[] layerBuilders = new BufferBuilder[ChunkSectionLayer.values().length];
+    /** Per layer: a block drawn into it has quads with animated sprites ({@link #animatedBlock}, {@link TerrainAnimation}). */
+    private final boolean[] layerAnimated = new boolean[ChunkSectionLayer.values().length];
     int originX, originY, originZ;
     @Nullable
     private FrameTimings.Span span;
@@ -82,6 +90,8 @@ public final class TerrainCompile {
         c.fluids = TerrainSwitches.on(Optimization.HIDDEN_FLUIDS);
         c.groups = TerrainSwitches.on(Optimization.FACE_GROUPS);
         c.current = null;
+        java.util.Arrays.fill(c.layerBuilders, null);
+        java.util.Arrays.fill(c.layerAnimated, false);
         c.originX = section.minBlockX();
         c.originY = section.minBlockY();
         c.originZ = section.minBlockZ();
@@ -185,13 +195,48 @@ public final class TerrainCompile {
         return HiddenFluids.hidden(region, c.current, fluid, c.scratch);
     }
 
-    /** {@code FACE_GROUPS}: the groups of the compile's solid and cutout quads (RETURN of the compile, before {@link #end}). */
+    /** The compile begins, or goes on with, a layer's builder ({@code SectionCompiler.getOrBeginLayer}). */
+    public static void layer(ChunkSectionLayer layer, BufferBuilder builder) {
+        TerrainCompile c = THREAD.get();
+        if (c.compiling) c.layerBuilders[layer.ordinal()] = builder;
+    }
+
+    /**
+     * A block about to be tesselated into {@code buffer} (one of the compile's layer builders): the layer is noted as
+     * drawing animated sprites when the block's model has quads with any ({@link AnimatedModels}: known per state, or
+     * read off the very parts drawn). Every compile does this, switches or not — {@link TerrainAnimation} is a fact
+     * about the mesh that anything may rely on.
+     */
+    public static void animatedBlock(VertexConsumer buffer, BlockState state, List<BlockModelPart> parts, BlockRenderDispatcher blocks) {
+        TerrainCompile c = THREAD.get();
+        if (!c.compiling) return;
+        int layer = -1;
+        for (int i = 0; i < c.layerBuilders.length; i++) {
+            if (c.layerBuilders[i] == buffer) {
+                layer = i;
+                break;
+            }
+        }
+        if (layer < 0 || c.layerAnimated[layer]) return;
+        int known = AnimatedModels.animated(state, blocks.getBlockModel(state));
+        if (known == AnimatedModels.UNKNOWN ? AnimatedModels.animated(parts) : known == AnimatedModels.YES) c.layerAnimated[layer] = true;
+    }
+
+    /**
+     * RETURN of the compile, before {@link #end}: the layers that draw animated sprites are told to
+     * {@link TerrainAnimation}, every layer's mesh is measured for {@link MeshBounds}; {@code FACE_GROUPS}: the groups
+     * of the compile's solid and cutout quads.
+     */
     public static void finish(SectionCompiler.Results results) {
         TerrainCompile c = THREAD.get();
-        if (!c.compiling || !c.groups) return;
+        if (!c.compiling) return;
         for (java.util.Map.Entry<ChunkSectionLayer, MeshData> e : results.renderedLayers.entrySet()) {
-            if (!FaceGroups.grouped(e.getKey())) continue;
+            ChunkSectionLayer layer = e.getKey();
             MeshData mesh = e.getValue();
+            if (c.layerAnimated[layer.ordinal()]) TerrainAnimation.pending(mesh);
+            float[] bounds = MeshBounds.measure(mesh.vertexBuffer(), mesh.drawState().format().getVertexSize());
+            if (bounds != null) MeshBounds.pending(mesh, bounds);
+            if (!c.groups || !FaceGroups.grouped(layer)) continue;
             FaceGroups groups = FaceGroups.of(mesh.vertexBuffer(), mesh.drawState().format().getVertexSize());
             if (groups != null) FaceGroups.pending(mesh, groups);
         }

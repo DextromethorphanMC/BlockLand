@@ -129,6 +129,7 @@ public final class TerrainDraws {
     public static void endFrame() {
         boundVao = -1;
         Arrays.fill(elementByVao, 0);
+        PagedDraws.endFrame();
     }
 
     // ---- batches -----------------------------------------------------------------------------------------------------
@@ -214,7 +215,9 @@ public final class TerrainDraws {
 
     /**
      * {@code LevelRenderer.prepareChunkRenders}: per visible section and layer with geometry, a transform (camera-relative
-     * origin, computed as vanilla does) and a draw that uploads it; all transforms written at once.
+     * origin, computed as vanilla does) and a draw that uploads it; all transforms written at once. {@code TERRAIN_PAGES}:
+     * the opaque layers' draws go into the frame's {@link PagedTerrain} plan instead (the same origins, as the draws'
+     * own offsets; one transform shared), their lists stay empty.
      */
     public static ChunkSectionsToRender prepare(ObjectArrayList<SectionRenderDispatcher.RenderSection> visibleSections,
                                                 Matrix4fc modelView, double cameraX, double cameraY, double cameraZ) {
@@ -229,6 +232,8 @@ public final class TerrainDraws {
         ArrayList<DynamicUniforms.Transform> list = transforms;
         Vector4f colorModulator = new Vector4f(1.0F, 1.0F, 1.0F, 1.0F);
         Matrix4f textureMatrix = new Matrix4f();
+        // the paged plan whenever a section may lie in a page (the switch, or its rebuild still under way)
+        PagedTerrain.Plan plan = VertexPages.on() || VertexPages.anyPaged() ? PagedTerrain.begin() : null;
         Object[] sections = visibleSections.elements();
         FaceIndex.budget(FACE_INDEX_NANOS);
         int count = visibleSections.size();
@@ -280,6 +285,11 @@ public final class TerrainDraws {
                             }
                         }
                     }
+                    if (plan != null && VertexPages.paged(layer)) {
+                        plan.batch(layer).add(buffers.getVertexBuffer(), indexBuffer, indexType, firstIndex, indexCount, VertexPages.baseVertex(buffers),
+                                (float) (origin.getX() - cameraX), (float) (origin.getY() - cameraY), (float) (origin.getZ() - cameraZ));
+                        continue;
+                    }
                     int index = list.size();
                     list.add(new DynamicUniforms.Transform(
                             modelView,
@@ -290,6 +300,15 @@ public final class TerrainDraws {
                     layerLists[layer.ordinal()].add(new RenderPass.Draw<>(0, buffers.getVertexBuffer(), indexBuffer, indexType, firstIndex,
                             indexCount, upload(index)));
                 }
+            }
+            if (plan != null) {
+                // the paged draws share one transform (the view and the colour; the offset in it is not read)
+                int shared = list.size();
+                list.add(new DynamicUniforms.Transform(modelView, colorModulator, new Vector3f(), textureMatrix, 1.0F));
+                GpuBufferSlice[] slices = RenderSystem.getDynamicUniforms().writeTransforms(list.toArray(new DynamicUniforms.Transform[0]));
+                ChunkSectionsToRender result = new ChunkSectionsToRender(drawsPerLayer, maxIndices, slices);
+                PagedTerrain.finish(plan, result, slices[shared], maxIndices);
+                return result;
             }
             GpuBufferSlice[] slices = RenderSystem.getDynamicUniforms().writeTransforms(list.toArray(new DynamicUniforms.Transform[0]));
             return new ChunkSectionsToRender(drawsPerLayer, maxIndices, slices);

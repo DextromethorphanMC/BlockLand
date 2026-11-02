@@ -1,6 +1,7 @@
 package com.blockland.client.graphics.light;
 
 import com.blockland.client.graphics.Graphics;
+import com.blockland.client.graphics.GraphicsSettings;
 import com.blockland.client.graphics.ReflectionInfo;
 import com.blockland.client.graphics.ShadowInfo;
 import com.blockland.client.graphics.frame.FrameContext;
@@ -222,6 +223,8 @@ final class SceneUniforms implements SceneLighting.Provider {
         out.putMat4f(prevView);
         out.putVec4(frame.prevProjection.m00(), frame.prevProjection.m11(), reflectionSteps, reflectionSteps > 0 ? 1 : 0); // BlPrevProj
         Wind.write(out, frame.camX, frame.camY, frame.camZ, frame.partialTick); // BlWind, BlWindInfo, BlGusts[], BlPushers[], BlSways[]
+        boolean softLow = Graphics.settings().shadowSoftQualityMode() == GraphicsSettings.SoftShadowQuality.LOW;
+        out.putVec4(softLow ? 1 : 0, 0, 0, 0); // BlShadowSoft
         RenderSystem.getDevice().createCommandEncoder().writeToBuffer(target.slice(), out.get());
     }
 

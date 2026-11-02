@@ -1,0 +1,238 @@
+{
+  "adsSensitivity": 0.55,
+  "scopeSensitivities": {
+    "2x": 0.5775,
+    "3x": 0.5775,
+    "4x": 0.5775,
+    "6x": 0.5775,
+    "8x": 0.5775,
+    "10x": 0.5775
+  },
+  "scopeQuality": "high",
+  "scopeBlurOutside": true,
+  "scopeDimOutside": true,
+  "cameraImpact": 1.0,
+  "cameraMotion": 1.0,
+  "crosshair": {
+    "shape": "circle",
+    "color": 16777215,
+    "opacity": 1.0,
+    "length": 13,
+    "thickness": 1,
+    "gap": 0,
+    "outline": true,
+    "dynamic": true
+  },
+  "hitmarker": {
+    "shape": "x",
+    "hitColor": 15922423,
+    "criticalColor": 16753205,
+    "killColor": 16726843,
+    "size": 1.0,
+    "thickness": 1,
+    "duration": 1.0
+  },
+  "graphics": {
+    "enabled": true,
+    "preset": "custom",
+    "aspectRatio": "native",
+    "aspectFit": "stretch",
+    "resolution": "native",
+    "customWidth": 1920,
+    "customHeight": 1080,
+    "farTerrain": true,
+    "farTerrainDistance": 8192,
+    "farTerrainQuality": "low",
+    "farTerrainFullDetail": 7,
+    "farChunks": true,
+    "farChunkDistance": 512,
+    "farChunkFullDetail": 32,
+    "farAtmosphere": false,
+    "aerialPerspective": 1.0,
+    "heatShimmer": 0.5,
+    "farBlur": 0.5,
+    "farTerrainHaze": 1.0,
+    "upscaler": "taau",
+    "upscaleQuality": "native",
+    "antialiasing": "off",
+    "sharpness": 0.35,
+    "dlssPreset": "default",
+    "dlssSharpness": 0.25,
+    "frameGeneration": 1,
+    "reflex": "boost",
+    "rayTracing": false,
+    "rayQuality": "high",
+    "rayDistance": 64.0,
+    "rayGlobalIllumination": 0.65,
+    "rayAmbientOcclusion": 0.0,
+    "rayEmission": 1.0,
+    "raySunBounce": true,
+    "rayDenoiser": "dlss_rr",
+    "neuralRendering": false,
+    "neuralIntensity": 1.0,
+    "neuralStructure": 1.0,
+    "neuralTone": 0.3,
+    "neuralModel": 1,
+    "neuralAutoMask": true,
+    "neuralCharacters": 0.5,
+    "neuralHighlightRecovery": true,
+    "worldLighting": true,
+    "shadows": "medium",
+    "shadowDistance": 64.0,
+    "shadowSoftness": 0.45,
+    "shadowPenumbra": 0.5,
+    "shadowSoftQuality": "low",
+    "shadowLag": 1.5,
+    "sunStrength": 2.0,
+    "dynamicLights": true,
+    "heldItemLights": true,
+    "emission": 0.9,
+    "waterReflections": false,
+    "waterRefraction": false,
+    "weaponWorldLighting": false,
+    "sunTemperature": 0.0,
+    "moonTemperature": 0.0,
+    "blockLightTemperature": 0.0,
+    "blockLightStrength": 1.0,
+    "fog": false,
+    "fogDensity": 2.0,
+    "fogQuality": "low",
+    "rainWetness": 1.0,
+    "waterRipples": true,
+    "soaking": true,
+    "lensWater": true,
+    "wind": false,
+    "windStrength": 1.0,
+    "reflections": "off",
+    "shaderSunMoon": false,
+    "physicalSky": false,
+    "volumetricClouds": false,
+    "cloudQuality": "low",
+    "cloudCoverage": 0.65,
+    "ambientOcclusion": 0.5,
+    "volumetricLight": 0.3,
+    "bloom": 0.45,
+    "autoExposure": false,
+    "exposure": 0.0,
+    "tonemap": "vanilla",
+    "motionBlur": 0.35,
+    "motionBlurViewmodel": 0.5,
+    "motionBlurQuality": "medium",
+    "motionBlurModel": 2,
+    "vignette": 0.2,
+    "chromaticAberration": 0.0,
+    "filmGrain": 0.0,
+    "saturation": 1.0,
+    "contrast": 1.0,
+    "temperature": 0.0,
+    "showStats": true
+  },
+  "impacts": {
+    "quality": "ultra",
+    "secondCollisions": false,
+    "dust": false,
+    "environment": false,
+    "blood": 1.8,
+    "bloodInWater": false,
+    "bloodStains": 1.4,
+    "fluidPhysics": false
+  },
+  "performance": {
+    "optimizations": {
+      "gl_state": true,
+      "immediate_uploads": true,
+      "terrain_draws": true,
+      "section_meshing": true,
+      "section_copies": true,
+      "biome_tints": true,
+      "compile_queue": true,
+      "particles": true,
+      "shadow_batching": true,
+      "shadow_tile_clear": true,
+      "shadow_entity_capture": true,
+      "shadow_culling": true,
+      "shadow_sorting": true,
+      "shadow_reuse": true,
+      "motion_blur_tiles": true,
+      "post_uniforms": true,
+      "post_dead_work": true,
+      "viewmodel_batching": true,
+      "impact_pools": true,
+      "frame_garbage": true,
+      "enclosed_blocks": true,
+      "face_groups": true,
+      "far_hidden_geometry": true,
+      "shadow_gpu_casters": true,
+      "enclosed_models": true,
+      "hidden_fluids": true,
+      "terrain_pages": true,
+      "shadow_gather_cache": true,
+      "shadow_view_casters": true
+    },
+    "showTimings": false,
+    "backgroundFrameLimit": 40
+  },
+  "inventoryBrightness": 0.0,
+  "inventoryCell": 18,
+  "hud": {
+    "places": {
+      "minimap": {
+        "anchor": "TOP_LEFT",
+        "x": 24,
+        "y": 23
+      },
+      "vehicle": {
+        "anchor": "TOP_RIGHT",
+        "x": -10,
+        "y": 15
+      },
+      "knife": {
+        "anchor": "BOTTOM_RIGHT",
+        "x": -14,
+        "y": -9
+      },
+      "hotbar": {
+        "anchor": "RIGHT",
+        "x": 0,
+        "y": 34
+      },
+      "damage_direction": {
+        "anchor": "CENTER",
+        "x": 0,
+        "y": 2
+      },
+      "experience": {
+        "anchor": "RIGHT",
+        "x": -26,
+        "y": 34
+      }
+    },
+    "hidden": [],
+    "options": {
+      "hotbar": {
+        "orientation": "vertical"
+      },
+      "experience": {
+        "orientation": "vertical"
+      }
+    },
+    "sizes": {
+      "damage_direction": [
+        115,
+        115
+      ]
+    },
+    "replaceVanilla": true,
+    "snap": true,
+    "snapMargin": 4
+  },
+  "minimap": {
+    "size": 96,
+    "range": 96,
+    "rotate": true
+  },
+  "ambient": {
+    "tumbleweeds": false,
+    "tumbleweedDensity": 2.0
+  }
+}

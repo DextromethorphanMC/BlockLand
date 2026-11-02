@@ -44,12 +44,15 @@ final class ColumnMesher {
         final EnumMap<ChunkSectionLayer, ByteBuffer> layers = new EnumMap<>(ChunkSectionLayer.class);
         /** {@code FACE_GROUPS}: the solid and cutout layers' quads by facing. */
         final EnumMap<ChunkSectionLayer, FaceGroups> groups = new EnumMap<>(ChunkSectionLayer.class);
+        /** {@code FAR_GPU_CULLING}: each layer's quads in clusters with their boxes (made with every mesh). */
+        final EnumMap<ChunkSectionLayer, Clusters> clusters = new EnumMap<>(ChunkSectionLayer.class);
         int minY = Integer.MAX_VALUE, maxY = Integer.MIN_VALUE;
 
         void free() {
             for (ByteBuffer b : layers.values()) MemoryUtil.memFree(b);
             layers.clear();
             groups.clear();
+            clusters.clear();
         }
 
         long bytes() {
@@ -135,6 +138,10 @@ final class ColumnMesher {
                         FaceGroups g = FaceGroups.of(copy, DefaultVertexFormat.BLOCK.getVertexSize());
                         if (g != null) result.groups.put(e.getKey(), g);
                     }
+                    // FAR_GPU_CULLING reads them; made whatever the switch says (one pass over the vertices), so flipping it
+                    // never meshes the far chunks again
+                    Clusters c = Clusters.of(copy, DefaultVertexFormat.BLOCK.getVertexSize(), size);
+                    if (c != null) result.clusters.put(e.getKey(), c);
                 }
             }
         } catch (RuntimeException | Error e) {

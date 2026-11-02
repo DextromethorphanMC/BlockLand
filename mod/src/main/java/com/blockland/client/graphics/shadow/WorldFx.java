@@ -164,6 +164,11 @@ final class WorldFx implements WorldEffects {
         millis = millis * 0.9f + (System.nanoTime() - start) / 1e6f * 0.1f;
     }
 
+    /** How far the volumetric march reads the shadow map at most (blocks): its range, within the shadow distance. */
+    static float volumetricRange(GraphicsSettings settings) {
+        return Math.min(VOLUMETRIC_RANGE, settings.shadowDistance);
+    }
+
     /** The volumetric fog and light runs: there is a medium (fog on, or light shafts asked for). */
     boolean wantsFog(GraphicsSettings settings) {
         return !broken && ((settings.fog && settings.fogDensity > 0.001f) || settings.volumetricLight > 0.01f);

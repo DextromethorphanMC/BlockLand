@@ -153,6 +153,12 @@ keeps encoding on, so held items never fake glow from their texture alpha.
   quality modes Quality / Balanced / Performance / Ultra Performance, DLAA = native; model preset default or J / K / L / M
   for every mode; sharpening after DLSS is BlockLand's contrast-adaptive pass with its own strength, DLSS's own being
   retired; any failure switches it off for the session and TAAU takes over the same frame, the status says why).
+  The bridge keeps three frames in flight (`DlssBridge.SLOTS`: a command buffer, a fence and a pair of handoff
+  semaphores per slot, plus an OpenGL fence set right after the slot's wait on "done"): with one of each, every frame
+  waited on the CPU for the previous frame's DLSS, which waits on the GPU for all of that frame's OpenGL work — a whole
+  GPU sync per frame that cost more than DLSS itself (measured 2026-11-02 on the RTX 5090 laptop at 1080p: 3.6 ms of
+  CPU and 1.7 ms of GPU per frame in `bl/post/upscale`). The shared images stay single: OpenGL's next frame queues
+  behind its wait on the previous "done", so nothing is overwritten while DLSS reads it.
   Native-resolution AA: off, FXAA, TAA (TAAU at scale 1).
 * Ray tracing (`raytrace/RayTracing`, a frame stage after the level; settings: on/off, quality, distance, GI, AO,
   emission, sun bounce, denoiser): `raytrace/VoxelWorld` keeps the blocks around the camera (up to 16×8×16 chunk
@@ -270,15 +276,131 @@ Cascaded sun shadow map: one depth atlas of 2×2 tiles (`ShadowQuality.tile` tex
 logarithmically up to `shadowDistance`, texel-snapped orthographic boxes around the camera, the sun path tilted so noon
 shadows are not axis-aligned. Casters: terrain sections in range (solid, cutout, cutout-mipped; alpha-tested), entities
 near the camera; slope-scaled depth bias at render time, normal offset at lookup. Far cascades may update every other
-frame. `ShadowInfo` hands the atlas and matrices to the uniforms and the volumetric light.
+frame. A box is placed around the camera and then kept while the camera stays within its slack — half size − reach −
+1.6 blocks (`Cascade.slack`; 1.6 is as far as the shaders' shadow taps reach from a position) — and the light is the one
+it was placed with (any change of the light places every cascade anew: a moving sun, as in the open world, keeps the
+shadows gliding as before); only then is it placed again. A kept box shows exactly what placing one around the camera
+every frame would: the texel grid is anchored to the world by the snapping, and the shaders pick a cascade by the
+distance from the camera and only then ask whether the position lies inside its box — within the slack every position
+nearer than the reach does, with every tap inside the tile. `ShadowInfo` hands the atlas and matrices to the uniforms
+and the volumetric light.
 
 The sun's time of day is interpolated between ticks only while the day clock runs (`SunPath.timeOfDay`: the client
 level's `tickDayTime` and an unfrozen tick rate); a stopped clock keeps the sun where it is. Two exact savings (§20):
 casters are drawn nearest the sun first (`SHADOW_SORTING`: every texel ends at the least depth covering it, whatever the
-order), and a cascade's terrain depth is kept in a texture of the atlas's size (`TerrainCache`, `SHADOW_REUSE`) while its
-placement, the light, the camera position, the meshes of the sections reaching it, the block atlas and the client tick are
-unchanged — the kept tile is copied in and the entities drawn over it each frame (the same least depths). Only frames
-whose camera and light held still since the last one take that path; moving, the cascades are drawn as before.
+order), and a cascade's atlas tile is kept instead of drawn again (`TerrainCache`, `SHADOW_REUSE`): it is the least
+depth of the static terrain — the solid layers of every section reaching it and the cutout layers of those without
+animated sprites, which only changes with the placement (the light it was placed with, the snapped box, its size), the
+meshes of the sections reaching it or the block atlas — the animated sections' cutout layers (which may change on every
+client tick) and the entities (every frame); every draw is a less-or-equal depth write, so the order never matters and
+a draw repeated over texels that hold it changes nothing. Each frame only the texels last frame's entities could have
+touched are cleared — the box round every captured caster vertex (and every GPU caster's primitive box placed by its
+matrix, `ShadowPass.Capture.gpuCaster`'s `bounds`) through the cascade's projection, `Cascade.tileRect` — and the
+sections whose geometry reaches those texels — the box round each mesh layer's vertices, measured by the section compile
+and carried on its `SectionBuffers` (`client/render/MeshBounds`; the whole tile for a mesh without one) — are drawn into
+them again, then this frame's entities. The static terrain alone is also kept in a texture of the atlas's size (drawn
+there when the cascade's static terrain changed): after a client tick the texels every animated section can touch (and
+the old entities') are copied back from it and the animated sections drawn again, and a tile that holds something else
+(drawn whole, a restart, a placement change) takes the static drawing whole with the animated sections on top. When
+only some sections' meshes changed, came or went (a block broken, a chunk loaded and its neighbours rebuilt with it),
+the kept and the current lists of sections reaching the cascade are merged by section place (`TerrainCasters.key`,
+gather order) and the texels the old and new boxes of the differing sections can touch are cleared in the static
+texture and drawn again with every static section reaching them, then copied into the tile with the animated sections
+on top (`TerrainCache.check`: a patch wider than half the tile, or a section without a box, draws the tile whole).
+The copies are `shadow/DepthBlit`: a nearest depth blit between the framebuffers Blaze3D keeps for the two depth
+textures with the atlas's colour attachment, through `GlStateManager` (bindings put back). Blaze3D's own
+`CommandEncoder.copyTextureToTexture` hands `glBlitFramebuffer` the rectangle's width and height where it wants the far
+corner, so it only copies rectangles at the origin (vanilla copies whole textures with it): never use it for a part of a
+texture. A cascade placed anew this frame (the camera left its slack, the light turned, its size changed) is drawn whole
+straight into its tile, terrain and entities, as without the switch; its static terrain goes into the static texture
+only when something later asks for it (an animated tick, a mesh change), since under a moving sun a placement is gone
+before anything does.
+**The sun's motion (`shadowLag`, a graphics setting).** The sun crosses the sky at 2π/24000 per tick; BlockLand
+interpolates it within the tick, but `Mth.sin` is a 65536-entry table, so the light's direction steps about 2.7 times
+a tick at any frame rate. With the day clock running every cascade used to be placed anew — the whole map drawn — at
+each step, every other frame or so at 100 fps, so outside arenas (fixed time) the kept terrain paid off only half.
+Measured at RD 16 (1080p forest, sun moving): 1.4–1.7 ms of GPU a frame in those whole redraws. A placement kept while
+the light turns
+shows every shadow edge within a bounded distance of where a fresh one would put it: the angle between the two
+directions times the farthest caster's distance from the box centre (`Cascade.reach`: the reaching sections' mesh
+boxes, `TerrainCasters.extent`, and the entity box's corners, grown as casters are drawn), over a texel
+(`Cascade.lightDrift`, in that cascade's texels; the receivers sample with the placement's own matrices, so map and
+lookups agree). A cascade is placed anew once that drift exceeds `shadowLag` texels — 1.5 by default, about a pixel
+at the cascade's near edge (a texel of the near cascade is a centimetre, of the far one a tenth of a block), so the
+near cascades, cheap to draw, follow nearly every step of the sun and the far ones, where the cost is, every several;
+0 restores placing anew at any change (the old picture, and the old cost). This is the one setting of the lighting
+page whose default changes the picture, by that much. At most one cascade is placed anew per frame for the light, so
+the whole draws spread over the frames instead of landing in one.
+`SHADOW_GATHER_CACHE`: the casters are gathered for every cascade at once (the union of their boxes' section ranges,
+a section kept when its sphere touches any cascade's box grown by a 16-block margin) and the walk is kept from frame
+to frame while nothing it read can have changed — the same view area at the same camera section, no section's mesh or
+place set since (`client/render/TerrainVersion` counts those: `mixin/terrain/RenderSectionMixin` on `setSectionMesh`,
+`reset`, `setSectionNode`), and every cascade's box still within the margin of where it was walked
+(`Cascade.withinWalk`: the centre's move plus the light's turn at the farthest corner), so a placement anew for the
+sun or a step of the camera does not cost a walk. The marks of which sections reach which cascade are kept per
+cascade placement with the walk, and the sort along the light with the light. Without the switch the walk is the
+outermost drawn cascade's alone, every frame, as are the marks and the sort. The soft shadows' cost is the taps: measured at RD 16 (720p internal, forest, lighting pack on) the lit terrain pass is
+2.0 ms of GPU with them and 1.1 ms with the fixed 8-tap filter (`shadowPenumbra` 0), the whole frame 5.0 → 3.55 ms;
+nothing exact is left to cut there. The graphics setting `shadowSoftQuality` (`BlShadowSoft.x`) trades taps for the
+penumbra's smoothness: HIGH is the 12-tap search and 16-tap Vogel disc above, LOW a 5-tap search (the centre, one at
+the floor radius, three up the spiral) and an 8-tap disc with the same estimate and the same penumbra width.
+**Casters only where the view can see their shadow** (`SHADOW_VIEW_CASTERS`, `shadow/ViewVolume`): every shadow
+lookup is made at a camera-relative position inside the view frustum — terrain, entity, water and hand fragments are on
+screen, the volumetric light marches along view rays, the per-vertex lit quads (smoke, debris, paint) sample within a
+few blocks of their on-screen part — and no farther from the camera than the cascade's reach (the shaders pick a
+cascade by distance). A caster shadows what lies behind it along the light, so only a section whose mesh box meets the
+frustum swept towards the sun can change a pixel: the frustum's planes that face away from the light still bound the
+swept volume, the others open up; a plane at view depth `split + margin` bounds the cascade's receivers; every plane is
+first pushed out by `ViewVolume.MARGIN` (16 blocks: the first-person weapon has its own projection, smoke quads are lit
+at their centres, the shadow taps reach, the projection jitters). The test is conservative (the swept volume's own side
+faces are left out; a box is left out only when its corner least far along a plane's normal lies outside it — testing
+the farthest corner culled every box straddling a plane, the reach plane above all, and cost 1.4 million pixels in a
+bench view) and a mesh without a measured box is never left out. `TerrainCasters.view` marks, per due cascade,
+the reaching sections that pass (`NEEDED`); the draws take a mode (`REACHING`, `NEEDED`, the kept `CACHED`, the `NEW`
+= needed but not kept, `KEPT_OR_ANIMATED` for refilling cleared texels). The kept static drawing (`TerrainCache`) is a
+set of sections with the meshes they were drawn from, checked against the view area only when the caster walk was made
+anew (`TerrainCasters.gatherSerial`; between walks nothing in it can change) and grown as the camera turns: the new
+sections are drawn into the static texture (depth only ever lowers, so adding them later equals drawing them with the
+first), their texels copied over and the animated sections and entities drawn there again (`bl/shadow/grown`). A cascade
+placed anew is drawn once into the static texture (`NEEDED`) and copied, instead of straight into the tile and again
+into the static texture the next frame when an entity's texels have to be restored. In a frame that will draw a second
+view of the world (a scope's picture through its eyepiece, `SceneLighting.expectExtraWorldView` set by the scope
+module) every reaching section is drawn, as without the switch. **Who reads the map** decides the volume: with the
+world lit, anything in view (margin 16); with the world unlit the scene block carries no cascades (`WorldLighting` hands
+`SceneUniforms` no shadows), so every `bl_shadow` lookup returns lit without sampling and the volumetric light's march
+is the only reader — then the margin is 2 blocks and each cascade's reach plane sits at `min(split, 128)`
+(`WorldFx.volumetricRange`), and with the volumetric light off too nothing reads the map and the stage draws nothing
+(`Shadows` passes `ShadowMap.render` the read range, status `shadows_unread`). With the kept drawings the culling only runs while the
+light keeps turning (`ShadowMap.lightMovedTick`, within 6 ticks of a placement made for the light): under a fixed sun
+(an arena's fixed time, the day cycle off) a kept drawing serves for a long time, and growing it as the camera turns
+(a copy and a redraw of the animated sections and entities each time) cost 5% in the frozen-sun bench, more than
+drawing every reaching section once. Measured at RD 16 (lighting on, sun moving): see §20.
+
+Back-face culling of the casters was tried and rejected (2026-11-02): the alpha-tested layers are not closed at the
+texel level — a ray through a transparent texel of a leaf's front face is stopped by an opaque texel of its back face,
+so culling them changed the lit picture over whole canopies — and even the solid layer alone left a few texels an ulp
+apart (coincident faces of neighbouring closed boxes rasterise their depth a little differently), for −5% still and
+nothing moving. Note that a bench with world lighting off cannot see the shadow map at all: shadow changes must be
+verified with the lighting pack on (DevAutomation `setting graphics.worldLighting true` + `commit`). `SHADOW_CULLING` tests the
+same mesh boxes against the cascade's box in the light's axes (`Cascade.meshReaches`); only a mesh without a measured
+box falls back to its block box padded by `CasterReach`'s global reach — which is unknown wherever a block model of a
+kind it cannot read exists, as in BlockLand's own worlds, so before the mesh boxes that switch was at the sphere test
+there. Measured on an RTX 5090 laptop: redrawing the few
+sections round the player costs less than copying their texels back every frame, while after a tick the static
+sections reaching the animated ones would be most of a far tile, so there the copy wins. The terrain casters are placed
+relative to the cascade's box centre, not the camera (`Cascade.casterView`
+/ `terrainRender`, fixed with the placement; each section's transform slot is its origin minus that centre, written per
+cascade drawn), and which sections reach a cascade is decided in the same frame of reference, so a kept drawing is the
+drawing any later frame would make until the cascade is placed anew (the camera left its slack, the light changed, its
+size changed): the camera may move freely. The entity casters and the receivers stay camera-relative
+(`Cascade.entityRender`, `view` / `clip` / `local`), with their own cascade uniforms. A client tick (the block atlas
+cycles its animated frames, which may change their alpha) clears and redraws only where the sections that draw an
+animated sprite in an alpha-tested layer can reach — `client/render/TerrainAnimation`: every section compile notes the
+layers whose blocks have quads with animated sprites (`SectionCompilerMixin` → `TerrainCompile.animatedBlock`, known per
+state for single / weighted variants of plain parts in `terrain/AnimatedModels`, read off the very parts drawn
+otherwise), the upload moves it onto the layer's `SectionBuffers` (`TerrainAnimation.Holder`), and readers ask
+`TerrainAnimation.animatedCutout(mesh)`; the solid layer is never alpha-tested, so its animated sprites (lava, magma,
+prismarine) do not count.
 
 Entities are captured by running their own renderers into a capturing buffer source; while that runs
 `client/render/ShadowPass.active()` is true, and renderers that would draw with their own pipeline (the third-person
@@ -1145,7 +1267,11 @@ sample, skips an update that could leave something a frame stale, or reorders dr
   work on the CPU and on the GPU (timestamp queries read back 4 frames later — never a wait); spans nest, keys are paths.
   Every pipeline stage's phases are spans by themselves (`bl/<Stage>/<phase>`, `FrameHooks`), and so are vanilla's own
   profiler sections down to 5 levels (`mc/<path>`, through `Minecraft.constructProfiler`). A frame is one iteration of the
-  client loop (ticks, render, swap). Spans cost a field read while nothing records (timings off, no benchmark).
+  client loop (ticks, render, swap). Spans cost a field read while nothing records (timings off, no benchmark). Spans
+  nest, and the report lists them flat with inclusive times: `mc/gameRenderer/gui` (vanilla's section around the HUD)
+  contains the pipeline's composite — the whole post chain `bl/post` and the frame generation's `before_hud` hook run as
+  the HUD's first overlay layer (`FrameHooks`, `graphics_composite`) — so the HUD itself costs what is left after those
+  (a few hundredths of a millisecond of GPU), not the section's total.
 * **Render clock** (`client/render/RenderClock`): everything on screen animates by `RenderClock.nanos()` (also the shared
   `anim/Ticker`); durations that measure or budget work keep `System.nanoTime()`. Normally it is the real clock.
 * **Benchmark** (`perf/Benchmark`, the 性能 tab, in a world): the camera turns through 16 fixed views on the spot.
@@ -1200,6 +1326,50 @@ sample, skips an update that could leave something a frame stale, or reorders dr
   neither reachable nor next to a reachable one (and not on the border) are not meshed (`far/HiddenCells`): the camera is
   never inside a far unit, so no line of sight reaches them. Switching the far entries meshes the real far chunks again.
   Offline check: `python -I tools/perf/check_mesh_opt.py` (FaceInfo windings, grouping, flood).
+  `TERRAIN_PAGES` — the opaque layers' vertices in a few shared 64 MB pages (`perf/gl/VertexPages`, first-fit ranges in
+  whole vertices on the layer's `SectionBuffers`, whose vertex buffer is then the page: every reader draws it from the
+  range's base vertex) and the sections' draws as multi-draws (`perf/gl/PagedDraws`: runs of consecutive draws sharing
+  their vertex and index buffers as one `glMultiDrawElementsBaseVertex`, in the same order; each draw's offset — the
+  floats `DynamicTransforms.ModelOffset` held — in a storage buffer the vertex shader reads by `gl_DrawIDARB`
+  (`BL_PAGES` in `blockland:terrain_vertex.glsl`, the lighting pack's terrain vertex shader shared with the pages
+  pipelines' own `blockland:core/terrain_pages.vsh` so a section is placed the same whichever draws it and the
+  pipelines work with the pack off, vanilla's fragment shader, as with it on; and in shadow_terrain.vsh; the same
+  `Position + offset`); the offsets go
+  through a three-region ring written with `glNamedBufferSubData`, bound by range per run). The opaque group is drawn
+  from the frame's batches (`perf/gl/PagedTerrain.render`, `mixin/terrain/ChunkSectionsToRenderMixin`; vanilla's
+  terrain pipelines with that vertex shader, patched by the lighting pack like the originals), the translucent and tripwire
+  layers as before; the sun shadow casters' batches use the same batches with the `BL_PAGES` shadow pipelines. Needs
+  GL 4.5 with `ARB_shader_draw_parameters` and `ARB_shader_storage_buffer_object` (else inert); flipping it rebuilds
+  the sections (a buffer-stored and a page-stored section can be drawn together meanwhile). Per-draw transforms are
+  not written for paged batches.
+  A depth pre-pass of the opaque terrain (the same draws depth-only first, the lit program then shading each pixel
+  once) was tried on 2026-11-01 and dropped: exact, but at render distance 16 it saved 0.25 ms of the 2.0 ms lit pass
+  (little is overdrawn: vanilla draws sections front to back) and cost 0.37 ms of GPU and 0.6 ms of CPU for the second
+  round of draw calls — the frame got 8% slower.
+* **Shadow casters by the view** (`SHADOW_VIEW_CASTERS`, §6): the sun shadow casters drawn into a cascade are only the
+  sections whose shadow can land on something the camera can see (the view frustum swept towards the sun, widened by
+  16 blocks), the kept drawing grown as the camera turns, a new placement drawn once and copied. Under a moving sun
+  every cascade is placed anew about once a tick (the sun's step is ~2 texels at the ultra tile, over the 1.5-texel
+  lag), so without this the whole map was redrawn every tick — twice (straight into the tile, then into the kept
+  texture for the next frame's entity patch). A frame looking at the sky still draws the map: the volumetric light and
+  the first-person weapon sample it. Measured 2026-11-02 (RD 16, 1080p, lighting pack on, sun moving, `timings 600`
+  off/on per view, run2's settings: shadow distance 96, ultra tiles): the shadow stage's GPU time 1.29 → 0.95 ms looking
+  at the sky, 1.51 → 1.18 at the ground, 2.95 → 2.64 in the forest (the terrain draws halve: 0.90 → 0.48, 1.01 → 0.58,
+  1.93 → 1.20; the per-placement clears and copies stay); frames 4.45 → 4.18 ms (sky), 5.56 → 4.95 (ground). The
+  frozen-sun bench is ±0 by design (4/4 views identical). With the world unlit (the player's own settings: world
+  lighting off, volumetric light 0.65, 1080p, render distance 6) the pipeline costs ~1.5 ms of GPU on a 0.9 ms
+  vanilla frame — post 0.7 (bloom 0.2, motion blur 0.2, TAA 0.14), shadow map 0.57, volumetric light 0.24, AO 0.1 —
+  and the unlit reader rule brings the shadow stage to 0.35: frames 2.40 → 2.19 ms (sky), 2.54 → 2.38 (ground),
+  2.58 → 2.54 (forest), 4/4 views identical with the volumetric light reading the map. What is left there is the
+  effects' own work. The 16-block margin keeps most of the sections around the
+  camera in every view (a sky view still draws the two nearest cascades' neighbourhood); it could shrink to what the
+  per-vertex lit quads need if the modules that sample away from their fragments reported their reach.
+* **Far chunks at the defaults** (measured 2026-11-02, not changed): with `farChunks` on at the default 1024-chunk
+  distance and 48-chunk full detail, after an hour at RD 16 the ring held 3300 columns in 1100 region-layer draws,
+  ~10 million quads after the face groups' culling, and the pass before the terrain cost 16 ms of GPU (the whole frame
+  25 ms) — every far fragment is shaded before vanilla's own terrain covers it, and the geometry alone is ten times
+  the render distance's. The defaults are too high for a laptop GPU; an exact cure would be occlusion of far units by
+  vanilla's depth (the pass moved behind the opaque terrain with a depth-fetch discard) or per-unit occlusion queries.
 * **Entity shadows from GPU buffers** (`SHADOW_GPU_CASTERS`): the shadow map's entity capture (§6) used to rebuild
   every BlockLand model draw (vehicles, third-person weapons, tumbleweeds) as entity vertices on the CPU — a quad per
   triangle, each corner transformed by its matrix — and upload them every frame. A draw whose buffers hold exactly its
@@ -1382,6 +1552,28 @@ them, meshes them into Minecraft-looking block columns and draws them behind the
   where nearer, and what vanilla draws later — clouds, rain, particles, the Fabulous layers — is hidden behind far terrain
   standing in front of it (without this the clouds were drawn over the land as if it were sky: it looked see-through). Tiles front to back; tiles touching the vanilla area use
   the masked program (`far_terrain` with `MASKED`), which discards fragments over chunks vanilla has compiled
+  `FAR_GPU_CULLING` — the real far chunks culled on the GPU (`far/GpuCull`, `far/Clusters`, `far_cull.csh`,
+  `far_hzb.csh`, `gpu/ComputeProgram`): the far pass moves to right after vanilla's opaque terrain group
+  (`LevelPasses.afterOpaque`, `mixin/terrain/ChunkSectionsToRenderMixin`), its depth seeded from the level's own carried
+  into the far projection (`far_depth_init.fsh`, kept in an R32F marker; the write-back `far_depth.fsh` with `OCCLUDED`
+  leaves texels the pass never wrote to the level). Each unit layer's quads are cut on the worker into clusters — runs of
+  at most 512 quads in the mesh's order, none wider than a section, each with its box — and every region layer keeps two
+  cluster tables in one shared storage buffer: in sequential terms (every quad) and in its face-group index list's terms
+  (written together with the list, `RegionRenderer.writeIndices`; a unit meshed without clusters is one cluster, its
+  whole box). Per view one compute dispatch tests every cluster of the region layers in the frustum: wholly outside a
+  frustum plane by more than 1 cm, or — with the hierarchical depth of the marker (max-reduced levels, odd rows and
+  columns folded into the last texel) — every corner in front of the camera's plane and the box's nearest depth beyond
+  the farthest depth under its screen rectangle (a 1e-6 slack), it writes a zero-count indirect command; else the
+  cluster's index range, the commands in the clusters' order. The draws are one `glMultiDrawElementsIndirect` per
+  region layer (opaque layers layer by layer, nearest first within each, as vanilla orders its own terrain; translucent
+  farthest first as before) with the `TERRAIN_PAGES` pipelines (`PagedTerrain.pipeline`, now for every layer), each
+  command's offset — its region's corner — read by draw id. Only clusters no fragment of which could reach the screen
+  are left out, and the commands keep the mesh's order, so the same fragments arrive in the same order. Needs GL 4.5 with
+  `ARB_shader_draw_parameters` (else the pass only moves and seeds its depth, which is exact too). The clusters are made
+  with every mesh whatever the switch says (one pass over the vertices, like the face groups), so flipping it never
+  meshes the far chunks again and the benchmark compares the same meshes. Compute shaders are listed in `programs.txt`
+  as `compute` programs. Depth testing alone (the same move without the culling) was measured on 2026-11-02 and saved
+  nothing: the pass is bound by its primitives, which only culling before the rasteriser removes.
   (`CoverageMask`: one texel per chunk, 128 × 128 round the camera); the rest the plain one (early depth test). Lit like
   the lighting pack's terrain (`bl_skyShade` with sky light 15, the face shade, cloud shadows; water: Fresnel sky
   reflection and the sun's glint), fogged with `bl_fog`. A scope's picture draws it too (its own depth texture).
@@ -1462,7 +1654,8 @@ server has not generated a chunk yet.
   pass before vanilla's terrain (§22) with each layer's vanilla pipeline and atlas, the far projection (`Projection` block
   of the pass), `DynamicTransforms` with the region's corner, frustum-culled, solid layers front to back before the far
   tiles, translucent ones back to front after them, into the far terrain's depth; `far_depth` then carries it into the
-  level's own.
+  level's own. With `FAR_GPU_CULLING` (§20) the pass runs after vanilla's opaque terrain instead, its depth seeded from
+  the level's, and the region layers are drawn as indirect multi-draws over the clusters the GPU left in.
 * **Coverage** (`CoverageMask`): one texel per chunk out to 320 chunks round the camera (vanilla's chunks and placed
   units), one per 16 × 16 chunks out to 4352 (set when all its chunks are held by placed units). The masked far tile
   program drops fragments either marks; far tiles are also drawn 0.1 % farther than they are (same pixel), so where a

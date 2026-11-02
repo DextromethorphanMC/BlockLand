@@ -29,6 +29,8 @@ public final class RenderTexture implements AutoCloseable {
         RG16F(GL30.GL_RG16F, GL30.GL_RG, GL30.GL_HALF_FLOAT),
         /** One float channel (luminance, depth-like values). */
         R16F(GL30.GL_R16F, GL11.GL_RED, GL30.GL_HALF_FLOAT),
+        /** One full-precision float channel (a depth value kept exactly). */
+        R32F(GL30.GL_R32F, GL11.GL_RED, GL11.GL_FLOAT),
         /** Depth (same format as Minecraft's targets, so depth copies between them work). */
         DEPTH(0, 0, 0);
 

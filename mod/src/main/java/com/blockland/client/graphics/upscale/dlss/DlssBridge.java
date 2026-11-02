@@ -1,5 +1,6 @@
 package com.blockland.client.graphics.upscale.dlss;
 
+import org.lwjgl.opengl.GL32;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
 
@@ -50,8 +51,20 @@ public final class DlssBridge implements AutoCloseable {
     private final SlRuntime runtime;
     /** The bridge brought its runtime up itself (the standalone check) and takes it down with it. */
     private final boolean ownsRuntime;
-    private final long commandPool, commandBuffer, fence;
-    private final SlRuntime.Handoff handoff;
+    private final long commandPool;
+    /**
+     * Frames in flight. One command buffer with one fence made every frame wait on the CPU for the previous frame's
+     * DLSS — which waits (on the GPU) for all of that frame's OpenGL work first — a whole GPU sync per frame, worth
+     * more than DLSS itself. A ring of command buffers, fences and handoff semaphores lets the CPU run ahead: a slot's
+     * fence is awaited only when the slot comes round again, by when it is long signalled. The images are shared by all
+     * slots: OpenGL's commands of the next frame queue behind its wait on the previous frame's "done" semaphore, so the
+     * GPU never writes an input while DLSS still reads it. A binary semaphore may not be signalled again before its wait
+     * ran, so each slot also keeps an OpenGL fence set right after its wait, checked before the slot is reused.
+     */
+    private static final int SLOTS = 3;
+    private final long[] commandBuffers = new long[SLOTS], fences = new long[SLOTS], glFences = new long[SLOTS];
+    private final SlRuntime.Handoff[] handoffs = new SlRuntime.Handoff[SLOTS];
+    private int slot;
     private SlRuntime.SharedImage color, depth, motion, output;
     /** Ray Reconstruction's guides at the render size (made on first use): diffuse albedo, specular albedo, normal + roughness. */
     private SlRuntime.SharedImage albedo, specular, normals;
@@ -66,10 +79,38 @@ public final class DlssBridge implements AutoCloseable {
         this.runtime = runtime;
         this.ownsRuntime = ownsRuntime;
         commandPool = runtime.commandPool();
-        commandBuffer = runtime.commandBuffer(commandPool);
-        fence = runtime.fence();
-        handoff = runtime.handoff();
+        for (int i = 0; i < SLOTS; i++) {
+            commandBuffers[i] = runtime.commandBuffer(commandPool);
+            fences[i] = runtime.fence();
+            handoffs[i] = runtime.handoff();
+        }
     }
+
+    /** Slot 0's command buffer for one-off work (the initial layouts), its fence awaited by the runtime first. */
+    private void initialLayouts(SlRuntime.SharedImage... images) {
+        runtime.initialLayouts(commandBuffers[0], fences[0], handoffs[0], images);
+        // OpenGL waited on slot 0's "done" semaphore inside: the slot's next signal must come after that wait ran
+        glFenceSet(0);
+    }
+
+    /** A fence behind OpenGL's commands so far, kept for the slot. */
+    private void glFenceSet(int s) {
+        if (glFences[s] != 0) GL32.glDeleteSync(glFences[s]);
+        glFences[s] = GL32.glFenceSync(GL32.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    }
+
+    /** OpenGL has run past the slot's last wait (normally long ago; the ring is three frames deep). */
+    private void glFenceAwait(int s) {
+        if (glFences[s] == 0) return;
+        int waited = GL32.glClientWaitSync(glFences[s], GL32.GL_SYNC_FLUSH_COMMANDS_BIT, GL_FENCE_TIMEOUT);
+        GL32.glDeleteSync(glFences[s]);
+        glFences[s] = 0;
+        if (waited == GL32.GL_TIMEOUT_EXPIRED || waited == GL32.GL_WAIT_FAILED) {
+            throw new DlssException("blockland.graphics.status.dlss.vulkan", "OpenGL did not reach the previous frame's wait");
+        }
+    }
+
+    private static final long GL_FENCE_TIMEOUT = 2_000_000_000L;
 
     /** DLSS on a runtime the caller owns. */
     public static DlssBridge on(SlRuntime runtime) {
@@ -132,7 +173,7 @@ public final class DlssBridge implements AutoCloseable {
         depth = runtime.image("depth", renderW, renderH, Vk.FORMAT_R32_SFLOAT, GL_R32F, USAGE);
         motion = runtime.image("motion", renderW, renderH, Vk.FORMAT_R16G16_SFLOAT, GL_RG16F, USAGE);
         output = runtime.image("output", outW, outH, Vk.FORMAT_R16G16B16A16_SFLOAT, GL_RGBA16F, USAGE);
-        runtime.initialLayouts(commandBuffer, fence, handoff, color, depth, motion, output);
+        initialLayouts(color, depth, motion, output);
         optionsMode = null;
         return true;
     }
@@ -152,7 +193,7 @@ public final class DlssBridge implements AutoCloseable {
         albedo = runtime.image("RR albedo", renderWidth, renderHeight, Vk.FORMAT_R16G16B16A16_SFLOAT, GL_RGBA16F, USAGE);
         specular = runtime.image("RR specular albedo", renderWidth, renderHeight, Vk.FORMAT_R16G16B16A16_SFLOAT, GL_RGBA16F, USAGE);
         normals = runtime.image("RR normals", renderWidth, renderHeight, Vk.FORMAT_R16G16B16A16_SFLOAT, GL_RGBA16F, USAGE);
-        runtime.initialLayouts(commandBuffer, fence, handoff, albedo, specular, normals);
+        initialLayouts(albedo, specular, normals);
         return true;
     }
 
@@ -236,10 +277,17 @@ public final class DlssBridge implements AutoCloseable {
         SlRuntime.SharedImage[] all = reconstruction
                 ? new SlRuntime.SharedImage[]{color, depth, motion, output, albedo, specular, normals}
                 : new SlRuntime.SharedImage[]{color, depth, motion, output};
+        int s = slot;
+        slot = (slot + 1) % SLOTS;
+        SlRuntime.Handoff handoff = handoffs[s];
+        long commandBuffer = commandBuffers[s], fence = fences[s];
+        // the slot's last frame: its DLSS done (the fence, so its command buffer and "ready" semaphore are free again)
+        // and OpenGL past its wait on "done" (the GL fence) — both normally long ago
+        runtime.await(fence);
+        glFenceAwait(s);
         // GL → Vulkan: the inputs are written
         handoff.glSignal(all);
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            runtime.await(fence);
             runtime.begin(stack, commandBuffer);
             runtime.handBarriers(stack, commandBuffer, true, all);
 
@@ -269,6 +317,7 @@ public final class DlssBridge implements AutoCloseable {
         if (!runtime.presenting()) runtime.nextFrame(false);
         // Vulkan → GL: DLSS is done (the GL side waits on the GPU, not here)
         handoff.glWait(all);
+        glFenceSet(s);
     }
 
     private void destroyImages() {
@@ -287,8 +336,12 @@ public final class DlssBridge implements AutoCloseable {
             runtime.sl.freeResources(runtime.viewport);
             if (runtime.rayReconstruction()) runtime.sl.freeResources(Streamline.FEATURE_DLSS_RR, runtime.viewport);
             destroyImages();
-            handoff.destroy();
-            runtime.vk.destroyFence.call(runtime.device, fence, 0);
+            for (int i = 0; i < SLOTS; i++) {
+                handoffs[i].destroy();
+                runtime.vk.destroyFence.call(runtime.device, fences[i], 0);
+                if (glFences[i] != 0) GL32.glDeleteSync(glFences[i]);
+                glFences[i] = 0;
+            }
             runtime.vk.destroyCommandPool.call(runtime.device, commandPool, 0);
         } finally {
             if (ownsRuntime) runtime.close();

@@ -29,7 +29,7 @@ import java.util.List;
  * A section compile reads the terrain switches once and keeps them for the whole section (rendering spec §20);
  * {@code ENCLOSED_BLOCKS} leaves out blocks whose every face is culled, {@code ENCLOSED_MODELS} does so before their
  * model is read, {@code HIDDEN_FLUIDS} leaves out fluid blocks without a face to draw, {@code FACE_GROUPS} groups the
- * finished meshes.
+ * finished meshes; every compile notes which layers draw animated sprites ({@code client/render/TerrainAnimation}).
  */
 @Mixin(SectionCompiler.class)
 public abstract class SectionCompilerMixin {
@@ -69,7 +69,16 @@ public abstract class SectionCompilerMixin {
     private void blockland$renderBatched(BlockRenderDispatcher dispatcher, BlockState state, BlockPos pos, BlockAndTintGetter level, PoseStack pose,
                                          VertexConsumer buffer, boolean cull, List<BlockModelPart> parts) {
         if (cull && TerrainCompile.enclosed(pos, parts)) return;
+        TerrainCompile.animatedBlock(buffer, state, parts, dispatcher);
         dispatcher.renderBatched(state, pos, level, pose, buffer, cull, parts);
+    }
+
+    /** The compile's builder of a layer, so the blocks drawn into it can be told apart by layer. */
+    @Inject(method = "getOrBeginLayer", at = @At("RETURN"))
+    private void blockland$layer(java.util.Map<net.minecraft.client.renderer.chunk.ChunkSectionLayer, com.mojang.blaze3d.vertex.BufferBuilder> layers,
+                                 SectionBufferBuilderPack buffers, net.minecraft.client.renderer.chunk.ChunkSectionLayer layer,
+                                 CallbackInfoReturnable<com.mojang.blaze3d.vertex.BufferBuilder> cir) {
+        TerrainCompile.layer(layer, cir.getReturnValue());
     }
 
     @Inject(method = "compile", at = @At("RETURN"))

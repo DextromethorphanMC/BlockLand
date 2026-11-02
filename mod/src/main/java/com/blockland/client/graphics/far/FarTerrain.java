@@ -95,6 +95,7 @@ public final class FarTerrain {
                 (ResourceManagerReloadListener) manager -> {
                     store.recolour();
                     columns.remesh();
+                    renderer.reload();
                 }));
     }
 
@@ -156,6 +157,7 @@ public final class FarTerrain {
                 meshedHidden = Optimization.FAR_HIDDEN_GEOMETRY.on();
                 columns.remesh();
             }
+            renderer.beginFrame();
             if (ring > 0) {
                 columns.beginFrame(now);
                 columns.frame(level, camChunkX, camChunkZ, renderDistance, settings.farChunkFullDetail, ring, now);

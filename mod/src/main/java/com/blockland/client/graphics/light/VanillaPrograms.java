@@ -37,6 +37,8 @@ final class VanillaPrograms {
     static final int ROLE_OPAQUE = 1, ROLE_BLENDED = 2, ROLE_TRANSLUCENT_TERRAIN = 3, ROLE_COMPOSITE = 4, ROLE_CLOUDS = 5;
 
     private static final ResourceLocation TERRAIN = ResourceLocation.withDefaultNamespace("core/terrain");
+    /** TERRAIN_PAGES: the same terrain vertex shader with the storage buffer path (client/perf/gl/PagedTerrain). */
+    private static final ResourceLocation TERRAIN_PAGES = ResourceLocation.fromNamespaceAndPath("blockland", "core/terrain_pages");
     private static final ResourceLocation ENTITY = ResourceLocation.withDefaultNamespace("core/entity");
     private static final ResourceLocation TRANSPARENCY = ResourceLocation.withDefaultNamespace("post/transparency");
     private static final ResourceLocation CLOUDS = ResourceLocation.withDefaultNamespace("core/rendertype_clouds");
@@ -135,7 +137,7 @@ final class VanillaPrograms {
     static int role(RenderPipeline pipeline) {
         ResourceLocation vertex = pipeline.getVertexShader();
         boolean blended = pipeline.getBlendFunction().isPresent();
-        if (vertex.equals(TERRAIN)) {
+        if (vertex.equals(TERRAIN) || vertex.equals(TERRAIN_PAGES)) {
             if (!blended) return ROLE_OPAQUE;
             // translucent blocks (water, glass, ice) have no cut-out; tripwire does
             return pipeline.getShaderDefines().values().containsKey("ALPHA_CUTOUT") ? ROLE_BLENDED : ROLE_TRANSLUCENT_TERRAIN;

@@ -34,9 +34,11 @@ public final class ShadowPass {
          * places it on the CPU, and its texture coordinates scaled by {@code uvScale}, alpha-tested against {@code type}'s
          * texture — the same triangles as the vertex path would give it. False when it cannot: then the caller builds the
          * vertices as before. The caller has asked for {@code type}'s buffer first (as the vertex path does).
+         * {@code bounds} is the box round the triangles' vertices before {@code matrix} (min x, y, z, max x, y, z), so the
+         * capture knows where in the shadow map the draw can land.
          */
         default boolean gpuCaster(RenderType type, Matrix4f matrix, GpuBuffer vertices, GpuBuffer indices, VertexFormat.IndexType indexType,
-                                  int firstIndex, int indexCount, float uvScale) {
+                                  int firstIndex, int indexCount, float uvScale, float[] bounds) {
             return false;
         }
     }

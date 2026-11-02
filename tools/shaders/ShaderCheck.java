@@ -3,6 +3,7 @@ import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.GL11C;
 import org.lwjgl.opengl.GL20C;
 import org.lwjgl.opengl.GL31C;
+import org.lwjgl.opengl.GL43C;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -21,7 +22,8 @@ import java.util.regex.Pattern;
  * <p>
  * Run through {@code check_shaders.py}. Arguments: the programs file, then the shader roots in lookup order (an
  * override root first, the mod's assets, the extracted vanilla assets). Programs file lines:
- * {@code <name> | <vertex id> | <fragment id> | <attr,attr,...> | <DEFINE[=value] ...>}; '#' starts a comment.
+ * {@code <name> | <vertex id> | <fragment id> | <attr,attr,...> | <DEFINE[=value] ...>}; '#' starts a comment. A compute
+ * program: {@code <name> | compute | <shader id> | | <DEFINE ...>} (needs a GL 4.3 context; skipped without one).
  */
 public final class ShaderCheck {
     private static final Pattern IMPORT = Pattern.compile("#\\s*moj_import\\s*(?:\"(.*)\"|<(.*)>)");
@@ -48,6 +50,8 @@ public final class ShaderCheck {
         System.out.println("GL: " + GL11C.glGetString(GL11C.GL_RENDERER) + " / " + GL11C.glGetString(GL11C.GL_VERSION));
 
         int failed = 0, checked = 0;
+        List<String[]> computes = new ArrayList<>();
+        List<Map<String, String>> computeDefines = new ArrayList<>();
         for (String raw : Files.readAllLines(programs, StandardCharsets.UTF_8)) {
             String line = raw.strip();
             if (line.isEmpty() || line.startsWith("#")) continue;
@@ -67,6 +71,12 @@ public final class ShaderCheck {
                 }
             }
             String[] attributes = f[3].strip().isEmpty() ? new String[0] : f[3].strip().split("\\s*,\\s*");
+            if (f[1].strip().equals("compute")) {
+                // checked afterwards in a GL 4.3 context of their own (the vanilla overrides stay in the 3.2 one)
+                computes.add(new String[]{name, f[2].strip()});
+                computeDefines.add(defines);
+                continue;
+            }
             checked++;
             String error = check(f[1].strip(), f[2].strip(), attributes, defines);
             if (error == null) {
@@ -77,6 +87,31 @@ public final class ShaderCheck {
             }
         }
         GLFW.glfwDestroyWindow(window);
+        if (!computes.isEmpty()) {
+            // the compute programs need GL 4.3: a core context of that version (the driver's highest compatible one)
+            GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 4);
+            GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 3);
+            GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_FORWARD_COMPAT, GLFW.GLFW_FALSE);
+            long compute = GLFW.glfwCreateWindow(64, 64, "shader check (compute)", 0, 0);
+            if (compute == 0) {
+                for (String[] c : computes) System.out.println("skip  " + c[0] + " (no GL 4.3 context)");
+            } else {
+                GLFW.glfwMakeContextCurrent(compute);
+                GL.createCapabilities();
+                System.out.println("GL (compute): " + GL11C.glGetString(GL11C.GL_VERSION));
+                for (int i = 0; i < computes.size(); i++) {
+                    checked++;
+                    String error = checkCompute(computes.get(i)[1], computeDefines.get(i));
+                    if (error == null) {
+                        System.out.println("ok    " + computes.get(i)[0]);
+                    } else {
+                        failed++;
+                        System.out.println("FAIL  " + computes.get(i)[0] + "\n" + error.indent(6));
+                    }
+                }
+                GLFW.glfwDestroyWindow(compute);
+            }
+        }
         GLFW.glfwTerminate();
         System.out.println(failed == 0 ? "ALL " + checked + " PROGRAMS OK" : failed + " OF " + checked + " PROGRAMS FAILED");
         System.exit(failed == 0 ? 0 : 1);
@@ -115,6 +150,28 @@ public final class ShaderCheck {
         GL20C.glDeleteProgram(program);
         GL20C.glDeleteShader(v);
         GL20C.glDeleteShader(fr);
+        return result;
+    }
+
+    private static String checkCompute(String id, Map<String, String> defines) {
+        String cs;
+        try {
+            cs = source(id, ".csh", defines);
+        } catch (Exception e) {
+            return e.getMessage();
+        }
+        int c = compile(GL43C.GL_COMPUTE_SHADER, cs);
+        if (GL20C.glGetShaderi(c, GL20C.GL_COMPILE_STATUS) == 0) {
+            String log = "compute " + id + ":\n" + GL20C.glGetShaderInfoLog(c);
+            GL20C.glDeleteShader(c);
+            return log;
+        }
+        int program = GL20C.glCreateProgram();
+        GL20C.glAttachShader(program, c);
+        GL20C.glLinkProgram(program);
+        String result = GL20C.glGetProgrami(program, GL20C.GL_LINK_STATUS) == 0 ? "link: " + GL20C.glGetProgramInfoLog(program) : null;
+        GL20C.glDeleteProgram(program);
+        GL20C.glDeleteShader(c);
         return result;
     }
 

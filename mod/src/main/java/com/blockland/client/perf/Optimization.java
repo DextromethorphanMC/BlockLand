@@ -33,6 +33,11 @@ public enum Optimization {
     HIDDEN_FLUIDS(Group.VANILLA, true),
     /** Solid and cutout quads grouped by facing; groups facing away from the camera are not drawn (the GPU culls them). */
     FACE_GROUPS(Group.VANILLA, true),
+    /**
+     * The opaque layers' vertices in a few shared pages, the sections drawn as multi-draws (a base vertex each, their
+     * offsets read by draw id) instead of one draw with its own buffer and uniform binds per section and layer.
+     */
+    TERRAIN_PAGES(Group.VANILLA, true),
     /** The section compile queue drops cancelled tasks in one sweep. */
     COMPILE_QUEUE(Group.VANILLA, false),
     /** Particles: dead ones removed in one sweep, no garbage per particle, light looked up once per block and frame. */
@@ -56,6 +61,14 @@ public enum Optimization {
     SHADOW_SORTING(Group.PIPELINE, false),
     /** A shadow cascade's terrain is kept while nothing it is drawn from changed; only the entities are drawn again. */
     SHADOW_REUSE(Group.PIPELINE, false),
+    /** The shadow casters found in the view area are kept from frame to frame while no section changed and the cascades stay placed. */
+    SHADOW_GATHER_CACHE(Group.PIPELINE, false),
+    /**
+     * Shadow casters drawn only where their shadow can land on something in view (the view frustum swept towards the
+     * sun); a kept cascade's drawing grows as the camera turns, and a cascade placed anew is drawn once into the kept
+     * drawing and copied, not drawn twice.
+     */
+    SHADOW_VIEW_CASTERS(Group.PIPELINE, false),
     /** Motion blur's tile maximum in two separable passes instead of one serial loop per tile. */
     MOTION_BLUR_TILES(Group.PIPELINE, false),
     /** Post-processing constants written once per change, each pass with its own uniform block. */
@@ -69,7 +82,13 @@ public enum Optimization {
     /** Per-frame loops over nearby entities without garbage (motion, lights, poses). */
     FRAME_GARBAGE(Group.PIPELINE, false),
     /** Real far chunks: blocks no line of sight from outside can reach (sealed caves, buried blocks) are not meshed. */
-    FAR_HIDDEN_GEOMETRY(Group.PIPELINE, false);
+    FAR_HIDDEN_GEOMETRY(Group.PIPELINE, false),
+    /**
+     * Real far chunks drawn after vanilla's opaque terrain, their depth started from the level's own, their quads in
+     * clusters a compute shader culls against the view frustum and the hierarchical depth of what vanilla drew, the rest
+     * drawn by one indirect multi-draw per region layer.
+     */
+    FAR_GPU_CULLING(Group.PIPELINE, false);
 
     /** Where an entry works: vanilla Minecraft (through hooks) or BlockLand's own pipeline. */
     public enum Group { VANILLA, PIPELINE }

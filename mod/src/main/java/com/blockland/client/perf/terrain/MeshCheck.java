@@ -166,6 +166,10 @@ public final class MeshCheck {
             MeshData a = off.renderedLayers.get(layer), b = on.renderedLayers.get(layer);
             if (!a.drawState().equals(b.drawState())) return layer + ": draw state " + a.drawState() + " vs " + b.drawState();
             FaceGroups.take(b);
+            com.blockland.client.render.TerrainAnimation.take(a);
+            com.blockland.client.render.TerrainAnimation.take(b);
+            com.blockland.client.render.MeshBounds.take(a);
+            com.blockland.client.render.MeshBounds.take(b);
             int at = mismatch(a.vertexBuffer(), b.vertexBuffer(), a.drawState().format());
             if (at >= 0) return layer + ": " + vertexByte(at, a.drawState().format().getVertexSize());
             ByteBuffer ia = a.indexBuffer(), ib = b.indexBuffer();

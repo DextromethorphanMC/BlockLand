@@ -59,9 +59,33 @@ public final class GltfModel {
         public float[] weights;
         public int[] indices;
         public int material = -1;
+        @javax.annotation.Nullable
+        private float[] bounds;
 
         public int vertexCount() {
             return positions.length / 3;
+        }
+
+        /** The box round every vertex position: min x, y, z, then max x, y, z (worked out once; an empty primitive gives zeros). */
+        public float[] bounds() {
+            float[] b = bounds;
+            if (b != null) return b;
+            b = new float[6];
+            if (positions.length >= 3) {
+                b[0] = b[3] = positions[0];
+                b[1] = b[4] = positions[1];
+                b[2] = b[5] = positions[2];
+                for (int i = 3; i + 2 < positions.length; i += 3) {
+                    float x = positions[i], y = positions[i + 1], z = positions[i + 2];
+                    if (x < b[0]) b[0] = x;
+                    if (y < b[1]) b[1] = y;
+                    if (z < b[2]) b[2] = z;
+                    if (x > b[3]) b[3] = x;
+                    if (y > b[4]) b[4] = y;
+                    if (z > b[5]) b[5] = z;
+                }
+            }
+            return bounds = b;
         }
     }
 

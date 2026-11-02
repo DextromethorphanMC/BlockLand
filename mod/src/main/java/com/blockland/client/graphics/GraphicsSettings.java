@@ -46,6 +46,11 @@ public final class GraphicsSettings {
     /** Anti-aliasing at native resolution (without an upscaler). */
     public enum AntiAliasing { OFF, FXAA, TAA }
 
+    /** The soft shadows' taps (rendering spec §6): LOW 5 blocker + 8 filter, HIGH 12 + 16. */
+    public enum SoftShadowQuality {
+        LOW, HIGH
+    }
+
     public enum ShadowQuality {
         OFF(0, 0), LOW(1024, 2), MEDIUM(2048, 3), HIGH(2048, 4), ULTRA(4096, 4);
 
@@ -298,6 +303,15 @@ public final class GraphicsSettings {
      * stays the narrowest edge either way).
      */
     public float shadowPenumbra = 0.5f;
+    /** How many taps the soft shadows take ({@link SoftShadowQuality}); low saves about a quarter of the lit terrain pass. */
+    public String shadowSoftQuality = "high";
+    /**
+     * How far the sun may turn, measured in shadow-map texels at the farthest caster, before a cascade's shadow map
+     * is placed and drawn anew (rendering spec §6): the sun crosses the sky so slowly that a map kept for a few of its
+     * steps moves its shadow edges by less than this — about a pixel at the cascade's near edge — while drawing it at
+     * every step costs most of the shadow work. 0: placed anew at any change.
+     */
+    public float shadowLag = 1.5f;
     /** Direct sunlight strength (1 = keeps vanilla brightness on average). */
     public float sunStrength = 1f;
     public boolean dynamicLights = true;
@@ -432,6 +446,10 @@ public final class GraphicsSettings {
 
     public ShadowQuality shadowQuality() {
         return parse(ShadowQuality.class, shadows, ShadowQuality.HIGH);
+    }
+
+    public SoftShadowQuality shadowSoftQualityMode() {
+        return parse(SoftShadowQuality.class, shadowSoftQuality, SoftShadowQuality.HIGH);
     }
 
     public RayQuality rayQualityMode() {
@@ -650,11 +668,13 @@ public final class GraphicsSettings {
         reflex = reflexBoost() ? "boost" : "on";
         antialiasing = id(antialiasingMode());
         shadows = id(shadowQuality());
+        shadowSoftQuality = id(shadowSoftQualityMode());
         tonemap = id(tonemapMode());
         sharpness = clamp(sharpness, 0, 1);
         shadowDistance = clamp(shadowDistance, 16, 256);
         shadowSoftness = clamp(shadowSoftness, 0.25f, 3);
         shadowPenumbra = clamp(shadowPenumbra, 0, 1);
+        shadowLag = clamp(shadowLag, 0, 4);
         sunStrength = clamp(sunStrength, 0, 2);
         sunTemperature = clamp(sunTemperature, -1, 1);
         moonTemperature = clamp(moonTemperature, -1, 1);

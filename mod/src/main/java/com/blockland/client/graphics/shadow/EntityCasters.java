@@ -100,6 +100,10 @@ final class EntityCasters implements ShadowPass.Capture {
     private int maxIndices;
     private int entities;
     private boolean warned;
+    /** The box round every caster vertex of this frame (camera-relative), while {@link #boxKnown}. */
+    private final Vector3f boxMin = new Vector3f(), boxMax = new Vector3f();
+    private boolean boxKnown;
+    private final Vector3f corner = new Vector3f();
 
     int entityCount() {
         return entities;
@@ -113,6 +117,28 @@ final class EntityCasters implements ShadowPass.Capture {
         return meshes.isEmpty() && gpuCasters.isEmpty();
     }
 
+    /**
+     * The box round everything this frame's casters draw (camera-relative; every captured vertex, every GPU caster's
+     * box placed by its matrix): what the shadow map's tiles can get from them. False while there is nothing.
+     */
+    boolean box(Vector3f min, Vector3f max) {
+        if (!boxKnown) return false;
+        min.set(boxMin);
+        max.set(boxMax);
+        return true;
+    }
+
+    private void extend(float x, float y, float z) {
+        if (!boxKnown) {
+            boxMin.set(x, y, z);
+            boxMax.set(x, y, z);
+            boxKnown = true;
+            return;
+        }
+        boxMin.min(corner.set(x, y, z));
+        boxMax.max(corner);
+    }
+
     /** Draws the entities near the camera into the capture and packs the result into the vertex buffer. */
     void capture(ClientLevel level, double camX, double camY, double camZ, float partialTick) {
         meshes.clear();
@@ -121,6 +147,7 @@ final class EntityCasters implements ShadowPass.Capture {
         maxIndices = 0;
         vertexBytes = 0;
         entities = 0;
+        boxKnown = false;
         Minecraft mc = Minecraft.getInstance();
         EntityRenderDispatcher dispatcher = mc.getEntityRenderDispatcher();
         if (dispatcher.camera == null) return;
@@ -192,10 +219,15 @@ final class EntityCasters implements ShadowPass.Capture {
 
     @Override
     public boolean gpuCaster(RenderType type, Matrix4f matrix, GpuBuffer vertices, GpuBuffer indices, VertexFormat.IndexType indexType,
-                             int firstIndex, int indexCount, float uvScale) {
+                             int firstIndex, int indexCount, float uvScale, float[] bounds) {
         if (gpuSupported == null) gpuSupported = GL.getCapabilities().GL_ARB_gpu_shader5;
         if (!gpuSupported || vertices.isClosed() || indices.isClosed()) return false;
         gpuCasters.add(new GpuCaster(type, new Matrix4f(matrix), vertices, indices, indexType, firstIndex, indexCount, uvScale));
+        // the placed box's corners bound the placed vertices (the shader places them by this very matrix)
+        for (int i = 0; i < 8; i++) {
+            matrix.transformPosition((i & 1) == 0 ? bounds[0] : bounds[3], (i & 2) == 0 ? bounds[1] : bounds[4], (i & 4) == 0 ? bounds[2] : bounds[5], corner);
+            extend(corner.x, corner.y, corner.z);
+        }
         return true;
     }
 
@@ -235,6 +267,10 @@ final class EntityCasters implements ShadowPass.Capture {
                 staging = ensure(staging, vertexBytes + bytes);
                 staging.position(vertexBytes);
                 staging.put(data);
+                // the position is the format's first element
+                for (int at = data.position() - bytes; at + 12 <= data.position(); at += vertexSize) {
+                    extend(data.getFloat(at), data.getFloat(at + 4), data.getFloat(at + 8));
+                }
                 int indices = mesh.drawState().indexCount();
                 meshes.add(new Mesh(texture, vertexBytes / vertexSize, indices));
                 maxIndices = Math.max(maxIndices, indices);

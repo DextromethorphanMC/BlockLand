@@ -5,6 +5,7 @@ import com.blockland.client.graphics.frame.LevelPasses;
 import com.blockland.client.graphics.gpu.Fullscreen;
 import com.blockland.client.graphics.gpu.RenderTexture;
 import com.blockland.client.graphics.gpu.Ubo;
+import com.blockland.client.perf.FrameTimings;
 import com.blockland.client.render.FrameJitter;
 import com.blockland.client.render.SceneLighting;
 import com.blockland.farterrain.FarTile;
@@ -42,6 +43,12 @@ import java.util.OptionalInt;
  * planes are the far terrain's, plus the frame's jitter in the main view. Tiles frustum-culled and front to back; tiles
  * reaching into vanilla's area through the masked program, then its depth carried into the target's own where the level
  * projection reaches. A scope's picture draws it with its own depth texture.
+ * <p>
+ * With {@code FAR_GPU_CULLING} (§23) the pass runs right after vanilla's opaque terrain instead ({@link LevelPasses.View#occluded}):
+ * the far depth starts from the level's own carried into the far projection ({@code far_depth_init.fsh}, kept in an R32F
+ * marker), so what lies behind vanilla's terrain fails the depth test unshaded and the write-back leaves the texels the
+ * pass never wrote to the level; the real far chunks' clusters are culled on the GPU against the frustum and the
+ * hierarchical depth of that marker and drawn by indirect multi-draws ({@link GpuCull}).
  */
 final class FarRenderer {
     private static final int VIEW_BYTES = 128;
@@ -79,14 +86,38 @@ final class FarRenderer {
             .withDepthWrite(true)
             .withColorWrite(false)
             .build();
+    /**
+     * FAR_GPU_CULLING: the far pass drawn after vanilla's opaque terrain starts its depth from the level's own
+     * (far_depth_init.fsh: the level's depth carried into the far projection, kept in an R32F marker too), so what lies
+     * behind vanilla's terrain fails the depth test unshaded; the write-back then leaves the texels the far pass never
+     * wrote (still equal to the marker) to the level.
+     */
+    static final RenderPipeline DEPTH_INIT = Fullscreen.pipeline("far_depth_init")
+            .withSampler("SceneDepthSampler")
+            .withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST)
+            .withDepthWrite(true)
+            .build();
+    static final RenderPipeline DEPTH_OCCLUDED = Fullscreen.pipeline("far_depth")
+            .withLocation(BlockLand.id("pipeline/far_depth_occluded"))
+            .withShaderDefine("OCCLUDED")
+            .withSampler("FarDepthSampler")
+            .withSampler("FarInitSampler")
+            .withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST)
+            .withDepthWrite(true)
+            .withColorWrite(false)
+            .build();
 
     final CoverageMask mask = new CoverageMask();
+    /** FAR_GPU_CULLING: the real far chunks' culling (tables, hierarchical depth, indirect draws). */
+    private final GpuCull cull = new GpuCull();
     /** Made on the render thread at the first draw (the renderer is built during mod construction). */
     @Nullable
-    private Ubo mainDepthInfo, extraDepthInfo;
+    private Ubo mainDepthInfo, extraDepthInfo, mainInitInfo, extraInitInfo;
     private final RenderTexture mainDepth = new RenderTexture("BlockLand far terrain depth", RenderTexture.Format.DEPTH, FilterMode.NEAREST);
     private final RenderTexture extraDepth = new RenderTexture("BlockLand far terrain depth (scope)", RenderTexture.Format.DEPTH,
             FilterMode.NEAREST);
+    private final RenderTexture mainInit = new RenderTexture("BlockLand far depth init", RenderTexture.Format.R32F, FilterMode.NEAREST);
+    private final RenderTexture extraInit = new RenderTexture("BlockLand far depth init (scope)", RenderTexture.Format.R32F, FilterMode.NEAREST);
     private final ByteBuffer scratch = ByteBuffer.allocateDirect(VIEW_BYTES).order(ByteOrder.nativeOrder());
     private final FrustumIntersection frustum = new FrustumIntersection();
     private final List<Selection.Draw> sorted = new ArrayList<>();
@@ -98,6 +129,18 @@ final class FarRenderer {
     /** Tiles, cells and real far chunk columns drawn in the last main view. */
     int drawn, chunksDrawn;
     long cells;
+    /** FAR_GPU_CULLING in the last main view: the clusters the GPU was given (the commands issued). */
+    int culledClusters;
+
+    /** Frame start: the culling's rings move on. */
+    void beginFrame() {
+        cull.beginFrame();
+    }
+
+    /** Resources reloaded: the compute programs are compiled again on their next use. */
+    void reload() {
+        cull.reload();
+    }
 
     /**
      * Draws the real far chunks ({@code ring}, may be null) and the tiles into the view's target: the chunks' solid layers
@@ -112,6 +155,10 @@ final class FarRenderer {
         int width = view.target().width, height = view.target().height;
         RenderTexture depth = view.mainView() ? mainDepth : extraDepth;
         depth.ensure(width, height);
+        // FAR_GPU_CULLING: the level's opaque terrain is down; its depth seeds the far depth (and the marker)
+        RenderTexture init = view.occluded() ? view.mainView() ? mainInit : extraInit : null;
+        if (init != null) init.ensure(width, height);
+        boolean culled = init != null && ring != null && ring.columns() > 0 && cull.ready();
 
         Matrix4f projection = farProjection(view.projection(), near, far);
         if (view.mainView()) FrameJitter.apply(projection);
@@ -130,7 +177,7 @@ final class FarRenderer {
             sorted.add(d);
         }
         List<RegionRenderer.Draw> ringDraws = ring != null
-                ? ring.prepare(frustum, view.viewRotation(), cam.x, cam.y, cam.z) : List.of();
+                ? ring.prepare(frustum, view.viewRotation(), cam.x, cam.y, cam.z, culled ? cull : null) : List.of();
         // nothing in view: no depth this frame (the texture still holds an older one)
         if (sorted.isEmpty() && ringDraws.isEmpty()) return null;
         sorted.sort((a, b) -> {
@@ -175,16 +222,34 @@ final class FarRenderer {
             transforms.add(RenderSystem.getDynamicUniforms().writeTransform(view.viewRotation(), white, offset, textureMatrix, 1));
             maxQuads = Math.max(maxQuads, e.mesh.quads);
         }
+        // FAR_GPU_CULLING: the culled draws share one transform (the view; their offsets come from the culling)
+        GpuBufferSlice shared = culled && !ringDraws.isEmpty()
+                ? RenderSystem.getDynamicUniforms().writeTransform(view.viewRotation(), white, new Vector3f(), new Matrix4f(), 1) : null;
         RenderSystem.AutoStorageIndexBuffer sequential = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
-        GpuBuffer indices = sequential.getBuffer(maxQuads * 6);
+        GpuBuffer indices = sequential.getBuffer(Math.max(6, maxQuads * 6));
         GpuTextureView lightmap = Minecraft.getInstance().gameRenderer.lightTexture().getTextureView();
         GpuTextureView atlasView = Minecraft.getInstance().getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getTextureView();
         GpuBufferSlice scene = SceneLighting.uniforms();
         GpuTextureView shadowMap = SceneLighting.shadowMap();
 
         long cellCount = 0;
+        boolean seeded = init != null && initDepth(view, depth, init, projection, indices, sequential.type());
+        // FAR_GPU_CULLING: the hierarchical depth of what vanilla drew, then the clusters culled against it and the frustum
+        GpuCull.Frame frame = null;
+        if (shared != null) {
+            GpuCull.Hzb hzb = null;
+            if (seeded) {
+                try (FrameTimings.Span ignored = FrameTimings.span("bl/far/hzb")) {
+                    hzb = cull.hzb(view.mainView(), init.texture(), width, height);
+                }
+            }
+            try (FrameTimings.Span ignored = FrameTimings.span("bl/far/cull")) {
+                frame = cull.cull(ringDraws, new Matrix4f(projection).mul(view.viewRotation()), hzb);
+            }
+        }
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder()
-                .createRenderPass(() -> "BlockLand far terrain", color, OptionalInt.empty(), depth.view(), OptionalDouble.of(1.0))) {
+                .createRenderPass(() -> "BlockLand far terrain", color, OptionalInt.empty(), depth.view(),
+                        seeded ? OptionalDouble.empty() : OptionalDouble.of(1.0))) {
             if (projectionBuffer != null) {
                 // the real far chunks: vanilla's own pipelines, their defaults with the far projection and the level's fog
                 RenderSystem.bindDefaultUniforms(pass);
@@ -192,7 +257,10 @@ final class FarRenderer {
                 pass.bindSampler("Sampler2", lightmap);
                 pass.setUniform("Fog", view.fog());
                 pass.setIndexBuffer(indices, sequential.type());
-                RegionRenderer.draw(pass, ringDraws, false, indices, sequential.type());
+                try (FrameTimings.Span ignored = FrameTimings.span("bl/far/chunks_opaque")) {
+                    if (frame != null) RegionRenderer.drawCulled(pass, ringDraws, false, indices, sequential.type(), cull, frame, shared);
+                    else RegionRenderer.draw(pass, ringDraws, false, indices, sequential.type());
+                }
             }
             pass.setUniform("Fog", view.fog());
             pass.setUniform("BlockLandScene", scene);
@@ -206,35 +274,75 @@ final class FarRenderer {
             }
             pass.setIndexBuffer(indices, sequential.type());
             RenderPipeline current = null;
-            for (int i = 0; i < sorted.size(); i++) {
-                Selection.Draw d = sorted.get(i);
-                RenderPipeline pipeline = d.masked() && maskView != null ? MASKED : PLAIN;
-                if (pipeline != current) {
-                    pass.setPipeline(pipeline);
-                    current = pipeline;
+            try (FrameTimings.Span ignored = FrameTimings.span("bl/far/tiles")) {
+                for (int i = 0; i < sorted.size(); i++) {
+                    Selection.Draw d = sorted.get(i);
+                    RenderPipeline pipeline = d.masked() && maskView != null ? MASKED : PLAIN;
+                    if (pipeline != current) {
+                        pass.setPipeline(pipeline);
+                        current = pipeline;
+                    }
+                    FarMesh mesh = d.entry().mesh;
+                    pass.setVertexBuffer(0, mesh.buffer);
+                    pass.setUniform("DynamicTransforms", transforms.get(i));
+                    pass.drawIndexed(0, 0, mesh.quads * 6, 1);
+                    cellCount += FarTile.CELLS;
                 }
-                FarMesh mesh = d.entry().mesh;
-                pass.setVertexBuffer(0, mesh.buffer);
-                pass.setUniform("DynamicTransforms", transforms.get(i));
-                pass.drawIndexed(0, 0, mesh.quads * 6, 1);
-                cellCount += FarTile.CELLS;
             }
             if (projectionBuffer != null) {
                 pass.bindSampler("Sampler2", lightmap);
-                RegionRenderer.draw(pass, ringDraws, true, indices, sequential.type());
+                try (FrameTimings.Span ignored = FrameTimings.span("bl/far/chunks_translucent")) {
+                    if (frame != null) RegionRenderer.drawCulled(pass, ringDraws, true, indices, sequential.type(), cull, frame, shared);
+                    else RegionRenderer.draw(pass, ringDraws, true, indices, sequential.type());
+                }
             }
         }
         if (view.mainView()) {
             drawn = sorted.size();
             cells = cellCount;
             chunksDrawn = ring != null ? ring.drawnColumns : 0;
+            culledClusters = frame != null ? frame.commands : 0;
         }
-        resolveDepth(view, depth.view(), projection);
+        try (FrameTimings.Span ignored = FrameTimings.span("bl/far/resolve")) {
+            resolveDepth(view, depth.view(), projection, seeded ? init.view() : null);
+        }
         return depth.view();
     }
 
-    /** far_depth.fsh: the far terrain's depth into the target's depth, where it lies within the level's far plane. */
-    private void resolveDepth(LevelPasses.View view, GpuTextureView farDepth, Matrix4f farProjection) {
+    /**
+     * FAR_GPU_CULLING: seeds the far depth (and the marker) from the level's depth so far. False when the target has no
+     * depth to read (the pass then clears the far depth as before).
+     */
+    private boolean initDepth(LevelPasses.View view, RenderTexture farDepth, RenderTexture init, Matrix4f farProjection,
+                              GpuBuffer indexBuffer, VertexFormat.IndexType indexType) {
+        GpuTextureView sceneDepth = view.target().getDepthTextureView();
+        if (sceneDepth == null) return false;
+        Matrix4f level = new Matrix4f(view.projection());
+        if (view.mainView()) FrameJitter.apply(level);
+        if (mainInitInfo == null) {
+            mainInitInfo = Ubo.pass("far depth init");
+            extraInitInfo = Ubo.pass("far depth init (scope)");
+        }
+        Ubo info = view.mainView() ? mainInitInfo : extraInitInfo;
+        info.pass(new Matrix4f(farProjection).mul(level.invert()));
+        try (FrameTimings.Span ignored = FrameTimings.span("bl/far/init");
+             RenderPass pass = RenderSystem.getDevice().createCommandEncoder()
+                     .createRenderPass(() -> "BlockLand far depth init", init.view(), OptionalInt.empty(), farDepth.view(), OptionalDouble.of(1.0))) {
+            pass.setPipeline(DEPTH_INIT);
+            pass.setUniform(Fullscreen.PASS_BLOCK, info.buffer().slice());
+            pass.bindSampler("SceneDepthSampler", sceneDepth);
+            pass.setVertexBuffer(0, RenderSystem.getQuadVertexBuffer());
+            pass.setIndexBuffer(indexBuffer, indexType);
+            pass.drawIndexed(0, 0, 6, 1);
+        }
+        return true;
+    }
+
+    /**
+     * far_depth.fsh: the far terrain's depth into the target's depth, where it lies within the level's far plane; with the
+     * marker ({@code init}) only where the far pass drew.
+     */
+    private void resolveDepth(LevelPasses.View view, GpuTextureView farDepth, Matrix4f farProjection, @Nullable GpuTextureView init) {
         GpuTextureView targetDepth = view.target().getDepthTextureView();
         GpuTextureView color = view.target().getColorTextureView();
         if (targetDepth == null || color == null) return;
@@ -250,9 +358,10 @@ final class FarRenderer {
         GpuBuffer indexBuffer = indices.getBuffer(6);
         try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder()
                 .createRenderPass(() -> "BlockLand far terrain depth", color, OptionalInt.empty(), targetDepth, OptionalDouble.empty())) {
-            pass.setPipeline(DEPTH);
+            pass.setPipeline(init != null ? DEPTH_OCCLUDED : DEPTH);
             pass.setUniform(Fullscreen.PASS_BLOCK, info.buffer().slice());
             pass.bindSampler("FarDepthSampler", farDepth);
+            if (init != null) pass.bindSampler("FarInitSampler", init);
             pass.setVertexBuffer(0, RenderSystem.getQuadVertexBuffer());
             pass.setIndexBuffer(indexBuffer, indices.type());
             pass.drawIndexed(0, 0, 6, 1);
@@ -312,13 +421,16 @@ final class FarRenderer {
     void close() {
         mainDepth.close();
         extraDepth.close();
+        mainInit.close();
+        extraInit.close();
         mask.close();
+        cull.close();
         if (mainView != null) mainView.close();
         if (extraView != null) extraView.close();
         if (mainProjection != null) mainProjection.close();
         if (extraProjection != null) extraProjection.close();
         mainView = extraView = mainProjection = extraProjection = null;
-        drawn = chunksDrawn = 0;
+        drawn = chunksDrawn = culledClusters = 0;
         cells = 0;
     }
 }

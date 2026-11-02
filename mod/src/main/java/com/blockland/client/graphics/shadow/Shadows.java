@@ -74,7 +74,12 @@ public final class Shadows {
                 status.shadowCascades = 0;
                 return;
             }
-            map.render(level, Graphics.settings(), frame.camX, frame.camY, frame.camZ, frame.partialTick);
+            GraphicsSettings settings = Graphics.settings();
+            // what reads the map: the lit world anywhere in view; with the world unlit (the scene block then carries no
+            // cascades, so every bl_shadow lookup returns lit without sampling) only the volumetric light, out to its
+            // march range — or nothing
+            float readRange = settings.worldLighting ? Float.MAX_VALUE : effects.wantsFog(settings) ? WorldFx.volumetricRange(settings) : 0;
+            map.render(level, settings, frame, readRange);
             ShadowInfo info = map.info();
             status.shadowCascades = info == null ? 0 : info.count();
             status.shadowReason = map.reason();

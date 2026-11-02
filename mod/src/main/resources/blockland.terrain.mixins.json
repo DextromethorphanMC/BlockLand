@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
   "client": [
+    "ChunkSectionsToRenderMixin",
     "ClientChunkCacheMixin",
     "ClientLevelMixin",
     "CompileTaskAccess",
@@ -12,6 +13,7 @@
     "CompiledSectionMeshMixin",
     "ModelBlockRendererCacheMixin",
     "ModelBlockRendererMixin",
+    "RenderSectionMixin",
     "SectionBuffersMixin",
     "SectionCompilerMixin",
     "SectionCopyMixin",

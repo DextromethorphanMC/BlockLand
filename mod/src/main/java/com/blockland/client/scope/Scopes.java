@@ -127,6 +127,8 @@ final class Scopes {
         sight = optic != null && optic.isScope() && optic.hasModel() && firstPerson ? optic : null;
         aim = sight == null ? 0 : Mth.clamp(raised, 0, 1);
         mode = sight == null ? Mode.NONE : canShowPicture(sight) ? Mode.PICTURE : Mode.ZOOM;
+        // the picture is a second view of the world (from PICTURE_FROM on): the frame's shadow casters must serve it too
+        com.blockland.client.render.SceneLighting.expectExtraWorldView(mode == Mode.PICTURE && aim > 0);
         zoom.track(sight);
         zoom.update(dt);
         steady.update(dt, sight == null ? null : sight.scope, (float) Ease.SINE_IN_OUT.apply(aim), wantSteady);
