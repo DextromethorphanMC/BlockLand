@@ -23,6 +23,7 @@ import com.blockland.client.screen.lobby.PartyPanel;
 import com.blockland.client.screen.lobby.TopBar;
 import com.blockland.client.settings.SettingsScreen;
 import com.blockland.client.ui.Draw;
+import com.blockland.client.ui.ToastArea;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.packet.C2SJoinQueue;
 import com.blockland.network.packet.C2SLeaveQueue;
@@ -55,7 +56,7 @@ import static com.blockland.client.ui.Tr.tr;
  * steps back inside it. This class only lays out and wires the components in {@code lobby}; all motion runs on
  * {@link Ticker}.
  */
-public final class LobbyScreen extends Screen {
+public final class LobbyScreen extends Screen implements ToastArea {
     private static final int TOP_BAR = TopBar.HEIGHT;
     private static final int PAD = 16;
 
@@ -211,6 +212,12 @@ public final class LobbyScreen extends Screen {
                 width * 0.35f, height * 0.4f, 0x1CFFB02E);
         Draw.glow(g, (float) (width * (0.45 + 0.06 * Math.sin(t * 0.11))), (float) (height * 0.05), width * 0.3f, height * 0.25f, 0x165EC8FF);
         Draw.fadeY(g, 0, height - 70, width, 70, 0x70000000, false);
+    }
+
+    /** Toasts (notices, vanilla's warnings) start under the top bar, never over its buttons. */
+    @Override
+    public int toastTop() {
+        return TOP_BAR + 4;
     }
 
     @Override

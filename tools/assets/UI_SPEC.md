@@ -261,6 +261,13 @@ untouched (the messages are wrapped again either way when the switch or the font
   takes (2 px at 22 px tall: 200 px show 100°). The width only decides how much of the horizon shows — never more than
   300° (a degree then takes more pixels).
 
+### 3.7 Toasts under a screen's own top bar (`client/ui/ToastArea`)
+
+Vanilla's toasts (our lobby notices are `SystemToast`s too, as are vanilla's own warnings) start at the top-right corner
+of the GUI. A screen with a bar across the top implements `ToastArea.toastTop()` (the lobby and the activity pages:
+under the 32 px top bar), and `mixin/hud/ToastManagerMixin` only moves the whole `ToastManager.render` down by it while
+that screen is open; slots, timing and looks stay vanilla's. Every other screen and the HUD keep vanilla's place.
+
 ## 4. Daily check-in (每日签到, `client/screen/lobby/CheckInPanel` + `server/checkin` + the backend's `checkin`)
 
 The lobby's daily check-in. The backend keeps the streaks and decides; the game server relays (clients never talk to
@@ -274,13 +281,27 @@ the backend); the lobby only shows.
   (the streak keeps counting); a missed day breaks the streak to 0 and the next check-in is the cycle's day 1 again.
   Once per day: asking again the same day answers `already` and changes nothing. Off (`enabled` false): the cycle shows
   but nobody can check in. The default cycle grants graffiti and name cards that exist in the mod's inventory registry.
+* **Milestones** (额外奖励, `CheckInConfig.milestones`, up to 64): extra rewards on top of the cycle, granted with the
+  check-in that reaches them. Each has a stable `id` (lowercase, records which ones a player was paid), a `kind` —
+  `STREAK` (连续签到 `days` days), `TOTAL` (累计签到 `days` days) or `DATE` (签到 on `date`: `yyyy-MM-dd` that day only,
+  or `MM-dd` every year; 02-29 only in leap years) — a `name` (blank: the rule in words, e.g. 连续签到 7 天 / 每年 12-25
+  签到, worded by the game server), `enabled`, and 1–8 `rewards` like a cycle day's. Streak and total milestones pay
+  once per player the first check-in whose count reaches `days` (one added later pays players already past it at their
+  next check-in; paid ids are kept in the record's `paidOnce`, even when an admin clears the record); with `repeat` they
+  pay on every check-in whose count is a multiple of `days` (a broken streak earns a repeating streak milestone again).
+  Date milestones pay on their day. Nothing pays twice because a check-in happens once a day.
 * **Backend** (`/api/server/checkin/{uuid}` state, `POST …/{uuid}/claim`; admin `/api/admin/checkin/config` GET/PUT,
   `/stats`, `DELETE /players/{uuid}` forgets a player's record — granted rewards stay). Records in
   `checkin-records.json`, the config in `checkin-config.json` (the defaults until saved). A reward is granted with
-  `PlayerService.grant` (source `checkin:<day>`), the same way a shop purchase is.
+  `PlayerService.grant` (source `checkin:<day>`, a milestone's `checkin:<id>:<day>`), the same way a shop purchase is.
+  The state lists the enabled milestones (date ones that are over left out) with `progress`, `target` (the count that
+  pays next), `checkInsLeft` (today's check-in counting while not made; days to the date for date ones), `nextDate` and
+  `achieved` (a one-time one: ever; a repeating or date one: with today's check-in); a claim answers the `bonuses` it
+  paid.
 * **Game server** (`server/checkin/CheckInService`, `CheckInPackets`, by player id — it serves the lobby): answers the
   lobby's request with the cycle (reward items carry their name, icon and rarity from `InventoryCatalog`), relays a
-  check-in (one at a time per player), confirms it with a toast (第 N 天奖励：…) and fetches the player's status again so
+  check-in (one at a time per player), confirms it with a toast (第 N 天奖励：…) plus one per milestone reached
+  (达成「…」！获得：…) and fetches the player's status again so
   the reward reaches everything owning items unlocks. The backend unreachable: an error state with a retry button.
 * **Lobby** (`TopBar` 签到 button with a breathing red dot while today's check-in waits; `CheckInPanel` over the whole
   lobby; `client/checkin/ClientCheckIn` holds the state and asks again when a new day begins): the title and rules,
@@ -288,6 +309,11 @@ the backend); the lobby only shows.
   fit — each with 第 N 天 / 今天, the reward's icon or a gift box, its name and 永久 / N 天, the rarity's colour along the
   top; checked-in days dimmed under a tilted 已签 stamp; today's card lifted, glowing and outlined in the accent while
   it waits; the cycle's last day marked 大奖), and one button: 签到领取, else 今日已签到 with the countdown to the next
-  day, 签到暂未开放, or 重试. A check-in that went through plays on its card: the stamp slams in, the card pops, sparks
-  burst, a flash rings out, the streak counts up, 获得 … rises over the card, and the level-up chime plays. Escape, the
+  day, 签到暂未开放, or 重试. Between the cards and the button, 额外奖励: up to six milestones two to a row (the ones today's
+  check-in paid first, then the closest still to come, then the one-time ones paid before; 还有 N 项 when there are more),
+  each with its kind's colour along the left (streak accent, total blue, date gold), the first reward's icon, its name,
+  its rewards (奖励：A、B), where it stands (再签 N 天 / N 天后 / 今天签到可得 / 已达成) and, for counts, a progress bar
+  with N/M. A check-in that went through plays on its card: the stamp slams in, the card pops, sparks
+  burst, a flash rings out, the streak counts up, 获得 … rises over the card (达成 … above it for every milestone
+  reached), and the level-up chime plays. Escape, the
   cross or a click outside closes it; while open it takes all input.

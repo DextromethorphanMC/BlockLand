@@ -33,6 +33,12 @@ final class CraftStats {
      * @param compact fewer rows (the in-game screen)
      */
     void drawGun(GuiGraphics g, GunData.Gun gun, Build applied, Build shown, int x, int y, int w, int h, float a, boolean compact) {
+        drawGun(g, gun, applied, shown, x, y, w, h, a, compact, 1);
+    }
+
+    /** The same with the stats in {@code columns} side by side (filled row by row). */
+    void drawGun(GuiGraphics g, GunData.Gun gun, Build applied, Build shown, int x, int y, int w, int h, float a, boolean compact,
+                 int columns) {
         GunStats now = GunStats.of(gun.id, new GunState(applied, 0)).orElse(null);
         GunStats next = GunStats.of(gun.id, new GunState(shown, 0)).orElse(null);
         if (now == null || next == null || h < 20) return;
@@ -51,16 +57,22 @@ final class CraftStats {
                         String.format("×%.1f", next.traits().armorDamage())));
         if (compact) stats = List.of(stats.get(0), stats.get(1), stats.get(2), stats.get(4), stats.get(5), stats.get(6));
         Draw.rect(g, x, y, w, h, ColorMath.fade(PANEL, a));
-        int rowH = Math.max(9, Math.min(14, (h - 6) / stats.size()));
+        columns = Math.max(1, columns);
+        int rows = (stats.size() + columns - 1) / columns;
+        int rowH = Math.max(9, Math.min(14, (h - 6) / rows));
         int labelW = 0;
         for (Stat s : stats) labelW = Math.max(labelW, UiFont.width(Component.translatable("blockland.craft.stat." + s.key()).getString()));
         int valueW = 52;
-        int barX = x + 8 + labelW + 6, barW = Math.max(20, w - labelW - valueW - 30);
+        int columnW = (w - (columns - 1) * 4) / columns;
+        int barW = Math.max(20, columnW - labelW - valueW - 30);
         for (int i = 0; i < stats.size(); i++) {
             Stat s = stats.get(i);
-            int ry = y + 6 + i * rowH;
+            int cx = x + (i % columns) * (columnW + 4);
+            int ry = y + 6 + (i / columns) * rowH;
             if (ry + 8 > y + h) break;
-            Draw.text(g, Component.translatable("blockland.craft.stat." + s.key()).getString(), x + 8, ry, 1f, ColorMath.fade(MUTED, a), false);
+            int barX = cx + 8 + labelW + 6;
+            if (i % columns > 0) g.fill(cx - 2, ry - 1, cx - 1, ry + 9, ColorMath.fade(LINE, a));
+            Draw.text(g, Component.translatable("blockland.craft.stat." + s.key()).getString(), cx + 8, ry, 1f, ColorMath.fade(MUTED, a), false);
             float base = spring01("a" + s.key(), s.applied());
             float target = spring01("p" + s.key(), s.preview());
             g.fill(barX, ry + 3, barX + barW, ry + 6, ColorMath.fade(0x30FFFFFF, a));
@@ -71,7 +83,7 @@ final class CraftStats {
             } else if (base > target + 0.002f) {
                 g.fill(barX + common, ry + 3, barX + Math.round(barW * base), ry + 6, ColorMath.fade(ERROR, a));
             }
-            Draw.text(g, s.value(), x + w - 8 - UiFont.width(s.value()), ry, 1f, ColorMath.fade(TEXT, a), false);
+            Draw.text(g, s.value(), cx + columnW - 8 - UiFont.width(s.value()), ry, 1f, ColorMath.fade(TEXT, a), false);
         }
     }
 
@@ -80,7 +92,14 @@ final class CraftStats {
         return compact ? 6 : 10;
     }
 
-    static void drawKnife(GuiGraphics g, MeleeData.Knife knife, int x, int y, int w, float a) {
+    /** Height of the full gun panel with its stats in {@code columns}, at {@code rowH} per row. */
+    static int gunHeight(int columns, int rowH) {
+        int rows = (gunRows(false) + Math.max(1, columns) - 1) / Math.max(1, columns);
+        return rows * rowH + 8;
+    }
+
+    /** @return the panel's height */
+    static int drawKnife(GuiGraphics g, MeleeData.Knife knife, int x, int y, int w, float a) {
         List<Component> rows = List.of(
                 Component.translatable("blockland.craft.knife.light", format(knife.light.damage)),
                 Component.translatable("blockland.craft.knife.heavy", format(knife.heavy.damage)),
@@ -92,6 +111,7 @@ final class CraftStats {
             Draw.text(g, Draw.fit(rows.get(i).getString(), w - 16), x + 8, y + 6 + i * 13, 1f,
                     ColorMath.fade(i == rows.size() - 1 ? DIM : MUTED, a), false);
         }
+        return h;
     }
 
     private static String format(float value) {

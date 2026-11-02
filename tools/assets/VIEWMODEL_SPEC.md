@@ -540,10 +540,11 @@ roughened by the normal detail it averages (Toksvig, `client/render/Mipmaps.roug
 Every material belongs to a **region** (`extras.region`); skins re-texture regions, not single materials, so one
 skin fits every gun and every attachment.
 
-Naming in the 工匠 UI: ordinary skins (colours, texture sets) are **迷彩** (Camo), skins with a shader effect
-**特效皮肤** (shader skins) and skins with a model or shot effects of their own (§30) **特殊皮肤** (special skins); each
-kind has its own tab, and all of them set the one skin of a build. The data keeps one list for all three (`skins` in
-guns.json / knives.json, `craft/skins.json`, a build's `skin`), so saved builds are not affected by the naming.
+Naming in the 工匠 UI: skins that only change the materials — colours, texture sets and shader effects — are
+**迷彩** (Camo, one concept whether animated or not), skins with a model or shot effects of their own (§30) **特殊皮肤**
+(special skins); each kind has its own tab (in the lobby under the stats, with 挂件 and 喷漆), and both set the one skin
+of a build. The data keeps one list for all of them (`skins` in guns.json / knives.json, `craft/skins.json`, a build's
+`skin`), so saved builds are not affected by the naming.
 
 | Region | Parts |
 |---|---|
@@ -593,7 +594,7 @@ an `effect`, an `effectColor` (`#RRGGBB`) and `params` (four numbers; missing on
 older per-material `tints` are display colours: on a material with a texture set they recolour its albedo around
 that colour (albedo × tint / mean albedo) and keep its detail; per-material `textures` replace the albedo (tiled at
 1 UV = 0.05 m, without the set's maps). A material's own entries win over a region layer. Skins with an effect are
-listed in the 工匠's 特效皮肤 tab, and the craft preview keeps animating them. **Shader effects** run in our pipeline:
+listed with the other camos in the 工匠's 迷彩 tab (tagged as animated), and the craft preview keeps animating them. **Shader effects** run in our pipeline:
 
 | `effect` | Look | `params` |
 |---|---|---|

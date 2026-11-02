@@ -21,29 +21,37 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import static com.blockland.client.screen.lobby.LobbyTheme.*;
 
 /**
- * The lobby's 工匠 tab: every weapon in a list, the edited weapon's pages (slots, 喷漆, the skin tabs) with their option
- * cards, a live 3D preview and, for guns, stat bars that show what an option changes. Drawn inside the lobby screen's
- * content area like its other tabs; the logic is the {@link CraftSession}'s.
+ * The lobby's 工匠 tab: every weapon in a (scrolling) list, the edited weapon's attachment slots with their option cards,
+ * a live 3D preview and under it, in one scrolling area, the numbers (a gun's stat bars that show what an option
+ * changes) and the looks (迷彩, 挂件, 特殊皮肤, 喷漆). Drawn inside the lobby screen's content area like its other tabs;
+ * the logic is the {@link CraftSession}'s.
  */
 public final class CraftPanel implements LobbyTab {
     private final CraftSession session;
-    private String category = CraftSession.SKIN;
+    /** The attachment slot shown in the options column ("" when the weapon has none). */
+    private String category = "";
+    /** The look page shown under the numbers. */
+    private String cosmetic = CraftSession.SKIN;
     @Nullable
     private String hoveredOption;
+    private String hoveredCategory = "";
 
     private float yaw = -112, pitch = 12, zoom = 1;
     private boolean userRotated;
     private boolean dragging;
-    private float optionScroll, optionScrollTarget;
-    private int optionContentHeight, optionViewTop, optionViewHeight;
+    private final Scroll list = new Scroll(), options = new Scroll(), info = new Scroll();
+    private int listX = -1, listW;
     private int previewX, previewY, previewW, previewH;
     private final Map<String, Spring> hover = new HashMap<>();
     private final Spring tabX = new Spring(0).config(260, 24);
     private final Spring tabW = new Spring(0).config(260, 24);
+    private final Spring lookTabX = new Spring(0).config(260, 24);
+    private final Spring lookTabW = new Spring(0).config(260, 24);
     private final List<Hit> hits = new ArrayList<>();
     private final SprayEditor sprays = new SprayEditor();
     private final CraftStats stats = new CraftStats();
@@ -51,6 +59,40 @@ public final class CraftPanel implements LobbyTab {
     private float sideBlend;
 
     private record Hit(int x, int y, int w, int h, Runnable action) {
+    }
+
+    /** A vertically scrolling view: where it is on screen, how tall its content is and how far it is scrolled. */
+    private static final class Scroll {
+        float offset, target;
+        int top, height, content;
+
+        /** Eases towards the target; call before drawing the content. @return the y the content starts at */
+        int begin(int top, int height) {
+            this.top = top;
+            this.height = height;
+            offset += (target - offset) * 0.35f;
+            return top - Math.round(offset);
+        }
+
+        /** The content drawn from {@code start} ended at {@code end}: clamps the scroll and draws the bar at {@code barX}. */
+        void end(GuiGraphics g, int start, int end, int barX, float a) {
+            content = end - start;
+            float max = Math.max(0, content - height);
+            target = Math.max(0, Math.min(max, target));
+            if (max > 0) {
+                int barH = Math.max(12, Math.round(height * height / (float) content));
+                int barY = top + Math.round((height - barH) * (Math.min(offset, max) / max));
+                g.fill(barX, barY, barX + 2, barY + barH, ColorMath.fade(0x55FFFFFF, a));
+            }
+        }
+
+        boolean contains(double mouseY) {
+            return mouseY >= top && mouseY < top + height;
+        }
+
+        void reset() {
+            offset = target = 0;
+        }
     }
 
     private CraftPanel(CraftSession session) {
@@ -69,9 +111,12 @@ public final class CraftPanel implements LobbyTab {
     }
 
     private void resetPage(Craftable weapon) {
-        category = weapon.slots().isEmpty() ? CraftSession.SKIN : weapon.slots().get(0).id();
+        List<String> gear = session.gearCategories();
+        category = gear.isEmpty() ? "" : gear.get(0);
+        if (!session.cosmeticCategories().contains(cosmetic)) cosmetic = CraftSession.SKIN;
         sprays.reset();
-        optionScroll = optionScrollTarget = 0;
+        options.reset();
+        info.reset();
         userRotated = false;
         zoom = 1;
     }
@@ -108,24 +153,27 @@ public final class CraftPanel implements LobbyTab {
 
         int top = y0 + 20, bottom = y0 + height;
         int x = x0;
+        hoveredOption = null;
+        hoveredCategory = "";
+        listX = -1;
         if (session.weapons.size() > 1) {
             int listW = Math.min(118, (int) (width * 0.2f));
-            drawWeaponList(g, mouseX, mouseY, x, top, listW, a);
+            drawWeaponList(g, mouseX, mouseY, x, top, listW, bottom - top, a);
             x += listW + 10;
         }
         int optW = Math.min(196, (int) (width * 0.32f));
         drawOptions(g, mouseX, mouseY, x, top, optW, bottom - top, a);
 
-        // preview and numbers on the right
+        // preview on the right, the numbers and the looks under it
         previewX = x + optW + 14;
         previewY = top - 2;
         previewW = x0 + width - previewX;
-        previewH = (int) ((bottom - previewY) * 0.56f);
+        previewH = Math.max(70, (int) ((bottom - previewY) * 0.46f));
         Draw.glow(g, previewX + previewW / 2f, previewY + previewH / 2f, previewW * 0.5f, previewH * 0.6f, ColorMath.fade(0x55A9C4E8, a));
         g.fill(previewX + previewW / 6, previewY + previewH - 2, previewX + previewW * 5 / 6, previewY + previewH - 1, ColorMath.fade(0x30FFFFFF, a));
         if (!userRotated && !dragging) yaw = -112 + (float) Math.sin(Ticker.global().time() * 0.35) * 14;
         // sprays are placed on a side seen square on (the weapon root's frame): the view turns there and back
-        sideBlend += ((category.equals(CraftSession.SPRAY) ? 1 : 0) - sideBlend) * 0.3f;
+        sideBlend += ((cosmetic.equals(CraftSession.SPRAY) ? 1 : 0) - sideBlend) * 0.3f;
         Quaternionf orientation = null;
         if (sideBlend > 0.002f) {
             Quaternionf side = sprays.sideView(weapon, session.edited);
@@ -140,14 +188,9 @@ public final class CraftPanel implements LobbyTab {
                     square ? 0 : pitch, zoom, orientation, previewX, previewY, previewX + previewW, previewY + previewH,
                     g.getScissorStack().peek()));
         }
-        if (category.equals(CraftSession.SPRAY)) sprays.drawMarker(g, previewX, previewY, previewW, previewH, weapon, session.edited, a);
+        if (cosmetic.equals(CraftSession.SPRAY)) sprays.drawMarker(g, previewX, previewY, previewW, previewH, weapon, session.edited, a);
         int infoY = previewY + previewH + 6;
-        if (weapon instanceof GunData.Gun gun) {
-            Build shown = hoveredOption != null ? CraftSession.with(category, session.edited, hoveredOption) : session.edited;
-            stats.drawGun(g, gun, session.baseline(gun), shown, previewX, infoY, previewW, bottom - infoY, a, false);
-        } else if (weapon instanceof MeleeData.Knife knife) {
-            CraftStats.drawKnife(g, knife, previewX, infoY, previewW, a);
-        }
+        drawInfo(g, mouseX, mouseY, weapon, previewX, infoY, previewW, bottom - infoY, a);
 
         float t = session.toast.get();
         if (t > 0.02f) {
@@ -157,132 +200,114 @@ public final class CraftPanel implements LobbyTab {
         }
     }
 
-    private void drawWeaponList(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, float a) {
+    private void drawWeaponList(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, int h, float a) {
+        listX = x;
+        listW = w;
+        int cy = list.begin(y, h);
+        int start = cy;
+        g.enableScissor(x - 2, y, x + w + 6, y + h);
         Craftable.Kind kind = null;
         for (Craftable entry : session.weapons) {
             if (entry.kind() != kind) {
                 kind = entry.kind();
                 Draw.text(g, Component.translatable("blockland.craft.kind." + kind.name().toLowerCase(Locale.ROOT)).getString(),
-                        x + 2, y + 2, 0.75f, ColorMath.fade(DIM, a), false);
-                y += 12;
+                        x + 2, cy + 2, 0.75f, ColorMath.fade(DIM, a), false);
+                cy += 12;
             }
-            boolean chosen = entry == session.weapon;
-            boolean over = inside(mouseX, mouseY, x, y, w, 20);
-            float hv = spring("w" + entry.id(), over ? 1 : 0, 320, 24).get();
-            float sel = spring("ws" + entry.id(), chosen ? 1 : 0, 260, 24).get();
-            Draw.rect(g, x, y, w, 20, ColorMath.fade(ColorMath.mix(ColorMath.mix(CARD, CARD_HOVER, hv), CARD_SELECTED, sel), a));
-            if (sel > 0.01f) g.fill(x, y, x + 2, y + 20, ColorMath.fade(ACCENT, a * sel));
-            String label = Draw.fit(entry.displayName().getString(), w - 12);
-            Draw.text(g, label, x + 7 + Math.round(hv * 2), y + 6, 1f, ColorMath.fade(chosen ? TEXT : ColorMath.mix(MUTED, TEXT, hv), a), false);
-            if (!ClientBuilds.get(entry.id()).isEmpty()) {
-                Draw.rect(g, x + w - 7, y + 8, 3, 3, ColorMath.fade(OK, a * 0.8f));
-            }
-            Craftable target = entry;
-            hits.add(new Hit(x, y, w, 20, () -> {
-                if (target != session.weapon) {
-                    select(target);
-                    CraftSession.playUi(1.4f, 0.25f);
+            if (cy + 20 > y && cy < y + h) {
+                boolean chosen = entry == session.weapon;
+                boolean over = list.contains(mouseY) && inside(mouseX, mouseY, x, cy, w, 20);
+                float hv = spring("w" + entry.id(), over ? 1 : 0, 320, 24).get();
+                float sel = spring("ws" + entry.id(), chosen ? 1 : 0, 260, 24).get();
+                Draw.rect(g, x, cy, w, 20, ColorMath.fade(ColorMath.mix(ColorMath.mix(CARD, CARD_HOVER, hv), CARD_SELECTED, sel), a));
+                if (sel > 0.01f) g.fill(x, cy, x + 2, cy + 20, ColorMath.fade(ACCENT, a * sel));
+                String label = Draw.fit(entry.displayName().getString(), w - 12);
+                Draw.text(g, label, x + 7 + Math.round(hv * 2), cy + 6, 1f, ColorMath.fade(chosen ? TEXT : ColorMath.mix(MUTED, TEXT, hv), a), false);
+                if (!ClientBuilds.get(entry.id()).isEmpty()) {
+                    Draw.rect(g, x + w - 7, cy + 8, 3, 3, ColorMath.fade(OK, a * 0.8f));
                 }
-            }));
-            y += 22;
+                Craftable target = entry;
+                addHit(x, cy, w, 20, list, () -> {
+                    if (target != session.weapon) {
+                        select(target);
+                        CraftSession.playUi(1.4f, 0.25f);
+                    }
+                });
+            }
+            cy += 22;
         }
+        g.disableScissor();
+        list.end(g, start, cy - 2, x + w + 3, a);
     }
 
-    private void drawOptions(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, int h, float a) {
-        // category tabs, wrapped onto several rows when they do not fit
+    /**
+     * A row of page tabs (wrapped onto several rows when they do not fit) with an underline easing to the current one;
+     * in a scrolling {@code view}, tabs scrolled out cannot be clicked.
+     *
+     * @return the y under the tabs' rule
+     */
+    private int drawTabs(GuiGraphics g, int mouseX, int mouseY, List<String> pages, String current, int x, int y, int w,
+                         @Nullable Scroll view, Spring underX, Spring underW, float a, Consumer<String> pick) {
         int tx = x, ty = y;
-        for (String c : session.categories()) {
+        for (String c : pages) {
             String label = CraftSession.categoryName(c).getString();
             int tw = UiFont.width(label) + 14;
             if (tx + tw > x + w && tx > x) {
                 tx = x;
                 ty += 18;
             }
-            boolean over = inside(mouseX, mouseY, tx, ty, tw, 16);
-            float hv = spring("tab" + c, over || c.equals(category) ? 1 : 0, 320, 26).get();
+            boolean over = (view == null || view.contains(mouseY)) && inside(mouseX, mouseY, tx, ty, tw, 16);
+            float hv = spring("tab" + c, over || c.equals(current) ? 1 : 0, 320, 26).get();
             Draw.text(g, label, tx + 7, ty + 4 - hv, 1f, ColorMath.fade(ColorMath.mix(MUTED, TEXT, hv), a), false);
-            if (c.equals(category)) {
-                tabX.setTarget(tx);
-                tabW.setTarget(tw);
-                if (tabW.get() == 0 || Math.abs(tabX.get() - tx) > w) {
-                    tabX.set(tx);
-                    tabW.set(tw);
+            if (c.equals(current)) {
+                underX.setTarget(tx);
+                underW.setTarget(tw);
+                if (underW.get() == 0 || Math.abs(underX.get() - tx) > w) {
+                    underX.set(tx);
+                    underW.set(tw);
                 }
-                g.fill(Math.round(tabX.get()), ty + 16, Math.round(tabX.get() + tabW.get()), ty + 17, ColorMath.fade(ACCENT, a));
+                g.fill(Math.round(underX.get()), ty + 16, Math.round(underX.get() + underW.get()), ty + 17, ColorMath.fade(ACCENT, a));
             }
             String target = c;
-            hits.add(new Hit(tx, ty, tw, 16, () -> {
-                if (!target.equals(category)) {
-                    category = target;
-                    optionScroll = optionScrollTarget = 0;
+            Runnable action = () -> {
+                if (!target.equals(current)) {
+                    pick.accept(target);
                     CraftSession.playUi(1.4f, 0.25f);
                 }
-            }));
+            };
+            if (view != null) addHit(tx, ty, tw, 16, view, action);
+            else hits.add(new Hit(tx, ty, tw, 16, action));
             tx += tw + 2;
         }
         g.fill(x, ty + 17, x + w, ty + 18, ColorMath.fade(LINE, a));
+        return ty + 18;
+    }
+
+    private void drawOptions(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, int h, float a) {
+        List<String> gear = session.gearCategories();
+        int below;
+        if (gear.isEmpty()) {
+            // nothing to fit (knives, most equipment): the looks under the preview are all there is
+            Draw.text(g, Draw.fit(Component.translatable("blockland.craft.no_slots").getString(), w), x, y + 4, 1f, ColorMath.fade(MUTED, a), false);
+            g.fill(x, y + 17, x + w, y + 18, ColorMath.fade(LINE, a));
+            below = y + 18;
+        } else {
+            below = drawTabs(g, mouseX, mouseY, gear, category, x, y, w, null, tabX, tabW, a, c -> {
+                category = c;
+                options.reset();
+            });
+        }
 
         // option cards (scrolling list), the buttons pinned underneath
         int buttonsY = y + h - 20;
-        optionViewTop = ty + 24;
-        optionViewHeight = Math.max(20, buttonsY - 22 - optionViewTop);
-        optionScroll += (optionScrollTarget - optionScroll) * 0.35f;
-        hoveredOption = null;
-        String current = session.selected(category, session.edited);
-        g.enableScissor(x - 2, optionViewTop, x + w + 6, optionViewTop + optionViewHeight);
-        int cy = optionViewTop - Math.round(optionScroll);
-        int contentTop = cy;
-        // the spray page draws itself in the same scrolling area
-        if (category.equals(CraftSession.SPRAY) && session.weapon != null) {
-            cy += sprays.draw(g, mouseX, mouseY, x, cy, w, optionViewTop, optionViewHeight, a, session.weapon, session.edited, b -> session.edited = b);
+        int cy = options.begin(below + 6, Math.max(20, buttonsY - 22 - (below + 6)));
+        int start = cy;
+        if (!category.isEmpty()) {
+            g.enableScissor(x - 2, options.top, x + w + 6, options.top + options.height);
+            cy += drawCards(g, mouseX, mouseY, category, x, cy, w, 1, options, a);
+            g.disableScissor();
         }
-        for (CraftSession.Option option : category.equals(CraftSession.SPRAY) ? List.<CraftSession.Option>of() : session.options(category)) {
-            String description = option.description().getString();
-            int ch = description.isEmpty() ? 22 : 34;
-            boolean visible = cy + ch > optionViewTop && cy < optionViewTop + optionViewHeight;
-            boolean over = visible && inside(mouseX, mouseY, x, Math.max(cy, optionViewTop), w,
-                    Math.min(cy + ch, optionViewTop + optionViewHeight) - Math.max(cy, optionViewTop));
-            if (over) hoveredOption = option.id();
-            boolean chosen = option.id().equals(current);
-            float hv = spring(category + option.id(), over ? 1 : 0, 320, 24).get();
-            float sel = spring("sel" + category + option.id(), chosen ? 1 : 0, 260, 24).get();
-            if (visible) {
-                int base = ColorMath.mix(ColorMath.mix(CARD, CARD_HOVER, hv), CARD_SELECTED, sel);
-                int ox = x + Math.round(hv * 3);
-                Draw.rect(g, ox, cy, w, ch, ColorMath.fade(base, a));
-                Draw.rect(g, ox, cy, Math.round(2 + 2 * Math.max(hv, sel)), ch,
-                        ColorMath.fade(CraftSession.rarityColor(option.rarity(), chosen), a * (0.4f + 0.6f * Math.max(hv, sel))));
-                if (sel > 0.01f) Draw.outline(g, ox, cy, w, ch, ColorMath.fade(ACCENT, a * 0.6f * sel));
-                int textX = x + 10 + Math.round(hv * 3);
-                // a skin the player does not own: a padlock before its name (it can still be tried on)
-                boolean locked = CraftSession.isSkinCategory(category) && session.locked(option.id());
-                if (locked) CraftSession.lockIcon(g, textX, cy + 5, ColorMath.fade(CraftSession.LOCKED, a));
-                int nameX = locked ? textX + 10 : textX;
-                Draw.text(g, Draw.fit(option.name().getString(), w - 60 - (nameX - textX)), nameX, cy + 6, 1f,
-                        ColorMath.fade(locked ? MUTED : TEXT, a), false);
-                if (!description.isEmpty()) {
-                    Draw.text(g, Draw.fit(description, w - 18), textX, cy + 20, 1f, ColorMath.fade(MUTED, a), false);
-                }
-                String tag = session.tag(category, option);
-                if (tag != null) {
-                    Draw.text(g, tag, x + w - 8 - UiFont.width(tag) * 0.75f, cy + 7, 0.75f,
-                            ColorMath.fade(session.tagColor(category, option), a), false);
-                }
-                String id = option.id();
-                int hitTop = Math.max(cy, optionViewTop), hitBottom = Math.min(cy + ch, optionViewTop + optionViewHeight);
-                hits.add(new Hit(x, hitTop, w, hitBottom - hitTop, () -> session.choose(category, id)));
-            }
-            cy += ch + 4;
-        }
-        g.disableScissor();
-        optionContentHeight = cy - contentTop;
-        float maxScroll = Math.max(0, optionContentHeight - optionViewHeight);
-        optionScrollTarget = Math.max(0, Math.min(maxScroll, optionScrollTarget));
-        if (maxScroll > 0) {
-            int barH = Math.max(12, Math.round(optionViewHeight * optionViewHeight / (float) optionContentHeight));
-            int barY = optionViewTop + Math.round((optionViewHeight - barH) * (optionScroll / maxScroll));
-            g.fill(x + w + 3, barY, x + w + 5, barY + barH, ColorMath.fade(0x55FFFFFF, a));
-        }
+        options.end(g, start, cy, x + w + 3, a);
 
         // buttons
         boolean changed = session.changed();
@@ -295,6 +320,102 @@ public final class CraftPanel implements LobbyTab {
             Draw.text(g, Component.translatable("blockland.craft.unsaved").getString(), x, buttonsY - 12, 0.75f,
                     ColorMath.fade(ACCENT, a * 0.85f), false);
         }
+    }
+
+    /** Under the preview, scrolling as one: the weapon's numbers, then the look pages (迷彩, 挂件, 特殊皮肤, 喷漆). */
+    private void drawInfo(GuiGraphics g, int mouseX, int mouseY, Craftable weapon, int x, int y, int w, int h, float a) {
+        if (h < 20) return;
+        int cy = info.begin(y, h);
+        int start = cy;
+        g.enableScissor(x - 2, y, x + w + 6, y + h);
+        if (weapon instanceof GunData.Gun gun) {
+            Build shown = hoveredOption != null ? CraftSession.with(hoveredCategory, session.edited, hoveredOption) : session.edited;
+            int columns = w >= 300 ? 2 : 1;
+            int statsH = CraftStats.gunHeight(columns, 12);
+            stats.drawGun(g, gun, session.baseline(gun), shown, x, cy, w, statsH, a, false, columns);
+            cy += statsH + 8;
+        } else if (weapon instanceof MeleeData.Knife knife) {
+            cy += CraftStats.drawKnife(g, knife, x, cy, w, a) + 8;
+        }
+        cy = drawTabs(g, mouseX, mouseY, session.cosmeticCategories(), cosmetic, x, cy, w, info, lookTabX, lookTabW, a, c -> {
+            cosmetic = c;
+            sprays.reset();
+        }) + 6;
+        if (cosmetic.equals(CraftSession.SPRAY)) {
+            cy += sprays.draw(g, mouseX, mouseY, x, cy, w, info.top, info.height, a, weapon, session.edited, b -> session.edited = b);
+        } else {
+            cy += drawCards(g, mouseX, mouseY, cosmetic, x, cy, w, Math.max(1, Math.min(4, w / 150)), info, a);
+        }
+        g.disableScissor();
+        info.end(g, start, cy, x + w + 3, a);
+    }
+
+    /**
+     * The option cards of a slot or look page in {@code columns}, from {@code y}; only what shows in {@code view} is
+     * drawn and clickable. Sets the hovered option.
+     *
+     * @return the cards' height
+     */
+    private int drawCards(GuiGraphics g, int mouseX, int mouseY, String page, int x, int y, int w, int columns, Scroll view, float a) {
+        List<CraftSession.Option> list = session.options(page);
+        String current = session.selected(page, session.edited);
+        int columnW = (w - (columns - 1) * 4) / columns;
+        int cy = y;
+        for (int first = 0; first < list.size(); first += columns) {
+            int last = Math.min(list.size(), first + columns);
+            int rowH = 22;
+            for (int i = first; i < last; i++) if (!list.get(i).description().getString().isEmpty()) rowH = 34;
+            for (int i = first; i < last; i++) {
+                CraftSession.Option option = list.get(i);
+                drawCard(g, mouseX, mouseY, page, option, option.id().equals(current), x + (i - first) * (columnW + 4), cy, columnW, rowH, view, a);
+            }
+            cy += rowH + 4;
+        }
+        return cy - y;
+    }
+
+    private void drawCard(GuiGraphics g, int mouseX, int mouseY, String page, CraftSession.Option option, boolean chosen,
+                          int x, int cy, int w, int ch, Scroll view, float a) {
+        String description = option.description().getString();
+        boolean visible = cy + ch > view.top && cy < view.top + view.height;
+        boolean over = visible && inside(mouseX, mouseY, x, Math.max(cy, view.top), w,
+                Math.min(cy + ch, view.top + view.height) - Math.max(cy, view.top));
+        if (over) {
+            hoveredOption = option.id();
+            hoveredCategory = page;
+        }
+        float hv = spring(page + option.id(), over ? 1 : 0, 320, 24).get();
+        float sel = spring("sel" + page + option.id(), chosen ? 1 : 0, 260, 24).get();
+        if (!visible) return;
+        int base = ColorMath.mix(ColorMath.mix(CARD, CARD_HOVER, hv), CARD_SELECTED, sel);
+        int ox = x + Math.round(hv * 3);
+        Draw.rect(g, ox, cy, w, ch, ColorMath.fade(base, a));
+        Draw.rect(g, ox, cy, Math.round(2 + 2 * Math.max(hv, sel)), ch,
+                ColorMath.fade(CraftSession.rarityColor(option.rarity(), chosen), a * (0.4f + 0.6f * Math.max(hv, sel))));
+        if (sel > 0.01f) Draw.outline(g, ox, cy, w, ch, ColorMath.fade(ACCENT, a * 0.6f * sel));
+        int textX = x + 10 + Math.round(hv * 3);
+        // a skin the player does not own: a padlock before its name (it can still be tried on)
+        boolean locked = CraftSession.isSkinCategory(page) && session.locked(option.id());
+        if (locked) CraftSession.lockIcon(g, textX, cy + 5, ColorMath.fade(CraftSession.LOCKED, a));
+        int nameX = locked ? textX + 10 : textX;
+        Draw.text(g, Draw.fit(option.name().getString(), w - 60 - (nameX - textX)), nameX, cy + 6, 1f,
+                ColorMath.fade(locked ? MUTED : TEXT, a), false);
+        if (!description.isEmpty()) {
+            Draw.text(g, Draw.fit(description, w - 18), textX, cy + 20, 1f, ColorMath.fade(MUTED, a), false);
+        }
+        String tag = session.tag(page, option);
+        if (tag != null) {
+            Draw.text(g, tag, x + w - 8 - UiFont.width(tag) * 0.75f, cy + 7, 0.75f,
+                    ColorMath.fade(session.tagColor(page, option), a), false);
+        }
+        String id = option.id();
+        addHit(x, cy, w, ch, view, () -> session.choose(page, id));
+    }
+
+    /** A hit area clipped to a scrolling view (none while it is scrolled out). */
+    private void addHit(int x, int y, int w, int h, Scroll view, Runnable action) {
+        int top = Math.max(y, view.top), bottom = Math.min(y + h, view.top + view.height);
+        if (bottom > top) hits.add(new Hit(x, top, w, bottom - top, action));
     }
 
     private void button(GuiGraphics g, int mouseX, int mouseY, int x, int y, int w, int h, String label, int color,
@@ -325,8 +446,8 @@ public final class CraftPanel implements LobbyTab {
             }
         }
         Craftable weapon = session.weapon;
-        if (category.equals(CraftSession.SPRAY) && weapon != null) {
-            if (sprays.mouseClicked(mouseX, mouseY)) {
+        if (cosmetic.equals(CraftSession.SPRAY) && weapon != null) {
+            if (info.contains(mouseY) && sprays.mouseClicked(mouseX, mouseY)) {
                 CraftSession.playUi(1.0f, 0.4f);
                 return true;
             }
@@ -369,14 +490,19 @@ public final class CraftPanel implements LobbyTab {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
-        if (session.weapon != null && category.equals(CraftSession.SPRAY) && inside(mouseX, mouseY, previewX, previewY, previewW, previewH)
+        boolean onPreview = inside(mouseX, mouseY, previewX, previewY, previewW, previewH);
+        if (session.weapon != null && cosmetic.equals(CraftSession.SPRAY) && onPreview
                 && sprays.previewScrolled(scrollY, Screen.hasShiftDown(), session.edited, b -> session.edited = b)) {
             return true;
         }
-        if (mouseX >= previewX) {
+        if (onPreview) {
             zoom = Math.max(0.7f, Math.min(2.2f, zoom + (float) scrollY * 0.12f));
-        } else if (mouseY >= optionViewTop && mouseY < optionViewTop + optionViewHeight) {
-            optionScrollTarget -= (float) scrollY * 26f;
+        } else if (mouseX >= previewX) {
+            if (info.contains(mouseY)) info.target -= (float) scrollY * 26f;
+        } else if (listX >= 0 && mouseX < listX + listW + 6) {
+            if (list.contains(mouseY)) list.target -= (float) scrollY * 26f;
+        } else if (options.contains(mouseY)) {
+            options.target -= (float) scrollY * 26f;
         }
         return true;
     }

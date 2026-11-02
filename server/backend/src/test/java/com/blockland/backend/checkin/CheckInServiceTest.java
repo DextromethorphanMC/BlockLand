@@ -213,6 +213,145 @@ class CheckInServiceTest {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.status().value()).isEqualTo(404));
     }
 
+    private static CheckInConfig.Milestone milestone(String id, CheckInConfig.Kind kind, int days, String date, boolean repeat, String reward) {
+        return new CheckInConfig.Milestone(id, kind, "", days, date, repeat, true, List.of(new CheckInConfig.Reward("", reward, 0)));
+    }
+
+    private static void withMilestones(Setup s, CheckInConfig.Milestone... milestones) {
+        s.checkIn().saveConfig(new CheckInConfig(true, "Asia/Shanghai", CheckInConfig.DEFAULT.days(), List.of(milestones)));
+    }
+
+    private static List<String> paid(CheckInService.ClaimResult r) {
+        return r.bonuses().stream().map(CheckInService.Bonus::id).toList();
+    }
+
+    @Test
+    void aStreakMilestonePaysOnceUnlessItRepeats(@TempDir Path dir) {
+        Setup s = setup(dir);
+        withMilestones(s, milestone("three", CheckInConfig.Kind.STREAK, 3, "", false, "card:aurora"),
+                milestone("every2", CheckInConfig.Kind.STREAK, 2, "", true, "PRIORITY_QUEUE"));
+        List<List<String>> got = new java.util.ArrayList<>();
+        for (int day = 0; day < 4; day++) {
+            got.add(paid(s.checkIn().claim(PLAYER)));
+            clock.days(1);
+        }
+        assertThat(got).containsExactly(List.of(), List.of("every2"), List.of("three"), List.of("every2"));
+        assertThat(owns(s.players(), "card:aurora")).isTrue();
+
+        // a broken streak: the repeating one pays again at 2, the one-time one never again
+        clock.days(1);
+        got.clear();
+        for (int day = 0; day < 3; day++) {
+            got.add(paid(s.checkIn().claim(PLAYER)));
+            clock.days(1);
+        }
+        assertThat(got).containsExactly(List.of(), List.of("every2"), List.of());
+    }
+
+    @Test
+    void aTotalMilestoneCountsEveryDayAndCatchesUp(@TempDir Path dir) {
+        Setup s = setup(dir);
+        // three check-ins with gaps before the milestone exists
+        for (int day = 0; day < 3; day++) {
+            s.checkIn().claim(PLAYER);
+            clock.days(2);
+        }
+        withMilestones(s, milestone("total2", CheckInConfig.Kind.TOTAL, 2, "", false, "card:aurora"),
+                milestone("total5", CheckInConfig.Kind.TOTAL, 5, "", false, "graffiti:crown"));
+        CheckInService.Milestone before = s.checkIn().state(PLAYER).milestones().get(0);
+        assertThat(before.achieved()).isFalse();
+        assertThat(before.checkInsLeft()).isEqualTo(1);
+
+        CheckInService.ClaimResult fourth = s.checkIn().claim(PLAYER);
+        assertThat(paid(fourth)).containsExactly("total2");
+        assertThat(fourth.state().total()).isEqualTo(4);
+        CheckInService.Milestone five = fourth.state().milestones().get(1);
+        assertThat(five.progress()).isEqualTo(4);
+        assertThat(five.target()).isEqualTo(5);
+        assertThat(five.checkInsLeft()).isEqualTo(1);
+        assertThat(fourth.state().milestones().get(0).achieved()).isTrue();
+
+        clock.days(3);
+        assertThat(paid(s.checkIn().claim(PLAYER))).containsExactly("total5");
+        clock.days(1);
+        assertThat(paid(s.checkIn().claim(PLAYER))).isEmpty();
+    }
+
+    @Test
+    void aDateMilestonePaysOnItsDay(@TempDir Path dir) {
+        Setup s = setup(dir);
+        withMilestones(s, milestone("once", CheckInConfig.Kind.DATE, 0, "2026-11-02", false, "card:aurora"),
+                milestone("yearly", CheckInConfig.Kind.DATE, 0, "11-01", false, "graffiti:crown"),
+                milestone("gone", CheckInConfig.Kind.DATE, 0, "2026-10-01", false, "graffiti:skull"));
+        CheckInService.State state = s.checkIn().state(PLAYER);
+        assertThat(state.milestones()).extracting(CheckInService.Milestone::id).containsExactly("once", "yearly");
+        assertThat(state.milestones().get(0).checkInsLeft()).isEqualTo(1);
+        assertThat(state.milestones().get(1).nextDate()).isEqualTo("2026-11-01");
+
+        CheckInService.ClaimResult first = s.checkIn().claim(PLAYER);
+        assertThat(paid(first)).containsExactly("yearly");
+        assertThat(first.state().milestones().get(1).achieved()).isTrue();
+        clock.days(1);
+        assertThat(paid(s.checkIn().claim(PLAYER))).containsExactly("once");
+        assertThat(owns(s.players(), "card:aurora")).isTrue();
+        // a year on: the yearly one is next on 2027-11-01, the one-off is over
+        clock.days(1);
+        CheckInService.State later = s.checkIn().state(PLAYER);
+        assertThat(later.milestones()).extracting(CheckInService.Milestone::id).containsExactly("yearly");
+        assertThat(later.milestones().get(0).nextDate()).isEqualTo("2027-11-01");
+    }
+
+    @Test
+    void disabledMilestonesDoNotPayAndClearedRecordsRememberOneTimeOnes(@TempDir Path dir) {
+        Setup s = setup(dir);
+        CheckInConfig.Milestone off = new CheckInConfig.Milestone("off", CheckInConfig.Kind.TOTAL, "", 1, "", false, false,
+                List.of(new CheckInConfig.Reward("", "graffiti:skull", 0)));
+        withMilestones(s, off, milestone("first", CheckInConfig.Kind.TOTAL, 1, "", false, "card:aurora"));
+        assertThat(paid(s.checkIn().claim(PLAYER))).containsExactly("first");
+        assertThat(owns(s.players(), "graffiti:skull")).isFalse();
+
+        s.checkIn().reset(PLAYER);
+        assertThat(s.checkIn().stats().players()).isZero();
+        assertThatThrownBy(() -> s.checkIn().reset(PLAYER)).isInstanceOf(ApiException.class);
+        clock.days(1);
+        CheckInService.ClaimResult again = s.checkIn().claim(PLAYER);
+        assertThat(again.state().total()).isEqualTo(1);
+        assertThat(paid(again)).isEmpty();
+    }
+
+    @Test
+    void milestonesAreValidated(@TempDir Path dir) {
+        Setup s = setup(dir);
+        assertThatThrownBy(() -> withMilestones(s, milestone("Bad Id", CheckInConfig.Kind.STREAK, 3, "", false, "card:aurora")))
+                .isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> withMilestones(s, milestone("a", CheckInConfig.Kind.STREAK, 0, "", false, "card:aurora")))
+                .isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> withMilestones(s, milestone("a", CheckInConfig.Kind.DATE, 0, "13-40", false, "card:aurora")))
+                .isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> withMilestones(s, milestone("a", CheckInConfig.Kind.TOTAL, 3, "", false, ""))).isInstanceOf(ApiException.class);
+        assertThatThrownBy(() -> withMilestones(s, milestone("a", CheckInConfig.Kind.TOTAL, 3, "", false, "card:aurora"),
+                milestone("a", CheckInConfig.Kind.STREAK, 3, "", false, "card:aurora"))).isInstanceOf(ApiException.class);
+
+        withMilestones(s, milestone("leap", CheckInConfig.Kind.DATE, 0, "02-29", false, "card:aurora"));
+        BlockLandProperties properties = new BlockLandProperties(dir.toString(), "a", "s", null, false, List.of());
+        assertThat(new CheckInConfigStore(mapper, properties).get().milestones()).hasSize(1);
+        assertThat(s.checkIn().state(PLAYER).milestones().get(0).nextDate()).isEqualTo("2028-02-29");
+    }
+
+    @Test
+    void anOldConfigFileWithoutMilestonesStillLoads(@TempDir Path dir) throws Exception {
+        java.nio.file.Files.writeString(dir.resolve("checkin-config.json"),
+                "{\"enabled\":true,\"zone\":\"UTC\",\"days\":[{\"label\":\"\",\"entitlement\":\"card:aurora\",\"durationDays\":0}]}");
+        java.nio.file.Files.writeString(dir.resolve("checkin-records.json"),
+                "[{\"uuid\":\"" + PLAYER + "\",\"lastDay\":\"2026-10-31\",\"streak\":2,\"best\":2,\"total\":5}]");
+        Setup s = setup(dir);
+        assertThat(s.store().get().zone()).isEqualTo("UTC");
+        assertThat(s.store().get().milestones()).isEmpty();
+        CheckInService.ClaimResult r = s.checkIn().claim(PLAYER);
+        assertThat(r.state().streak()).isEqualTo(3);
+        assertThat(r.state().total()).isEqualTo(6);
+    }
+
     @Test
     void statsCountTodaysCheckIns(@TempDir Path dir) {
         Setup s = setup(dir);

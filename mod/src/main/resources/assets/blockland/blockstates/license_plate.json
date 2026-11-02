@@ -1,0 +1,64 @@
+{
+  "variants": {
+    "facing=north,part=left,wall=false": {
+      "model": "blockland:block/decor/license_plate_left_floor"
+    },
+    "facing=north,part=left,wall=true": {
+      "model": "blockland:block/decor/license_plate_left_wall"
+    },
+    "facing=north,part=right,wall=false": {
+      "model": "blockland:block/decor/license_plate_right_floor"
+    },
+    "facing=north,part=right,wall=true": {
+      "model": "blockland:block/decor/license_plate_right_wall"
+    },
+    "facing=east,part=left,wall=false": {
+      "model": "blockland:block/decor/license_plate_left_floor",
+      "y": 90
+    },
+    "facing=east,part=left,wall=true": {
+      "model": "blockland:block/decor/license_plate_left_wall",
+      "y": 90
+    },
+    "facing=east,part=right,wall=false": {
+      "model": "blockland:block/decor/license_plate_right_floor",
+      "y": 90
+    },
+    "facing=east,part=right,wall=true": {
+      "model": "blockland:block/decor/license_plate_right_wall",
+      "y": 90
+    },
+    "facing=south,part=left,wall=false": {
+      "model": "blockland:block/decor/license_plate_left_floor",
+      "y": 180
+    },
+    "facing=south,part=left,wall=true": {
+      "model": "blockland:block/decor/license_plate_left_wall",
+      "y": 180
+    },
+    "facing=south,part=right,wall=false": {
+      "model": "blockland:block/decor/license_plate_right_floor",
+      "y": 180
+    },
+    "facing=south,part=right,wall=true": {
+      "model": "blockland:block/decor/license_plate_right_wall",
+      "y": 180
+    },
+    "facing=west,part=left,wall=false": {
+      "model": "blockland:block/decor/license_plate_left_floor",
+      "y": 270
+    },
+    "facing=west,part=left,wall=true": {
+      "model": "blockland:block/decor/license_plate_left_wall",
+      "y": 270
+    },
+    "facing=west,part=right,wall=false": {
+      "model": "blockland:block/decor/license_plate_right_floor",
+      "y": 270
+    },
+    "facing=west,part=right,wall=true": {
+      "model": "blockland:block/decor/license_plate_right_wall",
+      "y": 270
+    }
+  }
+}

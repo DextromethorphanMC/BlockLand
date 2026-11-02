@@ -1,0 +1,304 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "blockland:block/decor/rear_view_mirror/housing",
+    "glass": "blockland:block/decor/rear_view_mirror/glass"
+  },
+  "elements": [
+    {
+      "from": [
+        2,
+        4,
+        9
+      ],
+      "to": [
+        14,
+        12,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            2,
+            4,
+            14,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            2,
+            4,
+            14,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            9,
+            4,
+            12,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            4,
+            4,
+            7,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            2,
+            9,
+            14,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "down": {
+          "uv": [
+            2,
+            4,
+            14,
+            7
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        3,
+        5,
+        12
+      ],
+      "to": [
+        13,
+        11,
+        13
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            3,
+            5,
+            13,
+            11
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            3,
+            5,
+            13,
+            11
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            12,
+            5,
+            13,
+            11
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            3,
+            5,
+            4,
+            11
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            3,
+            12,
+            13,
+            13
+          ],
+          "texture": "#particle"
+        },
+        "down": {
+          "uv": [
+            3,
+            3,
+            13,
+            4
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        7,
+        0,
+        10
+      ],
+      "to": [
+        9,
+        4,
+        12
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            7,
+            12,
+            9,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            7,
+            12,
+            9,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            10,
+            12,
+            12,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            4,
+            12,
+            6,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            7,
+            10,
+            9,
+            12
+          ],
+          "texture": "#particle"
+        },
+        "down": {
+          "uv": [
+            7,
+            4,
+            9,
+            6
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        5,
+        0,
+        8
+      ],
+      "to": [
+        11,
+        1,
+        14
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            5,
+            15,
+            11,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "south": {
+          "uv": [
+            5,
+            15,
+            11,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "west": {
+          "uv": [
+            8,
+            15,
+            14,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "east": {
+          "uv": [
+            2,
+            15,
+            8,
+            16
+          ],
+          "texture": "#particle"
+        },
+        "up": {
+          "uv": [
+            5,
+            8,
+            11,
+            14
+          ],
+          "texture": "#particle"
+        },
+        "down": {
+          "uv": [
+            5,
+            2,
+            11,
+            8
+          ],
+          "texture": "#particle"
+        }
+      }
+    },
+    {
+      "from": [
+        3,
+        5,
+        8.75
+      ],
+      "to": [
+        13,
+        11,
+        9
+      ],
+      "faces": {
+        "north": {
+          "uv": [
+            3,
+            5,
+            13,
+            11
+          ],
+          "texture": "#glass"
+        }
+      }
+    }
+  ]
+}

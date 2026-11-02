@@ -1,0 +1,46 @@
+{
+  "variants": {
+    "axis=x,tires=1,upright=false": {
+      "model": "blockland:block/decor/tire_flat_1",
+      "y": 90
+    },
+    "axis=z,tires=1,upright=false": {
+      "model": "blockland:block/decor/tire_flat_1"
+    },
+    "axis=x,tires=1,upright=true": {
+      "model": "blockland:block/decor/tire_upright_1",
+      "y": 90
+    },
+    "axis=z,tires=1,upright=true": {
+      "model": "blockland:block/decor/tire_upright_1"
+    },
+    "axis=x,tires=2,upright=false": {
+      "model": "blockland:block/decor/tire_flat_2",
+      "y": 90
+    },
+    "axis=z,tires=2,upright=false": {
+      "model": "blockland:block/decor/tire_flat_2"
+    },
+    "axis=x,tires=2,upright=true": {
+      "model": "blockland:block/decor/tire_upright_2",
+      "y": 90
+    },
+    "axis=z,tires=2,upright=true": {
+      "model": "blockland:block/decor/tire_upright_2"
+    },
+    "axis=x,tires=3,upright=false": {
+      "model": "blockland:block/decor/tire_flat_3",
+      "y": 90
+    },
+    "axis=z,tires=3,upright=false": {
+      "model": "blockland:block/decor/tire_flat_3"
+    },
+    "axis=x,tires=3,upright=true": {
+      "model": "blockland:block/decor/tire_upright_3",
+      "y": 90
+    },
+    "axis=z,tires=3,upright=true": {
+      "model": "blockland:block/decor/tire_upright_3"
+    }
+  }
+}

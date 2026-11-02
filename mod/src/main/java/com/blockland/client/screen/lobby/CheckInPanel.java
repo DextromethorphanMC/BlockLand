@@ -18,6 +18,7 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.sounds.SoundEvents;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 
@@ -26,8 +27,8 @@ import static com.blockland.client.ui.Tr.tr;
 
 /**
  * The daily check-in (每日签到) over the lobby: the cycle as day cards (checked in, today, still to come; the cycle's
- * last day is its grand prize), the streak, best streak and total, and one button that checks in — or counts down to
- * the next day. A check-in that went through is celebrated on its card: a stamp slams in, sparks burst, the streak
+ * last day is its grand prize), the streak, best streak and total, the milestones the admin set on top (连续 / 累计 /
+ * 指定日期签到: what they grant, how far the player is) and one button that checks in — or counts down to the next day. A check-in that went through is celebrated on its card: a stamp slams in, sparks burst, the streak
  * counts up and the reward rises over the card. Opened by the top bar's 签到 button; Escape, the cross or a click
  * outside closes it. The server decides everything; this only shows {@link ClientCheckIn}.
  */
@@ -35,6 +36,8 @@ public final class CheckInPanel {
     private static final int PAD = 16, GAP = 6, MAX_COLS = 7, MIN_CARD = 40, MAX_CARD = 74;
     private static final int HEADER = 40, STATS = 22, FOOTER = 40;
     private static final int BUTTON_W = 150, BUTTON_H = 22;
+    /** The milestones under the cycle: up to {@link #MS_MAX} rows of {@link #MS_ROW} px, two to a line. */
+    private static final int MS_HEADER = 14, MS_ROW = 26, MS_MAX = 6;
 
     private final AnimValue openness = new AnimValue(0);
     private final Spring buttonHover = new Spring(0).config(320, 26);
@@ -51,11 +54,15 @@ public final class CheckInPanel {
     /** The card just checked in (the celebration plays on it), -1 when none. */
     private int celebrated = -1;
     private String celebratedName = "";
+    /** The milestones the celebrated check-in reached (their names). */
+    private List<String> celebratedEarned = List.of();
     private double lastTime = -1;
 
     // layout, recomputed every frame
     private int px, py, pw, ph, cols, cardW, cardH, gridX, gridY;
     private int bx, by, cx, cy;
+    private int msY, msH;
+    private List<CheckInPackets.Milestone> shownMilestones = List.of();
 
     private static final class Spark {
         float x, y, vx, vy, life, max, size;
@@ -131,6 +138,7 @@ public final class CheckInPanel {
         } else {
             stats(g, state, alpha);
             for (int i = 0; i < state.days().size(); i++) card(g, mouseX, mouseY, state, i, alpha);
+            milestones(g, mouseX, mouseY, state, alpha);
             celebration(g, dt, alpha);
         }
         button(g, mouseX, mouseY, state, alpha);
@@ -139,8 +147,11 @@ public final class CheckInPanel {
 
     private void layout(CheckInPackets.S2CState state, int width, int height) {
         int n = state == null || state.days().isEmpty() ? MAX_COLS : state.days().size();
+        shownMilestones = state == null || !state.error().isEmpty() ? List.of() : ordered(state.milestones());
+        int msRows = (shownMilestones.size() + 1) / 2;
+        msH = shownMilestones.isEmpty() ? 0 : MS_HEADER + msRows * (MS_ROW + 4) + 4;
         int maxW = Math.min(width - 24, 2 * PAD + MAX_COLS * MAX_CARD + (MAX_COLS - 1) * GAP);
-        int maxCardsH = height - 24 - HEADER - STATS - FOOTER - 12;
+        int maxCardsH = height - 24 - HEADER - STATS - FOOTER - 12 - msH;
         // the fewest columns (up to a week a row) whose cards still fit the screen's height, else the most that fit
         cols = Math.min(n, MAX_COLS);
         int rows = 0;
@@ -155,11 +166,12 @@ public final class CheckInPanel {
         cardH = cardW + 28;
         int gridW = cols * cardW + (cols - 1) * GAP;
         pw = Math.max(Math.min(width - 24, 300), gridW + 2 * PAD);
-        ph = HEADER + STATS + rows * cardH + (rows - 1) * GAP + 12 + FOOTER;
+        ph = HEADER + STATS + rows * cardH + (rows - 1) * GAP + 12 + msH + FOOTER;
         px = (width - pw) / 2;
         py = Math.max(12, (height - ph) / 2);
         gridX = px + (pw - gridW) / 2;
         gridY = py + HEADER + STATS + 6;
+        msY = gridY + rows * cardH + (rows - 1) * GAP + 6;
         bx = px + (pw - BUTTON_W) / 2;
         by = py + ph - FOOTER + (FOOTER - BUTTON_H) / 2;
         cx = px + pw - 18;
@@ -263,6 +275,103 @@ public final class CheckInPanel {
         g.pose().popMatrix();
     }
 
+    // ---- milestones (连续 / 累计 / 指定日期签到) -------------------------------------------------
+
+    /**
+     * The milestones worth showing first, at most {@link #MS_MAX}: the ones today's check-in paid, then the closest
+     * still to come, then the one-time ones paid before.
+     */
+    private static List<CheckInPackets.Milestone> ordered(List<CheckInPackets.Milestone> all) {
+        List<CheckInPackets.Milestone> list = new ArrayList<>(all);
+        list.sort(Comparator.comparingInt(CheckInPanel::rank));
+        return list.size() > MS_MAX ? List.copyOf(list.subList(0, MS_MAX)) : list;
+    }
+
+    private static int rank(CheckInPackets.Milestone m) {
+        if (!m.achieved()) return m.checkInsLeft();
+        // repeating and date milestones only show achieved on the day they paid; one-time ones stay achieved
+        return m.repeat() || m.kind() == CheckInPackets.MilestoneKind.DATE ? -1 : 1_000_000;
+    }
+
+    private static int kindColor(CheckInPackets.MilestoneKind kind) {
+        return switch (kind) {
+            case STREAK -> ACCENT;
+            case TOTAL -> INFO;
+            case DATE -> GOLD;
+        };
+    }
+
+    private void milestones(GuiGraphics g, int mouseX, int mouseY, CheckInPackets.S2CState state, float alpha) {
+        if (shownMilestones.isEmpty()) return;
+        int x0 = px + PAD, w = pw - 2 * PAD;
+        Draw.text(g, tr("blockland.checkin.milestones"), x0, msY + 2, 0.8f, ColorMath.fade(DIM, alpha), false);
+        int more = state.milestones().size() - shownMilestones.size();
+        if (more > 0) {
+            String text = tr("blockland.checkin.milestones_more", more);
+            Draw.text(g, text, x0 + w - UiFont.width(text) * 0.8f, msY + 2, 0.8f, ColorMath.fade(DIM, alpha), false);
+        }
+        int cellW = shownMilestones.size() > 1 ? (w - GAP) / 2 : w;
+        for (int i = 0; i < shownMilestones.size(); i++) {
+            int x = x0 + i % 2 * (cellW + GAP), y = msY + MS_HEADER + i / 2 * (MS_ROW + 4);
+            milestone(g, mouseX, mouseY, shownMilestones.get(i), x, y, cellW, alpha);
+        }
+    }
+
+    private void milestone(GuiGraphics g, int mouseX, int mouseY, CheckInPackets.Milestone m, int x, int y, int w, float alpha) {
+        boolean over = inside(mouseX, mouseY, x, y, w, MS_ROW);
+        int color = kindColor(m.kind());
+        Draw.rect(g, x, y, w, MS_ROW, ColorMath.fade(over ? CARD_HOVER : CARD, alpha));
+        g.fill(x, y, x + 2, y + MS_ROW, ColorMath.fade(color, alpha * (m.achieved() ? 0.5f : 1)));
+
+        // the first reward's icon (a gift box when it has none)
+        int s = MS_ROW - 6, ix = x + 5, iy = y + 3;
+        Draw.rect(g, ix, iy, s, s, ColorMath.fade(0xFF0E1420, alpha));
+        CheckInPackets.Reward first = m.rewards().isEmpty() ? null : m.rewards().get(0);
+        if (first != null && !first.icon().isEmpty()) {
+            ItemIcons.draw(g, first.icon(), Tr.text(first.name()), ix + 1, iy + 1, s - 2, s - 2, (float) Ticker.global().time());
+        } else {
+            glyph(g, true, ix, iy, s, ColorMath.fade(GOLD, alpha), 0);
+        }
+
+        // right: where it stands — achieved, check-ins to go, or days to the date
+        String status;
+        int statusColor;
+        if (m.achieved()) {
+            status = tr("blockland.checkin.ms.done");
+            statusColor = OK;
+        } else if (m.kind() == CheckInPackets.MilestoneKind.DATE) {
+            status = m.checkInsLeft() == 0 ? tr("blockland.checkin.ms.date_today") : tr("blockland.checkin.ms.date_in", m.checkInsLeft());
+            statusColor = m.checkInsLeft() == 0 ? ACCENT : MUTED;
+        } else {
+            status = tr("blockland.checkin.ms.left", m.checkInsLeft());
+            statusColor = m.checkInsLeft() <= 1 ? ACCENT : MUTED;
+        }
+        float statusW = UiFont.width(status) * 0.75f;
+        int textX = ix + s + 5, textW = x + w - 6 - textX;
+        Draw.text(g, status, x + w - 6 - statusW, y + 4, 0.75f, ColorMath.fade(statusColor, alpha), false);
+        String name = Draw.fit(Tr.text(m.name()), (textW - statusW - 6) / 0.85f);
+        Draw.text(g, name, textX, y + 3, 0.85f, ColorMath.fade(m.achieved() ? MUTED : TEXT, alpha), false);
+
+        // under it: what it grants, and for counts the progress
+        StringBuilder rewards = new StringBuilder();
+        for (CheckInPackets.Reward r : m.rewards()) {
+            if (!rewards.isEmpty()) rewards.append(tr("blockland.checkin.list_separator"));
+            rewards.append(Tr.text(r.name()));
+        }
+        String progress = m.kind() == CheckInPackets.MilestoneKind.DATE || m.target() <= 0 ? ""
+                : Math.min(m.progress(), m.target()) + "/" + m.target();
+        float progressW = UiFont.width(progress) * 0.7f;
+        String line = Draw.fit(tr("blockland.checkin.ms.rewards", rewards.toString()), (textW - progressW - 6) / 0.7f);
+        Draw.text(g, line, textX, y + 13, 0.7f, ColorMath.fade(DIM, alpha), false);
+        if (!progress.isEmpty()) Draw.text(g, progress, x + w - 6 - progressW, y + 14, 0.7f, ColorMath.fade(MUTED, alpha), false);
+        if (m.kind() != CheckInPackets.MilestoneKind.DATE && m.target() > 0) {
+            float f = m.achieved() ? 1 : Math.min(1, m.progress() / (float) m.target());
+            g.fill(textX, y + MS_ROW - 3, x + w - 6, y + MS_ROW - 2, ColorMath.fade(0x22FFFFFF, alpha));
+            g.fill(textX, y + MS_ROW - 3, textX + Math.round((x + w - 6 - textX) * f), y + MS_ROW - 2,
+                    ColorMath.fade(m.achieved() ? OK : color, alpha));
+        }
+    }
+
     /** A day without its own icon: a gift box for a reward, the day's number for a plain check-in. */
     private static void glyph(GuiGraphics g, boolean reward, int x, int y, int s, int color, int day) {
         if (!reward) {
@@ -343,6 +452,7 @@ public final class CheckInPanel {
         CheckInPackets.Day day = state.days().get(index);
         String itemName = Tr.text(day.itemName());
         celebratedName = !day.label().isEmpty() ? day.label() : itemName;
+        celebratedEarned = state.justEarned().stream().map(Tr::text).filter(s -> !s.isEmpty()).toList();
         Anim.killTweensOf(stamp, streakShown, rise, flash);
         Anim.fromTo(stamp, 0, 1, 0.45).ease(Ease.BACK_OUT).delay(0.05);
         Anim.fromTo(streakShown, Math.max(0, state.streak() - 1), state.streak(), 0.7).ease(Ease.CUBIC_OUT).delay(0.15);
@@ -391,13 +501,19 @@ public final class CheckInPanel {
             g.fill(Math.round(s.x), Math.round(s.y), Math.round(s.x) + size, Math.round(s.y) + size, ColorMath.fade(s.color, a));
         }
         float t = rise.get();
-        if (t < 1 && !celebratedName.isEmpty()) {
-            String text = tr("blockland.checkin.got", celebratedName);
+        if (t < 1) {
+            // the day's reward, and above it every milestone the check-in reached
+            List<String> lines = new ArrayList<>();
+            if (!celebratedName.isEmpty()) lines.add(tr("blockland.checkin.got", celebratedName));
+            for (String earned : celebratedEarned) lines.add(tr("blockland.checkin.milestone_got", earned));
             float a = alpha * (t < 0.15f ? t / 0.15f : t > 0.7f ? (1 - t) / 0.3f : 1);
-            float ty = y - 6 - t * 18;
-            float tx = Math.max(px + 4, Math.min(px + pw - 4 - UiFont.width(text), x + cardW / 2f - UiFont.width(text) / 2f));
-            Draw.rect(g, Math.round(tx) - 4, Math.round(ty) - 3, UiFont.width(text) + 8, 14, ColorMath.fade(0xE0141C29, a));
-            Draw.text(g, text, tx, ty, 1f, ColorMath.fade(GOLD, a), true);
+            for (int k = 0; k < lines.size(); k++) {
+                String text = lines.get(k);
+                float ty = y - 6 - t * 18 - k * 16;
+                float tx = Math.max(px + 4, Math.min(px + pw - 4 - UiFont.width(text), x + cardW / 2f - UiFont.width(text) / 2f));
+                Draw.rect(g, Math.round(tx) - 4, Math.round(ty) - 3, UiFont.width(text) + 8, 14, ColorMath.fade(0xE0141C29, a));
+                Draw.text(g, text, tx, ty, 1f, ColorMath.fade(k == 0 && !celebratedName.isEmpty() ? GOLD : ACCENT, a), true);
+            }
         }
     }
 

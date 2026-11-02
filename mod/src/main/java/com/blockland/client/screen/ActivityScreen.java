@@ -14,6 +14,7 @@ import com.blockland.client.screen.lobby.TopBar;
 import com.blockland.client.screen.lobby.activity.ActivityBodies;
 import com.blockland.client.screen.lobby.activity.ActivityBody;
 import com.blockland.client.ui.Draw;
+import com.blockland.client.ui.ToastArea;
 import com.blockland.network.packet.ActivityPackets;
 import com.blockland.network.packet.MediaPackets;
 import net.minecraft.client.Minecraft;
@@ -35,7 +36,7 @@ import static com.blockland.client.ui.Tr.tr;
  * below it the body its {@code kind} asks for ({@link ActivityBodies}). Works without a world (it is opened from the
  * lobby); Escape and the back button return to the screen it was opened from. This class only lays out and wires.
  */
-public final class ActivityScreen extends Screen {
+public final class ActivityScreen extends Screen implements ToastArea {
     private static final int BAR = TopBar.HEIGHT;
     private static final int PAD = 16;
     private static final int MAX_W = 760;
@@ -98,6 +99,12 @@ public final class ActivityScreen extends Screen {
         Draw.glow(g, (float) (width * (0.7 + 0.05 * Math.sin(t * 0.2))), height * 0.3f, width * 0.45f, height * 0.5f,
                 ColorMath.withAlpha(accent, 0x22));
         Draw.fadeY(g, 0, height - 70, width, 70, 0x70000000, false);
+    }
+
+    /** Toasts (notices, vanilla's warnings) start under the top bar, never over its buttons. */
+    @Override
+    public int toastTop() {
+        return BAR + 4;
     }
 
     @Override

@@ -6,10 +6,12 @@ python -I tools/assets/check_decor.py
 * every model a block state or item names exists; every element is in range with a legal rotation; every texture a
   model names exists (blockland textures as files, minecraft ones from a short allow list);
 * the target stand's model boxes are the collision boxes of TargetStandBlock (LOWER_NORTH / UPPER_NORTH), the vending
-  machine's cabinet is the block's shape, the layer heights are the LayerBlock shapes;
+  machine's cabinet is the block's shape, the layer heights are the LayerBlock shapes; the mirror's and the plate's
+  model boxes are their block's boxes, the drums' bodies OilDrumBlock.BODY, the tires' bounds the TireBlock shapes;
 * the mineable tags hold the blocks that need a tool;
 * the block states cover every state: facing x part (vending), facing x half (target), layers 1..8, the reef coral's
-  multipart has a core and an arm per side."""
+  multipart has a core and an arm per side, facing x wall (mirror), facing x part x wall (plate), facing x half
+  (drums), tires x upright x axis (tire)."""
 import json
 import os
 import re
@@ -46,7 +48,21 @@ def block_ids():
     ids = re.findall(r'block\("([a-z_]+)"', src) + re.findall(r'BLOCKS\.register\("([a-z_]+)"', src)
     for name in re.findall(r'new Coral\("([a-z_]+)"', src):
         ids += [f"{name}_coral", f"dead_{name}_coral"]
+    ids += [f"{c}_oil_drum" for c in drum_colours(src)]
     return sorted(set(ids))
+
+
+def drum_colours(src=None):
+    return re.findall(r'new OilDrum\("([a-z_]+)"', src or java("DecorContent"))
+
+
+def variants_of(block):
+    return load(os.path.join(ASSETS, "blockstates", block + ".json"))["variants"]
+
+
+def bounds(ref):
+    b = boxes(ref)
+    return tuple(min(r[i] for r in b) for i in range(3)) + tuple(max(r[i] for r in b) for i in range(3, 6))
 
 
 def model_path(ref):
@@ -161,7 +177,52 @@ def main():
         if sides != {"north", "east", "south", "west", "up", "down"} or not any("when" not in p for p in parts):
             problem(f"{reef}: multipart needs a core and an arm per side, has {sorted(sides)}")
 
+    for f in ("north", "east", "south", "west"):
+        for wall in ("false", "true"):
+            if f"facing={f},wall={wall}" not in variants_of("rear_view_mirror"):
+                problem(f"rear_view_mirror: no variant {f} wall={wall}")
+            for part in ("left", "right"):
+                if f"facing={f},part={part},wall={wall}" not in variants_of("license_plate"):
+                    problem(f"license_plate: no variant {f} {part} wall={wall}")
+        for colour in drum_colours():
+            for half in ("lower", "upper"):
+                if f"facing={f},half={half}" not in variants_of(f"{colour}_oil_drum"):
+                    problem(f"{colour}_oil_drum: no variant {f} {half}")
+    tire_variants = variants_of("tire")
+    for n in (1, 2, 3):
+        for upright in ("false", "true"):
+            for axis in ("x", "z"):
+                if f"axis={axis},tires={n},upright={upright}" not in tire_variants:
+                    problem(f"tire: no variant tires={n} upright={upright} axis={axis}")
+
     # shapes against models
+    mirror = java("RearViewMirrorBlock")
+    for mount, name in (("wall", "WALL_NORTH"), ("floor", "FLOOR_NORTH")):
+        if boxes(f"blockland:block/decor/rear_view_mirror_{mount}") != java_boxes(mirror, name):
+            problem(f"rear_view_mirror {mount}: model boxes differ from RearViewMirrorBlock.{name}")
+    plate = java("LicensePlateBlock")
+    for part in ("left", "right"):
+        for mount in ("wall", "floor"):
+            name = f"{part.upper()}_{mount.upper()}_NORTH"
+            if boxes(f"blockland:block/decor/license_plate_{part}_{mount}") != java_boxes(plate, name):
+                problem(f"license_plate {part} {mount}: model boxes differ from LicensePlateBlock.{name}")
+    drum = java("OilDrumBlock")
+    body = java_boxes(drum, "BODY")
+    upper = float(re.search(r"UPPER_HEIGHT\s*=\s*([\d.]+)", drum).group(1))
+    for colour in drum_colours():
+        for half in ("lower", "upper"):
+            have = boxes(f"blockland:block/decor/{colour}_oil_drum_{half}")
+            want = body if half == "lower" else [b[:4] + (upper,) + b[5:] for b in body]
+            if any(b not in have for b in want):
+                problem(f"{colour}_oil_drum {half}: model lacks a box of OilDrumBlock.BODY")
+    tire = java("TireBlock")
+    width, across = (int(re.search(name + r"\s*=\s*(\d+)", tire).group(1)) for name in ("WIDTH", "ACROSS"))
+    for n in (1, 2, 3):
+        start = (16 - width * n) / 2
+        if bounds(f"blockland:block/decor/tire_flat_{n}") != (1, 0, 1, 15, width * n, 15):
+            problem(f"tire flat {n}: model bounds differ from TireBlock's shape")
+        if bounds(f"blockland:block/decor/tire_upright_{n}") != (1, 0, start, 15, across, start + width * n):
+            problem(f"tire upright {n}: model bounds differ from TireBlock's shape")
     target = java("TargetStandBlock")
     for half, name in (("lower", "LOWER_NORTH"), ("upper", "UPPER_NORTH")):
         if boxes(f"blockland:block/decor/target_stand_{half}") != java_boxes(target, name):
@@ -175,7 +236,8 @@ def main():
 
     # tags
     tags = os.path.join(DATA, "minecraft", "tags", "block", "mineable")
-    for tag, blocks in (("pickaxe", ["vending_machine", "stone_layer", "reef_coral", "dead_reef_coral"]),
+    for tag, blocks in (("pickaxe", ["vending_machine", "stone_layer", "reef_coral", "dead_reef_coral", "license_plate",
+                                     "rear_view_mirror"] + [f"{c}_oil_drum" for c in drum_colours()]),
                         ("axe", ["target_stand"]), ("shovel", ["grass_layer"])):
         values = load(os.path.join(tags, tag + ".json"))["values"]
         for b in blocks:

@@ -1879,6 +1879,25 @@ textures, loot tables, lang, tags and that the model boxes are the collision sha
   `staghorn`, `sea_whip` (cross plants), `table`, `pillar`, `brain_dome`, `tube_cluster` (element shapes). **Reef coral**
   (`reef_coral`, 礁珊瑚, and its dead twin): a knobbly core with an arm to every neighbouring reef coral and down to a
   solid face (multipart, chorus-plant style), so a heap grows into one branching reef; alive while water touches it.
+* **Road-side props** (`tools/assets/gen_decor_props.py`, run by `gen_decor.py`; vehicle-themed decoration, nothing to
+  do with `com.blockland.vehicle`). All take the placer's direction and turn with structure rotation.
+  * **Rear-view mirror** (`rear_view_mirror`, 后视镜): a black housing 12 × 8 × 4 px with a glass face (block material
+    `metal`, reflectivity 0.9). On the side of a block it hangs from it on an arm, its glass away from the wall
+    (`wall=true`); on a floor it stands on a stalk and a foot, its glass towards the placer.
+  * **License plate** (`license_plate`, 车牌): 2 wide × 1 high, 30 × 12 × 1 px, an original plate (a blue band, a made-up
+    registration, an embossed look) cut from one 32 px picture; `part` = `left` / `right` seen from the front, the
+    placed block the left one. Flat against the wall it was placed on, or standing on two posts on a floor (`wall`).
+    Broken as one, only the left drops; footprint for the preview (§26).
+  * **Oil drums** (`red_oil_drum`, `blue_oil_drum`, `yellow_oil_drum`, 油桶): 1 × 1.5 in two blocks (`half`; the upper one
+    holds the top 8 px), the cross-section three
+    crossed boxes (a voxel circle 14 px across, also the collision shape), rolling hoops a third and two thirds up and a
+    chime near either end as 1 px rings, two bungs on the lid, a hazard label towards the placer. Broken as one like a
+    door, only the lower half drops; footprint for the preview (§26).
+  * **Tire** (`tire`, 轮胎): 1–3 in one block (`tires`, added with its own item like sea pickles, not while sneaking),
+    each an octagonal ring 14 px across with an 8 px hole and lugged tread. Lying flat (`upright=false`) they stack 5 px
+    each from the floor; upright on the tread they stand side by side along the axle (`axis`), centred. Placed on the
+    side of a block: upright, the axle along the face's normal (the side against it); on a floor: flat, or upright with
+    the axle along the look when sneaking. The collision box grows with the count; drops as many as it holds.
 
 ## 29. Tumbleweeds (风滚草: `client/ambient`, `ambient/TumbleweedEntity`, `server/ambient/AmbientService`)
 

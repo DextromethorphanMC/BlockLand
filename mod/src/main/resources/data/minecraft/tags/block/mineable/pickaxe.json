@@ -13,6 +13,11 @@
     "blockland:vending_machine",
     "blockland:stone_layer",
     "blockland:reef_coral",
-    "blockland:dead_reef_coral"
+    "blockland:dead_reef_coral",
+    "blockland:license_plate",
+    "blockland:rear_view_mirror",
+    "blockland:red_oil_drum",
+    "blockland:blue_oil_drum",
+    "blockland:yellow_oil_drum"
   ]
 }

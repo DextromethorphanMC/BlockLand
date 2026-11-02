@@ -43,14 +43,14 @@ import static com.blockland.client.screen.lobby.LobbyTheme.OK;
  * server keeps and validates the builds.
  */
 final class CraftSession {
-    /** The 迷彩 (camo) tab: ordinary skins — colours and texture sets. */
+    /** The 迷彩 (camo) tab: skins that only change the materials — colours, texture sets and shader effects (spec §21). */
     static final String SKIN = "skin";
-    /** The 特效皮肤 tab: skins with shader effects (asset spec §21). */
-    static final String SHADER_SKIN = "skin_shader";
     /** The 特殊皮肤 tab: skins with a model or shot effects of their own (asset spec §30). */
     static final String SPECIAL_SKIN = "skin_special";
     /** The 喷漆 page (asset spec §29): not a slot, the sprays placed on the weapon. */
     static final String SPRAY = "spray";
+    /** The 挂件 slot: a cosmetic slot, listed with the skins rather than with the attachments. */
+    static final String CHARM = "charm";
     /** Colour of special skins (their own model or shot effects, spec §30). */
     static final int SPECIAL = 0xFFFF4D5E;
     /** Colour of what marks a skin the player does not own. */
@@ -136,18 +136,32 @@ final class CraftSession {
 
     // ---- slots and skins ----------------------------------------------------------------------------
 
-    /** Every page of the weapon: its slots, the sprays, then the skin tabs it has skins for. */
+    /** Every page of the weapon: its attachment slots, then its looks. */
     List<String> categories() {
+        List<String> list = gearCategories();
+        list.addAll(cosmeticCategories());
+        return list;
+    }
+
+    /** The attachment slots (everything that may change the numbers): every slot but the charm. */
+    List<String> gearCategories() {
         List<String> list = new ArrayList<>();
         if (weapon == null) return list;
-        for (Craftable.Slot slot : weapon.slots()) list.add(slot.id());
-        list.add(SPRAY);
-        // the skins in three tabs by kind: 迷彩 (colours, texture sets), 特效皮肤 (shader effects), 特殊皮肤 (own model or
-        // shot effects); all of them set the build's one skin
+        for (Craftable.Slot slot : weapon.slots()) if (!slot.id().equals(CHARM)) list.add(slot.id());
+        return list;
+    }
+
+    /**
+     * The looks: 迷彩 (colours, texture sets, shader effects), the 挂件 slot, 特殊皮肤 (own model or shot effects) when the
+     * weapon has any, and the sprays. Both skin tabs set the build's one skin.
+     */
+    List<String> cosmeticCategories() {
+        List<String> list = new ArrayList<>();
+        if (weapon == null) return list;
         list.add(SKIN);
-        for (String kind : List.of(SHADER_SKIN, SPECIAL_SKIN)) {
-            if (weapon.skins().values().stream().anyMatch(skin -> skinKind(skin).equals(kind))) list.add(kind);
-        }
+        if (weapon.slot(CHARM).isPresent()) list.add(CHARM);
+        if (weapon.skins().values().stream().anyMatch(skin -> skinKind(skin).equals(SPECIAL_SKIN))) list.add(SPECIAL_SKIN);
+        list.add(SPRAY);
         return list;
     }
 
@@ -161,16 +175,15 @@ final class CraftSession {
 
     /** The skin tab a skin is listed in. */
     static String skinKind(CraftData.Skin skin) {
-        return skin.isSpecial() ? SPECIAL_SKIN : skin.hasEffects() ? SHADER_SKIN : SKIN;
+        return skin.isSpecial() ? SPECIAL_SKIN : SKIN;
     }
 
     static boolean isSkinCategory(String category) {
-        return category.equals(SKIN) || category.equals(SHADER_SKIN) || category.equals(SPECIAL_SKIN);
+        return category.equals(SKIN) || category.equals(SPECIAL_SKIN);
     }
 
     static Component categoryName(String category) {
         if (category.equals(SPRAY)) return Component.translatable("blockland.craft.spray");
-        if (category.equals(SHADER_SKIN)) return Component.translatable("blockland.craft.skin.shader");
         if (category.equals(SPECIAL_SKIN)) return Component.translatable("blockland.craft.skin.special");
         return category.equals(SKIN) ? Component.translatable("blockland.craft.skin") : Component.translatable("blockland.craft.slot." + category);
     }
@@ -181,8 +194,8 @@ final class CraftSession {
         if (isSkinCategory(category)) {
             for (CraftData.Skin skin : weapon.skins().values()) {
                 if (!skinKind(skin).equals(category)) continue;
-                // special skins (own model / shot effects) and shader skins (animated materials) say so under their name;
-                // a skin the player does not own says where to get it (it can still be tried on)
+                // special skins (own model / shot effects) and camos with shader effects (animated materials) say so under
+                // their name; a skin the player does not own says where to get it (it can still be tried on)
                 Component tag = locked(skin.id) ? Component.translatable("blockland.craft.skin.locked_hint")
                         : skin.isSpecial() ? Component.translatable("blockland.craft.special_skin")
                         : skin.hasEffects() ? Component.translatable("blockland.craft.shader_skin") : Component.empty();

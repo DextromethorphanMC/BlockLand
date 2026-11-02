@@ -130,6 +130,7 @@
                    "minecraft:block/mangrove_leaves", "minecraft:block/azalea_leaves",
                    "minecraft:block/flowering_azalea_leaves", "minecraft:block/cherry_leaves",
                    "minecraft:block/pale_oak_leaves"],
-      "wind": { "mode": "leaves", "flex": 1.0 } }
+      "wind": { "mode": "leaves", "flex": 1.0 } },
+    { "textures": ["blockland:block/decor/rear_view_mirror/glass"], "kind": "metal", "reflectivity": 0.9 }
   ]
 }

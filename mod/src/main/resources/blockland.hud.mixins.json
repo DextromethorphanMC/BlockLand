@@ -6,7 +6,8 @@
   "mixins": [],
   "client": [
     "ExperienceBarMixin",
-    "GuiBarsMixin"
+    "GuiBarsMixin",
+    "ToastManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

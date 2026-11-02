@@ -20,7 +20,7 @@ import static com.blockland.client.screen.lobby.LobbyTheme.*;
 
 /**
  * The in-game 工匠's skins: a carousel of cards along the bottom — each a mosaic of the skin's own colours
- * ({@link SkinSwatches}), its name and a rarity stripe — filtered by kind (全部 / 迷彩 / 特效皮肤 / 特殊皮肤), with the
+ * ({@link SkinSwatches}), its name and a rarity stripe — filtered by kind (全部 / 迷彩 / 特殊皮肤), with the
  * hovered (or chosen) skin's name large above it. The card under the mouse is previewed on the model; a click puts the
  * skin on.
  */
@@ -58,7 +58,7 @@ final class SkinCarousel {
         // the kinds this weapon has skins of
         List<String> kinds = new ArrayList<>();
         kinds.add(ALL);
-        for (String kind : List.of(CraftSession.SKIN, CraftSession.SHADER_SKIN, CraftSession.SPECIAL_SKIN)) {
+        for (String kind : List.of(CraftSession.SKIN, CraftSession.SPECIAL_SKIN)) {
             if (weapon.skins().values().stream().anyMatch(s -> CraftSession.skinKind(s).equals(kind))) kinds.add(kind);
         }
         if (!kinds.contains(filter)) filter = ALL;
@@ -121,7 +121,7 @@ final class SkinCarousel {
                 }
             }
             if (skin.hasEffects() || skin.isSpecial()) {
-                // shader and special skins shimmer over the swatch
+                // animated camos and special skins shimmer over the swatch
                 float shimmer = (float) ((System.nanoTime() / 1e9 * 0.8 + i * 0.37) % 1.0);
                 int sx = cx + 4 + Math.round(shimmer * (sw - 6));
                 g.fill(sx, cy + 4, sx + 6, cy + 4 + sh, ColorMath.fade(0x40FFFFFF, a));

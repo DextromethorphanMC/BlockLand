@@ -11,6 +11,7 @@ python -I tools/assets/gen_decor.py
 * grass_layer / stone_layer (草台 / 石台): eight heights like snow, the grass block's top (biome tinted) / stone.
 * corals: staghorn, sea_whip (cross plants), table, pillar, brain_dome, tube_cluster (element shapes); alive and dead.
 * reef_coral (礁珊瑚): multipart, a core and an arm per joined side (chorus plant style); alive and dead.
+* the road-side props (rear-view mirror, license plate, oil drums, tires): gen_decor_props.py, run at the end.
 Keep the ids in step with DecorContent (tools/assets/check_decor.py checks both)."""
 import json
 import os
@@ -608,6 +609,8 @@ def main():
     layers()
     corals()
     tags()
+    import gen_decor_props
+    gen_decor_props.main()
     print("decor: vending machine, target stand, swim ring, 2 layers x 8, "
           f"{len(CORAL_PLANTS) + len(CORAL_SHAPES)} corals x 2, reef coral x 2")
 

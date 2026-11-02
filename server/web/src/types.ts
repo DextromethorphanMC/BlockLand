@@ -209,6 +209,28 @@ export interface CheckInConfig {
   /** the time zone whose midnight starts a new day */
   zone: string
   days: CheckInReward[]
+  /** extra rewards on top of the cycle (连续 / 累计 / 指定日期签到) */
+  milestones: CheckInMilestone[]
+}
+
+/** STREAK: N days in a row · TOTAL: N days altogether · DATE: checking in on a date */
+export type CheckInMilestoneKind = 'STREAK' | 'TOTAL' | 'DATE'
+
+/** Mirrors the backend's CheckInConfig.Milestone. */
+export interface CheckInMilestone {
+  /** stable: which milestones a player was paid is recorded by it */
+  id: string
+  kind: CheckInMilestoneKind
+  /** blank: the game makes a name from the rule */
+  name: string
+  /** STREAK / TOTAL: the count */
+  days: number
+  /** DATE: yyyy-MM-dd (that day) or MM-dd (every year) */
+  date: string
+  /** STREAK / TOTAL: pay on every multiple of days instead of once */
+  repeat: boolean
+  enabled: boolean
+  rewards: CheckInReward[]
 }
 
 export interface CheckInPlayerLine {

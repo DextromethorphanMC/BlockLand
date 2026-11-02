@@ -27,8 +27,9 @@ import java.util.function.Function;
 
 /**
  * Registers the vanilla-style building blocks — the vending machine, the target, the swim ring, grass and stone layers,
- * the corals — their items and a creative tab, independent of the other modules. Models, textures, block states, loot
- * tables and tags come from {@code tools/assets/gen_decor.py}; the ids here and there must agree
+ * the corals, the road-side props (rear-view mirror, license plate, oil drums, tires) — their items and a creative tab,
+ * independent of the other modules. Models, textures, block states, loot tables and tags come from
+ * {@code tools/assets/gen_decor.py} (the props from its {@code gen_decor_props.py}); the ids here and there must agree
  * ({@code tools/assets/check_decor.py} checks).
  */
 public final class DecorContent {
@@ -49,6 +50,18 @@ public final class DecorContent {
             return "dead_" + name + "_coral";
         }
     }
+
+    /** An oil drum colour ({@code <colour>_oil_drum}); keep in step with gen_decor_props.py DRUM_COLOURS. */
+    public record OilDrum(String colour, MapColor map) {
+        public String id() {
+            return colour + "_oil_drum";
+        }
+    }
+
+    public static final List<OilDrum> OIL_DRUMS = List.of(
+            new OilDrum("red", MapColor.COLOR_RED),
+            new OilDrum("blue", MapColor.COLOR_BLUE),
+            new OilDrum("yellow", MapColor.COLOR_YELLOW));
 
     public static final List<Coral> CORALS = List.of(
             new Coral("staghorn", MapColor.COLOR_ORANGE),
@@ -82,7 +95,18 @@ public final class DecorContent {
             .mapColor(MapColor.COLOR_PINK).instrument(NoteBlockInstrument.BASEDRUM).strength(1.5f, 6.0f)
             .requiresCorrectToolForDrops().sound(SoundType.CORAL_BLOCK).noOcclusion()));
 
+    public static final RegistryObject<Block> REAR_VIEW_MIRROR = block("rear_view_mirror", p -> new RearViewMirrorBlock(p
+            .mapColor(MapColor.COLOR_BLACK).strength(0.5f).sound(SoundType.GLASS).noOcclusion().pushReaction(PushReaction.DESTROY)));
+    public static final RegistryObject<Block> LICENSE_PLATE = block("license_plate", p -> new LicensePlateBlock(p
+            .mapColor(MapColor.SNOW).strength(0.8f).sound(SoundType.METAL).noOcclusion().pushReaction(PushReaction.BLOCK)));
+    public static final RegistryObject<Block> TIRE = block("tire", p -> new TireBlock(p
+            .mapColor(MapColor.COLOR_BLACK).strength(0.8f).sound(SoundType.WOOL).noOcclusion()));
+
     static {
+        for (OilDrum drum : OIL_DRUMS) {
+            block(drum.id(), p -> new OilDrumBlock(p.mapColor(drum.map()).instrument(NoteBlockInstrument.IRON_XYLOPHONE)
+                    .strength(2.0f, 4.0f).sound(SoundType.METAL).noOcclusion().pushReaction(PushReaction.BLOCK)));
+        }
         for (Coral coral : CORALS) {
             RegistryObject<Block> dead = block(coral.dead(), p -> new BaseCoralPlantBlock(p
                     .mapColor(MapColor.COLOR_GRAY).forceSolidOn().instrument(NoteBlockInstrument.BASEDRUM).noCollission().instabreak()));

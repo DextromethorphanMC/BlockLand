@@ -306,3 +306,8 @@ a.stat:hover { border-color: var(--accent); }
 .ac-details summary { cursor: pointer; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
 .ac-stats { margin: 16px 0 0; }
 .ac-savebar { position: sticky; bottom: 0; padding: 12px 0; background: linear-gradient(transparent, var(--bg) 40%); }
+
+/* check-in milestones (额外奖励) */
+.milestone { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+.milestone .table { margin: 8px 0; }
+.milestone-off { opacity: 0.6; }
