@@ -86,7 +86,7 @@ public enum Optimization {
     /**
      * Real far chunks drawn after vanilla's opaque terrain, their depth started from the level's own, their quads in
      * clusters a compute shader culls against the view frustum and the hierarchical depth of what vanilla drew, the rest
-     * drawn by one indirect multi-draw per region layer.
+     * drawn by one indirect multi-draw per region layer (same pipelines, transforms and order).
      */
     FAR_GPU_CULLING(Group.PIPELINE, false);
 

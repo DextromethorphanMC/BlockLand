@@ -4,7 +4,6 @@ import com.blockland.BlockLand;
 import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
 import com.mojang.blaze3d.opengl.GlRenderPass;
-import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -39,23 +38,6 @@ public final class PagedTerrain {
             .withLocation(BlockLand.id("pipeline/terrain_pages_cutout_mipped")).withVertexShader(VERTEX).withShaderDefine("ALPHA_CUTOUT", 0.5F).build();
     private static final RenderPipeline CUTOUT = RenderPipeline.builder(RenderPipelines.TERRAIN_SNIPPET)
             .withLocation(BlockLand.id("pipeline/terrain_pages_cutout")).withVertexShader(VERTEX).withShaderDefine("ALPHA_CUTOUT", 0.1F).build();
-    // the translucent layers' pipelines (vanilla's TRANSLUCENT and TRIPWIRE with that vertex shader) for the far chunks' culled draws
-    private static final RenderPipeline TRANSLUCENT = RenderPipeline.builder(RenderPipelines.TERRAIN_SNIPPET)
-            .withLocation(BlockLand.id("pipeline/terrain_pages_translucent")).withVertexShader(VERTEX).withBlend(BlendFunction.TRANSLUCENT).build();
-    private static final RenderPipeline TRIPWIRE = RenderPipeline.builder(RenderPipelines.TERRAIN_SNIPPET)
-            .withLocation(BlockLand.id("pipeline/terrain_pages_tripwire")).withVertexShader(VERTEX).withShaderDefine("ALPHA_CUTOUT", 0.1F)
-            .withBlend(BlendFunction.TRANSLUCENT).build();
-
-    /** The layer's vanilla pipeline with the pages vertex shader (the draw's offset read by draw id). */
-    public static RenderPipeline pipeline(ChunkSectionLayer layer) {
-        return switch (layer) {
-            case SOLID -> SOLID;
-            case CUTOUT_MIPPED -> CUTOUT_MIPPED;
-            case CUTOUT -> CUTOUT;
-            case TRANSLUCENT -> TRANSLUCENT;
-            case TRIPWIRE -> TRIPWIRE;
-        };
-    }
 
     /** The frame's batches, taken by {@link #render}. */
     @Nullable
@@ -119,7 +101,7 @@ public final class PagedTerrain {
             for (ChunkSectionLayer layer : group.layers()) {
                 PagedDraws.Batch batch = p.batch(layer);
                 if (batch.isEmpty()) continue;
-                pass.setPipeline(pipeline(layer));
+                pass.setPipeline(layer == ChunkSectionLayer.SOLID ? SOLID : layer == ChunkSectionLayer.CUTOUT_MIPPED ? CUTOUT_MIPPED : CUTOUT);
                 pass.bindSampler("Sampler0", layer.textureView());
                 batch.draw((GlRenderPass) pass, sequentialBuffer, sequentialType);
             }

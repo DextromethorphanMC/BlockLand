@@ -14,6 +14,7 @@ import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ChunkTrackingView;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.lwjgl.system.MemoryUtil;
 
@@ -51,14 +52,27 @@ final class CoverageMask {
     /** The camera's chunk the texels were laid out round. */
     int centreX, centreZ;
 
-    /** Vanilla draws the chunk this frame: it holds it, it lies within vanilla's view distance and its surface is compiled. */
+    /**
+     * Vanilla draws the chunk this frame: it holds it, it lies within vanilla's view distance and one of its non-empty
+     * sections is compiled. Vanilla compiles only the sections its visibility graph reaches, so a chunk behind a hill can
+     * have its tree tops compiled and drawn while the section under its middle column never is: asking only for that
+     * section (as this once did) left such a chunk to the far units too, and both drew its visible blocks (z-fighting). The
+     * sections vanilla never compiled it never reached: hidden from the camera, they need no far unit.
+     */
     static boolean vanillaDraws(ClientLevel level, LevelRenderer renderer, int cameraChunkX, int cameraChunkZ, int renderDistance,
                                 int cx, int cz, BlockPos.MutableBlockPos pos) {
         if (!ChunkTrackingView.isInViewDistance(cameraChunkX, cameraChunkZ, renderDistance, cx, cz)) return false;
         LevelChunk chunk = level.getChunkSource().getChunk(cx, cz, false);
         if (chunk == null) return false;
-        int y = Math.max(level.getMinY(), chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8) - 1);
-        return renderer.isSectionCompiled(pos.set(cx * 16 + 8, y, cz * 16 + 8));
+        // the middle column's surface section first (nearly always the answer), then every other non-empty one
+        int surface = Math.max(level.getMinY(), chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8) - 1);
+        if (renderer.isSectionCompiled(pos.set(cx * 16 + 8, surface, cz * 16 + 8))) return true;
+        LevelChunkSection[] sections = chunk.getSections();
+        for (int i = 0; i < sections.length; i++) {
+            if (sections[i] == null || sections[i].hasOnlyAir()) continue;
+            if (renderer.isSectionCompiled(pos.set(cx * 16 + 8, level.getMinY() + i * 16 + 8, cz * 16 + 8))) return true;
+        }
+        return false;
     }
 
     /** Lays the mask out again round the camera chunk (every few frames, or at once when {@code now}). */

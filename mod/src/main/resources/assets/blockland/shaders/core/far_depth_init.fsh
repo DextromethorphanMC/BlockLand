@@ -3,8 +3,9 @@
 // Far terrain drawn after vanilla's opaque terrain (client/graphics/far/FarRenderer, FAR_GPU_CULLING, rendering spec
 // §23): the far depth starts out as the level's own depth carried into the far projection, so the far chunks' and tiles'
 // fragments behind what vanilla has drawn fail the depth test before they are shaded. The same value goes into the
-// colour target (R32F, the marker): a texel the far pass never wrote still holds it, and far_depth.fsh leaves the level's
-// depth alone there; the GPU culling's hierarchical depth is built from it (far_hzb.csh). Where the level drew nothing
+// colour target (R32F, the marker) — replaced right after by the value as the depth texture stored it (far_depth_copy.fsh:
+// the depth format's precision is not the float's): a texel the far pass never wrote still holds it, and
+// far_depth_clean.fsh puts such texels back at 1; the GPU culling's hierarchical depth is built from it (far_hzb.csh). Where the level drew nothing
 // (depth 1) the far depth is 1, as a clear would leave it; a level fragment nearer than the far projection's near plane
 // lands at 0 (nothing far can be nearer).
 //   Matrix = the far terrain's projection x the inverse of the level's (both jittered alike): level NDC -> far clip

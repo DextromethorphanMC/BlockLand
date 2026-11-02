@@ -6,14 +6,16 @@
 // drawn - its indirect command gets its index count - unless its box lies wholly outside the view frustum (by more than
 // a margin) or wholly behind the hierarchical depth of what vanilla drew (far_hzb.csh: every corner in front of the
 // camera's plane, and the box's nearest depth beyond the largest depth under its screen rectangle). Both tests only
-// leave out clusters no fragment of which could reach the screen; the commands keep the clusters' order, so what is
-// drawn is drawn in the order it always was. Beside each command goes its region's corner, the pages vertex shader's
-// offset for the draw (what DynamicTransforms.ModelOffset would hold).
+// leave out clusters no fragment of which could reach the screen; the commands keep the clusters' order and the draws
+// keep the order of the draws without the culling, so what is drawn is drawn in the order it always was (with the same
+// pipeline and transform).
 layout(local_size_x = 64) in;
 
 struct Cluster {
-    vec4 lo;   // the box's minimum; w: the first of the cluster's indices (uint bits)
-    vec4 hi;   // the box's maximum; w: how many indices (uint bits; 0 draws nothing)
+    float loX, loY, loZ;   // the box's minimum
+    uint first;            // the first of the cluster's indices
+    float hiX, hiY, hiZ;   // the box's maximum
+    uint count;            // how many indices (0 draws nothing)
 };
 struct Job {
     vec4 origin;   // the region's corner relative to the camera
@@ -26,7 +28,6 @@ struct Command {
 layout(std430, binding = 0) readonly buffer Clusters { Cluster clusters[]; };
 layout(std430, binding = 1) readonly buffer Jobs { Job jobs[]; };
 layout(std430, binding = 2) writeonly buffer Commands { Command commands[]; };
-layout(std430, binding = 3) writeonly buffer Offsets { vec4 offsets[]; };
 
 uniform int JobCount;
 uniform int CommandCount;
@@ -93,17 +94,15 @@ void main() {
     // the alignment gap between two jobs' commands: nothing is drawn from it
     if (i >= job.range.y) {
         commands[t] = Command(0u, 1u, 0u, 0u, 0u);
-        offsets[t] = vec4(0.0);
         return;
     }
     Cluster c = clusters[job.range.x + i];
-    uint count = floatBitsToUint(c.hi.w);
-    vec3 bmin = c.lo.xyz + job.origin.xyz, bmax = c.hi.xyz + job.origin.xyz;
+    uint count = c.count;
+    vec3 bmin = vec3(c.loX, c.loY, c.loZ) + job.origin.xyz, bmax = vec3(c.hiX, c.hiY, c.hiZ) + job.origin.xyz;
     bool visible = count != 0u;
     for (int p = 0; p < 6 && visible; p++) {
         if (outside(Planes[p], bmin, bmax)) visible = false;
     }
     if (visible && HzbLevels > 0 && occluded(bmin, bmax)) visible = false;
-    commands[t] = Command(visible ? count : 0u, 1u, floatBitsToUint(c.lo.w) + job.range.w, 0u, 0u);
-    offsets[t] = vec4(job.origin.xyz, 0.0);
+    commands[t] = Command(visible ? count : 0u, 1u, c.first + job.range.w, 0u, 0u);
 }

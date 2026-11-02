@@ -109,6 +109,8 @@ public final class GraphicsStatus {
     /** Real far chunks (rendering spec §23): columns drawn / held, GPU bytes of their meshes, columns waiting for the server. */
     public volatile int farChunksDrawn, farChunksPlaced, farChunksHeld, farChunksPending;
     public volatile long farChunkGpuBytes;
+    /** {@code FAR_GPU_CULLING}: the real far chunks' clusters handed to the GPU's culling in the last main view (0 when off). */
+    public volatile int farChunkClusters;
     public volatile float farMillis;
 
     /** Display (rendering spec §21): the virtual framebuffer and the window's real one. */

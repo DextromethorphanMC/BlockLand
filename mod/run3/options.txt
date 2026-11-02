@@ -17,7 +17,7 @@ gamma:0.5
 graphicsMode:1
 guiScale:2
 maxFps:260
-inactivityFpsLimit:"afk"
+inactivityFpsLimit:"minimized"
 mipmapLevels:4
 narrator:0
 particles:0

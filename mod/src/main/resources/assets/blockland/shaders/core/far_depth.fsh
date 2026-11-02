@@ -9,9 +9,6 @@
 #moj_import <blockland:gfx_screen.glsl>
 
 uniform sampler2D FarDepthSampler;
-#ifdef OCCLUDED
-uniform sampler2D FarInitSampler;
-#endif
 
 in vec2 texCoord;
 
@@ -22,13 +19,6 @@ void main() {
     if (depth >= 1.0) {
         discard;
     }
-#ifdef OCCLUDED
-    // the far pass started from the level's own depth (far_depth_init.fsh): a texel it never wrote still holds that
-    // value and shows vanilla's world - the level's depth stays as it is there
-    if (depth == texelFetch(FarInitSampler, ivec2(gl_FragCoord.xy), 0).r) {
-        discard;
-    }
-#endif
     vec4 clip = Matrix * vec4(texCoord * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     float z = clip.z / clip.w;
     if (clip.w <= 0.0 || z >= 0.999999) {

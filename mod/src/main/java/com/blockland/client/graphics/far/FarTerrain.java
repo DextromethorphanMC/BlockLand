@@ -135,6 +135,7 @@ public final class FarTerrain {
                 status.farCells = status.farGpuBytes = 0;
                 status.farChunksDrawn = status.farChunksPlaced = status.farChunksHeld = status.farChunksPending = 0;
                 status.farChunkGpuBytes = 0;
+                status.farChunkClusters = 0;
                 return;
             }
             wasOn = true;
@@ -186,14 +187,35 @@ public final class FarTerrain {
             status.farChunksHeld = columns.held();
             status.farChunksPending = columns.pending();
             status.farChunkGpuBytes = regions.gpuBytes();
+            status.farChunkClusters = ring > 0 ? renderer.culledClusters : 0;
             millis = millis * 0.9f + (System.nanoTime() - start) / 1e6f * 0.1f;
             status.farMillis = millis;
         }
     }
 
+    /** Dev probe (dev automation's {@code far}): placed chunk units over chunks vanilla also draws part of. */
+    public static String devOverlap() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return "overlap=-";
+        Vec3 pos = mc.gameRenderer.getMainCamera().getPosition();
+        int cx = Math.floorDiv((int) Math.floor(pos.x), 16), cz = Math.floorDiv((int) Math.floor(pos.z), 16);
+        return columns.overlapProbe(mc.level, cx, cz, mc.options.getEffectiveRenderDistance());
+    }
+
     /** The pass before vanilla's terrain (main view and scope pictures). */
     private static void draw(LevelPasses.View view) {
         if (!active || frame == null) return;
+        if (view.mainView() && regions.columns() > 0) {
+            // vanilla's compiles for this frame are in: chunks it has begun to draw are its alone from this frame on
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.level != null) {
+                Vec3 pos = view.camera().getPosition();
+                try (com.blockland.client.perf.FrameTimings.Span ignored = com.blockland.client.perf.FrameTimings.span("bl/far/handover")) {
+                    columns.handOver(mc.level, Math.floorDiv((int) Math.floor(pos.x), 16), Math.floorDiv((int) Math.floor(pos.z), 16),
+                            mc.options.getEffectiveRenderDistance(), System.currentTimeMillis());
+                }
+            }
+        }
         GpuTextureView depth = renderer.draw(view, selection.draws, regions.columns() > 0 ? regions : null, near, far);
         if (view.mainView()) {
             frame.farDepth = depth;

@@ -333,6 +333,21 @@ public final class DevAutomation {
             case "camera" -> mc.options.setCameraType("third".equals(a[1]) ? CameraType.THIRD_PERSON_BACK : CameraType.FIRST_PERSON);
             case "f3" -> mc.getDebugOverlay().toggleOverlay();
             case "state" -> state(mc, player);
+            case "prop" -> {
+                // prop <key> <value>: a system property (dev experiments read them)
+                System.setProperty(a[1], a[2]);
+                log("prop " + a[1] + " = " + a[2]);
+            }
+            case "far" -> {
+                // the far terrain's status line (rendering spec §22, §23)
+                var s = com.blockland.client.graphics.Graphics.status();
+                log(String.format("far: reach=%.0f reason=%s tiles drawn/wanted/held=%d/%d/%d chunks drawn/placed/held/pending=%d/%d/%d/%d"
+                                + " chunkMB=%.1f clusters=%d begin=%.2fms pos=%.1f,%.1f,%.1f dim=%s",
+                        s.farTerrainReach, s.farTerrainReason, s.farTilesDrawn, s.farTilesWanted, s.farTilesHeld, s.farChunksDrawn,
+                        s.farChunksPlaced, s.farChunksHeld, s.farChunksPending, s.farChunkGpuBytes / 1048576.0, s.farChunkClusters, s.farMillis,
+                        player.getX(), player.getY(), player.getZ(), player.level().dimension().location()));
+                log("far: " + com.blockland.client.graphics.far.FarTerrain.devOverlap());
+            }
             case "shot" -> Screenshot.takeScreenshot(mc.getMainRenderTarget(), image -> save(image, a[1]));
             default -> log("unknown command " + line);
         }

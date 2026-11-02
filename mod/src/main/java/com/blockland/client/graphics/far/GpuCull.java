@@ -55,19 +55,18 @@ import java.util.TreeMap;
  * <li><b>The frame</b> ({@link #cull}, {@code far_cull.csh}): one job per region layer drawn this frame (its region's
  *     corner relative to the camera, its clusters, where its commands go), one compute thread per command, which
  *     tests its cluster's box against the frustum and the hierarchical depth and writes the indirect command (zero
- *     count when culled) and the draw's offset for the pages vertex shader. Jobs, commands and offsets go through a
- *     three-slot ring; a slot is reused two frames later.</li>
- * <li><b>Draws</b> ({@link #multiDraw}): per job one {@code glMultiDrawElementsIndirect} over its clusters' commands, the
- *     vertex array and element buffer bound as Blaze3D's own draws bind them, the offsets bound by range on the pages
- *     vertex shader's storage block.</li>
+ *     count when culled). Jobs and commands go through a three-slot ring; a slot is reused two frames later.</li>
+ * <li><b>Draws</b> ({@link #multiDraw}): per job one {@code glMultiDrawElementsIndirect} over its clusters' commands with
+ *     the pass's pipeline and uniforms as they are (the same vanilla pipeline and transform as the draw without the
+ *     culling), the vertex array and element buffer bound as Blaze3D's own draws bind them.</li>
  * </ul>
  * Raw GL beside Blaze3D: compute programs bound and put back ({@link ComputeProgram}), texture unit {@link #HZB_UNIT}
  * bound and put back, image units and storage buffer bindings (which Blaze3D does not use or track), the indirect buffer
- * binding. Needs GL 4.5 with {@code ARB_shader_draw_parameters} (the pages vertex shader); else {@link #ready} is false
- * and nothing here is used. Render thread.
+ * binding. Needs GL 4.5 (compute shaders, indirect multi-draws, direct state access); else {@link #ready} is false and
+ * nothing here is used. Render thread.
  */
 final class GpuCull implements AutoCloseable {
-    private static final int JOB_BYTES = 32, COMMAND_BYTES = 20, OFFSET_BYTES = 16;
+    private static final int JOB_BYTES = 32, COMMAND_BYTES = 20;
     private static final int SLOTS = 3;
     /** The texture unit the compute shaders sample through (one of BlockLand's own, bound and put back). */
     private static final int HZB_UNIT = 15;
@@ -91,11 +90,11 @@ final class GpuCull implements AutoCloseable {
         }
     }
 
-    /** One culled frame of draws: where each draw's commands start (in commands) and the slot's byte offsets. */
+    /** One culled frame of draws: where each draw's commands start (in commands) and the slot's byte offset. */
     static final class Frame {
         int[] commandBase = new int[256];
         int commands;
-        long commandsAt, offsetsAt;
+        long commandsAt;
     }
 
     @Nullable
@@ -115,7 +114,7 @@ final class GpuCull implements AutoCloseable {
     // the frame rings
     private int slot;
     private int jobsBuffer, jobsRegion, jobsCursor;
-    private int commandsBuffer, offsetsBuffer, entriesRegion, entriesCursor;
+    private int commandsBuffer, entriesRegion, entriesCursor;
     private ByteBuffer jobStaging = MemoryUtil.memAlloc(256 * JOB_BYTES);
     private final Frame frame = new Frame();
     private final float[] planes = new float[24];
@@ -129,7 +128,7 @@ final class GpuCull implements AutoCloseable {
         boolean ok;
         try {
             GLCapabilities caps = GL.getCapabilities();
-            ok = caps.OpenGL45 && caps.GL_ARB_shader_draw_parameters && caps.GL_ARB_shader_storage_buffer_object;
+            ok = caps.OpenGL45;
             if (ok) alignment = Math.max(16, GL11.glGetInteger(GL43.GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT));
         } catch (RuntimeException e) {
             ok = false;
@@ -314,11 +313,8 @@ final class GpuCull implements AutoCloseable {
     Frame cull(List<RegionRenderer.Draw> draws, Matrix4f viewProj, @Nullable Hzb hzb) {
         int n = draws.size();
         if (frame.commandBase.length < n) frame.commandBase = new int[Math.max(n, frame.commandBase.length * 2)];
-        // every job's offsets are bound by range for its draw: its first command at an aligned place
-        int alignEntries = Math.max(1, alignment / OFFSET_BYTES);
         int total = 0;
         for (int i = 0; i < n; i++) {
-            total = (total + alignEntries - 1) / alignEntries * alignEntries;
             frame.commandBase[i] = total;
             total += draws.get(i).clusterCount();
         }
@@ -366,7 +362,6 @@ final class GpuCull implements AutoCloseable {
         GL30.glBindBufferRange(GL43.GL_SHADER_STORAGE_BUFFER, 0, clusterBuffer, 0, (long) clusterCapacity * Clusters.BYTES);
         GL30.glBindBufferRange(GL43.GL_SHADER_STORAGE_BUFFER, 1, jobsBuffer, jobsAt, (long) n * JOB_BYTES);
         GL30.glBindBufferRange(GL43.GL_SHADER_STORAGE_BUFFER, 2, commandsBuffer, frame.commandsAt, (long) total * COMMAND_BYTES);
-        GL30.glBindBufferRange(GL43.GL_SHADER_STORAGE_BUFFER, 3, offsetsBuffer, frame.offsetsAt, (long) total * OFFSET_BYTES);
         program.dispatch((total + GROUP - 1) / GROUP, 1, 1);
         program.unbind();
         GL11.glBindTexture(GL11.GL_TEXTURE_2D, previous);
@@ -391,27 +386,22 @@ final class GpuCull implements AutoCloseable {
         return (long) slot * jobsRegion + at;
     }
 
-    /** Room for {@code count} commands and offsets in this frame's slot ({@link Frame#commandsAt}, {@link Frame#offsetsAt}). */
+    /** Room for {@code count} commands in this frame's slot ({@link Frame#commandsAt}). */
     private void reserveEntries(int count) {
-        // the storage ranges bound for the compute pass start aligned: in entries, the alignment over both strides
+        // the storage range bound for the compute pass starts aligned: in commands, the alignment over the stride
         int alignEntries = Math.max(1, alignment / 4);
         int at = (entriesCursor + alignEntries - 1) / alignEntries * alignEntries;
         if (commandsBuffer == 0 || at + count > entriesRegion) {
             int need = Math.max(entriesRegion * 2, Math.max(1 << 14, at + count));
             need = (need + alignEntries - 1) / alignEntries * alignEntries;
             if (commandsBuffer != 0) GL15.glDeleteBuffers(commandsBuffer);
-            if (offsetsBuffer != 0) GL15.glDeleteBuffers(offsetsBuffer);
             commandsBuffer = GL45.glCreateBuffers();
-            offsetsBuffer = GL45.glCreateBuffers();
             GL45.glNamedBufferStorage(commandsBuffer, (long) need * SLOTS * COMMAND_BYTES, 0);
-            GL45.glNamedBufferStorage(offsetsBuffer, (long) need * SLOTS * OFFSET_BYTES, 0);
             entriesRegion = need;
             at = 0;
         }
         entriesCursor = at + count;
-        long first = (long) slot * entriesRegion + at;
-        frame.commandsAt = first * COMMAND_BYTES;
-        frame.offsetsAt = first * OFFSET_BYTES;
+        frame.commandsAt = ((long) slot * entriesRegion + at) * COMMAND_BYTES;
     }
 
     /** The frustum's six planes (left, right, bottom, top, near, far) of a clip matrix, unit normals, inside >= 0. */
@@ -457,7 +447,7 @@ final class GpuCull implements AutoCloseable {
 
     /**
      * One job's draw: its clusters' commands ({@code count} from {@code commandBase}) as one indirect multi-draw from the
-     * vertex buffer with the index buffer, the offsets bound for the pages vertex shader. After {@link #setup}.
+     * vertex buffer with the index buffer. After {@link #setup}.
      */
     void multiDraw(RenderPass pass, GpuBuffer vertexBuffer, GpuBuffer indexBuffer, VertexFormat.IndexType indexType, Frame frame,
                    int commandBase, int count) {
@@ -471,8 +461,6 @@ final class GpuCull implements AutoCloseable {
         pass.setIndexBuffer(indexBuffer, indexType);
         arrays.bindVertexArray(format, (GlBuffer) vertexBuffer);
         TerrainDraws.bindElementBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, GlStateCache.handle(indexBuffer));
-        GL30.glBindBufferRange(GL43.GL_SHADER_STORAGE_BUFFER, 0, offsetsBuffer, frame.offsetsAt + (long) commandBase * OFFSET_BYTES,
-                (long) count * OFFSET_BYTES);
         GL43.glMultiDrawElementsIndirect(mode, GlConst.toGl(indexType), frame.commandsAt + (long) commandBase * COMMAND_BYTES, count, 0);
     }
 
@@ -483,8 +471,7 @@ final class GpuCull implements AutoCloseable {
         if (clusterBuffer != 0) GL15.glDeleteBuffers(clusterBuffer);
         if (jobsBuffer != 0) GL15.glDeleteBuffers(jobsBuffer);
         if (commandsBuffer != 0) GL15.glDeleteBuffers(commandsBuffer);
-        if (offsetsBuffer != 0) GL15.glDeleteBuffers(offsetsBuffer);
-        clusterBuffer = jobsBuffer = commandsBuffer = offsetsBuffer = 0;
+        clusterBuffer = jobsBuffer = commandsBuffer = 0;
         clusterCapacity = jobsRegion = entriesRegion = 0;
         jobsCursor = entriesCursor = 0;
         free.clear();

@@ -1325,6 +1325,53 @@ sample, skips an update that could leave something a frame stale, or reorders dr
   `FAR_HIDDEN_GEOMETRY` — a far unit is flooded from its border through cells that are not full on all six faces; cells
   neither reachable nor next to a reachable one (and not on the border) are not meshed (`far/HiddenCells`): the camera is
   never inside a far unit, so no line of sight reaches them. Switching the far entries meshes the real far chunks again.
+  `FAR_GPU_CULLING` — the real far chunks culled on the GPU (`far/GpuCull`, `far/Clusters`, `far_cull.csh`,
+  `far_hzb.csh`, `gpu/ComputeProgram`): the far pass moves to right after vanilla's opaque terrain group
+  (`LevelPasses.afterOpaque`, `mixin/terrain/ChunkSectionsToRenderMixin`), its depth seeded from the level's own carried
+  into the far projection (`far_depth_init.fsh`; the R32F marker then gets the seed as the depth texture stored it,
+  `far_depth_copy.fsh` — Blaze3D's 32-bit depth is not float, and a marker holding the shader's float made untouched
+  texels beyond the far near plane compare unequal, so the write-back rewrote vanilla's depth there one unit in the last
+  place off: invisible, but the ambient occlusion and the volumetric light showed it). Afterwards `far_depth_clean.fsh` copies the
+  far depth into an R32F texture with the texels the pass never wrote (still equal to the marker) back at 1 — the far
+  depth the pass leaves without the switch wherever anything reads it — and the write-back runs the unchanged
+  `far_depth.fsh` on it; the post chain gets the clean copy as `FrameContext.farDepth`. (A write-back variant that skipped
+  those texels itself rounded the depth conversion one unit in the last place differently: invisible in the picture,
+  but the ambient occlusion and the volumetric light turned it into one-level differences in the far trees.) Each unit layer's quads are cut on the worker into clusters — runs of
+  at most 512 quads in the mesh's order, none wider than a section, each with its box — made with every mesh whatever
+  the switch says (so flipping it never meshes the far chunks again). Every region layer keeps two cluster tables in one
+  shared storage buffer: in sequential terms, and in its face-group index list's terms (written with the list,
+  `RegionRenderer.writeIndices`; a unit meshed without clusters is one cluster, its whole box). Per view one compute
+  dispatch tests every cluster of the region layers in the frustum: wholly outside a frustum plane by more than 1 cm,
+  or — against the hierarchical depth of the marker (max-reduced levels, odd rows and columns folded into the last
+  texel) — every corner in front of the camera's plane and the box's nearest depth beyond the farthest depth under its
+  screen rectangle (1e-6 slack), its indirect command gets a zero count; else the cluster's index range. Each region
+  layer is then one `glMultiDrawElementsIndirect` over its clusters' commands with the same vanilla pipeline, atlas and
+  `DynamicTransforms` as the draw without the switch, in the same order (§23): only clusters no fragment of which could
+  reach the screen are left out, and the commands keep the mesh's order. (Drawn through the `TERRAIN_PAGES` vertex
+  shader instead — offsets by draw id, one shared transform — the far chunks differed in scattered pixels of cutout
+  leaves even with nothing culled: another program rounds the large region offsets differently. The culled draws keep
+  vanilla's program.) The culling itself is exact — with every cluster kept the frames differ from the switch off exactly
+  as much as with the culling. The move is exact for everything opaque (the nearest fragment wins in either order); it
+  changes only blended far fragments in front of vanilla geometry: far water over a vanilla block is blended over that
+  block instead of over the sky the old pass had behind it (the old result was the wrong one). That needs a far unit in
+  front of vanilla's terrain, i.e. over a chunk inside vanilla's area that vanilla does not draw at all. Vanilla compiles
+  only the sections its visibility graph reaches in view, so such units sit beside and behind the camera (dev
+  automation's `far` prints them as `inside`: 0–60 at the user's spot, by heading), off screen; one goes the frame vanilla
+  compiles a section of its chunk (`ColumnStore.handOver`, §23 — until 2026-11-02 it stayed until the band's next look,
+  up to 250 ms, long enough for the benchmark to catch it at random), so they show only where vanilla's graph misses a
+  few visible pixels. Measured 2026-11-02 with the benchmark's frame comparison at the user's spot, after the handover:
+  with the post effects off all four views identical; with the user's effects three identical and the fourth's
+  differences smaller than its control's (the switch off twice). Before it, the benchmark (which rebuilds vanilla's
+  sections between its passes) caught units in that window at random — far water strips at a shoreline, and a noisy
+  control where far chunks meet vanilla's. Two bugs found on the way: the move flipped
+  z-fighting between far units and vanilla over chunks both drew (`vanillaDraws` now asks for any compiled section,
+  §23; `far` prints `overlap`, 0), and the marker held the seed as the shader computed it rather than as stored (fixed
+  above). Needs GL 4.5 (else the pass only moves and seeds its depth). Compute shaders are `compute` programs in
+  `programs.txt` (`tools/shaders/check_shaders.py` compiles them in a GL 4.3 context). Measured 2026-11-02 at the
+  user's far settings (far chunks 512, full detail 32, render distance 6, 1080p-class internal resolution, laptop
+  RTX 5090): `bl/far/chunks_opaque` 1.7–2.9 ms of GPU → 0.85–1.3 ms (frustum only 1.5–2.45), frames 4.7–6.0 →
+  4.0–4.6 ms; the benchmark (16 views) 6.17 → 4.71 ms standing, 6.19 → 4.77 ms moving. The culling costs 0.02 ms
+  (dispatch), 0.05–0.1 ms (hierarchical depth) and 0.02–0.06 ms (depth seed) of GPU a frame.
   Offline check: `python -I tools/perf/check_mesh_opt.py` (FaceInfo windings, grouping, flood).
   `TERRAIN_PAGES` — the opaque layers' vertices in a few shared 64 MB pages (`perf/gl/VertexPages`, first-fit ranges in
   whole vertices on the layer's `SectionBuffers`, whose vertex buffer is then the page: every reader draws it from the
@@ -1552,28 +1599,8 @@ them, meshes them into Minecraft-looking block columns and draws them behind the
   where nearer, and what vanilla draws later — clouds, rain, particles, the Fabulous layers — is hidden behind far terrain
   standing in front of it (without this the clouds were drawn over the land as if it were sky: it looked see-through). Tiles front to back; tiles touching the vanilla area use
   the masked program (`far_terrain` with `MASKED`), which discards fragments over chunks vanilla has compiled
-  `FAR_GPU_CULLING` — the real far chunks culled on the GPU (`far/GpuCull`, `far/Clusters`, `far_cull.csh`,
-  `far_hzb.csh`, `gpu/ComputeProgram`): the far pass moves to right after vanilla's opaque terrain group
-  (`LevelPasses.afterOpaque`, `mixin/terrain/ChunkSectionsToRenderMixin`), its depth seeded from the level's own carried
-  into the far projection (`far_depth_init.fsh`, kept in an R32F marker; the write-back `far_depth.fsh` with `OCCLUDED`
-  leaves texels the pass never wrote to the level). Each unit layer's quads are cut on the worker into clusters — runs of
-  at most 512 quads in the mesh's order, none wider than a section, each with its box — and every region layer keeps two
-  cluster tables in one shared storage buffer: in sequential terms (every quad) and in its face-group index list's terms
-  (written together with the list, `RegionRenderer.writeIndices`; a unit meshed without clusters is one cluster, its
-  whole box). Per view one compute dispatch tests every cluster of the region layers in the frustum: wholly outside a
-  frustum plane by more than 1 cm, or — with the hierarchical depth of the marker (max-reduced levels, odd rows and
-  columns folded into the last texel) — every corner in front of the camera's plane and the box's nearest depth beyond
-  the farthest depth under its screen rectangle (a 1e-6 slack), it writes a zero-count indirect command; else the
-  cluster's index range, the commands in the clusters' order. The draws are one `glMultiDrawElementsIndirect` per
-  region layer (opaque layers layer by layer, nearest first within each, as vanilla orders its own terrain; translucent
-  farthest first as before) with the `TERRAIN_PAGES` pipelines (`PagedTerrain.pipeline`, now for every layer), each
-  command's offset — its region's corner — read by draw id. Only clusters no fragment of which could reach the screen
-  are left out, and the commands keep the mesh's order, so the same fragments arrive in the same order. Needs GL 4.5 with
-  `ARB_shader_draw_parameters` (else the pass only moves and seeds its depth, which is exact too). The clusters are made
-  with every mesh whatever the switch says (one pass over the vertices, like the face groups), so flipping it never
-  meshes the far chunks again and the benchmark compares the same meshes. Compute shaders are listed in `programs.txt`
-  as `compute` programs. Depth testing alone (the same move without the culling) was measured on 2026-11-02 and saved
-  nothing: the pass is bound by its primitives, which only culling before the rasteriser removes.
+  (With `FAR_GPU_CULLING`, §20, the whole far pass runs after vanilla's opaque terrain group instead, its depth seeded
+  from the level's. The move alone saves nothing — measured 2026-11-02 — it is there for the culling.)
   (`CoverageMask`: one texel per chunk, 128 × 128 round the camera); the rest the plain one (early depth test). Lit like
   the lighting pack's terrain (`bl_skyShade` with sky light 15, the face shade, cloud shadows; water: Fresnel sky
   reflection and the sun's glint), fogged with `bl_fog`. A scope's picture draws it too (its own depth texture).
@@ -1636,8 +1663,14 @@ server has not generated a chunk yet.
 * **Client store** (`ColumnStore`): wanted = the leaves of a quadtree from scale-6 roots round the camera's chunk: a unit
   splits while its nearest chunk is closer than `farChunkFullDetail` × 2^(k−1) chunks; nothing farther than
   `farChunkDistance` or within the render distance − 2; a chunk vanilla draws (it holds it, it is within vanilla's view
-  distance, its surface section is compiled: `CoverageMask.vanillaDraws`) is left to vanilla, looked at again along
-  vanilla's edge every 250 ms. Disk cache (`…/farchunks2/<server>/<world>/<dim>/s<scale>/`), versions sent back. A unit is
+  distance, one of its non-empty sections is compiled: `CoverageMask.vanillaDraws`) is left to vanilla, looked at again
+  along vanilla's edge every 250 ms. (Vanilla compiles only the sections its visibility graph reaches: asking only for the
+  section under the chunk's middle column, as this did until 2026-11-02, left a chunk behind a hill whose tree tops
+  vanilla drew to the far units too — both drew those blocks and z-fought. Sections vanilla never compiled are hidden from
+  the camera and need no far unit.) A unit over a chunk vanilla has begun to draw goes the same frame: right before the
+  far pass draws (vanilla uploads its compiles before its frame graph runs), whenever `TerrainVersion` moved, the chunks
+  within vanilla's view distance that hold a placed unit are looked at again (`ColumnStore.handOver`); the band's look
+  every 250 ms is left for chunks vanilla gives up. Disk cache (`…/farchunks2/<server>/<world>/<dim>/s<scale>/`), versions sent back. A unit is
   kept as its compressed bytes; its `LevelChunkSection`s (light arrays all 0 or all 15 shared) only while a mesh needs
   them, decoded again when one does. **Swaps:** a unit that leaves the tree stays drawn until every wanted unit over it
   (finer or coarser) is meshed or known to hold nothing, then they change places in one frame (after 20 s it goes anyway);
@@ -1652,10 +1685,16 @@ server has not generated a chunk yet.
 * **Drawing** (`RegionRenderer`): units packed into regions of 4 × 4 units of one scale, one vertex buffer per region and
   layer (a unit's place in it kept; a unit leaving is zeroed, a full buffer rebuilt by GPU copies), drawn in the level's
   pass before vanilla's terrain (§22) with each layer's vanilla pipeline and atlas, the far projection (`Projection` block
-  of the pass), `DynamicTransforms` with the region's corner, frustum-culled, solid layers front to back before the far
-  tiles, translucent ones back to front after them, into the far terrain's depth; `far_depth` then carries it into the
-  level's own. With `FAR_GPU_CULLING` (§20) the pass runs after vanilla's opaque terrain instead, its depth seeded from
-  the level's, and the region layers are drawn as indirect multi-draws over the clusters the GPU left in.
+  of the pass), `DynamicTransforms` with the region's corner, frustum-culled; the opaque layers layer by layer as vanilla
+  draws its terrain (every region's solid layer nearest first, then every cutout mipped, then every cutout) before the
+  far tiles, translucent ones back to front after them, into the far terrain's depth; `far_depth` then carries it into
+  the level's own. (Drawn region by region — each region's layers in turn — the pipeline and the block atlas's mip
+  filter, which `ChunkSectionLayer.textureView` sets per layer, changed hundreds of times a frame; at ~1100 region
+  layers that cost about 5 ms of GPU time, more than the quads: `bl/far/chunks_opaque` 7.0–8.2 → 1.7–2.9 ms, frames
+  9.1–11.2 → 4.7–6.0 ms at the user's far settings. Changed 2026-11-02; where two regions' fragments meet at the far
+  horizon at the same quantised depth, the later layer now wins — the only pixels it changes.) With
+  `FAR_GPU_CULLING` (§20) the pass runs after vanilla's opaque terrain instead, its depth seeded from the level's, and
+  each region layer is drawn as an indirect multi-draw over the clusters the GPU left in.
 * **Coverage** (`CoverageMask`): one texel per chunk out to 320 chunks round the camera (vanilla's chunks and placed
   units), one per 16 × 16 chunks out to 4352 (set when all its chunks are held by placed units). The masked far tile
   program drops fragments either marks; far tiles are also drawn 0.1 % farther than they are (same pixel), so where a

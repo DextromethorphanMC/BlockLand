@@ -101,7 +101,8 @@ graffiti_glow        | blockland:core/graffiti_glow | blockland:core/graffiti_gl
 far_terrain          | blockland:core/far_terrain | blockland:core/far_terrain | Packed |
 far_terrain_masked   | blockland:core/far_terrain | blockland:core/far_terrain | Packed | MASKED
 far_depth            | blockland:core/gfx_screen | blockland:core/far_depth | Position |
-far_depth_occluded   | blockland:core/gfx_screen | blockland:core/far_depth | Position | OCCLUDED
+far_depth_clean      | blockland:core/gfx_screen | blockland:core/far_depth_clean | Position |
+far_depth_copy       | blockland:core/gfx_screen | blockland:core/far_depth_copy | Position |
 far_depth_init       | blockland:core/gfx_screen | blockland:core/far_depth_init | Position |
 # FAR_GPU_CULLING compute programs (client/graphics/far/GpuCull): "compute" in the vertex column, the shader in the fragment column
 far_hzb_copy         | compute | blockland:core/far_hzb | | COPY

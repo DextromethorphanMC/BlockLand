@@ -458,9 +458,10 @@ final class Benchmark {
         }
 
         /**
-         * Counts differing pixels (RGB) of {@code a} and {@code b}; when they differ the result's capture and a map of the
-         * differences (red where they differ, dimmed elsewhere) are saved next to the report. {@code control} only marks
-         * which comparison this is (null: the control itself, saved as {@code _control}).
+         * Counts differing pixels (RGB) of {@code a} and {@code b}; when they differ both captures ({@code b} as the name,
+         * {@code a} as {@code _first}) and a map of the differences (red where they differ, dimmed elsewhere) are saved next
+         * to the report. {@code control} only marks which comparison this is (null: the control itself, saved as
+         * {@code _control}).
          */
         BenchmarkReport.Diff diff(@Nullable NativeImage a, @Nullable NativeImage b, @Nullable NativeImage control, String stamp, int view) {
             if (a == null || b == null || a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) return BenchmarkReport.Diff.absent();
@@ -480,8 +481,9 @@ final class Benchmark {
                 imageName = stamp + "_view" + view + (control == null ? "_control" : "_result");
                 NativeImage map = new NativeImage(w, h, false);
                 NativeImage copy = new NativeImage(w, h, false);
-                // the control's first frame too: both sides of a scene that did not hold still
-                NativeImage first = control == null ? new NativeImage(w, h, false) : null;
+                // the other side too (the control's first frame, the result's frame with the switch off): both sides of
+                // every difference, to look at what changed
+                NativeImage first = new NativeImage(w, h, false);
                 for (int y = 0; y < h; y++) {
                     for (int x = 0; x < w; x++) {
                         int pa = a.getPixel(x, y), pb = b.getPixel(x, y);

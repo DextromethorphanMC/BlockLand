@@ -1,6 +1,7 @@
 package com.blockland.client.graphics.far;
 
 import com.blockland.BlockLand;
+import com.blockland.client.render.TerrainVersion;
 import com.blockland.farterrain.FarColumn;
 import com.blockland.network.BLNetwork;
 import com.blockland.network.packet.FarChunkPackets;
@@ -43,7 +44,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * The real far chunks the client holds or wants (rendering spec §23), render thread only. What is wanted is a quadtree of
  * units round the camera's chunk: chunks (scale 0) out to the full-detail distance, beyond it units of 2^k × 2^k chunks
  * whose blocks are cubes of 2^k real blocks, the scale doubling with the distance, out to the far chunk distance; chunks
- * vanilla draws itself are left to vanilla. Units are asked for nearest first with the version held, cached on disk, kept
+ * vanilla draws itself are left to vanilla (the frame it starts drawing one, {@link #handOver}). Units are asked for nearest
+ * first with the version held, cached on disk, kept
  * as their compressed bytes (their sections decoded on the {@link FarWorkers} only while a mesh needs them), meshed once
  * their neighbours of the same scale are known, and placed in the {@link RegionRenderer}. A unit no longer wanted stays
  * drawn until every unit replacing it is ready, then they swap in one frame — real terrain never gives way to the far
@@ -136,6 +138,8 @@ final class ColumnStore implements CoverageMask.Units {
     /** The quadtree as last laid out: its centre chunk and radii (chunks). */
     private int ringX = Integer.MIN_VALUE, ringZ, ringInner, ringFull, ringOuter, renderDistance;
     private long bandChecked, scheduled, snapshotsDropped;
+    /** {@link TerrainVersion} at the last {@link #handOver}. */
+    private long handedVersion = Long.MIN_VALUE;
     /** The level's lowest block and height. */
     private int minY, height;
     /** What is placed changed since the coverage mask last looked. */
@@ -263,6 +267,75 @@ final class ColumnStore implements CoverageMask.Units {
         lingering.remove(e);
         coverageChanged = true;
         if (e.has) e.meshDirty = true;
+    }
+
+    /**
+     * The chunk units over chunks vanilla has begun to draw go at once, the frame it does: called right before the far
+     * pass draws, after vanilla's compiles for the frame are in (it uploads them before its frame graph runs), and only
+     * when its sections changed since the last call ({@link TerrainVersion}). Without it a unit stayed until the band's
+     * next look (up to {@link #BAND_MS}), drawn together with vanilla's new chunk — z-fighting it, or its water standing
+     * in front of vanilla's terrain. Only chunks within vanilla's view distance can be vanilla's, so only those with a
+     * placed unit are looked at. The other way — vanilla giving a chunk up — stays with the band's look.
+     */
+    void handOver(ClientLevel level, int camChunkX, int camChunkZ, int renderDistance, long now) {
+        long version = TerrainVersion.current();
+        if (version == handedVersion) return;
+        handedVersion = version;
+        if (placed.isEmpty()) return;
+        LevelRenderer renderer = Minecraft.getInstance().levelRenderer;
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int dz = -renderDistance; dz <= renderDistance; dz++) {
+            for (int dx = -renderDistance; dx <= renderDistance; dx++) {
+                int cx = camChunkX + dx, cz = camChunkZ + dz;
+                Entry e = entries.get(FarColumn.key(0, cx, cz));
+                if (e == null || !e.placed) continue;
+                if (!CoverageMask.vanillaDraws(level, renderer, camChunkX, camChunkZ, renderDistance, cx, cz, pos)) continue;
+                setWanted(e, false, now);
+                removePlaced(e);
+            }
+        }
+    }
+
+    /**
+     * Dev probe (dev automation's {@code far}): the placed chunk units over a chunk vanilla also draws part of (it holds the
+     * chunk, it lies within vanilla's view distance and one of its non-empty sections is compiled) — 0 unless something
+     * broke {@link CoverageMask#vanillaDraws} — with a few of them described (chunk, vanilla's compiled sections, what
+     * {@code vanillaDraws} says); and {@code inside}: placed chunk units within vanilla's view distance over a chunk
+     * vanilla draws nothing of (not held, or no section compiled) — the only place far terrain can stand in front of
+     * vanilla's.
+     */
+    String overlapProbe(ClientLevel level, int camChunkX, int camChunkZ, int renderDistance) {
+        LevelRenderer renderer = Minecraft.getInstance().levelRenderer;
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        int count = 0, inside = 0;
+        StringBuilder some = new StringBuilder(), insideSome = new StringBuilder();
+        for (Entry e : placed) {
+            if (e.scale != 0) continue;
+            int cx = e.x, cz = e.z;
+            if (!net.minecraft.server.level.ChunkTrackingView.isInViewDistance(camChunkX, camChunkZ, renderDistance, cx, cz)) continue;
+            net.minecraft.world.level.chunk.LevelChunk chunk = level.getChunkSource().getChunk(cx, cz, false);
+            if (chunk == null) {
+                if (++inside <= 4) insideSome.append(String.format(" [%d,%d d=%d,%d not held]", cx, cz, cx - camChunkX, cz - camChunkZ));
+                continue;
+            }
+            LevelChunkSection[] sections = chunk.getSections();
+            int compiled = 0;
+            for (int i = 0; i < sections.length; i++) {
+                if (sections[i] == null || sections[i].hasOnlyAir()) continue;
+                int y = level.getMinY() + i * 16 + 8;
+                if (renderer.isSectionCompiled(pos.set(cx * 16 + 8, y, cz * 16 + 8))) compiled++;
+            }
+            if (compiled == 0) {
+                if (++inside <= 4) insideSome.append(String.format(" [%d,%d d=%d,%d none compiled]", cx, cz, cx - camChunkX, cz - camChunkZ));
+                continue;
+            }
+            count++;
+            if (count <= 4) {
+                boolean vanilla = CoverageMask.vanillaDraws(level, renderer, camChunkX, camChunkZ, renderDistance, cx, cz, pos);
+                some.append(String.format(" [%d,%d d=%d,%d compiled=%d vanillaDraws=%s]", cx, cz, cx - camChunkX, cz - camChunkZ, compiled, vanilla));
+            }
+        }
+        return "overlap=" + count + some + " inside=" + inside + insideSome;
     }
 
     @Override

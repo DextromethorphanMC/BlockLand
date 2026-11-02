@@ -385,7 +385,7 @@
   "blockland.settings.perf.opt.far_hidden_geometry": "远景区块隐藏几何",
   "blockland.settings.perf.opt.far_hidden_geometry.note": "真实远景区块里从外面任何方向都看不到的部分（封闭的洞穴、四面埋住的方块）不再生成网格；镜头永远在这些区块之外，所以画面完全一样，显存与网格时间更少。",
   "blockland.settings.perf.opt.far_gpu_culling": "远景区块 GPU 剔除",
-  "blockland.settings.perf.opt.far_gpu_culling.note": "真实远景区块改在原版不透明地形画完之后画，深度先从原版的深度换算过来；每个单元的面按位置分成若干簇并带包围盒，由计算着色器逐簇做视锥剔除和层次深度遮挡剔除（整簇被近处地形挡住的面不再送去光栅化），剩下的簇由每个区域层一次间接多重绘制画出，不再逐区域发绘制调用。只剔除不可能出现在屏幕上的面，画面相同。需要 OpenGL 4.5。",
+  "blockland.settings.perf.opt.far_gpu_culling.note": "真实远景区块改在原版不透明地形画完之后画，深度先从原版的深度换算过来；每个单元的面按位置分成若干簇并带包围盒，由计算着色器逐簇做视锥剔除和层次深度遮挡剔除（整簇被近处地形挡住的面不再送去光栅化），剩下的簇按原来的顺序、用原来的管线，每个区域层一次间接多重绘制画出。剔除本身只去掉不可能出现在屏幕上的面，不透明的部分画面完全相同；唯一不同的是远景的水正好挡在原版方块前面时（远景单元补上了原版没画的区块，例如加载途中），水下透出的是那个原版方块而不是天空，这才是对的。需要 OpenGL 4.5。",
   "blockland.settings.perf.opt.section_copies": "区块快照只复制需要的部分",
   "blockland.settings.perf.opt.section_copies.note": "重建区块时原版会把整列区块的全部方块实体复制一遍；改为只复制这一格区块里会读到的，读到的内容相同。",
   "blockland.settings.perf.opt.biome_tints": "生物群系颜色混合缓存",

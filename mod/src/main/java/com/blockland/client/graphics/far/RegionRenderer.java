@@ -1,7 +1,6 @@
 package com.blockland.client.graphics.far;
 
 import com.blockland.client.perf.Optimization;
-import com.blockland.client.perf.gl.PagedTerrain;
 import com.blockland.client.perf.terrain.FaceGroups;
 import com.blockland.client.perf.terrain.FaceIndex;
 import com.blockland.farterrain.FarColumn;
@@ -32,9 +31,13 @@ import java.util.List;
  * of one scale, one vertex buffer per region and layer in vanilla's block format, so a region is one draw per layer. A unit
  * keeps its place in the buffer; one that leaves is zeroed (degenerate quads), and a buffer that runs full is rebuilt by
  * copying the live columns on the GPU. Drawn with each layer's own vanilla pipeline and atlas, so the lighting pack lights
- * it like the near world. With {@code FAR_GPU_CULLING} every region layer also keeps the tables of its units' clusters
- * ({@link Clusters}) in the culling's buffer — in sequential terms, and in the terms of its face-group index list — and
- * is drawn as one indirect multi-draw over the clusters the GPU left in ({@link #drawCulled}). Render thread only.
+ * it like the near world, the opaque layers layer by layer as vanilla draws its terrain (every region's solid layer, then
+ * every cutout mipped, then every cutout; nearest region first within a layer): drawn region by region instead, the
+ * pipeline and the atlas's mip filter changed hundreds of times a frame, which cost more GPU time than the quads. With
+ * {@code FAR_GPU_CULLING} every region layer also keeps the tables of its units' clusters ({@link Clusters}) in the
+ * culling's buffer — in sequential terms, and in the terms of its face-group index list — and is drawn as one indirect
+ * multi-draw over the clusters the GPU left in, with the same pipeline and transform ({@link #drawCulled}). Render
+ * thread only.
  */
 final class RegionRenderer {
     static final int REGION = 4;
@@ -43,8 +46,6 @@ final class RegionRenderer {
     private static final int VERTEX = DefaultVertexFormat.BLOCK.getVertexSize();
     private static final int QUAD = VERTEX * 4;
     private static final ChunkSectionLayer[] LAYERS = ChunkSectionLayer.values();
-    /** The opaque layers in the order vanilla draws its own ({@link #drawCulled}). */
-    private static final ChunkSectionLayer[] OPAQUE = {ChunkSectionLayer.SOLID, ChunkSectionLayer.CUTOUT_MIPPED, ChunkSectionLayer.CUTOUT};
     private static final ByteBuffer ZEROS = MemoryUtil.memCalloc(1 << 20);
 
     private final Long2ObjectOpenHashMap<Region> regions = new Long2ObjectOpenHashMap<>();
@@ -255,17 +256,17 @@ final class RegionRenderer {
      * quads that may face the camera ({@code indexBuffer}, in the buffer's order). With {@code FAR_GPU_CULLING}: its
      * cluster table ({@code clusterBase}, {@code clusterCount} in the culling's buffer, in the terms of the index buffer
      * drawn, whose first index in its own buffer is {@code indexBase}) and its region's corner relative to the camera
-     * ({@code ox, oy, oz}; no transform is written then).
+     * ({@code ox, oy, oz}: where the culling places the clusters' boxes; the transform carries the same offset).
      */
-    record Draw(GpuBuffer buffer, int quads, ChunkSectionLayer layer, @Nullable GpuBufferSlice transform, double distance,
+    record Draw(GpuBuffer buffer, int quads, ChunkSectionLayer layer, GpuBufferSlice transform, double distance,
                 @Nullable GpuBuffer indexBuffer, VertexFormat.IndexType indexType, int firstIndex, int indexCount,
                 int clusterBase, int clusterCount, int indexBase, float ox, float oy, float oz) {
     }
 
     /**
-     * The visible region layers, nearest first (translucent ones farthest first, at the end), with their transforms (and
-     * index lists) made now (before the pass opens). With {@code cull} the region layers' cluster tables are brought up
-     * to date for the culling instead of transforms being written.
+     * The visible region layers, the opaque ones layer by layer and nearest first within a layer (the translucent ones
+     * farthest first, at the end), with their transforms (and index lists) made now (before the pass opens). With
+     * {@code cull} the region layers' cluster tables are brought up to date for the culling too.
      */
     List<Draw> prepare(FrustumIntersection frustum, Matrix4f viewRotation, double camX, double camY, double camZ, @Nullable GpuCull cull) {
         this.cull = cull;
@@ -313,7 +314,8 @@ final class RegionRenderer {
                     clusterBase = t.base;
                     clusterCount = t.count;
                     if (clusterCount == 0) continue;
-                } else if (transform == null) {
+                }
+                if (transform == null) {
                     Vector3f offset = new Vector3f((float) x0, (float) (region.originY - camY), (float) z0);
                     transform = RenderSystem.getDynamicUniforms().writeTransform(viewRotation, white, offset, texture, 1);
                 }
@@ -326,7 +328,9 @@ final class RegionRenderer {
             }
             if (drawn) columns += region.heights.size();
         }
-        opaque.sort((a, b) -> Double.compare(a.distance, b.distance));
+        // layer by layer as vanilla draws its terrain (one pipeline and atlas filter change per layer), nearest first
+        opaque.sort((a, b) -> a.layer != b.layer ? Integer.compare(a.layer.ordinal(), b.layer.ordinal())
+                : Double.compare(a.distance, b.distance));
         translucent.sort((a, b) -> Double.compare(b.distance, a.distance));
         opaque.addAll(translucent);
         drawnColumns = columns;
@@ -500,44 +504,25 @@ final class RegionRenderer {
     }
 
     /**
-     * {@code FAR_GPU_CULLING}: the draws {@link #prepare} made as indirect multi-draws over the clusters the culling
-     * ({@code frame}) left in, with the pages pipelines (the offsets read by draw id) and one shared transform. The opaque
-     * layers go layer by layer, nearest first within each, as vanilla orders its own terrain; the translucent ones in
-     * the prepared order (farthest first).
+     * {@code FAR_GPU_CULLING}: the draws {@link #prepare} made, in its order (the order {@link #draw} keeps), with the same
+     * vanilla pipelines, atlases and transforms, each as an indirect multi-draw over the clusters the culling
+     * ({@code frame}) left in.
      */
     static void drawCulled(RenderPass pass, List<Draw> draws, boolean translucent, GpuBuffer indices, VertexFormat.IndexType indexType,
-                           GpuCull cull, GpuCull.Frame frame, GpuBufferSlice transform) {
+                           GpuCull cull, GpuCull.Frame frame) {
         cull.beginDraws();
-        if (!translucent) {
-            for (ChunkSectionLayer layer : OPAQUE) {
-                boolean set = false;
-                for (int i = 0; i < draws.size(); i++) {
-                    Draw d = draws.get(i);
-                    if (d.layer != layer) continue;
-                    if (!set) {
-                        pass.setPipeline(PagedTerrain.pipeline(layer));
-                        pass.bindSampler("Sampler0", layer.textureView());
-                        pass.setUniform("DynamicTransforms", transform);
-                        if (!cull.setup(pass)) break;
-                        set = true;
-                    }
-                    cull.multiDraw(pass, d.buffer, d.indexBuffer != null ? d.indexBuffer : indices, d.indexBuffer != null ? d.indexType : indexType,
-                            frame, frame.commandBase[i], d.clusterCount);
-                }
-            }
-            return;
-        }
         ChunkSectionLayer current = null;
         for (int i = 0; i < draws.size(); i++) {
             Draw d = draws.get(i);
-            if (d.layer != ChunkSectionLayer.TRANSLUCENT && d.layer != ChunkSectionLayer.TRIPWIRE) continue;
+            boolean isTranslucent = d.layer == ChunkSectionLayer.TRANSLUCENT || d.layer == ChunkSectionLayer.TRIPWIRE;
+            if (isTranslucent != translucent) continue;
             if (d.layer != current) {
-                pass.setPipeline(PagedTerrain.pipeline(d.layer));
+                pass.setPipeline(d.layer.pipeline());
                 pass.bindSampler("Sampler0", d.layer.textureView());
-                pass.setUniform("DynamicTransforms", transform);
-                if (!cull.setup(pass)) return;
                 current = d.layer;
             }
+            pass.setUniform("DynamicTransforms", d.transform);
+            if (!cull.setup(pass)) return;
             cull.multiDraw(pass, d.buffer, d.indexBuffer != null ? d.indexBuffer : indices, d.indexBuffer != null ? d.indexType : indexType,
                     frame, frame.commandBase[i], d.clusterCount);
         }

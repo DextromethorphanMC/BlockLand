@@ -3,6 +3,7 @@ mod/.gradle/
 mod/build/
 mod/run/
 mod/run2/
+mod/run3/
 mod/run-server/
 mod/out/
 mod/*.iml
