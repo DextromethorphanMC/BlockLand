@@ -2,13 +2,12 @@ package com.blockland.backend.gametype.fastpvp;
 
 import com.blockland.backend.gamemode.GameModeService;
 import com.blockland.backend.kit.KitItem;
-import com.blockland.backend.map.GameMap;
 import com.blockland.backend.map.MapService;
+import com.blockland.backend.map.ShippedMaps;
 import com.blockland.backend.modegroup.ModeGroup;
 import com.blockland.backend.modegroup.ModeGroupService;
 import com.blockland.backend.seed.CoverArt;
 import com.blockland.backend.seed.DemoSeed;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.core.annotation.Order;
@@ -18,7 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Rush 1v1 (FastPVP): a knockback X stick and wool that never runs out on {@link RushDemoArena}; hits only knock back,
+ * Rush 1v1 (FastPVP): a knockback X stick and wool that never runs out on the shipped map {@code rush_arena}; hits only knock back,
  * so the only way to lose is the void. Added to the "PVP 竞技" group (also when that group was seeded long ago).
  */
 @Component
@@ -31,15 +30,16 @@ public class RushDemoSeed implements DemoSeed {
     private final GameModeService modes;
     private final ModeGroupService groups;
     private final MapService maps;
+    private final ShippedMaps shipped;
     private final FastPvpDefinition definition;
-    private final ObjectMapper mapper;
 
-    public RushDemoSeed(GameModeService modes, ModeGroupService groups, MapService maps, FastPvpDefinition definition, ObjectMapper mapper) {
+    public RushDemoSeed(GameModeService modes, ModeGroupService groups, MapService maps, ShippedMaps shipped,
+                        FastPvpDefinition definition) {
         this.modes = modes;
         this.groups = groups;
         this.maps = maps;
+        this.shipped = shipped;
         this.definition = definition;
-        this.mapper = mapper;
     }
 
     @Override
@@ -49,12 +49,7 @@ public class RushDemoSeed implements DemoSeed {
 
     @Override
     public void apply() {
-        if (!maps.exists(DEMO_MAP)) {
-            RushDemoArena.Result arena = RushDemoArena.generate();
-            GameMap map = maps.upload(DEMO_MAP, "Rush 双岛", FastPvpDefinition.ID, null, DEMO_MAP + ".nbt", arena.data());
-            maps.update(map.id(), new MapService.UpdateRequest(map.name(), map.gameType(), arena.spawns(), RushDemoArena.VOID_Y, null));
-            maps.setCover(DEMO_MAP, CoverArt.bridge(51));
-        }
+        shipped.install(DEMO_MAP);
         if (!modes.exists(MODE_ID)) {
             ObjectNode settings = definition.defaultSettings();
             settings.put("teamSize", 1);

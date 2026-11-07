@@ -1,8 +1,8 @@
 package com.blockland.backend.gametype.infection;
 
 import com.blockland.backend.gamemode.GameModeService;
-import com.blockland.backend.map.GameMap;
 import com.blockland.backend.map.MapService;
+import com.blockland.backend.map.ShippedMaps;
 import com.blockland.backend.modegroup.ModeGroup;
 import com.blockland.backend.modegroup.ModeGroupService;
 import com.blockland.backend.seed.CoverArt;
@@ -17,8 +17,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 枪战感染 on a generated quarantine station map (with role spawn points), with a generated cover, in its own lobby
- * group 「枪战感染」 (it is a game type of its own, not a PVP 竞技 mode). Every step checks what already exists.
+ * 枪战感染 on the quarantine station (shipped map {@code infection_demo}, with role spawn points), with a generated cover,
+ * in its own lobby group 「枪战感染」 (it is a game type of its own, not a PVP 竞技 mode). Every step checks what already
+ * exists.
  * Installs that ran the first version are brought to the same state by {@link InfectionUpgradeSeed}.
  */
 @Component
@@ -32,14 +33,16 @@ public class InfectionDemoSeed implements DemoSeed {
     private final GameModeService modes;
     private final ModeGroupService groups;
     private final MapService maps;
+    private final ShippedMaps shipped;
     private final InfectionDefinition definition;
     private final ObjectMapper mapper;
 
-    public InfectionDemoSeed(GameModeService modes, ModeGroupService groups, MapService maps, InfectionDefinition definition,
-                             ObjectMapper mapper) {
+    public InfectionDemoSeed(GameModeService modes, ModeGroupService groups, MapService maps, ShippedMaps shipped,
+                             InfectionDefinition definition, ObjectMapper mapper) {
         this.modes = modes;
         this.groups = groups;
         this.maps = maps;
+        this.shipped = shipped;
         this.definition = definition;
         this.mapper = mapper;
     }
@@ -51,12 +54,7 @@ public class InfectionDemoSeed implements DemoSeed {
 
     @Override
     public void apply() {
-        if (!maps.exists(DEMO_MAP)) {
-            InfectionDemoArena.Result arena = InfectionDemoArena.generate();
-            GameMap map = maps.upload(DEMO_MAP, "示例检疫站", InfectionDefinition.ID, null, DEMO_MAP + ".nbt", arena.data());
-            maps.update(map.id(), new MapService.UpdateRequest(map.name(), map.gameType(), arena.spawns(), -5,
-                    InfectionMapSettings.toJson(mapper, arena.roleSpawns())));
-        }
+        shipped.install(DEMO_MAP);
         if (!modes.exists(MODE_ID)) {
             ObjectNode settings = definition.defaultSettings();
             // two players so a match can be tested with two clients; admins raise it for real rounds
@@ -87,8 +85,8 @@ public class InfectionDemoSeed implements DemoSeed {
         if (group.coverVersion() == null) groups.setCover(GROUP_ID, CoverArt.infection(13));
     }
 
-    /** Role spawn points of the generated demo map, as map settings. */
+    /** Role spawn points of the shipped demo map, as map settings. */
     ObjectNode demoMapSettings() {
-        return InfectionMapSettings.toJson(mapper, InfectionDemoArena.generate().roleSpawns());
+        return InfectionMapSettings.toJson(mapper, InfectionMapSettings.read(shipped.get(DEMO_MAP).meta().settings()));
     }
 }

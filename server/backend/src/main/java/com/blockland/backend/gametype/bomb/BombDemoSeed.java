@@ -1,13 +1,12 @@
 package com.blockland.backend.gametype.bomb;
 
 import com.blockland.backend.gamemode.GameModeService;
-import com.blockland.backend.map.GameMap;
 import com.blockland.backend.map.MapService;
+import com.blockland.backend.map.ShippedMaps;
 import com.blockland.backend.modegroup.ModeGroup;
 import com.blockland.backend.modegroup.ModeGroupService;
 import com.blockland.backend.seed.CoverArt;
 import com.blockland.backend.seed.DemoSeed;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.core.annotation.Order;
@@ -17,7 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 枪战爆破 on a generated demo yard ({@link BombDemoArena}, sites A and B): a 5v5 mode and a 1v1 one (two clients are
+ * 枪战爆破 on the demo yard (shipped map {@code bomb_demo}, sites A and B): a 5v5 mode and a 1v1 one (two clients are
  * enough to try planting and defusing), in a lobby group of their own. The guns come with the mod, so the kit may name
  * items the connected server has not reported yet; the modes are created anyway and warn until the server knows them.
  */
@@ -31,15 +30,16 @@ public class BombDemoSeed implements DemoSeed {
     private final GameModeService modes;
     private final ModeGroupService groups;
     private final MapService maps;
+    private final ShippedMaps shipped;
     private final BombDefinition definition;
-    private final ObjectMapper mapper;
 
-    public BombDemoSeed(GameModeService modes, ModeGroupService groups, MapService maps, BombDefinition definition, ObjectMapper mapper) {
+    public BombDemoSeed(GameModeService modes, ModeGroupService groups, MapService maps, ShippedMaps shipped,
+                        BombDefinition definition) {
         this.modes = modes;
         this.groups = groups;
         this.maps = maps;
+        this.shipped = shipped;
         this.definition = definition;
-        this.mapper = mapper;
     }
 
     @Override
@@ -50,11 +50,7 @@ public class BombDemoSeed implements DemoSeed {
     @Override
     public void apply() {
         if (!maps.exists(DEMO_MAP)) {
-            BombDemoArena.Result arena = BombDemoArena.generate();
-            GameMap map = maps.upload(DEMO_MAP, "示例爆破场", BombDefinition.ID, null, DEMO_MAP + ".nbt", arena.data());
-            maps.update(map.id(), new MapService.UpdateRequest(map.name(), map.gameType(), arena.spawns(), -5,
-                    BombMapSettings.toJson(mapper, arena.sites())));
-            maps.setCover(DEMO_MAP, CoverArt.pistol(23));
+            shipped.install(DEMO_MAP);
         }
         mode("bomb_5v5", "枪战爆破 5v5", 5, 21);
         mode("bomb_1v1", "枪战爆破 1v1", 1, 22);

@@ -1,11 +1,8 @@
 package com.blockland.backend.gametype.infection;
 
-import com.blockland.backend.map.GameMap;
-import com.blockland.backend.map.MapAmbient;
 import com.blockland.backend.map.MapService;
+import com.blockland.backend.map.ShippedMaps;
 import com.blockland.backend.seed.DemoSeed;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
@@ -18,11 +15,11 @@ import org.springframework.stereotype.Component;
 @Order(63)
 public class InfectionHarborFixSeed implements DemoSeed {
     private final MapService maps;
-    private final ObjectMapper mapper;
+    private final ShippedMaps shipped;
 
-    public InfectionHarborFixSeed(MapService maps, ObjectMapper mapper) {
+    public InfectionHarborFixSeed(MapService maps, ShippedMaps shipped) {
         this.maps = maps;
-        this.mapper = mapper;
+        this.shipped = shipped;
     }
 
     @Override
@@ -34,11 +31,6 @@ public class InfectionHarborFixSeed implements DemoSeed {
     public void apply() {
         String id = InfectionHarborSeed.MAP_ID;
         if (!maps.exists(id) || !InfectionDefinition.ID.equalsIgnoreCase(maps.get(id).gameType())) return;
-        InfectionHarborArena.Result arena = InfectionHarborArena.generate();
-        if (!maps.replaceGeneratedFile(id, id + ".nbt", arena.data())) return;
-        GameMap map = maps.get(id);
-        ObjectNode settings = InfectionMapSettings.toJson(mapper, arena.roleSpawns());
-        MapAmbient.attach(settings, MapAmbient.of(map.settings()));
-        maps.update(id, new MapService.UpdateRequest(map.name(), map.gameType(), arena.spawns(), map.voidY(), settings));
+        shipped.refresh(id);
     }
 }

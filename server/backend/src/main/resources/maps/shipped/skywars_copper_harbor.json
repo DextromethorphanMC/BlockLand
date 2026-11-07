@@ -1,0 +1,497 @@
+{
+  "id": "skywars_copper_harbor",
+  "name": "铜轮天港",
+  "gameType": "SKYWARS",
+  "voidY": -10,
+  "teamSpawns": [
+    {
+      "name": "spawn-1",
+      "points": [
+        {
+          "x": 113.0,
+          "y": 17.0,
+          "z": 54.0,
+          "yaw": 90.0
+        },
+        {
+          "x": 113.0,
+          "y": 17.0,
+          "z": 56.0,
+          "yaw": 90.0
+        },
+        {
+          "x": 115.0,
+          "y": 17.0,
+          "z": 54.0,
+          "yaw": 90.0
+        },
+        {
+          "x": 115.0,
+          "y": 17.0,
+          "z": 56.0,
+          "yaw": 90.0
+        }
+      ]
+    },
+    {
+      "name": "spawn-2",
+      "points": [
+        {
+          "x": 113.0,
+          "y": 17.0,
+          "z": 76.0,
+          "yaw": 90.0
+        },
+        {
+          "x": 113.0,
+          "y": 17.0,
+          "z": 78.0,
+          "yaw": 90.0
+        },
+        {
+          "x": 115.0,
+          "y": 17.0,
+          "z": 76.0,
+          "yaw": 90.0
+        },
+        {
+          "x": 115.0,
+          "y": 17.0,
+          "z": 78.0,
+          "yaw": 90.0
+        }
+      ]
+    },
+    {
+      "name": "spawn-3",
+      "points": [
+        {
+          "x": 73.0,
+          "y": 17.0,
+          "z": 113.0,
+          "yaw": 180.0
+        },
+        {
+          "x": 71.0,
+          "y": 17.0,
+          "z": 113.0,
+          "yaw": 180.0
+        },
+        {
+          "x": 73.0,
+          "y": 17.0,
+          "z": 115.0,
+          "yaw": 180.0
+        },
+        {
+          "x": 71.0,
+          "y": 17.0,
+          "z": 115.0,
+          "yaw": 180.0
+        }
+      ]
+    },
+    {
+      "name": "spawn-4",
+      "points": [
+        {
+          "x": 51.0,
+          "y": 17.0,
+          "z": 113.0,
+          "yaw": 180.0
+        },
+        {
+          "x": 49.0,
+          "y": 17.0,
+          "z": 113.0,
+          "yaw": 180.0
+        },
+        {
+          "x": 51.0,
+          "y": 17.0,
+          "z": 115.0,
+          "yaw": 180.0
+        },
+        {
+          "x": 49.0,
+          "y": 17.0,
+          "z": 115.0,
+          "yaw": 180.0
+        }
+      ]
+    },
+    {
+      "name": "spawn-5",
+      "points": [
+        {
+          "x": 14.0,
+          "y": 17.0,
+          "z": 73.0,
+          "yaw": 270.0
+        },
+        {
+          "x": 14.0,
+          "y": 17.0,
+          "z": 71.0,
+          "yaw": 270.0
+        },
+        {
+          "x": 12.0,
+          "y": 17.0,
+          "z": 73.0,
+          "yaw": 270.0
+        },
+        {
+          "x": 12.0,
+          "y": 17.0,
+          "z": 71.0,
+          "yaw": 270.0
+        }
+      ]
+    },
+    {
+      "name": "spawn-6",
+      "points": [
+        {
+          "x": 14.0,
+          "y": 17.0,
+          "z": 51.0,
+          "yaw": 270.0
+        },
+        {
+          "x": 14.0,
+          "y": 17.0,
+          "z": 49.0,
+          "yaw": 270.0
+        },
+        {
+          "x": 12.0,
+          "y": 17.0,
+          "z": 51.0,
+          "yaw": 270.0
+        },
+        {
+          "x": 12.0,
+          "y": 17.0,
+          "z": 49.0,
+          "yaw": 270.0
+        }
+      ]
+    },
+    {
+      "name": "spawn-7",
+      "points": [
+        {
+          "x": 54.0,
+          "y": 17.0,
+          "z": 14.0,
+          "yaw": 0.0
+        },
+        {
+          "x": 56.0,
+          "y": 17.0,
+          "z": 14.0,
+          "yaw": 0.0
+        },
+        {
+          "x": 54.0,
+          "y": 17.0,
+          "z": 12.0,
+          "yaw": 0.0
+        },
+        {
+          "x": 56.0,
+          "y": 17.0,
+          "z": 12.0,
+          "yaw": 0.0
+        }
+      ]
+    },
+    {
+      "name": "spawn-8",
+      "points": [
+        {
+          "x": 76.0,
+          "y": 17.0,
+          "z": 14.0,
+          "yaw": 0.0
+        },
+        {
+          "x": 78.0,
+          "y": 17.0,
+          "z": 14.0,
+          "yaw": 0.0
+        },
+        {
+          "x": 76.0,
+          "y": 17.0,
+          "z": 12.0,
+          "yaw": 0.0
+        },
+        {
+          "x": 78.0,
+          "y": 17.0,
+          "z": 12.0,
+          "yaw": 0.0
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "chests": [
+      {
+        "x": 58,
+        "y": 17,
+        "z": 58,
+        "lootTableId": "center",
+        "label": "main"
+      },
+      {
+        "x": 69,
+        "y": 17,
+        "z": 58,
+        "lootTableId": "center",
+        "label": "main"
+      },
+      {
+        "x": 58,
+        "y": 17,
+        "z": 69,
+        "lootTableId": "center",
+        "label": "main"
+      },
+      {
+        "x": 69,
+        "y": 17,
+        "z": 69,
+        "lootTableId": "center",
+        "label": "main"
+      },
+      {
+        "x": 93,
+        "y": 17,
+        "z": 58,
+        "lootTableId": "center",
+        "label": "middle-0"
+      },
+      {
+        "x": 93,
+        "y": 17,
+        "z": 69,
+        "lootTableId": "center",
+        "label": "middle-0"
+      },
+      {
+        "x": 113,
+        "y": 17,
+        "z": 50,
+        "lootTableId": "island",
+        "label": "spawn-1"
+      },
+      {
+        "x": 118,
+        "y": 17,
+        "z": 50,
+        "lootTableId": "island",
+        "label": "spawn-1"
+      },
+      {
+        "x": 118,
+        "y": 17,
+        "z": 55,
+        "lootTableId": "island",
+        "label": "spawn-1"
+      },
+      {
+        "x": 113,
+        "y": 17,
+        "z": 72,
+        "lootTableId": "island",
+        "label": "spawn-2"
+      },
+      {
+        "x": 118,
+        "y": 17,
+        "z": 72,
+        "lootTableId": "island",
+        "label": "spawn-2"
+      },
+      {
+        "x": 118,
+        "y": 17,
+        "z": 77,
+        "lootTableId": "island",
+        "label": "spawn-2"
+      },
+      {
+        "x": 69,
+        "y": 17,
+        "z": 93,
+        "lootTableId": "center",
+        "label": "middle-1"
+      },
+      {
+        "x": 58,
+        "y": 17,
+        "z": 93,
+        "lootTableId": "center",
+        "label": "middle-1"
+      },
+      {
+        "x": 77,
+        "y": 17,
+        "z": 113,
+        "lootTableId": "island",
+        "label": "spawn-3"
+      },
+      {
+        "x": 77,
+        "y": 17,
+        "z": 118,
+        "lootTableId": "island",
+        "label": "spawn-3"
+      },
+      {
+        "x": 72,
+        "y": 17,
+        "z": 118,
+        "lootTableId": "island",
+        "label": "spawn-3"
+      },
+      {
+        "x": 55,
+        "y": 17,
+        "z": 113,
+        "lootTableId": "island",
+        "label": "spawn-4"
+      },
+      {
+        "x": 55,
+        "y": 17,
+        "z": 118,
+        "lootTableId": "island",
+        "label": "spawn-4"
+      },
+      {
+        "x": 50,
+        "y": 17,
+        "z": 118,
+        "lootTableId": "island",
+        "label": "spawn-4"
+      },
+      {
+        "x": 34,
+        "y": 17,
+        "z": 69,
+        "lootTableId": "center",
+        "label": "middle-2"
+      },
+      {
+        "x": 34,
+        "y": 17,
+        "z": 58,
+        "lootTableId": "center",
+        "label": "middle-2"
+      },
+      {
+        "x": 14,
+        "y": 17,
+        "z": 77,
+        "lootTableId": "island",
+        "label": "spawn-5"
+      },
+      {
+        "x": 9,
+        "y": 17,
+        "z": 77,
+        "lootTableId": "island",
+        "label": "spawn-5"
+      },
+      {
+        "x": 9,
+        "y": 17,
+        "z": 72,
+        "lootTableId": "island",
+        "label": "spawn-5"
+      },
+      {
+        "x": 14,
+        "y": 17,
+        "z": 55,
+        "lootTableId": "island",
+        "label": "spawn-6"
+      },
+      {
+        "x": 9,
+        "y": 17,
+        "z": 55,
+        "lootTableId": "island",
+        "label": "spawn-6"
+      },
+      {
+        "x": 9,
+        "y": 17,
+        "z": 50,
+        "lootTableId": "island",
+        "label": "spawn-6"
+      },
+      {
+        "x": 58,
+        "y": 17,
+        "z": 34,
+        "lootTableId": "center",
+        "label": "middle-3"
+      },
+      {
+        "x": 69,
+        "y": 17,
+        "z": 34,
+        "lootTableId": "center",
+        "label": "middle-3"
+      },
+      {
+        "x": 50,
+        "y": 17,
+        "z": 14,
+        "lootTableId": "island",
+        "label": "spawn-7"
+      },
+      {
+        "x": 50,
+        "y": 17,
+        "z": 9,
+        "lootTableId": "island",
+        "label": "spawn-7"
+      },
+      {
+        "x": 55,
+        "y": 17,
+        "z": 9,
+        "lootTableId": "island",
+        "label": "spawn-7"
+      },
+      {
+        "x": 72,
+        "y": 17,
+        "z": 14,
+        "lootTableId": "island",
+        "label": "spawn-8"
+      },
+      {
+        "x": 72,
+        "y": 17,
+        "z": 9,
+        "lootTableId": "island",
+        "label": "spawn-8"
+      },
+      {
+        "x": 77,
+        "y": 17,
+        "z": 9,
+        "lootTableId": "island",
+        "label": "spawn-8"
+      }
+    ],
+    "defaultLootTableId": "island"
+  }
+}

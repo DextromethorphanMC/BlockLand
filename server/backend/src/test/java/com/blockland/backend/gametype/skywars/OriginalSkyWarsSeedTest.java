@@ -2,6 +2,7 @@ package com.blockland.backend.gametype.skywars;
 
 import com.blockland.backend.gamemode.GameModeService;
 import com.blockland.backend.map.MapService;
+import com.blockland.backend.map.ShippedMaps;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,7 @@ class OriginalSkyWarsSeedTest {
     @Autowired SkyWarsDemoSeed demo;
     @Autowired OriginalSkyWarsSeed originals;
     @Autowired MapService maps;
+    @Autowired ShippedMaps shipped;
     @Autowired GameModeService modes;
 
     @Test
@@ -37,11 +39,11 @@ class OriginalSkyWarsSeedTest {
         assertThat(maps.list()).hasSize(6);
         assertThat(maps.get("demo_islands")).isEqualTo(baseline);
         assertThat(Files.readAllBytes(maps.file(baseline.id()))).isEqualTo(baselineBytes);
-        for (var design : OriginalSkyWarsMaps.catalog()) {
-            var map = maps.get(design.id());
+        for (String id : OriginalSkyWarsSeed.MAPS) {
+            var map = maps.get(id);
             assertThat(map.teamSpawns()).hasSize(8);
             assertThat(map.settings().path("chests").size()).isEqualTo(36);
-            assertThat(Files.readAllBytes(maps.file(map.id()))).isEqualTo(OriginalSkyWarsMaps.generate(design).data());
+            assertThat(Files.readAllBytes(maps.file(map.id()))).isEqualTo(shipped.get(id).data());
         }
         for (String id : new String[]{"skywars_1v1", "skywars_4v4"}) {
             assertThat(modes.get(id).settings().path("mapIds").size()).isEqualTo(6);

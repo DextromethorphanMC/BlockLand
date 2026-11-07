@@ -4,8 +4,8 @@ import com.blockland.backend.gamemode.GameModeService;
 import com.blockland.backend.gametype.skywars.loot.LootTable;
 import com.blockland.backend.gametype.skywars.loot.LootTable.LootEntry;
 import com.blockland.backend.gametype.skywars.loot.LootTableService;
-import com.blockland.backend.map.GameMap;
 import com.blockland.backend.map.MapService;
+import com.blockland.backend.map.ShippedMaps;
 import com.blockland.backend.seed.DemoSeed;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/** 空岛战争 1v1 / 4v4, the island/center loot tables and a generated 8-island map. */
+/** 空岛战争 1v1 / 4v4, the island/center loot tables and the 8-island demo map (shipped map {@code demo_islands}). */
 @Component
 @Order(10)
 public class SkyWarsDemoSeed implements DemoSeed {
@@ -22,12 +22,14 @@ public class SkyWarsDemoSeed implements DemoSeed {
 
     private final GameModeService modes;
     private final MapService maps;
+    private final ShippedMaps shipped;
     private final LootTableService lootTables;
     private final ObjectMapper mapper;
 
-    public SkyWarsDemoSeed(GameModeService modes, MapService maps, LootTableService lootTables, ObjectMapper mapper) {
+    public SkyWarsDemoSeed(GameModeService modes, MapService maps, ShippedMaps shipped, LootTableService lootTables, ObjectMapper mapper) {
         this.modes = modes;
         this.maps = maps;
+        this.shipped = shipped;
         this.lootTables = lootTables;
         this.mapper = mapper;
     }
@@ -70,12 +72,7 @@ public class SkyWarsDemoSeed implements DemoSeed {
                 new LootEntry("minecraft:experience_bottle", 4, 8, 30),
                 new LootEntry("minecraft:cobblestone", 32, 64, 50)), null));
 
-        if (!maps.exists(DEMO_MAP)) {
-            SkyWarsDemoMap.Result demo = SkyWarsDemoMap.generate();
-            GameMap map = maps.upload(DEMO_MAP, "示例空岛（8 岛）", SkyWarsDefinition.ID, null, DEMO_MAP + ".nbt", demo.data());
-            ObjectNode settings = mapper.valueToTree(new SkyWarsMapSettings(demo.chests(), "island"));
-            maps.update(map.id(), new MapService.UpdateRequest(map.name(), map.gameType(), demo.spawns(), -10, settings));
-        }
+        shipped.install(DEMO_MAP);
 
         if (!modes.exists("skywars_1v1")) modes.create(new GameModeService.Request("skywars_1v1", "空岛战争 1v1", SkyWarsDefinition.ID,
                 "经典单挑，两名玩家各占一座空岛。", true, 600, null, settings(1, 2, 180), List.of()));

@@ -1,6 +1,6 @@
 # 五张原创空岛战争地图
 
-地图内容在 `server/backend/src/main/resources/maps/skywars/originals.json`；`OriginalSkyWarsMaps` 仅负责把数据中的岛形、材质、长方体建筑与点位转成原版结构 NBT，不按地图名称分支。
+五张地图是固定的内置地图（`server/backend/src/main/resources/maps/shipped/skywars_*`，见 [MAPS.md](MAPS.md)），后端只安装这些文件。它们最初由生成器生成：设计数据在 `server/backend/src/test/resources/maps/skywars/originals.json`，`OriginalSkyWarsMaps`（测试目录里的工具）把其中的岛形、材质、长方体建筑与点位转成原版结构 NBT，不按地图名称分支。改了设计数据或生成器后，按 MAPS.md 的方法重新导出。
 
 | ID | 名称 | 建筑与地貌 |
 | --- | --- | --- |
@@ -23,7 +23,7 @@
 
 ## 注册与启动
 
-正常重启更新后的后端即可：保持 `blockland.seed-demo-data=true`（默认开启）。独立迁移 `skywars-original-five-v1` 会在已运行过旧版种子的安装上补入这五张地图，并追加到内置 `skywars_1v1` / `skywars_4v4` 的非空地图池。空地图池仍表示全部可用地图；自定义模式不改。现有同 ID 地图不会被覆盖，旧示例地图保留。关闭示例种子的安装不会自动导入。
+正常重启更新后的后端即可：保持 `blockland.seed-demo-data=true`（默认开启）。独立迁移 `skywars-original-five-v1` 会在已运行过旧版种子的安装上补入这五张地图（安装内置文件），并追加到内置 `skywars_1v1` / `skywars_4v4` 的非空地图池。空地图池仍表示全部可用地图；自定义模式不改。现有同 ID 地图不会被覆盖，旧示例地图保留。关闭示例种子的安装不会自动导入。
 
 ## 非视觉检查与导出
 
@@ -34,8 +34,8 @@ mvn -f server/backend/pom.xml test
 mvn -f server/backend/pom.xml '-Dtest=OriginalSkyWarsMapsTest' "-Dblockland.mapExport=$PWD/server/backend/target/original-skywars" test
 ```
 
-导出目录包含每张地图的 `.nbt` 和 `.json` 元数据。NBT 仅含建筑方块；出生点与分级物资表在 JSON 中，生产注册由种子一起保存，不能只导入 NBT 就认为元数据已配置。
+导出目录包含每张地图的 `.nbt` 和 `.json` 元数据，用于检查。NBT 仅含建筑方块；出生点与分级物资表在 JSON 中。要更新内置地图，请用 MAPS.md 里的 `GeneratedMapsTest` 导出。
 
-检查覆盖：5 张结构可解码且可重复生成、13 个独立岛体、36 个箱子、32 个安全出生点、箱盖上方净空、箱前可达、16 条十格连接、任意岛间不小于十格；真实 MapService 注册、旧地图字节不变、两个模式池追加与重复执行幂等。测试使用独立临时数据目录，不改正在运行的后端数据。
+检查覆盖：5 张结构可解码且可重复生成、13 个独立岛体、36 个箱子、32 个安全出生点、箱盖上方净空、箱前可达、16 条十格连接、任意岛间不小于十格；真实 MapService 注册（存进去的与内置文件逐字节相同）、旧地图字节不变、两个模式池追加与重复执行幂等。测试使用独立临时数据目录，不改正在运行的后端数据。
 
 视觉验收交给用户：后端更新并重启后，打开游戏大厅的空岛战争地图选择；依次检查五张地图的主题建筑、出生后视线、箱子交互，以及搭桥跨越出生岛—中岛—主岛的十格空隙。代理不启动客户端。

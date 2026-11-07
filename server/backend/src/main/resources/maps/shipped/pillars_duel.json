@@ -1,0 +1,31 @@
+{
+  "id": "pillars_duel",
+  "name": "双柱对决",
+  "gameType": "LUCKY_PILLARS",
+  "voidY": -6,
+  "teamSpawns": [
+    {
+      "name": "高柱 1",
+      "points": [
+        {
+          "x": 13.0,
+          "y": 31.0,
+          "z": 6.0,
+          "yaw": 0.0
+        }
+      ]
+    },
+    {
+      "name": "高柱 2",
+      "points": [
+        {
+          "x": 13.0,
+          "y": 31.0,
+          "z": 20.0,
+          "yaw": 180.0
+        }
+      ]
+    }
+  ],
+  "settings": {}
+}

@@ -1,6 +1,7 @@
 package com.blockland.backend.gametype.battleroyale;
 
 import com.blockland.backend.map.MapService;
+import com.blockland.backend.map.ShippedMaps;
 import com.blockland.backend.seed.DemoSeed;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -14,9 +15,11 @@ import org.springframework.stereotype.Component;
 @Order(69)
 public class BattleRoyaleIslandFixSeed implements DemoSeed {
     private final MapService maps;
+    private final ShippedMaps shipped;
 
-    public BattleRoyaleIslandFixSeed(MapService maps) {
+    public BattleRoyaleIslandFixSeed(MapService maps, ShippedMaps shipped) {
         this.maps = maps;
+        this.shipped = shipped;
     }
 
     @Override
@@ -28,6 +31,6 @@ public class BattleRoyaleIslandFixSeed implements DemoSeed {
     public void apply() {
         String id = BattleRoyaleDemoSeed.DEMO_MAP;
         if (!maps.exists(id) || !BattleRoyaleDefinition.ID.equalsIgnoreCase(maps.get(id).gameType())) return;
-        maps.replaceGeneratedFile(id, id + ".nbt", BattleRoyaleDemoIsland.generate().data());
+        shipped.refresh(id);
     }
 }

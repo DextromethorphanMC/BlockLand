@@ -1,13 +1,12 @@
 package com.blockland.backend.gametype.battleroyale;
 
 import com.blockland.backend.gamemode.GameModeService;
-import com.blockland.backend.map.GameMap;
 import com.blockland.backend.map.MapService;
+import com.blockland.backend.map.ShippedMaps;
 import com.blockland.backend.modegroup.ModeGroup;
 import com.blockland.backend.modegroup.ModeGroupService;
 import com.blockland.backend.seed.CoverArt;
 import com.blockland.backend.seed.DemoSeed;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.core.annotation.Order;
@@ -16,7 +15,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * 大逃杀 on a generated island ({@link BattleRoyaleDemoIsland}): a 16-player mode and a 2-player one (two clients are
+ * 大逃杀 on the demo island (shipped map {@code br_island}): a 16-player mode and a 2-player one (two clients are
  * enough to try the plane, the jump and the fight), in a lobby group of their own. The loot names guns that come with
  * the mod, so the modes are created even before the server has reported its items.
  */
@@ -30,16 +29,16 @@ public class BattleRoyaleDemoSeed implements DemoSeed {
     private final GameModeService modes;
     private final ModeGroupService groups;
     private final MapService maps;
+    private final ShippedMaps shipped;
     private final BattleRoyaleDefinition definition;
-    private final ObjectMapper mapper;
 
-    public BattleRoyaleDemoSeed(GameModeService modes, ModeGroupService groups, MapService maps, BattleRoyaleDefinition definition,
-                                ObjectMapper mapper) {
+    public BattleRoyaleDemoSeed(GameModeService modes, ModeGroupService groups, MapService maps, ShippedMaps shipped,
+                                BattleRoyaleDefinition definition) {
         this.modes = modes;
         this.groups = groups;
         this.maps = maps;
+        this.shipped = shipped;
         this.definition = definition;
-        this.mapper = mapper;
     }
 
     @Override
@@ -49,13 +48,7 @@ public class BattleRoyaleDemoSeed implements DemoSeed {
 
     @Override
     public void apply() {
-        if (!maps.exists(DEMO_MAP)) {
-            BattleRoyaleDemoIsland.Result island = BattleRoyaleDemoIsland.generate();
-            GameMap map = maps.upload(DEMO_MAP, "示例岛屿", BattleRoyaleDefinition.ID, null, DEMO_MAP + ".nbt", island.data());
-            maps.update(map.id(), new MapService.UpdateRequest(map.name(), map.gameType(), List.of(), -8,
-                    BattleRoyaleMapSettings.toJson(mapper, island.lootSpots())));
-            maps.setCover(DEMO_MAP, CoverArt.islands(false, 41));
-        }
+        shipped.install(DEMO_MAP);
         mode("br_16", "大逃杀 16人", 16, 42);
         mode("br_2", "大逃杀 2人（测试）", 2, 43);
 
