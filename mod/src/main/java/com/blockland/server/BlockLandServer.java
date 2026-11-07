@@ -82,6 +82,8 @@ import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.event.network.GatherLoginConfigurationTasksEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
+import net.minecraftforge.fml.config.ModConfig;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLPaths;
 
 import javax.annotation.Nullable;
@@ -319,8 +321,12 @@ public final class BlockLandServer {
         return instance;
     }
 
-    /** Registers the Forge listeners. Called once from the mod constructor on both sides. */
-    public static void bootstrap() {
+    /**
+     * Registers the server config and the Forge listeners. Called once from the mod constructor, by name: the client
+     * jar leaves the server half out (see {@code BlockLand.bootstrapServerHalf}), so nothing else may refer to it.
+     */
+    public static void bootstrap(FMLJavaModLoadingContext context) {
+        context.registerConfig(ModConfig.Type.COMMON, BlockLandConfig.SPEC);
         ServerStartedEvent.BUS.addListener(event -> start(event.getServer()));
         ServerStoppingEvent.BUS.addListener(event -> stop());
         TickEvent.ServerTickEvent.Post.BUS.addListener(event -> {
