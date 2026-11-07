@@ -32,8 +32,14 @@ public final class BlockLand {
      * it (build.gradle {@code clientJar}), so it is only ever named here, as a string.
      */
     private static final String SERVER_HALF = "com.blockland.server.BlockLandServer";
+    /**
+     * Composition root of the client half (client/, the client-only mixins and resources). The server jar is built
+     * without it (build.gradle {@code jar}).
+     */
+    private static final String CLIENT_HALF = "com.blockland.client.BlockLandClient";
 
     public BlockLand(FMLJavaModLoadingContext context) {
+        if (FMLEnvironment.dist == Dist.CLIENT) requireClientHalf();
         GunContent.register(context.getModBusGroup());
         MeleeContent.register(context.getModBusGroup());
         EquipmentContent.register(context.getModBusGroup());
@@ -56,6 +62,16 @@ public final class BlockLand {
         bootstrapServerHalf(context);
         if (FMLEnvironment.dist == Dist.CLIENT) {
             BlockLandClient.init(context.getModBusGroup());
+        }
+    }
+
+    /** The server jar has no client half (build.gradle {@code jar}): on a client, say so before anything needs it. */
+    private static void requireClientHalf() {
+        try {
+            Class.forName(CLIENT_HALF, false, BlockLand.class.getClassLoader());
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException("[BlockLand] This is the server jar (blockland-*-server.jar): "
+                    + "players need blockland-*-client.jar", e);
         }
     }
 

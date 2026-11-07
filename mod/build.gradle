@@ -71,22 +71,52 @@ tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
 
-// Two jars, so players never get the server to decompile: blockland-<ver>-server.jar is the whole mod (dedicated
-// servers), blockland-<ver>-client.jar is the same without the server half — game logic (server/, games/), the server's
-// mixins and the data only the server reads. Nothing outside the server half may refer to it: BlockLand finds it by
-// name (bootstrapServerHalf) and checkClientJar fails the build when a class in the client jar names a stripped one.
-// Synced registries (damage_type, dimension_type, dimension), tags, loot tables and the shared catalogs stay in both.
+// Two jars, each without the other side's half, so neither ships what it never runs:
+//  - blockland-<ver>-client.jar, for players: no server half — game logic (server/, games/), the server's mixins and the
+//    data only the server reads — so there is no server to decompile;
+//  - blockland-<ver>-server.jar, for dedicated servers: no client half — client/, the client-only mixins and the client's
+//    resources (textures, models, shaders, sounds, fonts, built-in resource packs); only the language files stay, which
+//    Forge loads on a dedicated server for Language lookups.
+// Shared code (items, entities, network, catalogs, synced registries, tags, loot tables) is in both. Neither half may be
+// named outside itself except where that side alone runs it: BlockLand loads the server half by name and starts the
+// client half under a Dist check, and client item extensions (GunItem, BinocularsItem) are only called on a client.
+// checkClientJar / checkServerJar fail the build when a class in a jar names something stripped from it.
 ext.SERVER_ONLY_CLASSES = ['com/blockland/server/', 'com/blockland/games/',
                            'com/blockland/mixin/anticheat/', 'com/blockland/mixin/farterrain/']
 ext.SERVER_ONLY_MIXIN_CONFIGS = ['blockland.anticheat.mixins.json', 'blockland.farterrain.mixins.json']
 ext.SERVER_ONLY_DATA = ['data/blockland/anticheat/', 'data/blockland/infection/', 'data/blockland/farterrain/',
                         'data/blockland/combat/projectile_hits.json']
+// a package ends in '/'; anything else is one class (with its nested classes) out of a mixed mixin package
+ext.CLIENT_ONLY_CLASSES = ['com/blockland/client/', 'com/blockland/mixin/core/', 'com/blockland/mixin/gl/',
+                           'com/blockland/mixin/terrain/', 'com/blockland/mixin/particles/', 'com/blockland/mixin/display/',
+                           'com/blockland/mixin/level/', 'com/blockland/mixin/hud/', 'com/blockland/mixin/chat/',
+                           'com/blockland/mixin/inventory/ContainerScreenAccess', 'com/blockland/mixin/inventory/CreativeGridMixin',
+                           'com/blockland/mixin/inventory/CreativeScreenAccess', 'com/blockland/mixin/inventory/ItemPickerMenuMixin']
+ext.CLIENT_ONLY_MIXIN_CONFIGS = ['blockland.mixins.json', 'blockland.gl.mixins.json', 'blockland.terrain.mixins.json',
+                                 'blockland.particles.mixins.json', 'blockland.display.mixins.json', 'blockland.level.mixins.json',
+                                 'blockland.hud.mixins.json', 'blockland.chat.mixins.json']
+ext.CLIENT_ONLY_RESOURCES = ['resourcepacks/']
+
+/** Exclude patterns for stripped names: a package or folder (trailing '/'), a class and its nested classes, or a file. */
+static List<String> excludePatterns(List<String> names) {
+    names.collectMany { String name ->
+        if (name.endsWith('/')) return [name + '**']
+        if (name.startsWith('com/') && !name.contains('.')) return [name + '.class', name + '$*.class']
+        return [name]
+    }
+}
 
 // official names at runtime, so no refmap
 tasks.named('jar', Jar) {
+    description = 'The mod without its client half, for dedicated servers (blockland-<ver>-server.jar).'
     archiveClassifier = 'server'
+    includeEmptyDirs = false
+    exclude excludePatterns(CLIENT_ONLY_CLASSES + CLIENT_ONLY_RESOURCES)
+    exclude CLIENT_ONLY_MIXIN_CONFIGS
+    // the client's assets, all but the language files (assets/<namespace>/lang/)
+    exclude { FileTreeElement e -> !e.directory && e.path.startsWith('assets/') && !(e.path ==~ /assets\/[^\/]+\/lang\/.+/) }
     manifest {
-        attributes('MixinConfigs': MIXIN_CONFIGS.join(','))
+        attributes('MixinConfigs': (MIXIN_CONFIGS - CLIENT_ONLY_MIXIN_CONFIGS).join(','))
     }
 }
 
@@ -95,7 +125,7 @@ def clientJar = tasks.register('clientJar', Jar) {
     description = 'The mod without its server half, for players (blockland-<ver>-client.jar).'
     archiveClassifier = 'client'
     from sourceSets.main.output
-    exclude((SERVER_ONLY_CLASSES + SERVER_ONLY_DATA).collect { it.endsWith('/') ? it + '**' : it })
+    exclude excludePatterns(SERVER_ONLY_CLASSES + SERVER_ONLY_DATA)
     exclude SERVER_ONLY_MIXIN_CONFIGS
     manifest {
         attributes('MixinConfigs': (MIXIN_CONFIGS - SERVER_ONLY_MIXIN_CONFIGS).join(','))
@@ -103,19 +133,23 @@ def clientJar = tasks.register('clientJar', Jar) {
 }
 
 /**
- * Fails when the client jar would break or leak: a class in it names a stripped class or server-only data file (in its
- * constant pool, so imports, reflection strings and mixin targets alike), or its manifest names a mixin config or
- * mixin class that is not in it.
+ * Fails when a side's jar would break or leak: a stripped path is in it, a class in it names a stripped class or file (in
+ * its constant pool, so imports, reflection strings and mixin targets alike), or its manifest names a mixin config, or a
+ * mixin that side applies, that is not in it.
  */
-abstract class CheckClientJar extends DefaultTask {
+abstract class CheckSideJar extends DefaultTask {
     @InputFile
     abstract RegularFileProperty getJar()
 
-    /** Name fragments the client jar must not mention, in both the internal (a/b/) and the dotted (a.b.) form. */
+    /** 'client' or 'server': which of a mixin config's lists (besides 'mixins') this side applies. */
+    @Input
+    abstract Property<String> getSide()
+
+    /** Names the jar must not mention, in both the internal (a/b/) and the dotted (a.b.) form; see excludePatterns. */
     @Input
     abstract ListProperty<String> getStripped()
 
-    /** Entry → the one stripped name it may mention as a string (BlockLand loads the server half by name). */
+    /** Entry → the one stripped class it may name, in either form (only reached on the side that has it). */
     @Input
     abstract MapProperty<String, String> getAllowed()
 
@@ -136,7 +170,7 @@ abstract class CheckClientJar extends DefaultTask {
                 // constant-pool names are (modified) UTF-8: ASCII names appear byte for byte
                 String text = zip.getInputStream(entry).withCloseable { new String(it.bytes, 'ISO-8859-1') }
                 String exempt = allowed.get()[entry.name]
-                if (exempt) text = text.replace(exempt, '')
+                if (exempt) text = text.replace(exempt, '').replace(exempt.replace('/', '.'), '')
                 needles.findAll { text.contains(it) }.each { problems << "${entry.name} refers to ${it}" }
             }
             String configs = zip.manifest?.mainAttributes?.getValue('MixinConfigs') ?: ''
@@ -144,29 +178,42 @@ abstract class CheckClientJar extends DefaultTask {
                 def config = zip.getEntry(name)
                 if (config == null) { problems << "manifest names mixin config ${name}, not in the jar"; return }
                 def json = zip.getInputStream(config).withCloseable { new groovy.json.JsonSlurper().parse(it, 'UTF-8') }
-                ((json.mixins ?: []) + (json.client ?: []) + (json.server ?: [])).each { mixin ->
+                ((json.mixins ?: []) + (json[side.get()] ?: [])).each { mixin ->
                     String path = "${json.package}.${mixin}".replace('.', '/') + '.class'
                     if (zip.getEntry(path) == null) problems << "${name} lists ${mixin}, not in the jar"
                 }
             }
         }
-        if (problems) throw new GradleException("Client jar ${jar.get().asFile.name} is not self-contained:\n  "
-                + problems.unique().join('\n  '))
-        report.get().asFile.text = "${classes} classes checked, no reference to the server half\n"
+        if (problems) throw new GradleException("${side.get().capitalize()} jar ${jar.get().asFile.name} is not "
+                + "self-contained:\n  " + problems.unique().join('\n  '))
+        report.get().asFile.text = "${classes} classes checked, nothing stripped is named\n"
     }
 }
 
-def checkClientJar = tasks.register('checkClientJar', CheckClientJar) {
+def checkClientJar = tasks.register('checkClientJar', CheckSideJar) {
     group = 'verification'
     description = 'Checks that the client jar neither contains nor refers to the server half.'
     jar = clientJar.flatMap { it.archiveFile }
+    side = 'client'
     stripped = SERVER_ONLY_CLASSES + SERVER_ONLY_DATA
-    allowed = ['com/blockland/BlockLand.class': 'com.blockland.server.BlockLandServer']
+    allowed = ['com/blockland/BlockLand.class': 'com/blockland/server/BlockLandServer']
     report = layout.buildDirectory.file('reports/checkClientJar.txt')
 }
 
-tasks.named('assemble') { dependsOn clientJar, checkClientJar }
-tasks.named('check') { dependsOn checkClientJar }
+def checkServerJar = tasks.register('checkServerJar', CheckSideJar) {
+    group = 'verification'
+    description = 'Checks that the server jar neither contains nor refers to the client half.'
+    jar = tasks.named('jar', Jar).flatMap { it.archiveFile }
+    side = 'server'
+    stripped = CLIENT_ONLY_CLASSES + CLIENT_ONLY_RESOURCES
+    allowed = ['com/blockland/BlockLand.class'          : 'com/blockland/client/BlockLandClient',
+               'com/blockland/gun/GunItem$1.class'       : 'com/blockland/client/gun/DualHold',
+               'com/blockland/binoculars/BinocularsItem$1.class': 'com/blockland/client/binoculars/ClientBinoculars']
+    report = layout.buildDirectory.file('reports/checkServerJar.txt')
+}
+
+tasks.named('assemble') { dependsOn clientJar, checkClientJar, checkServerJar }
+tasks.named('check') { dependsOn checkClientJar, checkServerJar }
 
 tasks.named('processResources', ProcessResources) {
     def props = [mod_version: mod_version, minecraft_version: minecraft_version, forge_version: forge_version]

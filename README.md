@@ -204,10 +204,10 @@ cd mod && powershell -ExecutionPolicy Bypass -File build.ps1 build
 
 产物（`mod/build/libs/`）：
 
-- `blockland-0.1.0-client.jar`：发给玩家。不含服务端的一半（`server/`、`games/`、反作弊与远景地形的 mixin、只有服务端读的数据如反作弊阈值、感染怪物），反编译看不到服务端逻辑；用它自己开单人 / 局域网世界时没有 BlockLand 的玩法服务。
-- `blockland-0.1.0-server.jar`：完整模组，装在专用服务端上。误把客户端 jar 装到专用服务端会在启动时直接报错。
+- `blockland-0.1.0-client.jar`：发给玩家。不含服务端的一半（`server/`、`games/`、反作弊与远景地形的 mixin、只有服务端读的数据如反作弊阈值、感染怪物），反编译看不到服务端逻辑；用它自己开单人 / 局域网世界时没有 BlockLand 的玩法服务。误把它装到专用服务端会在启动时直接报错。
+- `blockland-0.1.0-server.jar`：装在专用服务端。不含客户端的一半（`client/`、渲染与界面的 mixin、贴图 / 模型 / 着色器 / 声音 / 字体与内置资源包，只保留语言文件），约 2 MB。误把它装到客户端会在启动时直接报错。
 
-`build` / `assemble` 会顺带跑 `checkClientJar`：客户端 jar 里只要有类引用了被剥离的类或数据（导入、反射字符串、mixin 目标都算），构建就失败。
+`build` / `assemble` 会顺带跑 `checkClientJar` 与 `checkServerJar`：任一 jar 里只要有类引用了被剥离的类或数据（导入、反射字符串、mixin 目标都算），构建就失败。
 
 开发测试（`mod/run-server` 已配置为离线模式 + 超平坦 + 仅本机 RCON）：
 
