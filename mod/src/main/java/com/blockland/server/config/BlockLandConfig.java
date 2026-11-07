@@ -9,6 +9,7 @@ public final class BlockLandConfig {
     public static final ForgeConfigSpec.ConfigValue<String> BACKEND_URL;
     public static final ForgeConfigSpec.ConfigValue<String> SERVER_TOKEN;
     public static final ForgeConfigSpec.IntValue SYNC_INTERVAL_SECONDS;
+    public static final ForgeConfigSpec.BooleanValue BACKEND_ALLOW_INSECURE_REMOTE;
 
     public static final ForgeConfigSpec.BooleanValue LOBBY_USE_WORLD_SPAWN;
     public static final ForgeConfigSpec.DoubleValue LOBBY_X;
@@ -41,6 +42,8 @@ public final class BlockLandConfig {
         BACKEND_URL = BUILDER.comment("BlockLand 后端地址").define("url", "http://127.0.0.1:8080");
         SERVER_TOKEN = BUILDER.comment("后端 blockland.server-token，用于服务器拉取配置").define("serverToken", "change-me-server");
         SYNC_INTERVAL_SECONDS = BUILDER.comment("从后端同步小游戏配置的间隔（秒）").defineInRange("syncIntervalSeconds", 30, 5, 3600);
+        BACKEND_ALLOW_INSECURE_REMOTE = BUILDER.comment("后端在其他机器上时也允许用明文 http://（服务器令牌会明文经过网络）；只在完全可信的内网里打开，"
+                + "其他情况请用 https:// 地址。本机地址（127.0.0.1 / localhost）不受影响").define("allowInsecureRemote", false);
         BUILDER.pop();
 
         BUILDER.push("lobby");

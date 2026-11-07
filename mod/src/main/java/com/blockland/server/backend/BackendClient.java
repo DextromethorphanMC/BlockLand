@@ -5,7 +5,6 @@ import com.google.gson.GsonBuilder;
 
 import java.lang.reflect.Type;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -17,13 +16,14 @@ import java.util.function.Supplier;
 public final class BackendClient {
     private static final Gson GSON = new GsonBuilder().create();
 
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    private final BackendHttp http;
     private final Supplier<String> baseUrl;
     private final Supplier<String> token;
 
-    public BackendClient(Supplier<String> baseUrl, Supplier<String> token) {
+    public BackendClient(Supplier<String> baseUrl, Supplier<String> token, BackendHttp http) {
         this.baseUrl = baseUrl;
         this.token = token;
+        this.http = http;
     }
 
     public <T> CompletableFuture<T> get(String path, Type type) {

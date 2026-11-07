@@ -52,4 +52,4 @@
 
 - 在本仓库内的构建、运行、测试命令可直接执行，无需逐条征求用户确认。
 - Windows 下用 `mod/build.ps1`（会处理 JDK、代理与 Gradle 参数）；开发期测试驱动 `client/dev/DevAutomation` 仅在 `-Pautomation=<目录>` 时启用。
-- 开发令牌 `change-me-admin` / `change-me-server` 仅限本地，上线前必须修改。
+- 开发令牌 `change-me-admin` / `change-me-server` 仅限本地：后端默认只监听 `127.0.0.1`，弱令牌（默认值或少于 24 个字符）只接受本机直连请求，对外监听时必须有 HTTPS 与强令牌，否则拒绝启动（`config/TransportSecurity`）；模组服务端只向 `https://` 或本机地址发送服务器令牌（`server/backend/BackendHttp`）。所有连后端的 HTTP 都走 `BackendHttp`，不要另建 `HttpClient`；部署见 `tools/deploy/SECURITY.md`。

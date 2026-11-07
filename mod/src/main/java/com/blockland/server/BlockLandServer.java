@@ -16,6 +16,7 @@ import com.blockland.movement.action.BodyActions;
 import com.blockland.network.BLNetwork;
 import com.blockland.server.arena.ArenaService;
 import com.blockland.server.backend.BackendClient;
+import com.blockland.server.backend.BackendHttp;
 import com.blockland.server.combat.HitHistory;
 import com.blockland.server.combat.KillTracker;
 import com.blockland.server.command.BlockLandCommands;
@@ -148,7 +149,8 @@ public final class BlockLandServer {
 
     private BlockLandServer(MinecraftServer server) {
         this.server = server;
-        this.content = new RemoteContentRepository(BlockLandConfig.BACKEND_URL::get, BlockLandConfig.SERVER_TOKEN::get,
+        BackendHttp backendHttp = new BackendHttp(BlockLandConfig.BACKEND_ALLOW_INSECURE_REMOTE::get);
+        this.content = new RemoteContentRepository(BlockLandConfig.BACKEND_URL::get, BlockLandConfig.SERVER_TOKEN::get, backendHttp,
                 FMLPaths.GAMEDIR.get().resolve("blockland"), server);
         this.types = new GameTypeRegistry()
                 .register(new SkyWarsGameType())
@@ -164,7 +166,7 @@ public final class BlockLandServer {
         this.jobs = new WorldJobScheduler(BlockLandConfig.BLOCK_OPERATIONS_PER_TICK::get);
         this.arenas = new ArenaService(server, jobs, BlockLandConfig.ARENA_SPACING::get, BlockLandConfig.ARENA_BASE_Y::get);
         this.maps = new MapLoader(content, server);
-        this.backend = new BackendClient(BlockLandConfig.BACKEND_URL::get, BlockLandConfig.SERVER_TOKEN::get);
+        this.backend = new BackendClient(BlockLandConfig.BACKEND_URL::get, BlockLandConfig.SERVER_TOKEN::get, backendHttp);
         this.lobbyWorld = new LobbyWorld(server);
         this.sessions = new PlayerSessions(server, lobbyWorld);
         this.kitLayouts = new SessionKitLayouts();
@@ -504,6 +506,12 @@ public final class BlockLandServer {
     }
 
     private static void start(MinecraftServer server) {
+        // the server token only goes where it cannot be read on the way (BackendHttp); say so now, not on the first request
+        String backendRefusal = BackendHttp.refusal(BlockLandConfig.BACKEND_URL.get(),
+                BlockLandConfig.BACKEND_ALLOW_INSECURE_REMOTE.get());
+        if (backendRefusal != null) {
+            BlockLand.LOGGER.error("[BlockLand] Not talking to the backend: {} (config/blockland-common.toml [backend])", backendRefusal);
+        }
         BlockLandServer created = new BlockLandServer(server);
         instance = created;
         BLNetwork.setServerListener(new ServerPacketRouter(created.lobby, created.shop, created.media));

@@ -1,6 +1,7 @@
 package com.blockland.server.content;
 
 import com.blockland.BlockLand;
+import com.blockland.server.backend.BackendHttp;
 import com.blockland.server.content.model.MapDef;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -8,7 +9,6 @@ import com.google.gson.JsonElement;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -33,10 +33,7 @@ import java.util.function.Supplier;
 public final class RemoteContentRepository implements ContentRepository {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    private final HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
+    private final BackendHttp http;
     private final Supplier<String> baseUrl;
     private final Supplier<String> token;
     private final Path cacheDir;
@@ -48,9 +45,11 @@ public final class RemoteContentRepository implements ContentRepository {
     private volatile String etag;
     private volatile boolean lastRefreshFailed;
 
-    public RemoteContentRepository(Supplier<String> baseUrl, Supplier<String> token, Path cacheDir, Executor mainThread) {
+    public RemoteContentRepository(Supplier<String> baseUrl, Supplier<String> token, BackendHttp http, Path cacheDir,
+                                   Executor mainThread) {
         this.baseUrl = baseUrl;
         this.token = token;
+        this.http = http;
         this.cacheDir = cacheDir;
         this.mainThread = mainThread;
     }

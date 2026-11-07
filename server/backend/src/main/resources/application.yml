@@ -1,5 +1,9 @@
 server:
   port: 8080
+  # 只监听本机：令牌（管理令牌、服务器令牌）以明文 HTTP 传输，只能在本机内流动。
+  # 要从其他机器访问（管理后台、另一台机器上的 Minecraft 服务器），在前面放 HTTPS 反向代理，
+  # 或在这里配置 server.ssl.* 并改监听地址；不安全的组合后端会拒绝启动。见 tools/deploy/SECURITY.md
+  address: 127.0.0.1
 
 spring:
   application:
@@ -16,9 +20,11 @@ spring:
 blockland:
   # 所有配置与地图文件都存放在这里（JSON + 地图文件）
   data-dir: ./data
-  # 管理后台登录令牌（React 后台使用）
+  # 管理后台登录令牌（React 后台使用）。默认值只在本机直接访问时有效，上线前换成至少 24 个字符的随机串：
+  # python -c "import secrets; print(secrets.token_urlsafe(32))"（也可用环境变量 BLOCKLAND_ADMINTOKEN 设置）
   admin-token: change-me-admin
-  # Minecraft 服务器拉取配置使用的令牌，需与 config/blockland-common.toml 中 serverToken 一致
+  # Minecraft 服务器拉取配置使用的令牌，需与 config/blockland-common.toml 中 serverToken 一致；同样只在本机直接访问时允许默认值
+  #（环境变量 BLOCKLAND_SERVERTOKEN）
   server-token: change-me-server
   # React 构建产物目录（npm run build 之后），存在时由后端直接托管
   web-dir: ../web/dist
@@ -27,3 +33,6 @@ blockland:
   # 开发时允许 Vite 开发服务器跨域访问
   cors-origins:
     - http://localhost:5173
+  transport:
+    # 允许在本机以外用明文 HTTP 提供服务（令牌会明文经过网络）。只在完全可信的内网里打开，公网一律用 HTTPS
+    allow-insecure-remote: false

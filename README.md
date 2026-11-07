@@ -190,7 +190,9 @@ cd server/backend && mvn package
 cd server/backend && java -jar target/blockland-backend-0.1.0.jar
 ```
 
-打开 <http://localhost:8080>，使用 `application.yml` 中的 `blockland.admin-token` 登录。**上线前请修改 `admin-token` 与 `server-token`。** 数据保存在 `server/backend/data/`。
+打开 <http://127.0.0.1:8080>，使用 `application.yml` 中的 `blockland.admin-token` 登录。数据保存在 `server/backend/data/`。
+
+后端默认只监听本机（`127.0.0.1`），令牌以明文 HTTP 传输只在本机内流动；默认令牌也只接受本机直接发出的请求。要让其他机器访问（管理后台、另一台机器上的 Minecraft 服务端），必须走 HTTPS 并换成强令牌，不安全的配置后端会拒绝启动。做法见 [tools/deploy/SECURITY.md](tools/deploy/SECURITY.md)。
 
 前端开发：后端运行时执行 `npm run dev`（<http://localhost:5173>，`/api` 自动代理到 8080）。
 
